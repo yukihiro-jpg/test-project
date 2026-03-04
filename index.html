@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>茨城県土浦市大畑字大畑６４２番2 — 地図</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <title>茨城県土浦市大畑字大畑６４２番2 — Google マップ</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -43,7 +41,6 @@
       background: #f8f9fa;
     }
 
-    /* ── Property info grid ── */
     .info-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -58,38 +55,57 @@
       letter-spacing: 0.5px;
       margin-bottom: 3px;
     }
-    .info-item .value {
-      font-size: 0.95em;
-      font-weight: 500;
+    .info-item .value { font-size: 0.95em; font-weight: 500; }
+
+    /* ── Google Maps iframe ── */
+    .map-wrap { position: relative; }
+    #gmap {
+      width: 100%;
+      height: 480px;
+      border: 0;
+      display: block;
     }
+    /* loading overlay */
+    #map-loading {
+      position: absolute;
+      inset: 0;
+      background: #e8eaed;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-size: 0.88em;
+      color: #5f6368;
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid #c5cae9;
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Map ── */
-    #map { height: 460px; width: 100%; }
-
-    /* ── Status bar ── */
     #status {
       padding: 9px 16px;
       font-size: 0.82em;
-      border-top: 1px solid #e8eaed;
       background: #e8f0fe;
       color: #1557b0;
+      border-top: 1px solid #c5d5f7;
       min-height: 36px;
     }
-    #status.warn {
-      background: #fef7e0;
-      color: #b06000;
-      border-color: #f9c843;
-    }
-    #coords-display {
-      padding: 6px 16px 10px;
+    #status.warn { background: #fef7e0; color: #b06000; border-color: #f9c843; }
+
+    #coords-bar {
+      padding: 6px 16px 8px;
       font-size: 0.78em;
       color: #5f6368;
-      border-top: 1px solid #f1f3f4;
       background: #fafafa;
+      border-top: 1px solid #f1f3f4;
       display: none;
     }
 
-    /* ── Action buttons ── */
     .actions {
       padding: 12px 16px;
       display: flex;
@@ -111,19 +127,19 @@
       transition: filter 0.15s;
     }
     .btn:hover { filter: brightness(0.92); }
-    .btn-blue   { background: #1a73e8; color: white; }
-    .btn-gray   { background: #f1f3f4; color: #202124; }
+    .btn-blue { background: #1a73e8; color: white; }
+    .btn-gray { background: #f1f3f4; color: #202124; }
 
-    /* ── Note ── */
     .note {
       padding: 10px 16px 14px;
       font-size: 0.76em;
       color: #9aa0a6;
-      line-height: 1.6;
+      line-height: 1.65;
       border-top: 1px solid #f1f3f4;
       background: #fafafa;
     }
     .note strong { color: #5f6368; }
+    .note a { color: #1a73e8; }
   </style>
 </head>
 <body>
@@ -135,7 +151,7 @@
 
 <div class="container">
 
-  <!-- Property card -->
+  <!-- Property info -->
   <div class="card">
     <div class="card-title">物件情報</div>
     <div class="info-grid">
@@ -162,15 +178,30 @@
     </div>
   </div>
 
-  <!-- Map card -->
+  <!-- Map -->
   <div class="card">
-    <div class="card-title">Google マップ上の位置</div>
-    <div id="map"></div>
-    <div id="status">📍 位置情報を検索中...</div>
-    <div id="coords-display"></div>
+    <div class="card-title">Google マップ上の位置（ピン止め）</div>
+
+    <div class="map-wrap">
+      <!-- iframe is filled by JS once coordinates are known -->
+      <iframe id="gmap"
+        src="about:blank"
+        allowfullscreen
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade">
+      </iframe>
+      <div id="map-loading">
+        <div class="spinner"></div>
+        <span>位置を検索中…</span>
+      </div>
+    </div>
+
+    <div id="status">📍 Nominatim で住所をジオコーディング中...</div>
+    <div id="coords-bar"></div>
+
     <div class="actions">
       <a id="gmaps-btn" href="#" target="_blank" class="btn btn-blue">
-        📍 Google マップで開く
+        📍 Google マップで開く（新しいタブ）
       </a>
       <a href="https://kouzuviewer.com/chiban/" target="_blank" class="btn btn-gray">
         📜 公図ビューア
@@ -182,120 +213,87 @@
         🌐 いばらきデジタルまっぷ
       </a>
     </div>
+
     <div class="note">
       <strong>※ 表示について</strong><br>
-      地番（642番2）の正確な筆界確定には
+      地番（642番2）の正確な筆界は住居表示と異なります。
       <a href="https://kouzuviewer.com/chiban/" target="_blank">公図ビューア</a> または
-      水戸地方法務局 土浦支局の登記所備付地図データをご確認ください。<br>
-      地番は住居表示と異なるため、ジオコーディングの結果は丁目・大字レベルの代表点となる場合があります。
+      水戸地方法務局 土浦支局の登記所備付地図データで確認してください。<br>
+      ジオコーディング結果は大字・字レベルの代表点となる場合があります。
     </div>
   </div>
 
 </div><!-- /container -->
 
 <script>
-  // ── 1. Map initialisation ──────────────────────────────────────
-  // Initial centre: approximate centroid of 土浦市大畑 (between Tsukuba & Tsuchiura)
-  const INIT_LAT = 36.0814;
-  const INIT_LON = 140.1553;
+  // ── Approximate centroid of 土浦市大畑 (between Tsukuba & Tsuchiura stations, ~6.3 km each)
+  const APPROX_LAT = 36.0814;
+  const APPROX_LON = 140.1553;
 
-  const map = L.map('map').setView([INIT_LAT, INIT_LON], 13);
+  const iframe     = document.getElementById('gmap');
+  const loading    = document.getElementById('map-loading');
+  const statusEl   = document.getElementById('status');
+  const coordsBar  = document.getElementById('coords-bar');
+  const gmapsBtn   = document.getElementById('gmaps-btn');
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19
-  }).addTo(map);
-
-  // ── 2. Custom pin icon ─────────────────────────────────────────
-  function pinIcon(color) {
-    return L.divIcon({
-      className: '',
-      html: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="44" viewBox="0 0 32 44">
-        <path d="M16 0C7.16 0 0 7.16 0 16c0 10.5 14 28 16 28s16-17.5 16-28C32 7.16 24.84 0 16 0z"
-              fill="${color}" stroke="#fff" stroke-width="2"/>
-        <circle cx="16" cy="16" r="6" fill="#fff" opacity="0.85"/>
-      </svg>`,
-      iconSize: [32, 44],
-      iconAnchor: [16, 44],
-      popupAnchor: [0, -46]
-    });
+  // Build the Google Maps embed URL with a pin at the given coordinates
+  function embedUrl(lat, lon, zoom = 17) {
+    return `https://maps.google.com/maps?q=${lat},${lon}&z=${zoom}&output=embed&hl=ja`;
   }
 
-  const statusEl  = document.getElementById('status');
-  const coordsEl  = document.getElementById('coords-display');
-  const gmapsBtn  = document.getElementById('gmaps-btn');
-  let   marker    = null;
+  function showMap(lat, lon, confirmed) {
+    iframe.src = embedUrl(lat, lon, confirmed ? 17 : 14);
+    iframe.onload = () => { loading.style.display = 'none'; };
 
-  // ── 3. Place marker ────────────────────────────────────────────
-  function placeMarker(lat, lon, confirmed) {
-    if (marker) marker.remove();
-    marker = L.marker([lat, lon], { icon: pinIcon(confirmed ? '#e74c3c' : '#f39c12') })
-      .addTo(map);
+    gmapsBtn.href = `https://www.google.com/maps?q=${lat},${lon}&z=17&hl=ja`;
 
-    marker.bindPopup(`
-      <div style="font-family:sans-serif;min-width:190px;line-height:1.5">
-        <strong>茨城県土浦市大畑字大畑６４２番2</strong>
-        <div style="color:#5f6368;font-size:0.82em">雑種地</div>
-        <hr style="margin:6px 0;border:none;border-top:1px solid #eee"/>
-        <div style="font-size:0.78em;color:#9aa0a6">
-          緯度: ${lat.toFixed(6)}<br>
-          経度: ${lon.toFixed(6)}<br>
-          ${confirmed ? '' : '<span style="color:#f39c12">※ 字・大字レベルの概算位置</span>'}
-        </div>
-      </div>
-    `).openPopup();
-
-    // Update UI
-    coordsEl.style.display = 'block';
-    coordsEl.textContent   = `緯度 ${lat.toFixed(6)}  /  経度 ${lon.toFixed(6)}${confirmed ? '' : '  ※概算'}`;
-    gmapsBtn.href = `https://www.google.com/maps?q=${lat},${lon}&z=17`;
+    coordsBar.style.display = 'block';
+    coordsBar.textContent =
+      `緯度 ${lat.toFixed(6)} / 経度 ${lon.toFixed(6)}${confirmed ? '' : '  ※概算位置'}`;
   }
 
-  // ── 4. Geocode via Nominatim (browser → OSM, no API key needed) ──
   async function geocode() {
-    const candidates = [
+    const queries = [
       '茨城県土浦市大畑字大畑',
       '茨城県土浦市大畑',
     ];
 
-    for (const q of candidates) {
+    for (const q of queries) {
       try {
-        const url =
-          'https://nominatim.openstreetmap.org/search?' +
-          'format=json&limit=3&countrycodes=jp&accept-language=ja&q=' +
-          encodeURIComponent(q);
-        const res  = await fetch(url, { headers: { 'Accept-Language': 'ja' } });
+        const res  = await fetch(
+          'https://nominatim.openstreetmap.org/search?format=json&limit=3' +
+          '&countrycodes=jp&accept-language=ja&q=' + encodeURIComponent(q),
+          { headers: { 'Accept-Language': 'ja' } }
+        );
         const data = await res.json();
 
         if (data && data.length > 0) {
-          const { lat, lon, display_name } = data[0];
-          const la = parseFloat(lat);
-          const lo = parseFloat(lon);
+          const la = parseFloat(data[0].lat);
+          const lo = parseFloat(data[0].lon);
 
           statusEl.className = '';
           statusEl.textContent =
-            `📍 位置を特定しました — ${display_name.slice(0, 60)}…`;
+            `📍 Google マップにピン止めしました — ${data[0].display_name.slice(0, 70)}`;
 
-          map.setView([la, lo], 16);
-          placeMarker(la, lo, true);
+          showMap(la, lo, true);
           return;
         }
-      } catch (err) {
-        console.warn('Nominatim error:', err);
+      } catch (e) {
+        console.warn('Nominatim error:', e);
       }
     }
 
-    // ── 5. Fallback: approximate known coordinates ────────────────
+    // Fallback
     statusEl.className = 'warn';
     statusEl.textContent =
-      '⚠️ 概算位置を表示中（土浦市大畑エリア / つくば駅・土浦駅の中間付近）';
-
-    map.setView([INIT_LAT, INIT_LON], 14);
-    placeMarker(INIT_LAT, INIT_LON, false);
+      '⚠️ 概算位置を表示（土浦市大畑エリア / つくば駅・土浦駅中間付近）';
     gmapsBtn.href =
       'https://www.google.com/maps/search/茨城県土浦市大畑字大畑';
+    showMap(APPROX_LAT, APPROX_LON, false);
   }
 
+  // Show approximate pin immediately, then refine with geocoding
+  showMap(APPROX_LAT, APPROX_LON, false);
   geocode();
 </script>
 </body>
