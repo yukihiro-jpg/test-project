@@ -4,13 +4,15 @@
 使い方:
   python main.py <顧問先フォルダ名>                    # 仕訳CSV生成
   python main.py <顧問先フォルダ名> --build-rulebook    # ルールブックのみ生成
-  python main.py --init <顧問先フォルダ名>              # 顧問先フォルダを初期化
+  python main.py --init <顧問先フォルダ名>              # 顧問先フォルダを1件作成
+  python main.py --batch-init <CSVファイル>             # CSVから顧問先フォルダを一括作成
   python main.py --list                                # 顧問先一覧を表示
 
 例:
   python main.py 山田商事
   python main.py 山田商事 --build-rulebook
   python main.py --init 新規顧問先A
+  python main.py --batch-init 顧問先リスト.csv
 """
 import argparse
 import glob
@@ -21,7 +23,8 @@ from datetime import datetime
 from config import 顧問先フォルダ
 from modules.master import マスタデータ
 from modules.rulebook import ルールブック管理
-from modules.pdf_reader import 通帳PDF解析, 請求書PDF解析, 賃金台帳PDF解析
+from modules.pdf_reader import 請求書PDF解析, 賃金台帳PDF解析
+from modules.bank_parsers import 銀行別通帳解析
 from modules.csv_exporter import CSV出力, レビュー用CSV出力
 from modules.journal_engine import 仕訳エンジン
 
@@ -57,6 +60,109 @@ def 顧問先初期化(名前):
     print(f"  {os.path.join(パス, '当月資料')}/ → 通帳PDF、請求書PDF、賃金台帳PDF等")
     print(f"  {os.path.join(パス, 'マスタ')}/  → 科目リスト.csv、補助科目リスト.csv等")
     print(f"  {os.path.join(パス, 'マスタ', '事業者情報.json')} → インボイス区分等（テンプレート生成済）")
+
+
+def 顧問先一括作成(CSVパス):
+    """
+    顧問先リストCSVから一括でフォルダを作成する。
+
+    CSVファイルの形式（以下のどちらでも対応）:
+
+    パターン1: 顧問先名だけの1列CSV
+      山田商事
+      佐藤建設
+      田中医院
+
+    パターン2: 顧問先名,インボイス事業者,インボイス番号,会計期間開始,会計期間終了
+      山田商事,TRUE,T1234567890123,2025/04/01,2026/03/31
+      佐藤建設,FALSE,,2025/01/01,2025/12/31
+      田中医院,TRUE,T9876543210987,2025/04/01,2026/03/31
+
+    ※ヘッダー行があっても自動でスキップします
+    ※Shift_JIS(cp932)でもUTF-8でも読めます
+    """
+    import csv as csv_mod
+    import json
+
+    if not os.path.isfile(CSVパス):
+        print(f"エラー: CSVファイルが見つかりません: {CSVパス}")
+        return
+
+    # ファイル読み込み（文字コード自動判定）
+    行一覧 = []
+    for 文字コード in ["cp932", "utf-8-sig", "utf-8"]:
+        try:
+            with open(CSVパス, "r", encoding=文字コード) as f:
+                行一覧 = list(csv_mod.reader(f))
+            break
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+
+    if not 行一覧:
+        print("エラー: CSVを読み込めませんでした。")
+        return
+
+    # ヘッダー行の判定（「顧問先」「名前」「会社名」等を含む行はスキップ）
+    ヘッダー語 = ["顧問先", "名前", "会社名", "クライアント", "事業者名", "名称"]
+    if 行一覧 and any(語 in str(行一覧[0]) for 語 in ヘッダー語):
+        行一覧 = 行一覧[1:]
+
+    作成数 = 0
+    スキップ数 = 0
+    for 行 in 行一覧:
+        if not 行 or not 行[0].strip():
+            continue
+
+        名前 = 行[0].strip()
+        パス = os.path.join(顧問先フォルダ, 名前)
+
+        # 既存フォルダはスキップ
+        if os.path.isdir(パス):
+            print(f"  スキップ（既存）: {名前}")
+            スキップ数 += 1
+            continue
+
+        # フォルダ作成
+        for フォルダ in [パス,
+                        os.path.join(パス, "過去仕訳"),
+                        os.path.join(パス, "当月資料"),
+                        os.path.join(パス, "マスタ"),
+                        os.path.join(パス, "output")]:
+            os.makedirs(フォルダ, exist_ok=True)
+
+        # 事業者情報.json の生成
+        テンプレート = {
+            "会社名": 名前,
+            "インボイス事業者": True,
+            "インボイス番号": "T0000000000000",
+            "会計期間開始": "2025/04/01",
+            "会計期間終了": "2026/03/31",
+            "備考": "",
+        }
+
+        # CSVに追加情報があれば反映
+        if len(行) >= 2 and 行[1].strip().upper() in ("TRUE", "FALSE", "○", "×"):
+            テンプレート["インボイス事業者"] = 行[1].strip().upper() in ("TRUE", "○")
+        if len(行) >= 3 and 行[2].strip():
+            テンプレート["インボイス番号"] = 行[2].strip()
+        if len(行) >= 4 and 行[3].strip():
+            テンプレート["会計期間開始"] = 行[3].strip()
+        if len(行) >= 5 and 行[4].strip():
+            テンプレート["会計期間終了"] = 行[4].strip()
+
+        情報パス = os.path.join(パス, "マスタ", "事業者情報.json")
+        with open(情報パス, "w", encoding="utf-8") as f:
+            json.dump(テンプレート, f, ensure_ascii=False, indent=2)
+
+        print(f"  作成: {名前}")
+        作成数 += 1
+
+    print()
+    print(f"一括作成完了: {作成数}件作成、{スキップ数}件スキップ（既存）")
+    print()
+    print("次のステップ:")
+    print("  各フォルダの「過去仕訳」フォルダに、会計大将から出力したCSVを入れてください。")
+    print("  各フォルダの「当月資料」フォルダに、通帳PDF等を入れてください。")
 
 
 def 顧問先一覧表示():
@@ -100,7 +206,7 @@ def ルールブック生成(顧問先パス):
                   glob.glob(os.path.join(資料フォルダ, "*passbook*.pdf"))
     for PDFパス in 通帳PDF一覧:
         try:
-            取引 = 通帳PDF解析(PDFパス)
+            取引 = 銀行別通帳解析(PDFパス)
             通帳取引一覧.extend(取引)
             print(f"  通帳PDF: {os.path.basename(PDFパス)} → {len(取引)}件")
         except Exception as e:
@@ -166,7 +272,7 @@ def 顧問先処理(顧問先パス):
                    or os.path.basename(f)[:3].isdigit()]
     for PDFパス in 通帳PDF一覧:
         try:
-            取引一覧 = 通帳PDF解析(PDFパス)
+            取引一覧 = 銀行別通帳解析(PDFパス)
             print(f"  通帳: {os.path.basename(PDFパス)} → {len(取引一覧)}取引")
             エンジン.通帳取引処理(取引一覧)
         except Exception as e:
@@ -237,6 +343,7 @@ def main():
     )
     parser.add_argument("client", nargs="?", help="顧問先フォルダ名")
     parser.add_argument("--init", metavar="名前", help="顧問先フォルダを新規作成")
+    parser.add_argument("--batch-init", metavar="CSVファイル", help="CSVから顧問先フォルダを一括作成")
     parser.add_argument("--list", action="store_true", help="顧問先一覧を表示")
     parser.add_argument("--build-rulebook", action="store_true", help="ルールブックのみ生成")
 
@@ -248,6 +355,10 @@ def main():
 
     if args.init:
         顧問先初期化(args.init)
+        return
+
+    if args.batch_init:
+        顧問先一括作成(args.batch_init)
         return
 
     if not args.client:
