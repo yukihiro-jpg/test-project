@@ -4,11 +4,11 @@
 import os
 
 # === パス設定 ===
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CLIENTS_DIR = os.path.join(BASE_DIR, "clients")
+ベースフォルダ = os.path.dirname(os.path.abspath(__file__))
+顧問先フォルダ = os.path.join(ベースフォルダ, "clients")
 
 # === 会計大将CSV 26列フォーマット定義 ===
-CSV_COLUMNS = [
+CSV列定義 = [
     "日付",           # 0: YYYYMMDD
     "借方科目コード",   # 1
     "借方科目名",      # 2
@@ -38,7 +38,7 @@ CSV_COLUMNS = [
 ]
 
 # === デフォルト消費税設定 ===
-TAX_DEFAULTS = {
+消費税初期値 = {
     "非課税": {"税売仕": "0", "業種": "0", "税込抜": "0", "税コード": "", "税率": "", "事業者": "0"},
     "課税仕入10%": {"税売仕": "2", "業種": "0", "税込抜": "0", "税コード": "10", "税率": "10", "事業者": "1"},
     "課税仕入8%軽減": {"税売仕": "2", "業種": "0", "税込抜": "0", "税コード": "08", "税率": "08", "事業者": "1"},
@@ -46,11 +46,11 @@ TAX_DEFAULTS = {
 }
 
 # === ルールブック設定 ===
-RULEBOOK_MIN_COUNT = 3  # この回数以上の摘要パターンのみ辞書化
+ルールブック最小出現回数 = 3  # この回数以上の摘要パターンのみ辞書化
 
 # === PDF読み取り設定 ===
-PDF_SETTINGS = {
+PDF設定 = {
     "dpi": 300,           # OCR用DPI
     "lang": "jpn",        # Tesseract言語
-    "use_ocr_fallback": True,  # テキスト抽出失敗時にOCRへフォールバック
+    "OCRフォールバック": True,  # テキスト抽出失敗時にOCRへフォールバック
 }

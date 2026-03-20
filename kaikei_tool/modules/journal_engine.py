@@ -3,22 +3,22 @@
 ルールブック・マスタを参照して、取引データから仕訳を自動判定する
 """
 import math
-from .pdf_reader import BankTransaction, InvoiceData, PayrollEntry
-from .csv_exporter import JournalEntry
-from .rulebook import Rulebook
-from .master import MasterData
+from .pdf_reader import 通帳取引, 請求書データ, 賃金台帳データ
+from .csv_exporter import 仕訳エントリ
+from .rulebook import ルールブック管理
+from .master import マスタデータ
 
 
-class JournalEngine:
+class 仕訳エンジン:
     """仕訳判定の中核エンジン"""
 
-    def __init__(self, rulebook: Rulebook, master: MasterData):
-        self.rulebook = rulebook
-        self.master = master
-        self.confirmed = []     # 確定仕訳
-        self.review_items = []  # 要確認リスト
+    def __init__(self, ルールブック: ルールブック管理, マスタ: マスタデータ):
+        self.ルールブック = ルールブック
+        self.マスタ = マスタ
+        self.確定仕訳一覧 = []
+        self.要確認一覧 = []
 
-    def process_bank_transactions(self, transactions: list):
+    def 通帳取引処理(self, 取引一覧: list):
         """
         通帳取引リストを処理して仕訳を生成
 
@@ -29,348 +29,270 @@ class JournalEngine:
         4. 借入金返済なら諸口仕訳
         5. いずれも不一致→174仮払金（要確認）
         """
-        for tx in transactions:
-            entries = self._process_single_bank_tx(tx)
-            if entries:
-                self.confirmed.extend(entries)
+        for 取引 in 取引一覧:
+            エントリ一覧 = self._通帳1件処理(取引)
+            if エントリ一覧:
+                self.確定仕訳一覧.extend(エントリ一覧)
 
-    def _process_single_bank_tx(self, tx: BankTransaction):
+    def _通帳1件処理(self, 取引: 通帳取引):
         """通帳取引1件を仕訳に変換"""
         # STEP1: カタカナ→正式摘要変換
-        formal_tekiyo = self.rulebook.lookup_tekiyo(tx.tekiyo)
+        正式摘要 = self.ルールブック.摘要変換(取引.摘要)
 
         # 出入金の方向
-        direction = "出金" if tx.withdrawal > 0 else "入金"
-        amount = tx.withdrawal if tx.withdrawal > 0 else tx.deposit
+        方向 = "出金" if 取引.出金額 > 0 else "入金"
+        金額 = 取引.出金額 if 取引.出金額 > 0 else 取引.入金額
 
         # 銀行口座の情報
-        bank_info = {
-            "account_code": tx.bank_code,
-            "account_name": self.master.get_account_name(tx.bank_code),
-            "sub_code": "",
-            "sub_name": "",
+        口座情報 = {
+            "科目コード": 取引.口座コード,
+            "科目名": self.マスタ.科目名取得(取引.口座コード),
+            "補助コード": "", "補助名": "",
         }
 
         # STEP2: ルールブックから仕訳パターンを検索
-        pattern = self.rulebook.lookup_pattern(formal_tekiyo, direction, tx.bank_code, amount)
+        パターン = self.ルールブック.パターン検索(正式摘要, 方向, 取引.口座コード, 金額)
 
         # STEP3: 源泉税対象チェック
-        if self.rulebook.is_withholding_target(formal_tekiyo):
-            return self._create_withholding_entries(tx, formal_tekiyo, bank_info, amount)
+        if self.ルールブック.源泉税対象判定(正式摘要):
+            return self._源泉税仕訳生成(取引, 正式摘要, 口座情報, 金額)
 
         # STEP4: 借入金返済チェック
-        loan = self._check_loan_repayment(formal_tekiyo, amount)
-        if loan:
-            return self._create_loan_entries(tx, formal_tekiyo, bank_info, loan)
+        借入情報 = self._借入金返済チェック(正式摘要, 金額)
+        if 借入情報:
+            return self._借入金仕訳生成(取引, 正式摘要, 口座情報, 借入情報)
 
         # STEP5: 通常パターン一致
-        if pattern:
-            counterpart_info = {
-                "account_code": pattern["account_code"],
-                "account_name": pattern.get("account_name",
-                                            self.master.get_account_name(pattern["account_code"])),
-                "sub_code": pattern.get("sub_code", ""),
-                "sub_name": pattern.get("sub_name",
-                                        self.master.get_sub_account_name(
-                                            pattern["account_code"],
-                                            pattern.get("sub_code", ""))),
-                "tax": pattern.get("tax", {}),
+        if パターン:
+            相手科目情報 = {
+                "科目コード": パターン["科目コード"],
+                "科目名": パターン.get("科目名",
+                                    self.マスタ.科目名取得(パターン["科目コード"])),
+                "補助コード": パターン.get("補助コード", ""),
+                "補助名": パターン.get("補助名",
+                                    self.マスタ.補助科目名取得(
+                                        パターン["科目コード"],
+                                        パターン.get("補助コード", ""))),
+                "消費税": パターン.get("消費税", {}),
             }
 
-            if direction == "出金":
-                entry = JournalEntry.from_bank_transaction(
-                    tx, debit_info=counterpart_info, credit_info=bank_info,
-                    tekiyo=formal_tekiyo,
-                )
+            if 方向 == "出金":
+                エントリ = 仕訳エントリ.通帳取引から生成(
+                    取引, 借方情報=相手科目情報, 貸方情報=口座情報, 摘要=正式摘要)
             else:
-                entry = JournalEntry.from_bank_transaction(
-                    tx, debit_info=bank_info, credit_info=counterpart_info,
-                    tekiyo=formal_tekiyo,
-                )
-            entry.confidence = "high"
-            return [entry]
+                エントリ = 仕訳エントリ.通帳取引から生成(
+                    取引, 借方情報=口座情報, 貸方情報=相手科目情報, 摘要=正式摘要)
+            エントリ.信頼度 = "高"
+            return [エントリ]
 
         # STEP6: 不一致 → 174仮払金 + 要確認リストに追加
-        self.review_items.append({
-            "date": tx.date,
-            "tekiyo": formal_tekiyo,
-            "amount": amount,
-            "direction": direction,
-            "reason": "ルールブックに一致するパターンなし",
+        self.要確認一覧.append({
+            "日付": 取引.日付, "摘要": 正式摘要, "金額": 金額,
+            "方向": 方向, "理由": "ルールブックに一致するパターンなし",
         })
 
-        fallback_info = {
-            "account_code": "174",
-            "account_name": "仮払金",
-            "sub_code": "",
-            "sub_name": "",
-        }
+        仮払情報 = {"科目コード": "174", "科目名": "仮払金", "補助コード": "", "補助名": ""}
 
-        if direction == "出金":
-            entry = JournalEntry.from_bank_transaction(
-                tx, debit_info=fallback_info, credit_info=bank_info,
-                tekiyo=formal_tekiyo,
-            )
+        if 方向 == "出金":
+            エントリ = 仕訳エントリ.通帳取引から生成(
+                取引, 借方情報=仮払情報, 貸方情報=口座情報, 摘要=正式摘要)
         else:
-            entry = JournalEntry.from_bank_transaction(
-                tx, debit_info=bank_info, credit_info=fallback_info,
-                tekiyo=formal_tekiyo,
-            )
-        entry.confidence = "low"
-        return [entry]
+            エントリ = 仕訳エントリ.通帳取引から生成(
+                取引, 借方情報=口座情報, 貸方情報=仮払情報, 摘要=正式摘要)
+        エントリ.信頼度 = "低"
+        return [エントリ]
 
-    def _create_withholding_entries(self, tx, tekiyo, bank_info, amount):
+    def _源泉税仕訳生成(self, 取引, 摘要, 口座情報, 金額):
         """源泉税対象の諸口仕訳を生成（報酬 + 預り金 + 消費税）"""
-        entries = []
+        結果 = []
 
         # 簡易計算（10%税率の場合）
-        # 支払額 = 報酬(税込) - 源泉所得税
-        # 源泉所得税 = 報酬(税抜) × 10.21%
-        # 報酬(税込) = 報酬(税抜) × 1.1
-        # → 報酬(税抜) = 支払額 / (1.1 - 0.1021) = 支払額 / 0.9979
-        tax_excl = math.floor(amount / 0.9979)
-        tax_amount = math.floor(tax_excl * 0.1)
-        withholding_tax = math.floor(tax_excl * 0.1021)
-        gross = tax_excl + tax_amount
+        税抜額 = math.floor(金額 / 0.9979)
+        消費税額 = math.floor(税抜額 * 0.1)
+        源泉税額 = math.floor(税抜額 * 0.1021)
+        税込総額 = 税抜額 + 消費税額
 
-        # 実際の源泉税額で再計算（支払額 = gross - withholding_tax）
-        # 誤差が出る場合があるので、支払額に合わせて調整
-        if gross - withholding_tax != amount:
-            # 諸口仕訳のため、貸方合計=借方合計にする
-            gross = amount + withholding_tax
+        if 税込総額 - 源泉税額 != 金額:
+            税込総額 = 金額 + 源泉税額
 
         # 借方: 報酬（997諸口）
-        entry1 = JournalEntry()
-        entry1.date = tx.date
-        entry1.debit_code = "997"
-        entry1.debit_name = "諸口"
-        entry1.debit_amount = gross
-        entry1.credit_code = "997"
-        entry1.credit_name = "諸口"
-        entry1.credit_amount = gross
-        entry1.tekiyo = tekiyo
-        entry1.confidence = "medium"
-        entries.append(entry1)
+        e1 = 仕訳エントリ()
+        e1.日付 = 取引.日付
+        e1.借方科目コード, e1.借方科目名 = "997", "諸口"
+        e1.借方金額 = 税込総額
+        e1.貸方科目コード, e1.貸方科目名 = "997", "諸口"
+        e1.貸方金額 = 税込総額
+        e1.摘要, e1.信頼度 = 摘要, "中"
+        結果.append(e1)
 
         # 貸方: 預り金（源泉所得税）
-        entry2 = JournalEntry()
-        entry2.date = tx.date
-        entry2.debit_code = "997"
-        entry2.debit_name = "諸口"
-        entry2.debit_amount = withholding_tax
-        entry2.credit_code = "323"
-        entry2.credit_name = "預り金"
-        entry2.credit_sub_code = "1"
-        entry2.credit_sub_name = "源泉所得税"
-        entry2.credit_amount = withholding_tax
-        entry2.tekiyo = tekiyo + " 源泉"
-        entry2.confidence = "medium"
-        entries.append(entry2)
+        e2 = 仕訳エントリ()
+        e2.日付 = 取引.日付
+        e2.借方科目コード, e2.借方科目名 = "997", "諸口"
+        e2.借方金額 = 源泉税額
+        e2.貸方科目コード, e2.貸方科目名 = "323", "預り金"
+        e2.貸方補助コード, e2.貸方補助名 = "1", "源泉所得税"
+        e2.貸方金額 = 源泉税額
+        e2.摘要, e2.信頼度 = 摘要 + " 源泉", "中"
+        結果.append(e2)
 
         # 貸方: 銀行口座（実際の支払額）
-        entry3 = JournalEntry()
-        entry3.date = tx.date
-        entry3.debit_code = "997"
-        entry3.debit_name = "諸口"
-        entry3.debit_amount = amount
-        entry3.credit_code = bank_info["account_code"]
-        entry3.credit_name = bank_info["account_name"]
-        entry3.credit_amount = amount
-        entry3.tekiyo = tekiyo
-        entry3.confidence = "medium"
-        entries.append(entry3)
+        e3 = 仕訳エントリ()
+        e3.日付 = 取引.日付
+        e3.借方科目コード, e3.借方科目名 = "997", "諸口"
+        e3.借方金額 = 金額
+        e3.貸方科目コード = 口座情報["科目コード"]
+        e3.貸方科目名 = 口座情報["科目名"]
+        e3.貸方金額 = 金額
+        e3.摘要, e3.信頼度 = 摘要, "中"
+        結果.append(e3)
 
-        self.review_items.append({
-            "date": tx.date,
-            "tekiyo": tekiyo,
-            "amount": amount,
-            "direction": "出金",
-            "reason": "源泉税対象（諸口仕訳を自動生成。報酬科目・金額の確認が必要）",
+        self.要確認一覧.append({
+            "日付": 取引.日付, "摘要": 摘要, "金額": 金額,
+            "方向": "出金", "理由": "源泉税対象（諸口仕訳を自動生成。報酬科目・金額の確認が必要）",
         })
 
-        return entries
+        return 結果
 
-    def _check_loan_repayment(self, tekiyo, amount):
+    def _借入金返済チェック(self, 摘要, 金額):
         """借入金返済パターンに一致するかチェック"""
-        for lp in self.rulebook.loan_patterns.values():
-            best_tek = max(lp["tekiyo_map"], key=lp["tekiyo_map"].get)
-            if best_tek in tekiyo or tekiyo in best_tek:
+        for lp in self.ルールブック.借入金パターン.values():
+            代表摘要 = max(lp["摘要集計"], key=lp["摘要集計"].get)
+            if 代表摘要 in 摘要 or 摘要 in 代表摘要:
                 return lp
-            # 金額での照合
-            if amount in lp["amounts"] or (lp["amounts"] and abs(amount - lp["amounts"][-1]) < 100):
+            if 金額 in lp["金額一覧"] or (lp["金額一覧"] and abs(金額 - lp["金額一覧"][-1]) < 100):
                 return lp
         return None
 
-    def _create_loan_entries(self, tx, tekiyo, bank_info, loan):
-        """借入金返済の諸口仕訳を生成"""
-        entries = []
-        principal = tx.withdrawal  # 元本（利息は別途手動確認が必要）
+    def _借入金仕訳生成(self, 取引, 摘要, 口座情報, 借入情報):
+        """借入金返済の仕訳を生成"""
+        結果 = []
+        元本 = 取引.出金額
 
-        # 借方: 借入金返済
-        entry1 = JournalEntry()
-        entry1.date = tx.date
-        entry1.debit_code = loan["code"]
-        entry1.debit_name = loan["name"]
-        entry1.debit_sub_code = loan.get("sub_code", "")
-        entry1.debit_sub_name = loan.get("sub_name", "")
-        entry1.debit_amount = principal
-        entry1.credit_code = bank_info["account_code"]
-        entry1.credit_name = bank_info["account_name"]
-        entry1.credit_amount = principal
-        entry1.tekiyo = tekiyo
-        entry1.confidence = "medium"
-        entries.append(entry1)
+        e1 = 仕訳エントリ()
+        e1.日付 = 取引.日付
+        e1.借方科目コード = 借入情報["コード"]
+        e1.借方科目名 = 借入情報["科目名"]
+        e1.借方補助コード = 借入情報.get("補助コード", "")
+        e1.借方補助名 = 借入情報.get("補助名", "")
+        e1.借方金額 = 元本
+        e1.貸方科目コード = 口座情報["科目コード"]
+        e1.貸方科目名 = 口座情報["科目名"]
+        e1.貸方金額 = 元本
+        e1.摘要, e1.信頼度 = 摘要, "中"
+        結果.append(e1)
 
-        self.review_items.append({
-            "date": tx.date,
-            "tekiyo": tekiyo,
-            "amount": principal,
-            "direction": "出金",
-            "reason": "借入金返済（元本・利息の内訳確認が必要）",
+        self.要確認一覧.append({
+            "日付": 取引.日付, "摘要": 摘要, "金額": 元本,
+            "方向": "出金", "理由": "借入金返済（元本・利息の内訳確認が必要）",
         })
 
-        return entries
+        return 結果
 
-    def process_invoices(self, invoices: list):
+    def 請求書処理(self, 請求書一覧: list):
         """請求書データを処理して売上仕訳を生成"""
-        for inv in invoices:
-            entry = JournalEntry()
-            entry.date = inv.date
-            entry.debit_code = "150"  # 売掛金（デフォルト）
-            entry.debit_name = "売掛金"
-            entry.debit_amount = inv.total_amount
-            entry.credit_code = "400"  # 売上高（デフォルト）
-            entry.credit_name = "売上高"
-            entry.credit_amount = inv.total_amount
-            entry.tekiyo = f"{inv.vendor} 請求"
+        for 請求書 in 請求書一覧:
+            エントリ = 仕訳エントリ()
+            エントリ.日付 = 請求書.日付
+            エントリ.借方科目コード, エントリ.借方科目名 = "150", "売掛金"
+            エントリ.借方金額 = 請求書.合計金額
+            エントリ.貸方科目コード, エントリ.貸方科目名 = "400", "売上高"
+            エントリ.貸方金額 = 請求書.合計金額
+            エントリ.摘要 = f"{請求書.取引先名} 請求"
 
-            # 消費税設定
-            if inv.tax_amount > 0:
-                entry.credit_tax_sales = "1"
-                entry.credit_tax_type = "0"  # 税込
-                entry.credit_tax_code = "10"
-                entry.credit_tax_rate = "10"
-                entry.credit_tax_amount = inv.tax_amount
-                if self.master.is_invoice_issuer():
-                    entry.credit_biz_type = "1"
+            if 請求書.消費税額 > 0:
+                エントリ.貸方税売仕 = "1"
+                エントリ.貸方税込抜 = "0"
+                エントリ.貸方税コード = "10"
+                エントリ.貸方税率コード = "10"
+                エントリ.貸方消費税額 = 請求書.消費税額
+                if self.マスタ.インボイス事業者判定():
+                    エントリ.貸方事業者区分 = "1"
 
-            entry.confidence = "medium"
-            self.confirmed.append(entry)
+            エントリ.信頼度 = "中"
+            self.確定仕訳一覧.append(エントリ)
 
-            self.review_items.append({
-                "date": inv.date,
-                "tekiyo": f"{inv.vendor} 請求",
-                "amount": inv.total_amount,
-                "direction": "売上",
-                "reason": "請求書から自動生成（科目・税率の確認が必要）",
+            self.要確認一覧.append({
+                "日付": 請求書.日付, "摘要": f"{請求書.取引先名} 請求",
+                "金額": 請求書.合計金額, "方向": "売上",
+                "理由": "請求書から自動生成（科目・税率の確認が必要）",
             })
 
-    def process_payroll(self, payroll_entries: list, pay_date=""):
-        """
-        賃金台帳から給与仕訳を生成
+    def 給与処理(self, 賃金一覧: list, 支給日=""):
+        """賃金台帳から給与仕訳を生成"""
+        for 従業員 in 賃金一覧:
+            日付 = 支給日 or 従業員.対象期間
 
-        給与仕訳は複数行の諸口仕訳になる:
-        借方: 給料手当、法定福利費（会社負担分）
-        貸方: 預り金（源泉所得税、住民税、社保）、普通預金
-        """
-        for pe in payroll_entries:
-            date = pay_date or pe.period
+            if 従業員.支給合計 > 0:
+                e = 仕訳エントリ()
+                e.日付 = 日付
+                e.借方科目コード, e.借方科目名 = "510", "給料手当"
+                e.借方金額 = 従業員.支給合計
+                e.貸方科目コード, e.貸方科目名 = "997", "諸口"
+                e.貸方金額 = 従業員.支給合計
+                e.摘要, e.信頼度 = f"給与 {従業員.従業員名}", "中"
+                self.確定仕訳一覧.append(e)
 
-            # 借方: 給料手当
-            if pe.total_pay > 0:
-                entry = JournalEntry()
-                entry.date = date
-                entry.debit_code = "510"
-                entry.debit_name = "給料手当"
-                entry.debit_amount = pe.total_pay
-                entry.credit_code = "997"
-                entry.credit_name = "諸口"
-                entry.credit_amount = pe.total_pay
-                entry.tekiyo = f"給与 {pe.employee_name}"
-                entry.confidence = "medium"
-                self.confirmed.append(entry)
+            if 従業員.源泉所得税 > 0:
+                e = 仕訳エントリ()
+                e.日付 = 日付
+                e.借方科目コード, e.借方科目名 = "997", "諸口"
+                e.借方金額 = 従業員.源泉所得税
+                e.貸方科目コード, e.貸方科目名 = "323", "預り金"
+                e.貸方補助コード, e.貸方補助名 = "1", "源泉所得税"
+                e.貸方金額 = 従業員.源泉所得税
+                e.摘要, e.信頼度 = f"給与 {従業員.従業員名} 源泉", "中"
+                self.確定仕訳一覧.append(e)
 
-            # 貸方: 源泉所得税
-            if pe.income_tax > 0:
-                entry = JournalEntry()
-                entry.date = date
-                entry.debit_code = "997"
-                entry.debit_name = "諸口"
-                entry.debit_amount = pe.income_tax
-                entry.credit_code = "323"
-                entry.credit_name = "預り金"
-                entry.credit_sub_code = "1"
-                entry.credit_sub_name = "源泉所得税"
-                entry.credit_amount = pe.income_tax
-                entry.tekiyo = f"給与 {pe.employee_name} 源泉"
-                entry.confidence = "medium"
-                self.confirmed.append(entry)
+            if 従業員.住民税 > 0:
+                e = 仕訳エントリ()
+                e.日付 = 日付
+                e.借方科目コード, e.借方科目名 = "997", "諸口"
+                e.借方金額 = 従業員.住民税
+                e.貸方科目コード, e.貸方科目名 = "323", "預り金"
+                e.貸方補助コード, e.貸方補助名 = "2", "住民税"
+                e.貸方金額 = 従業員.住民税
+                e.摘要, e.信頼度 = f"給与 {従業員.従業員名} 住民税", "中"
+                self.確定仕訳一覧.append(e)
 
-            # 貸方: 住民税
-            if pe.resident_tax > 0:
-                entry = JournalEntry()
-                entry.date = date
-                entry.debit_code = "997"
-                entry.debit_name = "諸口"
-                entry.debit_amount = pe.resident_tax
-                entry.credit_code = "323"
-                entry.credit_name = "預り金"
-                entry.credit_sub_code = "2"
-                entry.credit_sub_name = "住民税"
-                entry.credit_amount = pe.resident_tax
-                entry.tekiyo = f"給与 {pe.employee_name} 住民税"
-                entry.confidence = "medium"
-                self.confirmed.append(entry)
+            社保合計 = 従業員.健康保険 + 従業員.厚生年金 + 従業員.雇用保険
+            if 社保合計 > 0:
+                e = 仕訳エントリ()
+                e.日付 = 日付
+                e.借方科目コード, e.借方科目名 = "997", "諸口"
+                e.借方金額 = 社保合計
+                e.貸方科目コード, e.貸方科目名 = "323", "預り金"
+                e.貸方補助コード, e.貸方補助名 = "3", "社会保険"
+                e.貸方金額 = 社保合計
+                e.摘要, e.信頼度 = f"給与 {従業員.従業員名} 社保", "中"
+                self.確定仕訳一覧.append(e)
 
-            # 貸方: 社会保険料
-            social_ins = pe.health_ins + pe.pension + pe.employment_ins
-            if social_ins > 0:
-                entry = JournalEntry()
-                entry.date = date
-                entry.debit_code = "997"
-                entry.debit_name = "諸口"
-                entry.debit_amount = social_ins
-                entry.credit_code = "323"
-                entry.credit_name = "預り金"
-                entry.credit_sub_code = "3"
-                entry.credit_sub_name = "社会保険"
-                entry.credit_amount = social_ins
-                entry.tekiyo = f"給与 {pe.employee_name} 社保"
-                entry.confidence = "medium"
-                self.confirmed.append(entry)
+            if 従業員.差引支給額 > 0:
+                e = 仕訳エントリ()
+                e.日付 = 日付
+                e.借方科目コード, e.借方科目名 = "997", "諸口"
+                e.借方金額 = 従業員.差引支給額
+                e.貸方科目コード, e.貸方科目名 = "131", "普通預金"
+                e.貸方金額 = 従業員.差引支給額
+                e.摘要, e.信頼度 = f"給与 {従業員.従業員名} 振込", "中"
+                self.確定仕訳一覧.append(e)
 
-            # 貸方: 差引支給額（銀行振込）
-            if pe.net_pay > 0:
-                entry = JournalEntry()
-                entry.date = date
-                entry.debit_code = "997"
-                entry.debit_name = "諸口"
-                entry.debit_amount = pe.net_pay
-                entry.credit_code = "131"
-                entry.credit_name = "普通預金"
-                entry.credit_amount = pe.net_pay
-                entry.tekiyo = f"給与 {pe.employee_name} 振込"
-                entry.confidence = "medium"
-                self.confirmed.append(entry)
-
-            self.review_items.append({
-                "date": date,
-                "tekiyo": f"給与 {pe.employee_name}",
-                "amount": pe.total_pay,
-                "direction": "給与",
-                "reason": "賃金台帳から自動生成（社保率・科目コードの確認が必要）",
+            self.要確認一覧.append({
+                "日付": 日付, "摘要": f"給与 {従業員.従業員名}",
+                "金額": 従業員.支給合計, "方向": "給与",
+                "理由": "賃金台帳から自動生成（社保率・科目コードの確認が必要）",
             })
 
-    def get_results(self):
+    def 結果取得(self):
         """処理結果を返す"""
         return {
-            "confirmed": self.confirmed,
-            "review_items": self.review_items,
-            "stats": {
-                "total": len(self.confirmed),
-                "high_confidence": sum(1 for e in self.confirmed if e.confidence == "high"),
-                "medium_confidence": sum(1 for e in self.confirmed if e.confidence == "medium"),
-                "low_confidence": sum(1 for e in self.confirmed if e.confidence == "low"),
-                "review_count": len(self.review_items),
+            "確定仕訳": self.確定仕訳一覧,
+            "要確認": self.要確認一覧,
+            "統計": {
+                "合計": len(self.確定仕訳一覧),
+                "高信頼": sum(1 for e in self.確定仕訳一覧 if e.信頼度 == "高"),
+                "中信頼": sum(1 for e in self.確定仕訳一覧 if e.信頼度 == "中"),
+                "低信頼": sum(1 for e in self.確定仕訳一覧 if e.信頼度 == "低"),
+                "要確認数": len(self.要確認一覧),
             },
         }

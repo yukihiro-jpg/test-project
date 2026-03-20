@@ -3,123 +3,122 @@ PDF読み取りモジュール
 通帳PDF・売上請求書PDF・賃金台帳PDFからデータを抽出する
 
 事務所PCでClaude Codeに実際のPDFを見せて、このモジュールの
-parse関数をカスタマイズしてもらう想定。
+解析関数をカスタマイズしてもらう想定。
 """
 import re
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 try:
     import pdfplumber
-    HAS_PDFPLUMBER = True
+    PDF読取可能 = True
 except ImportError:
-    HAS_PDFPLUMBER = False
+    PDF読取可能 = False
 
 try:
     from PIL import Image
     import pytesseract
-    HAS_OCR = True
+    OCR可能 = True
 except ImportError:
-    HAS_OCR = False
+    OCR可能 = False
 
 
 @dataclass
-class BankTransaction:
+class 通帳取引:
     """通帳1行分のデータ"""
-    date: str              # YYYYMMDD
-    tekiyo: str            # 摘要（カタカナ等）
-    withdrawal: int = 0    # 出金額
-    deposit: int = 0       # 入金額
-    balance: int = 0       # 残高
-    bank_code: str = ""    # 口座の科目コード（例: "131"）
-    raw_text: str = ""     # 元のテキスト（デバッグ用）
+    日付: str              # YYYYMMDD
+    摘要: str              # 摘要（カタカナ等）
+    出金額: int = 0
+    入金額: int = 0
+    残高: int = 0
+    口座コード: str = ""    # 口座の科目コード（例: "131"）
+    元テキスト: str = ""    # 元のテキスト（デバッグ用）
 
 
 @dataclass
-class InvoiceData:
+class 請求書データ:
     """請求書1枚分のデータ"""
-    date: str = ""              # 請求日 YYYYMMDD
-    vendor: str = ""            # 取引先名
-    total_amount: int = 0       # 合計金額
-    tax_amount: int = 0         # 消費税額
-    items: list = field(default_factory=list)  # [{品名, 数量, 単価, 金額, 税率}]
-    invoice_number: str = ""    # インボイス番号（T+13桁）
-    is_invoice: bool = False    # 適格請求書かどうか
-    raw_text: str = ""
+    日付: str = ""              # 請求日 YYYYMMDD
+    取引先名: str = ""
+    合計金額: int = 0
+    消費税額: int = 0
+    明細一覧: list = field(default_factory=list)  # [{品名, 数量, 単価, 金額, 税率}]
+    インボイス番号: str = ""    # T+13桁
+    適格請求書: bool = False
+    元テキスト: str = ""
 
 
 @dataclass
-class PayrollEntry:
+class 賃金台帳データ:
     """賃金台帳1人分のデータ"""
-    employee_name: str = ""     # 従業員名
-    period: str = ""            # 対象期間
-    base_salary: int = 0        # 基本給
-    overtime: int = 0           # 残業代
-    commute: int = 0            # 通勤手当
-    total_pay: int = 0          # 支給合計
-    health_ins: int = 0         # 健康保険
-    pension: int = 0            # 厚生年金
-    employment_ins: int = 0     # 雇用保険
-    income_tax: int = 0         # 源泉所得税
-    resident_tax: int = 0       # 住民税
-    total_deduction: int = 0    # 控除合計
-    net_pay: int = 0            # 差引支給額
-    raw_text: str = ""
+    従業員名: str = ""
+    対象期間: str = ""
+    基本給: int = 0
+    残業代: int = 0
+    通勤手当: int = 0
+    支給合計: int = 0
+    健康保険: int = 0
+    厚生年金: int = 0
+    雇用保険: int = 0
+    源泉所得税: int = 0
+    住民税: int = 0
+    控除合計: int = 0
+    差引支給額: int = 0
+    元テキスト: str = ""
 
 
-def extract_text_from_pdf(pdf_path):
+def PDFテキスト抽出(PDFパス):
     """PDFからテキストを抽出（pdfplumber優先、失敗時はOCR）"""
-    if not os.path.isfile(pdf_path):
-        raise FileNotFoundError(f"PDFが見つかりません: {pdf_path}")
+    if not os.path.isfile(PDFパス):
+        raise FileNotFoundError(f"PDFが見つかりません: {PDFパス}")
 
-    text = ""
+    テキスト = ""
 
     # pdfplumberでテキスト抽出を試行
-    if HAS_PDFPLUMBER:
-        with pdfplumber.open(pdf_path) as pdf:
-            for page in pdf.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
+    if PDF読取可能:
+        with pdfplumber.open(PDFパス) as pdf:
+            for ページ in pdf.pages:
+                ページテキスト = ページ.extract_text()
+                if ページテキスト:
+                    テキスト += ページテキスト + "\n"
 
     # テキストが取れなかった場合、OCRにフォールバック
-    if not text.strip() and HAS_OCR:
-        text = _ocr_pdf(pdf_path)
+    if not テキスト.strip() and OCR可能:
+        テキスト = _OCR読み取り(PDFパス)
 
-    if not text.strip():
+    if not テキスト.strip():
         raise RuntimeError(
-            f"PDFからテキストを抽出できません: {pdf_path}\n"
+            f"PDFからテキストを抽出できません: {PDFパス}\n"
             "pdfplumberまたはtesseract-ocrをインストールしてください。"
         )
 
-    return text
+    return テキスト
 
 
-def extract_tables_from_pdf(pdf_path):
+def PDFテーブル抽出(PDFパス):
     """PDFからテーブル構造を抽出"""
-    if not HAS_PDFPLUMBER:
+    if not PDF読取可能:
         return []
 
-    tables = []
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            page_tables = page.extract_tables()
-            if page_tables:
-                tables.extend(page_tables)
-    return tables
+    テーブル一覧 = []
+    with pdfplumber.open(PDFパス) as pdf:
+        for ページ in pdf.pages:
+            ページテーブル = ページ.extract_tables()
+            if ページテーブル:
+                テーブル一覧.extend(ページテーブル)
+    return テーブル一覧
 
 
-def _ocr_pdf(pdf_path):
+def _OCR読み取り(PDFパス):
     """OCRでPDFを読み取り"""
     try:
         from pdf2image import convert_from_path
-        images = convert_from_path(pdf_path, dpi=300)
-        texts = []
-        for img in images:
-            t = pytesseract.image_to_string(img, lang="jpn")
-            texts.append(t)
-        return "\n".join(texts)
+        画像一覧 = convert_from_path(PDFパス, dpi=300)
+        テキスト一覧 = []
+        for 画像 in 画像一覧:
+            t = pytesseract.image_to_string(画像, lang="jpn")
+            テキスト一覧.append(t)
+        return "\n".join(テキスト一覧)
     except ImportError:
         return ""
 
@@ -127,7 +126,7 @@ def _ocr_pdf(pdf_path):
 # ============================================================
 # 通帳PDF解析
 # ============================================================
-def parse_passbook_pdf(pdf_path, bank_code=""):
+def 通帳PDF解析(PDFパス, 口座コード=""):
     """
     通帳PDFを解析して取引リストを返す。
 
@@ -136,149 +135,125 @@ def parse_passbook_pdf(pdf_path, bank_code=""):
     この関数内のパターンを調整してもらう。
     銀行ごとにフォーマットが異なるため。
 
-    Args:
-        pdf_path: 通帳PDFのパス
-        bank_code: この口座の科目コード（例: "131"）
+    引数:
+        PDFパス: 通帳PDFのパス
+        口座コード: この口座の科目コード（例: "131"）
 
-    Returns:
-        list[BankTransaction]
+    戻り値:
+        list[通帳取引]
     """
     # ファイル名から口座コード推定（例: "131_常陽銀行普通.pdf"）
-    if not bank_code:
-        fname = os.path.basename(pdf_path)
-        m = re.match(r"^(\d{2,4})", fname)
+    if not 口座コード:
+        ファイル名 = os.path.basename(PDFパス)
+        m = re.match(r"^(\d{2,4})", ファイル名)
         if m:
-            bank_code = m.group(1)
+            口座コード = m.group(1)
 
-    text = extract_text_from_pdf(pdf_path)
-    transactions = []
+    テキスト = PDFテキスト抽出(PDFパス)
+    取引一覧 = []
 
     # テーブル抽出を優先
-    tables = extract_tables_from_pdf(pdf_path)
-    if tables:
-        transactions = _parse_passbook_tables(tables, bank_code)
+    テーブル一覧 = PDFテーブル抽出(PDFパス)
+    if テーブル一覧:
+        取引一覧 = _通帳テーブル解析(テーブル一覧, 口座コード)
 
     # テーブルが取れなければテキストベースで解析
-    if not transactions:
-        transactions = _parse_passbook_text(text, bank_code)
+    if not 取引一覧:
+        取引一覧 = _通帳テキスト解析(テキスト, 口座コード)
 
-    return transactions
+    return 取引一覧
 
 
-def _parse_passbook_tables(tables, bank_code):
+def _通帳テーブル解析(テーブル一覧, 口座コード):
     """テーブル構造から通帳データを抽出"""
-    txs = []
-    for table in tables:
-        for row in table:
-            if not row or len(row) < 4:
+    結果 = []
+    for テーブル in テーブル一覧:
+        for 行 in テーブル:
+            if not 行 or len(行) < 4:
                 continue
-            # 日付列の検出（YYYY/MM/DD, MM/DD, etc.）
-            date_str = _find_date_in_cells(row)
-            if not date_str:
+            日付文字列 = _セルから日付検索(行)
+            if not 日付文字列:
                 continue
 
-            # 金額列の検出
-            amounts = [_parse_amount(cell) for cell in row if cell]
-            tekiyo = _find_tekiyo_in_cells(row)
+            摘要 = _セルから摘要検索(行)
 
             # 出金・入金・残高の特定（位置ベース）
-            numeric_cells = [(i, _parse_amount(cell)) for i, cell in enumerate(row)
-                             if cell and _parse_amount(cell) > 0]
+            数値セル = [(i, _金額抽出(セル)) for i, セル in enumerate(行)
+                       if セル and _金額抽出(セル) > 0]
 
-            if len(numeric_cells) >= 2 and tekiyo:
-                # 一般的なパターン: ..., 摘要, 出金, 入金, 残高
-                withdrawal = 0
-                deposit = 0
-                balance = 0
-                if len(numeric_cells) == 2:
-                    withdrawal = numeric_cells[0][1]
-                    balance = numeric_cells[1][1]
-                    if balance > withdrawal:
-                        deposit = withdrawal
-                        withdrawal = 0
-                elif len(numeric_cells) >= 3:
-                    withdrawal = numeric_cells[0][1]
-                    deposit = numeric_cells[1][1]
-                    balance = numeric_cells[2][1]
+            if len(数値セル) >= 2 and 摘要:
+                出金額 = 0
+                入金額 = 0
+                残高 = 0
+                if len(数値セル) == 2:
+                    出金額 = 数値セル[0][1]
+                    残高 = 数値セル[1][1]
+                    if 残高 > 出金額:
+                        入金額 = 出金額
+                        出金額 = 0
+                elif len(数値セル) >= 3:
+                    出金額 = 数値セル[0][1]
+                    入金額 = 数値セル[1][1]
+                    残高 = 数値セル[2][1]
 
-                txs.append(BankTransaction(
-                    date=date_str,
-                    tekiyo=tekiyo,
-                    withdrawal=withdrawal,
-                    deposit=deposit,
-                    balance=balance,
-                    bank_code=bank_code,
-                    raw_text=str(row),
+                結果.append(通帳取引(
+                    日付=日付文字列, 摘要=摘要,
+                    出金額=出金額, 入金額=入金額, 残高=残高,
+                    口座コード=口座コード, 元テキスト=str(行),
                 ))
-    return txs
+    return 結果
 
 
-def _parse_passbook_text(text, bank_code):
+def _通帳テキスト解析(テキスト, 口座コード):
     """テキストベースで通帳データを抽出"""
-    txs = []
-    lines = text.split("\n")
-
-    for line in lines:
-        line = line.strip()
-        if not line:
+    結果 = []
+    for 行 in テキスト.split("\n"):
+        行 = 行.strip()
+        if not 行:
             continue
 
-        # 日付パターン検出
-        date_match = re.search(
-            r"(\d{4}[/\-]\d{1,2}[/\-]\d{1,2}|\d{1,2}[/\-]\d{1,2})", line
+        日付一致 = re.search(
+            r"(\d{4}[/\-]\d{1,2}[/\-]\d{1,2}|\d{1,2}[/\-]\d{1,2})", 行
         )
-        if not date_match:
+        if not 日付一致:
             continue
 
-        date_str = _normalize_date(date_match.group(1))
+        日付文字列 = _日付正規化(日付一致.group(1))
 
-        # 金額パターン検出（カンマ区切りの数字）
-        amounts = re.findall(r"[\d,]+\d", line)
-        amounts = [int(a.replace(",", "")) for a in amounts if int(a.replace(",", "")) > 0]
+        金額一覧 = re.findall(r"[\d,]+\d", 行)
+        金額一覧 = [int(a.replace(",", "")) for a in 金額一覧 if int(a.replace(",", "")) > 0]
 
-        if len(amounts) < 1:
+        if len(金額一覧) < 1:
             continue
 
-        # 日付と金額の間がおそらく摘要
-        after_date = line[date_match.end():].strip()
-        # 最初の金額の前までが摘要
-        amount_match = re.search(r"[\d,]{2,}", after_date)
-        tekiyo = after_date[:amount_match.start()].strip() if amount_match else after_date
+        日付以降 = 行[日付一致.end():].strip()
+        金額一致 = re.search(r"[\d,]{2,}", 日付以降)
+        摘要 = 日付以降[:金額一致.start()].strip() if 金額一致 else 日付以降
 
-        if not tekiyo:
+        if not 摘要:
             continue
 
-        withdrawal = 0
-        deposit = 0
-        balance = 0
+        出金額, 入金額, 残高 = 0, 0, 0
+        if len(金額一覧) == 1:
+            出金額 = 金額一覧[0]
+        elif len(金額一覧) == 2:
+            出金額, 残高 = 金額一覧[0], 金額一覧[1]
+        elif len(金額一覧) >= 3:
+            出金額, 入金額, 残高 = 金額一覧[0], 金額一覧[1], 金額一覧[2]
 
-        if len(amounts) == 1:
-            withdrawal = amounts[0]
-        elif len(amounts) == 2:
-            withdrawal = amounts[0]
-            balance = amounts[1]
-        elif len(amounts) >= 3:
-            withdrawal = amounts[0]
-            deposit = amounts[1]
-            balance = amounts[2]
-
-        txs.append(BankTransaction(
-            date=date_str,
-            tekiyo=tekiyo,
-            withdrawal=withdrawal,
-            deposit=deposit,
-            balance=balance,
-            bank_code=bank_code,
-            raw_text=line,
+        結果.append(通帳取引(
+            日付=日付文字列, 摘要=摘要,
+            出金額=出金額, 入金額=入金額, 残高=残高,
+            口座コード=口座コード, 元テキスト=行,
         ))
 
-    return txs
+    return 結果
 
 
 # ============================================================
 # 請求書PDF解析
 # ============================================================
-def parse_invoice_pdf(pdf_path):
+def 請求書PDF解析(PDFパス):
     """
     売上請求書PDFを解析。
 
@@ -286,87 +261,80 @@ def parse_invoice_pdf(pdf_path):
     請求書のレイアウトは会社ごとに大きく異なるため、
     Claude Codeに実物を見せてパターンを調整してもらう。
     """
-    text = extract_text_from_pdf(pdf_path)
-    tables = extract_tables_from_pdf(pdf_path)
+    テキスト = PDFテキスト抽出(PDFパス)
+    テーブル一覧 = PDFテーブル抽出(PDFパス)
 
-    data = InvoiceData(raw_text=text)
+    データ = 請求書データ(元テキスト=テキスト)
 
     # 日付抽出
-    date_patterns = [
+    日付パターン = [
         r"(\d{4})[年/\-](\d{1,2})[月/\-](\d{1,2})",
         r"令和(\d+)年(\d{1,2})月(\d{1,2})日",
     ]
-    for pat in date_patterns:
-        m = re.search(pat, text)
+    for パターン in 日付パターン:
+        m = re.search(パターン, テキスト)
         if m:
-            groups = m.groups()
-            if "令和" in pat:
-                year = int(groups[0]) + 2018
-                data.date = f"{year}{int(groups[1]):02d}{int(groups[2]):02d}"
+            グループ = m.groups()
+            if "令和" in パターン:
+                年 = int(グループ[0]) + 2018
+                データ.日付 = f"{年}{int(グループ[1]):02d}{int(グループ[2]):02d}"
             else:
-                data.date = f"{groups[0]}{int(groups[1]):02d}{int(groups[2]):02d}"
+                データ.日付 = f"{グループ[0]}{int(グループ[1]):02d}{int(グループ[2]):02d}"
             break
 
     # インボイス番号（T+13桁）
-    inv_match = re.search(r"T\d{13}", text)
-    if inv_match:
-        data.invoice_number = inv_match.group(0)
-        data.is_invoice = True
+    inv一致 = re.search(r"T\d{13}", テキスト)
+    if inv一致:
+        データ.インボイス番号 = inv一致.group(0)
+        データ.適格請求書 = True
 
-    # 合計金額（「合計」「請求金額」の近くの金額）
-    total_patterns = [
+    # 合計金額
+    合計パターン = [
         r"(?:合計|請求金額|御請求額|ご請求額)[^\d]*?([\d,]+)",
         r"([\d,]+)[^\d]*(?:円\s*$|円\s*\(税込\))",
     ]
-    for pat in total_patterns:
-        m = re.search(pat, text)
+    for パターン in 合計パターン:
+        m = re.search(パターン, テキスト)
         if m:
-            data.total_amount = int(m.group(1).replace(",", ""))
+            データ.合計金額 = int(m.group(1).replace(",", ""))
             break
 
     # 消費税額
-    tax_patterns = [
+    税額パターン = [
         r"(?:消費税|税額)[^\d]*?([\d,]+)",
         r"(?:うち消費税)[^\d]*?([\d,]+)",
     ]
-    for pat in tax_patterns:
-        m = re.search(pat, text)
+    for パターン in 税額パターン:
+        m = re.search(パターン, テキスト)
         if m:
-            data.tax_amount = int(m.group(1).replace(",", ""))
+            データ.消費税額 = int(m.group(1).replace(",", ""))
             break
 
     # 取引先名（「御中」「様」の前）
-    vendor_match = re.search(r"(.{2,20})\s*(?:御中|様)", text)
-    if vendor_match:
-        data.vendor = vendor_match.group(1).strip()
+    取引先一致 = re.search(r"(.{2,20})\s*(?:御中|様)", テキスト)
+    if 取引先一致:
+        データ.取引先名 = 取引先一致.group(1).strip()
 
     # テーブルから明細行を抽出
-    if tables:
-        for table in tables:
-            for row in table:
-                if row and len(row) >= 3:
-                    # 金額を含む行を明細と判定
-                    amounts_in_row = [
-                        _parse_amount(c) for c in row if c and _parse_amount(c) > 0
-                    ]
-                    if amounts_in_row:
-                        item_name = next(
-                            (c for c in row if c and not re.match(r"^[\d,.\s]+$", c)),
-                            "",
+    if テーブル一覧:
+        for テーブル in テーブル一覧:
+            for 行 in テーブル:
+                if 行 and len(行) >= 3:
+                    行内金額 = [_金額抽出(c) for c in 行 if c and _金額抽出(c) > 0]
+                    if 行内金額:
+                        品名 = next(
+                            (c for c in 行 if c and not re.match(r"^[\d,.\s]+$", c)), ""
                         )
-                        if item_name:
-                            data.items.append({
-                                "品名": item_name.strip(),
-                                "金額": max(amounts_in_row),
-                            })
+                        if 品名:
+                            データ.明細一覧.append({"品名": 品名.strip(), "金額": max(行内金額)})
 
-    return data
+    return データ
 
 
 # ============================================================
 # 賃金台帳PDF解析
 # ============================================================
-def parse_payroll_pdf(pdf_path):
+def 賃金台帳PDF解析(PDFパス):
     """
     賃金台帳PDFを解析。
 
@@ -374,127 +342,109 @@ def parse_payroll_pdf(pdf_path):
     賃金台帳のフォーマットも会社ごとに異なるため、
     実物を見せて調整が必要。
     """
-    text = extract_text_from_pdf(pdf_path)
-    tables = extract_tables_from_pdf(pdf_path)
+    テキスト = PDFテキスト抽出(PDFパス)
+    テーブル一覧 = PDFテーブル抽出(PDFパス)
 
-    entries = []
+    結果 = []
 
-    # テーブルベースの解析を優先
-    if tables:
-        entries = _parse_payroll_tables(tables, text)
+    if テーブル一覧:
+        結果 = _賃金台帳テーブル解析(テーブル一覧, テキスト)
 
-    # テーブルが取れない場合はテキストベース
-    if not entries:
-        entries = _parse_payroll_text(text)
+    if not 結果:
+        結果 = _賃金台帳テキスト解析(テキスト)
 
-    return entries
+    return 結果
 
 
-def _parse_payroll_tables(tables, full_text):
+def _賃金台帳テーブル解析(テーブル一覧, 全テキスト):
     """テーブルから賃金データを抽出"""
-    entries = []
-    for table in tables:
-        for row in table:
-            if not row or len(row) < 5:
+    結果 = []
+    for テーブル in テーブル一覧:
+        for 行 in テーブル:
+            if not 行 or len(行) < 5:
                 continue
-            # 名前列と金額列がある行を探す
-            name = None
-            amounts = []
-            for cell in row:
-                if not cell:
+            名前 = None
+            金額一覧 = []
+            for セル in 行:
+                if not セル:
                     continue
-                amt = _parse_amount(cell)
-                if amt > 0:
-                    amounts.append(amt)
-                elif not name and re.search(r"[ぁ-んァ-ヶ一-龥]", cell):
-                    name = cell.strip()
+                金額 = _金額抽出(セル)
+                if 金額 > 0:
+                    金額一覧.append(金額)
+                elif not 名前 and re.search(r"[ぁ-んァ-ヶ一-龥]", セル):
+                    名前 = セル.strip()
 
-            if name and len(amounts) >= 3:
-                entry = PayrollEntry(
-                    employee_name=name,
-                    total_pay=max(amounts),
-                    raw_text=str(row),
-                )
-                entries.append(entry)
+            if 名前 and len(金額一覧) >= 3:
+                結果.append(賃金台帳データ(
+                    従業員名=名前, 支給合計=max(金額一覧), 元テキスト=str(行),
+                ))
 
-    return entries
+    return 結果
 
 
-def _parse_payroll_text(text):
+def _賃金台帳テキスト解析(テキスト):
     """テキストベースで賃金データを抽出"""
-    entries = []
-    # 基本的なパターンマッチング（実物に合わせて要調整）
-    lines = text.split("\n")
-    current_entry = None
+    結果 = []
+    現在のエントリ = None
 
-    for line in lines:
-        line = line.strip()
-        # 「基本給」「支給合計」などのキーワードで金額を取得
-        for keyword, attr in [
-            ("基本給", "base_salary"),
-            ("残業", "overtime"),
-            ("通勤", "commute"),
-            ("支給合計", "total_pay"),
-            ("健康保険", "health_ins"),
-            ("厚生年金", "pension"),
-            ("雇用保険", "employment_ins"),
-            ("源泉", "income_tax"),
-            ("所得税", "income_tax"),
-            ("住民税", "resident_tax"),
-            ("控除合計", "total_deduction"),
-            ("差引", "net_pay"),
+    for 行 in テキスト.split("\n"):
+        行 = 行.strip()
+        for キーワード, 属性名 in [
+            ("基本給", "基本給"), ("残業", "残業代"), ("通勤", "通勤手当"),
+            ("支給合計", "支給合計"), ("健康保険", "健康保険"), ("厚生年金", "厚生年金"),
+            ("雇用保険", "雇用保険"), ("源泉", "源泉所得税"), ("所得税", "源泉所得税"),
+            ("住民税", "住民税"), ("控除合計", "控除合計"), ("差引", "差引支給額"),
         ]:
-            if keyword in line:
-                m = re.search(r"([\d,]+)", line)
-                if m and current_entry:
-                    setattr(current_entry, attr, int(m.group(1).replace(",", "")))
+            if キーワード in 行:
+                m = re.search(r"([\d,]+)", 行)
+                if m and 現在のエントリ:
+                    setattr(現在のエントリ, 属性名, int(m.group(1).replace(",", "")))
 
-    if current_entry:
-        entries.append(current_entry)
+    if 現在のエントリ:
+        結果.append(現在のエントリ)
 
-    return entries
+    return 結果
 
 
 # ============================================================
 # ユーティリティ
 # ============================================================
-def _normalize_date(date_str):
+def _日付正規化(日付文字列):
     """日付文字列をYYYYMMDD形式に正規化"""
-    date_str = date_str.replace("/", "").replace("-", "")
-    if len(date_str) == 4:  # MMDD
-        date_str = "2025" + date_str
-    elif len(date_str) == 6:  # YYMMDD
-        date_str = "20" + date_str
-    return date_str
+    日付文字列 = 日付文字列.replace("/", "").replace("-", "")
+    if len(日付文字列) == 4:  # MMDD
+        日付文字列 = "2025" + 日付文字列
+    elif len(日付文字列) == 6:  # YYMMDD
+        日付文字列 = "20" + 日付文字列
+    return 日付文字列
 
 
-def _parse_amount(text):
+def _金額抽出(テキスト):
     """テキストから金額を抽出"""
-    if not text:
+    if not テキスト:
         return 0
-    cleaned = re.sub(r"[^\d]", "", str(text))
-    return int(cleaned) if cleaned else 0
+    数字のみ = re.sub(r"[^\d]", "", str(テキスト))
+    return int(数字のみ) if 数字のみ else 0
 
 
-def _find_date_in_cells(cells):
+def _セルから日付検索(セル一覧):
     """セルリストから日付を探す"""
-    for cell in cells:
-        if not cell:
+    for セル in セル一覧:
+        if not セル:
             continue
-        m = re.search(r"\d{4}[/\-]\d{1,2}[/\-]\d{1,2}|\d{1,2}[/\-]\d{1,2}", str(cell))
+        m = re.search(r"\d{4}[/\-]\d{1,2}[/\-]\d{1,2}|\d{1,2}[/\-]\d{1,2}", str(セル))
         if m:
-            return _normalize_date(m.group(0))
+            return _日付正規化(m.group(0))
     return ""
 
 
-def _find_tekiyo_in_cells(cells):
+def _セルから摘要検索(セル一覧):
     """セルリストから摘要（日本語テキスト）を探す"""
-    for cell in cells:
-        if not cell:
+    for セル in セル一覧:
+        if not セル:
             continue
-        cell = str(cell).strip()
-        # 日付でも数字だけでもない、テキストを含むセル
-        if (re.search(r"[ぁ-んァ-ヶ一-龥a-zA-Zａ-ｚＡ-Ｚ]", cell)
-                and not re.match(r"^\d{4}[/\-]", cell)):
-            return cell
+        セル = str(セル).strip()
+        if (re.search(r"[ぁ-んァ-ヶ一-龥a-zA-Zａ-ｚＡ-Ｚ]", セル)
+                and not re.match(r"^\d{4}[/\-]", セル)):
+            return セル
     return ""
