@@ -1,11 +1,12 @@
 """数値・表示フォーマットユーティリティ"""
 
+import math
 from config import DISPLAY_UNIT
 
 
 def format_yen(amount, unit=DISPLAY_UNIT):
     """金額を千円単位でフォーマット（負数は▲表示）"""
-    if amount is None:
+    if amount is None or (isinstance(amount, float) and math.isnan(amount)):
         return "-"
     value = amount / unit if unit != 1 else amount
     value = round(value)
@@ -16,21 +17,21 @@ def format_yen(amount, unit=DISPLAY_UNIT):
 
 def format_yen_raw(amount, unit=DISPLAY_UNIT):
     """金額を千円単位で数値として返す"""
-    if amount is None:
+    if amount is None or (isinstance(amount, float) and math.isnan(amount)):
         return 0
     return round(amount / unit) if unit != 1 else round(amount)
 
 
 def format_percent(value):
     """パーセント表示"""
-    if value is None:
+    if value is None or (isinstance(value, float) and math.isnan(value)):
         return "-"
     return f"{value:.1f}%"
 
 
 def format_change(current, previous):
     """増減額と増減率を返す"""
-    if previous is None or current is None:
+    if previous is None or current is None or (isinstance(previous, float) and math.isnan(previous)) or (isinstance(current, float) and math.isnan(current)):
         return None, None
     change = current - previous
     if previous == 0:
