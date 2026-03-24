@@ -16,28 +16,41 @@ from config import (
 
 def register_fonts():
     """日本語フォントを登録"""
+    registered = False
+
     if os.path.exists(FONT_FILE):
         pdfmetrics.registerFont(TTFont(FONT_NAME, FONT_FILE))
-        return True
+        registered = True
+    else:
+        # フォントがない場合のフォールバック
+        # システムフォントを探す
+        system_fonts = [
+            "/usr/share/fonts/opentype/ipafont-gothic/ipagp.ttf",
+            "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+            "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+        ]
+        for font_path in system_fonts:
+            if os.path.exists(font_path):
+                try:
+                    pdfmetrics.registerFont(TTFont(FONT_NAME, font_path))
+                    registered = True
+                    break
+                except Exception:
+                    continue
 
-    # フォントがない場合のフォールバック
-    # システムフォントを探す
-    system_fonts = [
-        "/usr/share/fonts/opentype/ipafont-gothic/ipagp.ttf",
-        "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-        "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
-    ]
-    for font_path in system_fonts:
-        if os.path.exists(font_path):
-            try:
-                pdfmetrics.registerFont(TTFont(FONT_NAME, font_path))
-                return True
-            except Exception:
-                continue
+    if registered:
+        # Bold/Italic バリアントのマッピングを登録（同一フォントを使用）
+        pdfmetrics.registerFontFamily(
+            FONT_NAME,
+            normal=FONT_NAME,
+            bold=FONT_NAME,
+            italic=FONT_NAME,
+            boldItalic=FONT_NAME,
+        )
 
-    return False
+    return registered
 
 
 def get_paragraph_style(name, font_size=8, alignment=TA_LEFT, bold=False):

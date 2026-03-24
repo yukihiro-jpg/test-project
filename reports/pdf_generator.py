@@ -15,6 +15,9 @@ from config import (
     COLOR_TEXT_RED, COLOR_TEXT_GREEN, COLOR_ACCENT,
 )
 from reports.styles import register_fonts, get_paragraph_style, get_table_style
+from reports.chart_generator import (
+    generate_pl_trend_chart, generate_loan_balance_chart, generate_debt_vs_ebitda_chart,
+)
 from utils.formatting import format_yen, format_percent, format_yen_raw
 
 
@@ -79,6 +82,38 @@ def generate_pdf(report_data: dict, settings: dict) -> bytes:
             report_data["monthly_transition"], report_data.get("months", []),
             settings, unit, unit_label
         ))
+        elements.append(PageBreak())
+
+    # 8. 月次推移グラフ（売上高・売上総利益・営業利益）
+    if "monthly_transition" in report_data:
+        chart = generate_pl_trend_chart(
+            report_data["monthly_transition"], report_data.get("months", []), unit
+        )
+        if chart:
+            elements.append(_p("月次推移グラフ", 14, "LEFT"))
+            elements.append(Spacer(1, 8))
+            elements.append(chart)
+            elements.append(PageBreak())
+
+    # 9. 借入金残高推移グラフ
+    if "loan_schedule" in report_data:
+        chart = generate_loan_balance_chart(report_data["loan_schedule"], unit)
+        if chart:
+            elements.append(_p("借入金残高推移", 14, "LEFT"))
+            elements.append(Spacer(1, 8))
+            elements.append(chart)
+            elements.append(Spacer(1, 16))
+
+        # 10. 借入金 vs EBITDAグラフ
+        ebitda_data = report_data.get("ebitda", {})
+        chart2 = generate_debt_vs_ebitda_chart(
+            report_data["loan_schedule"], ebitda_data, unit
+        )
+        if chart2:
+            elements.append(PageBreak())
+            elements.append(_p("借入金残高 vs EBITDA 比較分析", 14, "LEFT"))
+            elements.append(Spacer(1, 8))
+            elements.append(chart2)
 
     doc.build(elements)
     return buffer.getvalue()
