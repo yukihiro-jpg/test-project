@@ -19,7 +19,11 @@ def parse_trial_balance(uploaded_file) -> dict:
     filename = uploaded_file.name.lower()
 
     if filename.endswith(".csv"):
-        df = pd.read_csv(uploaded_file, header=None, encoding="utf-8")
+        try:
+            df = pd.read_csv(uploaded_file, header=None, encoding="utf-8")
+        except UnicodeDecodeError:
+            uploaded_file.seek(0)
+            df = pd.read_csv(uploaded_file, header=None, encoding="cp932")
     else:
         df = pd.read_excel(uploaded_file, header=None)
 
