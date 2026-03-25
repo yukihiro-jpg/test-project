@@ -7,34 +7,56 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import TableStyle
+import config
 from config import (
-    FONT_DIR, FONT_NAME, FONT_FILE,
+    FONT_DIR, FONT_FILE,
     COLOR_HEADER_BG, COLOR_HEADER_TEXT, COLOR_ROW_ALT, COLOR_BORDER,
     COLOR_TOTAL_BG, COLOR_HIGHLIGHT_RED, COLOR_HIGHLIGHT_GREEN,
 )
 
+# 実行時に確定するフォント名（register_fonts() で更新される）
+_active_font = config.FONT_NAME
+
 
 def register_fonts():
-    """日本語フォントを登録"""
+    """日本語フォントを登録。成功時True、フォールバック時Falseを返す。"""
+    global _active_font
     registered = False
+    font_name = config.FONT_NAME  # "IPAexGothic"
 
+    # 1. プロジェクト同梱フォント
     if os.path.exists(FONT_FILE):
-        pdfmetrics.registerFont(TTFont(FONT_NAME, FONT_FILE))
-        registered = True
-    else:
-        # フォントがない場合のフォールバック
-        # システムフォントを探す
+        try:
+            pdfmetrics.registerFont(TTFont(font_name, FONT_FILE))
+            registered = True
+        except Exception:
+            pass
+
+    # 2. システムフォントを探索
+    if not registered:
+        _windir = os.environ.get("WINDIR", r"C:\Windows")
         system_fonts = [
-            "/usr/share/fonts/opentype/ipafont-gothic/ipagp.ttf",
-            "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
-            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-            "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+            # Windows (.ttc はsubfontIndex=0で読む)
+            (os.path.join(_windir, "Fonts", "msgothic.ttc"), 0),
+            (os.path.join(_windir, "Fonts", "YuGothM.ttc"), 0),
+            (os.path.join(_windir, "Fonts", "meiryo.ttc"), 0),
+            # Linux
+            ("/usr/share/fonts/opentype/ipafont-gothic/ipagp.ttf", None),
+            ("/usr/share/fonts/truetype/fonts-japanese-gothic.ttf", None),
+            ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
+            ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", 0),
+            # macOS
+            ("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", 0),
         ]
-        for font_path in system_fonts:
+        for font_path, subfont_idx in system_fonts:
             if os.path.exists(font_path):
                 try:
-                    pdfmetrics.registerFont(TTFont(FONT_NAME, font_path))
+                    if subfont_idx is not None:
+                        pdfmetrics.registerFont(
+                            TTFont(font_name, font_path, subfontIndex=subfont_idx)
+                        )
+                    else:
+                        pdfmetrics.registerFont(TTFont(font_name, font_path))
                     registered = True
                     break
                 except Exception:
@@ -43,21 +65,32 @@ def register_fonts():
     if registered:
         # Bold/Italic バリアントのマッピングを登録（同一フォントを使用）
         pdfmetrics.registerFontFamily(
-            FONT_NAME,
-            normal=FONT_NAME,
-            bold=FONT_NAME,
-            italic=FONT_NAME,
-            boldItalic=FONT_NAME,
+            font_name,
+            normal=font_name,
+            bold=font_name,
+            italic=font_name,
+            boldItalic=font_name,
         )
+        _active_font = font_name
+    else:
+        # 日本語フォントが見つからない場合、Helveticaにフォールバック
+        # （日本語は文字化けするが、エラーでPDF生成が止まることは防ぐ）
+        _active_font = "Helvetica"
+        config.FONT_NAME = "Helvetica"
 
     return registered
+
+
+def _get_font():
+    """現在のアクティブフォント名を返す"""
+    return _active_font
 
 
 def get_paragraph_style(name, font_size=8, alignment=TA_LEFT, bold=False):
     """ParagraphStyleを返す"""
     return ParagraphStyle(
         name=name,
-        fontName=FONT_NAME,
+        fontName=_active_font,
         fontSize=font_size,
         leading=font_size * 1.4,
         alignment=alignment,
@@ -65,19 +98,21 @@ def get_paragraph_style(name, font_size=8, alignment=TA_LEFT, bold=False):
     )
 
 
-# テーブルスタイル定義
-BASE_TABLE_STYLE = [
-    ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
-    ("FONTSIZE", (0, 0), (-1, -1), 7),
-    ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
-    ("ALIGN", (0, 0), (0, -1), "LEFT"),
-    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-    ("GRID", (0, 0), (-1, -1), 0.5, COLOR_BORDER),
-    ("TOPPADDING", (0, 0), (-1, -1), 2),
-    ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-    ("LEFTPADDING", (0, 0), (-1, -1), 4),
-    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-]
+def _build_base_table_style():
+    """現在のフォント設定でベーステーブルスタイルを構築"""
+    return [
+        ("FONTNAME", (0, 0), (-1, -1), _active_font),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.5, COLOR_BORDER),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    ]
+
 
 HEADER_STYLE = [
     ("BACKGROUND", (0, 0), (-1, 0), COLOR_HEADER_BG),
@@ -88,7 +123,7 @@ HEADER_STYLE = [
 
 def get_table_style(num_rows=0, total_rows=None, alt_rows=True):
     """テーブルスタイルを生成"""
-    style_cmds = list(BASE_TABLE_STYLE) + list(HEADER_STYLE)
+    style_cmds = _build_base_table_style() + list(HEADER_STYLE)
 
     # 交互行の背景色
     if alt_rows:

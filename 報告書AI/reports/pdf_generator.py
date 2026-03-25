@@ -8,8 +8,9 @@ from reportlab.lib.pagesizes import landscape, A4
 from reportlab.lib.units import mm
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.platypus import TableStyle
+import config
 from config import (
-    PAGE_SIZE, MARGIN, FONT_NAME, PL_SUMMARY_ITEMS, PL_TOTAL_ITEMS,
+    PAGE_SIZE, MARGIN, PL_SUMMARY_ITEMS, PL_TOTAL_ITEMS,
     COLOR_HEADER_BG, COLOR_HEADER_TEXT, COLOR_TOTAL_BG, COLOR_BORDER,
     COLOR_ROW_ALT, COLOR_HIGHLIGHT_RED, COLOR_HIGHLIGHT_GREEN,
     COLOR_TEXT_RED, COLOR_TEXT_GREEN, COLOR_ACCENT,
