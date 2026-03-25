@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a73e8">
+    <title>書類スキャン</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: #1a73e8;
+            color: white;
+            padding: 16px 20px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .main {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+        .client-info {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .client-info label {
+            font-size: 14px;
+            color: #666;
+            display: block;
+            margin-bottom: 6px;
+        }
+        .client-info select, .client-info input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            background: #fafafa;
+        }
+        .capture-area {
+            width: 100%;
+            max-width: 500px;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .capture-btn {
+            width: 100%;
+            padding: 18px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .capture-btn:active { background: #1557b0; }
+        .capture-btn:disabled { background: #ccc; }
+        .capture-btn .icon { font-size: 24px; }
+        .preview-container {
+            width: 100%;
+            max-width: 500px;
+            display: none;
+        }
+        .preview-container.active { display: block; }
+        .preview-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .preview-card img {
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        .preview-card .label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        .preview-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .preview-actions button {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-retry { background: #f1f3f4; color: #333; }
+        .btn-upload { background: #34a853; color: white; }
+        .btn-upload:disabled { background: #ccc; }
+        .queue-list {
+            width: 100%;
+            max-width: 500px;
+        }
+        .queue-item {
+            background: white;
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+        }
+        .queue-item img {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 6px;
+        }
+        .queue-item .info { flex: 1; }
+        .queue-item .info .name { font-size: 14px; font-weight: 500; }
+        .queue-item .info .status { font-size: 12px; color: #888; }
+        .queue-item .status-icon { font-size: 20px; }
+        .status-uploading { color: #f9ab00; }
+        .status-done { color: #34a853; }
+        .status-error { color: #ea4335; }
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .toast.show { opacity: 1; }
+        .help-text {
+            font-size: 13px;
+            color: #888;
+            text-align: center;
+            padding: 8px 20px;
+            line-height: 1.6;
+        }
+        .correction-toggle {
+            width: 100%;
+            max-width: 500px;
+            background: white;
+            border-radius: 12px;
+            padding: 14px 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .correction-toggle label {
+            font-size: 14px;
+            color: #333;
+        }
+        .switch {
+            position: relative;
+            width: 50px;
+            height: 28px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #ccc;
+            border-radius: 28px;
+            transition: 0.3s;
+        }
+        .slider:before {
+            content: "";
+            position: absolute;
+            height: 22px; width: 22px;
+            left: 3px; bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+        .switch input:checked + .slider { background: #1a73e8; }
+        .switch input:checked + .slider:before { transform: translateX(22px); }
+        .processing-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+        .processing-overlay.active { display: flex; }
+        .processing-box {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            max-width: 280px;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1a73e8;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        #fileInput { display: none; }
+
+        canvas { display: none; }
+    </style>
+</head>
+<body>
+    <div class="header">書類スキャン</div>
+    <div class="main">
+        <div class="client-info">
+            <label>書類の種類</label>
+            <select id="docType">
+                <option value="receipt">領収書・レシート</option>
+                <option value="invoice">請求書</option>
+                <option value="statement">明細書</option>
+                <option value="contract">契約書</option>
+                <option value="tax">税務関連書類</option>
+                <option value="other">その他</option>
+            </select>
+        </div>
+
+        <div class="correction-toggle">
+            <label>自動台形補正</label>
+            <div class="switch">
+                <input type="checkbox" id="autoCorrect" checked>
+                <span class="slider"></span>
+            </div>
+        </div>
+
+        <div class="capture-area">
+            <button class="capture-btn" id="captureBtn" onclick="startCapture()">
+                <span class="icon">📷</span>
+                <span>書類を撮影する</span>
+            </button>
+            <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFileSelect(event)">
+        </div>
+
+        <p class="help-text">
+            書類をできるだけ真上から撮影してください。<br>
+            自動台形補正をONにすると、斜めからの撮影も補正されます。
+        </p>
+
+        <div class="preview-container" id="previewContainer">
+            <div class="preview-card">
+                <p class="label">補正後プレビュー</p>
+                <img id="previewImg" src="" alt="プレビュー">
+                <div class="preview-actions">
+                    <button class="btn-retry" onclick="startCapture()">撮り直す</button>
+                    <button class="btn-upload" id="uploadBtn" onclick="uploadImage()">送信する</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="queue-list" id="queueList"></div>
+    </div>
+
+    <div class="processing-overlay" id="processingOverlay">
+        <div class="processing-box">
+            <div class="spinner"></div>
+            <p id="processingText">画像を補正中...</p>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <canvas id="cvCanvas"></canvas>
+
+    <!-- OpenCV.js for perspective correction -->
+    <script async src="https://docs.opencv.org/4.9.0/opencv.js" onload="onOpenCvReady()" id="opencvScript"></script>
+
+    <script>
+    // ============================================================
+    // Configuration - Edit these values for your deployment
+    // ============================================================
+    const CONFIG = {
+        // Google Apps Script Web App URL (deploy後に設定)
+        APPS_SCRIPT_URL: '', // ← デプロイ後のURLをここに貼り付け
+        // クライアント識別子 (URLパラメータから取得)
+        CLIENT_ID: new URLSearchParams(window.location.search).get('client') || 'default',
+        CLIENT_NAME: new URLSearchParams(window.location.search).get('name') || 'お客様',
+    };
+
+    // ============================================================
+    // State
+    // ============================================================
+    let cvReady = false;
+    let currentImageData = null; // base64 of corrected image
+    let uploadQueue = [];
+
+    function onOpenCvReady() {
+        cvReady = true;
+        console.log('OpenCV.js loaded');
+    }
+
+    // ============================================================
+    // Camera Capture
+    // ============================================================
+    function startCapture() {
+        document.getElementById('fileInput').click();
+    }
+
+    function handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                processImage(img);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+        // Reset input so same file can be re-selected
+        event.target.value = '';
+    }
+
+    // ============================================================
+    // Image Processing (Perspective Correction)
+    // ============================================================
+    function processImage(img) {
+        const autoCorrect = document.getElementById('autoCorrect').checked;
+
+        if (!autoCorrect || !cvReady) {
+            // No correction - just resize and use as-is
+            const canvas = document.getElementById('cvCanvas');
+            const ctx = canvas.getContext('2d');
+            const maxDim = 2000;
+            let w = img.width, h = img.height;
+            if (w > maxDim || h > maxDim) {
+                const ratio = Math.min(maxDim / w, maxDim / h);
+                w = Math.round(w * ratio);
+                h = Math.round(h * ratio);
+            }
+            canvas.width = w;
+            canvas.height = h;
+            ctx.drawImage(img, 0, 0, w, h);
+            currentImageData = canvas.toDataURL('image/jpeg', 0.92);
+            showPreview(currentImageData);
+            return;
+        }
+
+        showProcessing('画像を補正中...');
+
+        // Use requestAnimationFrame to let the overlay render
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                try {
+                    correctPerspective(img);
+                } catch(e) {
+                    console.error('Perspective correction failed:', e);
+                    // Fallback: use original image
+                    const canvas = document.getElementById('cvCanvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    currentImageData = canvas.toDataURL('image/jpeg', 0.92);
+                    showPreview(currentImageData);
+                    showToast('自動補正できませんでした。元の画像を使用します。');
+                }
+                hideProcessing();
+            }, 100);
+        });
+    }
+
+    function correctPerspective(img) {
+        const canvas = document.getElementById('cvCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Resize for processing
+        const maxDim = 2000;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+            const ratio = Math.min(maxDim / w, maxDim / h);
+            w = Math.round(w * ratio);
+            h = Math.round(h * ratio);
+        }
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(img, 0, 0, w, h);
+
+        // Read into OpenCV
+        let src = cv.imread(canvas);
+        let gray = new cv.Mat();
+        let blur = new cv.Mat();
+        let edges = new cv.Mat();
+
+        // Convert to grayscale
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        // Gaussian blur
+        cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
+        // Edge detection
+        cv.Canny(blur, edges, 50, 150);
+        // Dilate to connect edges
+        let kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+        cv.dilate(edges, edges, kernel, new cv.Point(-1, -1), 2);
+
+        // Find contours
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+        // Find the largest quadrilateral contour
+        let maxArea = 0;
+        let bestContour = null;
+        let docCorners = null;
+
+        for (let i = 0; i < contours.size(); i++) {
+            let cnt = contours.get(i);
+            let area = cv.contourArea(cnt);
+            if (area < (w * h * 0.1)) continue; // Skip small contours
+
+            let peri = cv.arcLength(cnt, true);
+            let approx = new cv.Mat();
+            cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+
+            if (approx.rows === 4 && area > maxArea) {
+                maxArea = area;
+                docCorners = [];
+                for (let j = 0; j < 4; j++) {
+                    docCorners.push({
+                        x: approx.data32S[j * 2],
+                        y: approx.data32S[j * 2 + 1]
+                    });
+                }
+            }
+            approx.delete();
+        }
+
+        if (docCorners && maxArea > (w * h * 0.15)) {
+            // Sort corners: top-left, top-right, bottom-right, bottom-left
+            docCorners = orderPoints(docCorners);
+
+            // Calculate output dimensions
+            const widthA = Math.hypot(docCorners[2].x - docCorners[3].x, docCorners[2].y - docCorners[3].y);
+            const widthB = Math.hypot(docCorners[1].x - docCorners[0].x, docCorners[1].y - docCorners[0].y);
+            const maxWidth = Math.round(Math.max(widthA, widthB));
+
+            const heightA = Math.hypot(docCorners[1].x - docCorners[2].x, docCorners[1].y - docCorners[2].y);
+            const heightB = Math.hypot(docCorners[0].x - docCorners[3].x, docCorners[0].y - docCorners[3].y);
+            const maxHeight = Math.round(Math.max(heightA, heightB));
+
+            // Perspective transform
+            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                docCorners[0].x, docCorners[0].y,
+                docCorners[1].x, docCorners[1].y,
+                docCorners[2].x, docCorners[2].y,
+                docCorners[3].x, docCorners[3].y
+            ]);
+            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                0, 0,
+                maxWidth, 0,
+                maxWidth, maxHeight,
+                0, maxHeight
+            ]);
+
+            let M = cv.getPerspectiveTransform(srcTri, dstTri);
+            let dst = new cv.Mat();
+            cv.warpPerspective(src, dst, M, new cv.Size(maxWidth, maxHeight));
+
+            // Output
+            canvas.width = maxWidth;
+            canvas.height = maxHeight;
+            cv.imshow(canvas, dst);
+
+            dst.delete(); M.delete(); srcTri.delete(); dstTri.delete();
+        } else {
+            // No document detected - use original
+            cv.imshow(canvas, src);
+            showToast('書類の輪郭を自動検出できませんでした。');
+        }
+
+        // Cleanup
+        src.delete(); gray.delete(); blur.delete(); edges.delete();
+        kernel.delete(); contours.delete(); hierarchy.delete();
+
+        currentImageData = canvas.toDataURL('image/jpeg', 0.92);
+        showPreview(currentImageData);
+    }
+
+    function orderPoints(pts) {
+        // Sort by sum (x+y) for TL and BR
+        let sorted = [...pts].sort((a, b) => (a.x + a.y) - (b.x + b.y));
+        let tl = sorted[0];
+        let br = sorted[3];
+        // Sort by diff (y-x) for TR and BL
+        let sorted2 = [...pts].sort((a, b) => (a.y - a.x) - (b.y - b.x));
+        let tr = sorted2[0];
+        let bl = sorted2[3];
+        return [tl, tr, br, bl];
+    }
+
+    // ============================================================
+    // UI Helpers
+    // ============================================================
+    function showPreview(dataUrl) {
+        document.getElementById('previewImg').src = dataUrl;
+        document.getElementById('previewContainer').classList.add('active');
+    }
+
+    function hidePreview() {
+        document.getElementById('previewContainer').classList.remove('active');
+    }
+
+    function showProcessing(text) {
+        document.getElementById('processingText').textContent = text;
+        document.getElementById('processingOverlay').classList.add('active');
+    }
+
+    function hideProcessing() {
+        document.getElementById('processingOverlay').classList.remove('active');
+    }
+
+    function showToast(message, duration = 3000) {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), duration);
+    }
+
+    // ============================================================
+    // Upload
+    // ============================================================
+    async function uploadImage() {
+        if (!currentImageData) return;
+        if (!CONFIG.APPS_SCRIPT_URL) {
+            showToast('サーバーURLが設定されていません');
+            return;
+        }
+
+        const docType = document.getElementById('docType').value;
+        const timestamp = new Date().toISOString();
+        const queueId = Date.now();
+
+        // Add to visual queue
+        addToQueue(queueId, docType, currentImageData);
+        hidePreview();
+
+        // Upload
+        try {
+            updateQueueStatus(queueId, 'uploading');
+
+            const payload = {
+                image: currentImageData.split(',')[1], // Remove data:image/jpeg;base64, prefix
+                clientId: CONFIG.CLIENT_ID,
+                clientName: CONFIG.CLIENT_NAME,
+                docType: docType,
+                timestamp: timestamp,
+                fileName: `${CONFIG.CLIENT_ID}_${docType}_${Date.now()}.jpg`
+            };
+
+            const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
+            });
+
+            // With no-cors, we can't read the response, but if no error thrown, it likely succeeded
+            updateQueueStatus(queueId, 'done');
+            showToast('送信完了！');
+        } catch (error) {
+            console.error('Upload failed:', error);
+            updateQueueStatus(queueId, 'error');
+            showToast('送信に失敗しました。再度お試しください。');
+        }
+
+        currentImageData = null;
+    }
+
+    function addToQueue(id, docType, thumbnail) {
+        const typeLabels = {
+            receipt: '領収書・レシート',
+            invoice: '請求書',
+            statement: '明細書',
+            contract: '契約書',
+            tax: '税務関連書類',
+            other: 'その他'
+        };
+
+        const queueList = document.getElementById('queueList');
+        const item = document.createElement('div');
+        item.className = 'queue-item';
+        item.id = `queue-${id}`;
+        item.innerHTML = `
+            <img src="${thumbnail}" alt="">
+            <div class="info">
+                <div class="name">${typeLabels[docType] || docType}</div>
+                <div class="status" id="queue-status-${id}">送信中...</div>
+            </div>
+            <span class="status-icon status-uploading" id="queue-icon-${id}">⏳</span>
+        `;
+        queueList.prepend(item);
+    }
+
+    function updateQueueStatus(id, status) {
+        const statusEl = document.getElementById(`queue-status-${id}`);
+        const iconEl = document.getElementById(`queue-icon-${id}`);
+        if (!statusEl || !iconEl) return;
+
+        switch(status) {
+            case 'uploading':
+                statusEl.textContent = '送信中...';
+                iconEl.textContent = '⏳';
+                iconEl.className = 'status-icon status-uploading';
+                break;
+            case 'done':
+                statusEl.textContent = '送信完了';
+                iconEl.textContent = '✓';
+                iconEl.className = 'status-icon status-done';
+                break;
+            case 'error':
+                statusEl.textContent = '送信失敗';
+                iconEl.textContent = '✕';
+                iconEl.className = 'status-icon status-error';
+                break;
+        }
+    }
+
+    // ============================================================
+    // Service Worker Registration (PWA)
+    // ============================================================
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+
+    // Update header with client name
+    if (CONFIG.CLIENT_NAME !== 'お客様') {
+        document.querySelector('.header').textContent = `書類スキャン - ${CONFIG.CLIENT_NAME}`;
+    }
+    </script>
+</body>
+</html>
