@@ -1,6 +1,7 @@
 """グラフ生成モジュール - PDF埋め込み用のmatplotlibチャートを生成"""
 
 import io
+import os
 import math
 import matplotlib
 matplotlib.use("Agg")
@@ -10,27 +11,37 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Image
 
 # 日本語フォント設定
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _FONT_PATHS = [
-    "fonts/ipaexg.ttf",
+    os.path.join(_BASE_DIR, "fonts", "ipaexg.ttf"),
+    # Windows
+    os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "msgothic.ttc"),
+    os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "meiryo.ttc"),
+    os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "YuGothM.ttc"),
+    # Linux
     "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",
     "/usr/share/fonts/opentype/ipafont-gothic/ipagp.ttf",
     "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
+    # macOS
+    "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
 ]
 
 _font_prop = None
 for _fp in _FONT_PATHS:
-    try:
-        _font_prop = fm.FontProperties(fname=_fp)
-        break
-    except Exception:
-        continue
+    if os.path.exists(_fp):
+        try:
+            _font_prop = fm.FontProperties(fname=_fp)
+            fm.fontManager.addfont(_fp)
+            break
+        except Exception:
+            continue
 
 if _font_prop:
     plt.rcParams["font.family"] = _font_prop.get_name()
-    # フォントをmatplotlibに登録
-    fm.fontManager.addfont(_font_prop.get_file())
 else:
-    plt.rcParams["font.family"] = ["WenQuanYi Zen Hei", "IPAGothic", "sans-serif"]
+    # フォールバック：システムで利用可能な日本語フォントを探す
+    plt.rcParams["font.family"] = ["MS Gothic", "Yu Gothic", "Meiryo",
+                                    "IPAGothic", "WenQuanYi Zen Hei", "sans-serif"]
 
 plt.rcParams["axes.unicode_minus"] = False
 
