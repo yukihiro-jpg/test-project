@@ -1,0 +1,273 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// 案件（被相続人）
+model Case {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  nameKana    String
+  birthDate   String?
+  address     String?
+  phone       String?
+  email       String?
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  datasets AssetDataset[]
+}
+
+// 相続財産データセット
+model AssetDataset {
+  id          String   @id @default(cuid())
+  caseId      String
+  name        String
+  baseDate    String
+  status      String   @default("draft")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  case             Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  heirs            Heir[]
+  landAssets       LandAsset[]
+  buildingAssets   BuildingAsset[]
+  securityAssets   SecurityAsset[]
+  cashDeposits     CashDepositAsset[]
+  insuranceAssets  InsuranceAsset[]
+  otherAssets      OtherAsset[]
+  liabilities      LiabilityExpense[]
+  annualGifts      AnnualGift[]
+  settlementGifts  SettlementGift[]
+  partitionPlans   PartitionPlan[]
+}
+
+// 親族関係（相続人・受遺者）
+model Heir {
+  id                    String   @id @default(cuid())
+  datasetId             String
+  name                  String
+  nameKana              String?
+  relationship          String
+  acquisitionCause      String   @default("相続")
+  civilLegalShareNum    Int      @default(0)
+  civilLegalShareDen    Int      @default(1)
+  taxLegalShareNum      Int      @default(0)
+  taxLegalShareDen      Int      @default(1)
+  twentyPercentAdd      Boolean  @default(false)
+  isDisabled            Boolean  @default(false)
+  disabilityType        String?
+  birthDate             String?
+  note                  String?
+  displayOrder          Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  dataset              AssetDataset       @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  insuranceBenefits    InsuranceAsset[]   @relation("BeneficiaryHeir")
+  partitionAllocations PartitionAllocation[]
+}
+
+model LandAsset {
+  id                    String   @id @default(cuid())
+  datasetId             String
+  landType              String   @default("宅地")
+  location              String?
+  usage                 String?
+  area                  Float    @default(0)
+  valuationMethod       String   @default("路線価方式")
+  rosenka               Int      @default(0)
+  fixedAssetTaxValue    Int      @default(0)
+  multiplier            Float    @default(1.0)
+  ownershipShareNum     Int      @default(1)
+  ownershipShareDen     Int      @default(1)
+  adjustmentCoeff       Float    @default(1.0)
+  autoCalc              Boolean  @default(true)
+  evaluationAmount      Int      @default(0)
+  smallLandReduction    Boolean  @default(false)
+  urlMemo               String?
+  note                  String?
+  displayOrder          Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  dataset    AssetDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+}
+
+model BuildingAsset {
+  id                    String   @id @default(cuid())
+  datasetId             String
+  subType               String   @default("居宅")
+  usage                 String?
+  location              String?
+  floorArea             Float    @default(0)
+  fixedAssetTaxValue    Int      @default(0)
+  ownershipShareNum     Int      @default(1)
+  ownershipShareDen     Int      @default(1)
+  adjustmentCoeff       Float    @default(1.0)
+  autoCalc              Boolean  @default(true)
+  evaluationAmount      Int      @default(0)
+  note                  String?
+  displayOrder          Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  dataset    AssetDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+}
+
+model SecurityAsset {
+  id                String   @id @default(cuid())
+  datasetId         String
+  institution       String?
+  branch            String?
+  securityType      String   @default("株式")
+  name              String?
+  unitPrice         Int      @default(0)
+  quantity          Float    @default(0)
+  adjustmentCoeff   Float    @default(1.0)
+  autoCalc          Boolean  @default(true)
+  amount            Int      @default(0)
+  urlMemo           String?
+  note              String?
+  displayOrder      Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  dataset    AssetDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+}
+
+model CashDepositAsset {
+  id              String   @id @default(cuid())
+  datasetId       String
+  institution     String?
+  depositType     String   @default("普通預金")
+  accountNumber   String?
+  amount          Int      @default(0)
+  note            String?
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  dataset    AssetDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+}
+
+model InsuranceAsset {
+  id                String   @id @default(cuid())
+  datasetId         String
+  company           String?
+  policyNumber      String?
+  insuranceType     String   @default("終身保険")
+  premiumPayer      String?
+  insuredPerson     String?
+  beneficiaryId     String?
+  amount            Int      @default(0)
+  isTaxExemptTarget Boolean  @default(true)
+  note              String?
+  displayOrder      Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  dataset      AssetDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  beneficiary  Heir?        @relation("BeneficiaryHeir", fields: [beneficiaryId], references: [id], onDelete: SetNull)
+}
+
+model OtherAsset {
+  id            String   @id @default(cuid())
+  datasetId     String
+  assetType     String   @default("その他")
+  subType       String?
+  description   String?
+  amount        Int      @default(0)
+  note          String?
+  displayOrder  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  dataset    AssetDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+}
+
+model LiabilityExpense {
+  id              String   @id @default(cuid())
+  datasetId       String
+  liabilityType   String   @default("債務")
+  subType         String?
+  creditorName    String?
+  creditorAddress String?
+  amount          Int      @default(0)
+  note            String?
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  dataset    AssetDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+}
+
+model AnnualGift {
+  id              String   @id @default(cuid())
+  datasetId       String
+  recipientName   String?
+  giftDate        String?
+  giftType        String?
+  subType         String?
+  giftValue       Int      @default(0)
+  paidGiftTax     Int      @default(0)
+  isAddBack       Boolean  @default(true)
+  note            String?
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  dataset    AssetDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+}
+
+// 仮仕様: 相続時精算課税制度のプレースホルダ
+model SettlementGift {
+  id              String   @id @default(cuid())
+  datasetId       String
+  recipientName   String?
+  giftDate        String?
+  giftType        String?
+  subType         String?
+  giftValue       Int      @default(0)
+  paidGiftTax     Int      @default(0)
+  note            String?
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  dataset    AssetDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+}
+
+model PartitionPlan {
+  id          String   @id @default(cuid())
+  datasetId   String
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dataset     AssetDataset         @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  allocations PartitionAllocation[]
+}
+
+model PartitionAllocation {
+  id              String   @id @default(cuid())
+  partitionPlanId String
+  heirId          String
+  assetType       String
+  assetId         String
+  amount          Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  partitionPlan PartitionPlan @relation(fields: [partitionPlanId], references: [id], onDelete: Cascade)
+  heir          Heir          @relation(fields: [heirId], references: [id], onDelete: Cascade)
+
+  @@unique([partitionPlanId, heirId, assetType, assetId])
+}
