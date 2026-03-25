@@ -2,44 +2,36 @@
  * Google Apps Script - 書類スキャン バックエンド
  *
  * 機能:
- * 1. PWAからの画像受信 → Google Driveに保存（OCR付き）
- * 2. 毎朝6時にアップロードされたファイルのサマリーをGmailで通知
+ * 1. PWAからの複数画像受信 → 1つのPDFにまとめてGoogle Driveに保存（OCR付き）
+ * 2. 毎朝6時にアップロードサマリーをGmailで通知
+ * 3. 顧問先URL一覧の管理
  *
- * セットアップ手順:
- * 1. Google Apps Script (https://script.google.com) で新しいプロジェクトを作成
- * 2. このコードを貼り付け
- * 3. CONFIG セクションの値を設定
- * 4. デプロイ → ウェブアプリ → アクセスできるユーザー「全員」で公開
- * 5. 初回実行時にDrive/Gmail権限を許可
- * 6. createTriggers() を一度手動実行してタイマートリガーを設定
+ * セットアップ:
+ * 1. CONFIG を編集
+ * 2. Drive APIを有効化（サービス → Drive API → 追加）
+ * 3. デプロイ → ウェブアプリ → 全員でアクセス可
+ * 4. createTriggers() を一度手動実行
  */
 
 // ============================================================
-// 設定 - ここを編集してください
+// 設定
 // ============================================================
 const CONFIG = {
-  // アップロード先Google DriveフォルダのID
-  // フォルダURLの https://drive.google.com/drive/folders/XXXXX の XXXXX 部分
   ROOT_FOLDER_ID: 'YOUR_FOLDER_ID_HERE',
-
-  // 通知先メールアドレス（税理士のGmail）
   NOTIFICATION_EMAIL: 'YOUR_EMAIL@gmail.com',
-
-  // OCRの言語（日本語）
   OCR_LANGUAGE: 'ja',
+  // フロントエンドのURL（GitHub Pages等）- 顧問先URL生成に使用
+  FRONTEND_URL: 'https://あなた.github.io/test-project/frontend/',
 };
 
 // ============================================================
 // Web App エンドポイント
 // ============================================================
 
-/**
- * POST リクエスト処理 - PWAからの画像アップロード
- */
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
-    const result = saveImageToDrive(data);
+    const result = saveBatchToDrive(data);
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
       fileId: result.fileId,
@@ -54,9 +46,6 @@ function doPost(e) {
   }
 }
 
-/**
- * GET リクエスト処理 - ヘルスチェック用
- */
 function doGet(e) {
   return ContentService.createTextOutput(JSON.stringify({
     status: 'ok',
@@ -65,158 +54,166 @@ function doGet(e) {
 }
 
 // ============================================================
-// 画像保存 & OCR処理
+// 複数画像 → 1つのPDF保存
 // ============================================================
 
-/**
- * 画像をGoogle Driveに保存し、OCR処理を行う
- */
-function saveImageToDrive(data) {
-  const { image, clientId, clientName, docType, timestamp, fileName } = data;
+function saveBatchToDrive(data) {
+  const { images, clientId, clientName, docType, bankName, timestamp, pageCount, fileName } = data;
 
-  // クライアント別フォルダを取得 or 作成
+  // 顧問先フォルダを取得 or 作成
   const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
-  const clientFolderName = `${clientId}_${clientName}`;
-  let clientFolder = getOrCreateFolder(rootFolder, clientFolderName);
+  const clientFolder = getOrCreateFolder(rootFolder, clientName);
 
-  // 日付別サブフォルダ
-  const dateStr = new Date(timestamp).toLocaleDateString('ja-JP', {
-    year: 'numeric', month: '2-digit', day: '2-digit'
-  }).replace(/\//g, '-');
-  let dateFolder = getOrCreateFolder(clientFolder, dateStr);
+  // 全画像のOCRテキストを収集
+  let allOcrText = '';
 
-  // Base64デコードして画像Blobを作成
-  const imageBlob = Utilities.newBlob(
-    Utilities.base64Decode(image),
-    'image/jpeg',
-    fileName
-  );
+  // Googleドキュメントを作成（複数ページ → 1つのPDF）
+  const doc = DocumentApp.create(fileName);
+  const body = doc.getBody();
 
-  // 1. 元画像をDriveに保存
-  const imageFile = dateFolder.createFile(imageBlob);
-
-  // 2. OCR処理: 画像をGoogle Docsとして挿入（OCR有効）
-  let ocrText = '';
-  try {
-    const ocrResource = {
-      title: fileName.replace('.jpg', '_ocr'),
-      mimeType: 'image/jpeg',
-      parents: [{ id: dateFolder.getId() }]
-    };
-    const ocrFile = Drive.Files.insert(ocrResource, imageBlob, {
-      ocr: true,
-      ocrLanguage: CONFIG.OCR_LANGUAGE
-    });
-    // OCR結果のテキストを取得
-    const ocrDoc = DocumentApp.openById(ocrFile.id);
-    ocrText = ocrDoc.getBody().getText();
-
-    // OCRテキストをファイルのdescriptionに保存（検索用）
-    imageFile.setDescription('OCR: ' + ocrText.substring(0, 500));
-
-    // OCR用の一時Docを削除（テキストは取得済み）
-    DriveApp.getFileById(ocrFile.id).setTrashed(true);
-  } catch (ocrError) {
-    console.error('OCR error:', ocrError);
-    // OCR失敗しても画像保存は成功としてcontinue
+  // 最初の空の段落を削除
+  if (body.getNumChildren() > 0) {
+    body.removeChild(body.getChild(0));
   }
 
-  // 3. OCRテキスト付きPDFを生成
-  try {
-    const pdfFileName = fileName.replace('.jpg', '.pdf');
+  for (let i = 0; i < images.length; i++) {
+    const imageBlob = Utilities.newBlob(
+      Utilities.base64Decode(images[i]),
+      'image/jpeg',
+      `page_${i + 1}.jpg`
+    );
 
-    // Googleドキュメントを作成してPDFにエクスポート
-    const doc = DocumentApp.create(pdfFileName.replace('.pdf', ''));
-    const body = doc.getBody();
-
-    // 画像を挿入
-    body.appendImage(imageBlob).setWidth(500);
-
-    // OCRテキストがあれば追記
-    if (ocrText) {
-      body.appendParagraph('--- OCR結果 ---')
-        .setHeading(DocumentApp.ParagraphHeading.HEADING3);
-      body.appendParagraph(ocrText);
+    // ページ区切り（2ページ目以降）
+    if (i > 0) {
+      body.appendPageBreak();
     }
 
-    doc.saveAndClose();
+    // 画像を挿入（ページ幅に合わせる）
+    const image = body.appendImage(imageBlob);
+    const width = 500;
+    const ratio = width / image.getWidth();
+    image.setWidth(width);
+    image.setHeight(image.getHeight() * ratio);
 
-    // PDFとしてエクスポート
-    const pdfBlob = DriveApp.getFileById(doc.getId())
-      .getAs('application/pdf')
-      .setName(pdfFileName);
-    const pdfFile = dateFolder.createFile(pdfBlob);
-
-    // 一時ドキュメントを削除
-    DriveApp.getFileById(doc.getId()).setTrashed(true);
-
-    // アップロードログに記録
-    logUpload(clientId, clientName, docType, timestamp, pdfFile.getId(), ocrText);
-
-    return { fileId: pdfFile.getId(), ocrText: ocrText };
-  } catch (pdfError) {
-    console.error('PDF creation error:', pdfError);
-    // PDF作成失敗でも元画像は保存されている
-    logUpload(clientId, clientName, docType, timestamp, imageFile.getId(), ocrText);
-    return { fileId: imageFile.getId(), ocrText: ocrText };
+    // OCR処理
+    try {
+      const ocrResource = {
+        title: `_ocr_temp_${i}`,
+        mimeType: 'image/jpeg'
+      };
+      const ocrFile = Drive.Files.insert(ocrResource, imageBlob, {
+        ocr: true,
+        ocrLanguage: CONFIG.OCR_LANGUAGE
+      });
+      const ocrDoc = DocumentApp.openById(ocrFile.id);
+      const pageOcr = ocrDoc.getBody().getText();
+      if (pageOcr) {
+        allOcrText += `[ページ${i + 1}] ${pageOcr}\n`;
+      }
+      DriveApp.getFileById(ocrFile.id).setTrashed(true);
+    } catch (ocrErr) {
+      console.error(`OCR error page ${i + 1}:`, ocrErr);
+    }
   }
+
+  // OCRテキストをドキュメント末尾に追記
+  if (allOcrText) {
+    body.appendPageBreak();
+    body.appendParagraph('--- OCR結果 ---')
+      .setHeading(DocumentApp.ParagraphHeading.HEADING3);
+    body.appendParagraph(allOcrText);
+  }
+
+  doc.saveAndClose();
+
+  // PDFとしてエクスポート
+  const pdfFileName = buildPdfFileName(docType, bankName, timestamp, pageCount);
+  const pdfBlob = DriveApp.getFileById(doc.getId())
+    .getAs('application/pdf')
+    .setName(pdfFileName);
+  const pdfFile = clientFolder.createFile(pdfBlob);
+
+  // OCRテキストをPDFの説明に保存（検索用）
+  if (allOcrText) {
+    pdfFile.setDescription('OCR: ' + allOcrText.substring(0, 800));
+  }
+
+  // 一時ドキュメントを削除
+  DriveApp.getFileById(doc.getId()).setTrashed(true);
+
+  // ログ記録
+  logUpload(clientId, clientName, docType, bankName, timestamp, pageCount, pdfFile.getId(), allOcrText);
+
+  return { fileId: pdfFile.getId() };
 }
 
 /**
- * フォルダを取得、なければ作成
+ * PDFファイル名を生成
  */
+function buildPdfFileName(docType, bankName, timestamp, pageCount) {
+  const date = new Date(timestamp);
+  const dateStr = Utilities.formatDate(date, 'Asia/Tokyo', 'yyyyMMdd_HHmm');
+  let name = `${dateStr}_${docType}`;
+  if (bankName) name += `_${bankName}`;
+  name += `_${pageCount}p.pdf`;
+  return name;
+}
+
 function getOrCreateFolder(parent, name) {
   const folders = parent.getFoldersByName(name);
-  if (folders.hasNext()) {
-    return folders.next();
-  }
+  if (folders.hasNext()) return folders.next();
   return parent.createFolder(name);
 }
 
 // ============================================================
-// アップロードログ管理
+// アップロードログ
 // ============================================================
 
-/**
- * アップロードをSpreadsheetにログ記録
- */
-function logUpload(clientId, clientName, docType, timestamp, fileId, ocrText) {
+function logUpload(clientId, clientName, docType, bankName, timestamp, pageCount, fileId, ocrText) {
   const ss = getOrCreateLogSheet();
-  const sheet = ss.getSheetByName('UploadLog');
+  const sheet = ss.getSheetByName('アップロード履歴');
   sheet.appendRow([
-    new Date(),           // ログ日時
-    clientId,             // クライアントID
-    clientName,           // クライアント名
-    docType,              // 書類種別
-    timestamp,            // 撮影日時
-    fileId,               // DriveファイルID
-    ocrText.substring(0, 200),  // OCRテキスト（先頭200文字）
-    'pending'             // ステータス（pending/notified）
+    new Date(),
+    clientName,
+    docType,
+    bankName || '',
+    pageCount,
+    new Date(timestamp),
+    fileId,
+    (ocrText || '').substring(0, 200),
+    'pending'
   ]);
 }
 
-/**
- * ログ用スプレッドシートを取得 or 作成
- */
 function getOrCreateLogSheet() {
   const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
-  const files = rootFolder.getFilesByName('_scan_upload_log');
+  const files = rootFolder.getFilesByName('_書類スキャン管理');
 
   if (files.hasNext()) {
     return SpreadsheetApp.open(files.next());
   }
 
-  // 新規作成
-  const ss = SpreadsheetApp.create('_scan_upload_log');
-  const sheet = ss.getActiveSheet();
-  sheet.setName('UploadLog');
-  sheet.appendRow([
-    'ログ日時', 'クライアントID', 'クライアント名',
-    '書類種別', '撮影日時', 'ファイルID', 'OCRテキスト', 'ステータス'
-  ]);
-  sheet.setFrozenRows(1);
+  const ss = SpreadsheetApp.create('_書類スキャン管理');
 
-  // ログファイルをルートフォルダに移動
+  // シート1: アップロード履歴
+  const logSheet = ss.getActiveSheet();
+  logSheet.setName('アップロード履歴');
+  logSheet.appendRow([
+    '受信日時', '顧問先名', '書類種別', '銀行名',
+    'ページ数', '撮影日時', 'ファイルID', 'OCRテキスト', 'ステータス'
+  ]);
+  logSheet.setFrozenRows(1);
+
+  // シート2: 顧問先URL一覧
+  const urlSheet = ss.insertSheet('顧問先URL一覧');
+  urlSheet.appendRow(['顧問先名', 'クライアントID', 'URL', '登録日']);
+  urlSheet.setFrozenRows(1);
+  urlSheet.setColumnWidth(1, 200);
+  urlSheet.setColumnWidth(2, 150);
+  urlSheet.setColumnWidth(3, 500);
+  urlSheet.setColumnWidth(4, 120);
+
+  // ファイルをルートフォルダに移動
   const file = DriveApp.getFileById(ss.getId());
   rootFolder.addFile(file);
   DriveApp.getRootFolder().removeFile(file);
@@ -225,30 +222,96 @@ function getOrCreateLogSheet() {
 }
 
 // ============================================================
-// 定時メール通知
+// 顧問先URL管理
 // ============================================================
 
 /**
- * 毎朝6時に実行 - 前日のアップロードサマリーをメール送信
+ * ★ 顧問先を登録する（これだけ実行すればOK）
+ *
+ * 使い方:
+ *   1. この関数を選択して「実行」
+ *   2. 入力ダイアログに顧問先名を入力（例: 田中商事）
+ *   3. 自動でフォルダ作成 + URL生成 + 一覧に追記
+ *   4. ログに表示されたURLを顧問先に渡す
+ *
+ * ※ クライアントIDは顧問先名から自動生成されます
  */
+function registerClient() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt(
+    '顧問先登録',
+    '顧問先名を入力してください（例: 田中商事）',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+
+  const clientName = response.getResponseText().trim();
+  if (!clientName) {
+    ui.alert('顧問先名が入力されていません。');
+    return;
+  }
+
+  // クライアントIDを生成（タイムスタンプベースで一意に）
+  const clientId = 'c' + Date.now().toString(36);
+
+  // フォルダ作成
+  const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
+  getOrCreateFolder(rootFolder, clientName);
+
+  // URL生成
+  const url = `${CONFIG.FRONTEND_URL}?client=${encodeURIComponent(clientId)}&name=${encodeURIComponent(clientName)}`;
+
+  // 一覧に追記
+  const ss = getOrCreateLogSheet();
+  const urlSheet = ss.getSheetByName('顧問先URL一覧');
+  urlSheet.appendRow([clientName, clientId, url, new Date()]);
+
+  // 結果を表示
+  ui.alert(
+    '登録完了',
+    `顧問先: ${clientName}\n\n配布用URL:\n${url}\n\nこのURLを顧問先にお渡しください。\n「顧問先URL一覧」シートにも記録しました。`,
+    ui.ButtonSet.OK
+  );
+
+  console.log(`登録完了 - ${clientName}: ${url}`);
+}
+
+/**
+ * 顧問先URL一覧を開く（ショートカット）
+ */
+function openClientUrlList() {
+  const ss = getOrCreateLogSheet();
+  const urlSheet = ss.getSheetByName('顧問先URL一覧');
+  const url = ss.getUrl() + '#gid=' + urlSheet.getSheetId();
+  console.log(`顧問先URL一覧: ${url}`);
+
+  const ui = SpreadsheetApp.getUi();
+  ui.alert('顧問先URL一覧', `以下のスプレッドシートで確認できます:\n${ss.getUrl()}`, ui.ButtonSet.OK);
+}
+
+// ============================================================
+// 定時メール通知
+// ============================================================
+
 function sendDailySummaryEmail() {
   const ss = getOrCreateLogSheet();
-  const sheet = ss.getSheetByName('UploadLog');
+  const sheet = ss.getSheetByName('アップロード履歴');
   const data = sheet.getDataRange().getValues();
 
-  // 未通知のレコードを抽出
   const pendingRows = [];
   for (let i = 1; i < data.length; i++) {
-    if (data[i][7] === 'pending') {
+    if (data[i][8] === 'pending') {
       pendingRows.push({
         rowIndex: i + 1,
         logDate: data[i][0],
-        clientId: data[i][1],
-        clientName: data[i][2],
-        docType: data[i][3],
-        timestamp: data[i][4],
-        fileId: data[i][5],
-        ocrText: data[i][6]
+        clientName: data[i][1],
+        docType: data[i][2],
+        bankName: data[i][3],
+        pageCount: data[i][4],
+        timestamp: data[i][5],
+        fileId: data[i][6],
+        ocrText: data[i][7]
       });
     }
   }
@@ -258,72 +321,53 @@ function sendDailySummaryEmail() {
     return;
   }
 
-  // クライアント別にグループ化
+  // 顧問先別にグループ化
   const byClient = {};
   pendingRows.forEach(row => {
-    const key = `${row.clientId}_${row.clientName}`;
-    if (!byClient[key]) {
-      byClient[key] = { name: row.clientName, files: [] };
+    if (!byClient[row.clientName]) {
+      byClient[row.clientName] = [];
     }
-    byClient[key].files.push(row);
+    byClient[row.clientName].push(row);
   });
-
-  // メール本文を作成
-  const docTypeLabels = {
-    receipt: '領収書・レシート',
-    invoice: '請求書',
-    statement: '明細書',
-    contract: '契約書',
-    tax: '税務関連書類',
-    other: 'その他'
-  };
-
-  let htmlBody = `
-    <div style="font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif; max-width: 600px;">
-      <h2 style="color: #1a73e8; border-bottom: 2px solid #1a73e8; padding-bottom: 8px;">
-        📋 書類スキャン - 日次レポート
-      </h2>
-      <p style="color: #666;">
-        ${new Date().toLocaleDateString('ja-JP')} 時点で
-        <strong>${pendingRows.length}件</strong>の新規アップロードがあります。
-      </p>
-  `;
 
   const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
   const folderUrl = rootFolder.getUrl();
 
-  Object.keys(byClient).forEach(key => {
-    const client = byClient[key];
+  let htmlBody = `
+    <div style="font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif; max-width: 600px;">
+      <h2 style="color: #1a73e8; border-bottom: 2px solid #1a73e8; padding-bottom: 8px;">
+        書類スキャン - 日次レポート
+      </h2>
+      <p style="color: #666;">
+        ${Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd')} 時点で
+        <strong>${pendingRows.length}件</strong>の新規アップロードがあります。
+      </p>
+  `;
+
+  Object.keys(byClient).forEach(clientName => {
+    const files = byClient[clientName];
     htmlBody += `
       <div style="background: #f8f9fa; border-radius: 8px; padding: 16px; margin: 16px 0;">
-        <h3 style="margin: 0 0 12px 0; color: #333;">${client.name}</h3>
+        <h3 style="margin: 0 0 12px 0; color: #333;">${clientName}</h3>
         <table style="width: 100%; border-collapse: collapse;">
           <tr style="background: #e8eaed;">
-            <th style="padding: 8px; text-align: left; font-size: 13px;">種別</th>
-            <th style="padding: 8px; text-align: left; font-size: 13px;">日時</th>
-            <th style="padding: 8px; text-align: left; font-size: 13px;">OCRプレビュー</th>
+            <th style="padding: 8px; text-align: left; font-size: 13px;">書類種別</th>
+            <th style="padding: 8px; text-align: left; font-size: 13px;">詳細</th>
+            <th style="padding: 8px; text-align: center; font-size: 13px;">ページ</th>
             <th style="padding: 8px; text-align: center; font-size: 13px;">リンク</th>
           </tr>
     `;
 
-    client.files.forEach(file => {
+    files.forEach(file => {
       const driveLink = `https://drive.google.com/file/d/${file.fileId}/view`;
-      const ocrPreview = file.ocrText ?
-        file.ocrText.substring(0, 60) + '...' : '(OCR結果なし)';
-
+      const detail = file.bankName || '-';
       htmlBody += `
         <tr style="border-bottom: 1px solid #e0e0e0;">
-          <td style="padding: 8px; font-size: 13px;">
-            ${docTypeLabels[file.docType] || file.docType}
-          </td>
-          <td style="padding: 8px; font-size: 13px;">
-            ${new Date(file.timestamp).toLocaleString('ja-JP')}
-          </td>
-          <td style="padding: 8px; font-size: 12px; color: #666;">
-            ${ocrPreview}
-          </td>
+          <td style="padding: 8px; font-size: 13px;">${file.docType}</td>
+          <td style="padding: 8px; font-size: 13px;">${detail}</td>
+          <td style="padding: 8px; text-align: center; font-size: 13px;">${file.pageCount}p</td>
           <td style="padding: 8px; text-align: center;">
-            <a href="${driveLink}" style="color: #1a73e8; text-decoration: none;">開く</a>
+            <a href="${driveLink}" style="color: #1a73e8;">開く</a>
           </td>
         </tr>
       `;
@@ -347,16 +391,14 @@ function sendDailySummaryEmail() {
     </div>
   `;
 
-  // メール送信
   GmailApp.sendEmail(CONFIG.NOTIFICATION_EMAIL,
-    `【書類スキャン】${pendingRows.length}件の新規アップロード - ${new Date().toLocaleDateString('ja-JP')}`,
-    `${pendingRows.length}件の新規アップロードがあります。HTMLメールで詳細をご確認ください。`,
+    `【書類スキャン】${pendingRows.length}件の新規アップロード - ${Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd')}`,
+    `${pendingRows.length}件の新規アップロードがあります。`,
     { htmlBody: htmlBody }
   );
 
-  // ステータスを更新
   pendingRows.forEach(row => {
-    sheet.getRange(row.rowIndex, 8).setValue('notified');
+    sheet.getRange(row.rowIndex, 9).setValue('notified');
   });
 
   console.log(`通知メール送信完了: ${pendingRows.length}件`);
@@ -366,16 +408,10 @@ function sendDailySummaryEmail() {
 // トリガー設定
 // ============================================================
 
-/**
- * 初回セットアップ時に一度だけ手動実行してください
- * - 毎朝6時にサマリーメールを送信するトリガーを設定します
- */
 function createTriggers() {
-  // 既存トリガーを削除
   const triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(trigger => ScriptApp.deleteTrigger(trigger));
 
-  // 毎朝6時にメール通知
   ScriptApp.newTrigger('sendDailySummaryEmail')
     .timeBased()
     .atHour(6)
@@ -383,28 +419,13 @@ function createTriggers() {
     .inTimezone('Asia/Tokyo')
     .create();
 
-  console.log('トリガーを設定しました: 毎朝6時（JST）にメール通知');
+  console.log('トリガー設定完了: 毎朝6時（JST）にメール通知');
 }
 
 // ============================================================
-// ユーティリティ
+// テスト用
 // ============================================================
 
-/**
- * テスト用 - 手動でメール通知を送信
- */
 function testSendEmail() {
   sendDailySummaryEmail();
-}
-
-/**
- * クライアント用URL生成ヘルパー
- * @param {string} webAppUrl - デプロイ済みPWAのURL
- * @param {string} clientId - クライアントID
- * @param {string} clientName - クライアント名
- */
-function generateClientUrl(webAppUrl, clientId, clientName) {
-  const url = `${webAppUrl}?client=${encodeURIComponent(clientId)}&name=${encodeURIComponent(clientName)}`;
-  console.log(`クライアントURL: ${url}`);
-  return url;
 }
