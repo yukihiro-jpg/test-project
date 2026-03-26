@@ -653,16 +653,22 @@
         try {
             const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
                 method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'text/plain' },
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify(payload)
             });
-            updateHistory(historyId, 'done');
-            showToast('送信完了！');
-            capturedPages = [];
-            updateThumbStrip();
-            document.getElementById('bankName').value = '';
+            const result = await response.json();
+            if (result.success) {
+                updateHistory(historyId, 'done');
+                showToast('送信完了！');
+                capturedPages = [];
+                updateThumbStrip();
+                document.getElementById('bankName').value = '';
+            } else {
+                updateHistory(historyId, 'error');
+                showToast('送信に失敗しました: ' + (result.message || ''));
+            }
         } catch (error) {
+            console.error('Upload error:', error);
             updateHistory(historyId, 'error');
             showToast('送信に失敗しました。再度お試しください。');
         }
