@@ -5,7 +5,13 @@
  * Gemini API で解析し、顧問先別スプレッドシートに書き込む
  */
 
-const GEMINI_API_KEY = 'AIzaSyCS9aXu0vXypzNq9vV3ZC-923h8SKitRmI';
+/**
+ * APIキーの設定方法:
+ * Apps Scriptエディタ → 左メニュー「プロジェクトの設定」（歯車アイコン）
+ * → 下部「スクリプトプロパティ」→「スクリプトプロパティを追加」
+ * → プロパティ名: GEMINI_API_KEY / 値: あなたのAPIキー
+ */
+const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 // 解析対象の書類種別
