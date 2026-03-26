@@ -226,29 +226,22 @@ function getOrCreateLogSheet() {
 // ============================================================
 
 /**
- * ★ 顧問先を登録する（これだけ実行すればOK）
+ * ★ 顧問先を登録する
  *
  * 使い方:
- *   1. この関数を選択して「実行」
- *   2. 入力ダイアログに顧問先名を入力（例: 田中商事）
- *   3. 自動でフォルダ作成 + URL生成 + 一覧に追記
- *   4. ログに表示されたURLを顧問先に渡す
- *
- * ※ クライアントIDは顧問先名から自動生成されます
+ *   1. 下の「ここに顧問先名を入力」を書き換える（例: '田中商事'）
+ *   2. この関数を選択して「実行」
+ *   3. 実行ログにURLが表示される → それを顧問先に渡す
+ *   4. 「顧問先URL一覧」シートにも自動記録される
  */
 function registerClient() {
-  const ui = SpreadsheetApp.getUi();
-  const response = ui.prompt(
-    '顧問先登録',
-    '顧問先名を入力してください（例: 田中商事）',
-    ui.ButtonSet.OK_CANCEL
-  );
+  // ★★★ ここに顧問先名を入力してから実行 ★★★
+  const clientName = 'ここに顧問先名を入力';
+  // ★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
-  if (response.getSelectedButton() !== ui.Button.OK) return;
-
-  const clientName = response.getResponseText().trim();
-  if (!clientName) {
-    ui.alert('顧問先名が入力されていません。');
+  if (clientName === 'ここに顧問先名を入力') {
+    console.log('エラー: 顧問先名を入力してから実行してください');
+    console.log('例: const clientName = \'田中商事\';');
     return;
   }
 
@@ -267,14 +260,16 @@ function registerClient() {
   const urlSheet = ss.getSheetByName('顧問先URL一覧');
   urlSheet.appendRow([clientName, clientId, url, new Date()]);
 
-  // 結果を表示
-  ui.alert(
-    '登録完了',
-    `顧問先: ${clientName}\n\n配布用URL:\n${url}\n\nこのURLを顧問先にお渡しください。\n「顧問先URL一覧」シートにも記録しました。`,
-    ui.ButtonSet.OK
-  );
-
-  console.log(`登録完了 - ${clientName}: ${url}`);
+  // 結果をログに表示
+  console.log('========================================');
+  console.log(`登録完了: ${clientName}`);
+  console.log('');
+  console.log('配布用URL:');
+  console.log(url);
+  console.log('');
+  console.log('このURLを顧問先にお渡しください。');
+  console.log('「顧問先URL一覧」シートにも記録しました。');
+  console.log('========================================');
 }
 
 /**
@@ -284,10 +279,8 @@ function openClientUrlList() {
   const ss = getOrCreateLogSheet();
   const urlSheet = ss.getSheetByName('顧問先URL一覧');
   const url = ss.getUrl() + '#gid=' + urlSheet.getSheetId();
-  console.log(`顧問先URL一覧: ${url}`);
-
-  const ui = SpreadsheetApp.getUi();
-  ui.alert('顧問先URL一覧', `以下のスプレッドシートで確認できます:\n${ss.getUrl()}`, ui.ButtonSet.OK);
+  console.log('顧問先URL一覧はこちら:');
+  console.log(url);
 }
 
 // ============================================================
