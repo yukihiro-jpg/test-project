@@ -207,12 +207,13 @@ function getOrCreateLogSheet() {
 
   // シート2: 顧問先URL一覧
   const urlSheet = ss.insertSheet('顧問先URL一覧');
-  urlSheet.appendRow(['顧問先名', 'クライアントID', 'URL', '登録日']);
+  urlSheet.appendRow(['顧問先名', 'クライアントID', 'URL', '登録日', 'QRコード画像URL']);
   urlSheet.setFrozenRows(1);
   urlSheet.setColumnWidth(1, 200);
   urlSheet.setColumnWidth(2, 150);
   urlSheet.setColumnWidth(3, 500);
   urlSheet.setColumnWidth(4, 120);
+  urlSheet.setColumnWidth(5, 500);
 
   // ファイルをルートフォルダに移動
   const file = DriveApp.getFileById(ss.getId());
@@ -256,10 +257,13 @@ function registerClient() {
   // URL生成
   const url = `${CONFIG.FRONTEND_URL}?client=${encodeURIComponent(clientId)}&name=${encodeURIComponent(clientName)}`;
 
-  // 一覧に追記
+  // QRコード画像URL生成
+  const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(url)}&size=300&margin=2`;
+
+  // 一覧に追記（QRコードURL付き）
   const ss = getOrCreateLogSheet();
   const urlSheet = ss.getSheetByName('顧問先URL一覧');
-  urlSheet.appendRow([clientName, clientId, url, new Date()]);
+  urlSheet.appendRow([clientName, clientId, url, new Date(), qrUrl]);
 
   // 結果をログに表示
   console.log('========================================');
@@ -267,6 +271,9 @@ function registerClient() {
   console.log('');
   console.log('配布用URL:');
   console.log(url);
+  console.log('');
+  console.log('QRコード画像（ブラウザで開いて印刷可能）:');
+  console.log(qrUrl);
   console.log('');
   console.log('このURLを顧問先にお渡しください。');
   console.log('「顧問先URL一覧」シートにも記録しました。');
