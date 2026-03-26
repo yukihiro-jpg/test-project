@@ -76,7 +76,7 @@ function analyzeUploadedDocuments() {
         const analysisResult = callGeminiApi(base64Data, target.docType, target.bankName, clientSheet);
 
         // スプレッドシートに書き込み
-        writeAnalysisResult(clientSheet, target.docType, analysisResult);
+        writeAnalysisResult(clientSheet, target.docType, analysisResult, target.bankName);
 
         // ステータスを更新
         sheet.getRange(target.rowIndex, 9).setValue('analyzed');
@@ -359,7 +359,7 @@ function getOrCreateClientAnalysisSheet(clientName) {
 // 解析結果をスプレッドシートに書き込み
 // ============================================================
 
-function writeAnalysisResult(clientSheet, docType, rows) {
+function writeAnalysisResult(clientSheet, docType, rows, bankName) {
   const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
   let sheet;
 
@@ -386,7 +386,7 @@ function writeAnalysisResult(clientSheet, docType, rows) {
       rows.forEach(row => {
         sheet.appendRow([
           today,
-          row['銀行名'] || '',
+          bankName || '',
           row['年月日'] || '',
           row['摘要'] || '',
           row['入金額'] || 0,
