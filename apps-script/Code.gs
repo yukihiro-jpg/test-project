@@ -295,7 +295,7 @@ function sendDailySummaryEmail() {
 
   const pendingRows = [];
   for (let i = 1; i < data.length; i++) {
-    if (data[i][8] === 'pending') {
+    if (data[i][8] === 'pending' || data[i][8] === 'analyzed') {
       pendingRows.push({
         rowIndex: i + 1,
         logDate: data[i][0],
@@ -370,6 +370,38 @@ function sendDailySummaryEmail() {
     htmlBody += '</table></div>';
   });
 
+  // 解析結果スプレッドシートへのリンクを追加
+  const analysisSummaryJson = PropertiesService.getScriptProperties().getProperty('lastAnalysisSummary');
+  if (analysisSummaryJson) {
+    try {
+      const analysisSummary = JSON.parse(analysisSummaryJson);
+      const sheetUrls = {};
+      analysisSummary.forEach(s => { sheetUrls[s.clientName] = s.sheetUrl; });
+
+      if (Object.keys(sheetUrls).length > 0) {
+        htmlBody += `
+          <div style="background: #e8f5e9; border-radius: 8px; padding: 16px; margin: 16px 0;">
+            <h3 style="margin: 0 0 12px 0; color: #2e7d32;">AI解析結果</h3>
+            <p style="font-size: 13px; color: #666; margin-bottom: 12px;">
+              以下の顧問先の書類をAI解析しました。スプレッドシートで結果を確認できます。
+            </p>
+        `;
+        Object.keys(sheetUrls).forEach(name => {
+          htmlBody += `
+            <p style="margin: 4px 0;">
+              <a href="${sheetUrls[name]}" style="color: #1a73e8; font-size: 14px;">${name} の解析結果</a>
+            </p>
+          `;
+        });
+        htmlBody += '</div>';
+      }
+      // 使用済みのサマリーをクリア
+      PropertiesService.getScriptProperties().deleteProperty('lastAnalysisSummary');
+    } catch (e) {
+      console.error('解析サマリー読み込みエラー:', e);
+    }
+  }
+
   htmlBody += `
     <p style="margin-top: 20px;">
       <a href="${folderUrl}"
@@ -406,6 +438,15 @@ function createTriggers() {
   const triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(trigger => ScriptApp.deleteTrigger(trigger));
 
+  // AM3:00 - Gemini API解析
+  ScriptApp.newTrigger('analyzeUploadedDocuments')
+    .timeBased()
+    .atHour(3)
+    .everyDays(1)
+    .inTimezone('Asia/Tokyo')
+    .create();
+
+  // AM6:00 - メール通知
   ScriptApp.newTrigger('sendDailySummaryEmail')
     .timeBased()
     .atHour(6)
@@ -413,7 +454,9 @@ function createTriggers() {
     .inTimezone('Asia/Tokyo')
     .create();
 
-  console.log('トリガー設定完了: 毎朝6時（JST）にメール通知');
+  console.log('トリガー設定完了:');
+  console.log('  AM3:00 - Gemini API解析');
+  console.log('  AM6:00 - メール通知');
 }
 
 // ============================================================
