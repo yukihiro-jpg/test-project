@@ -29,7 +29,7 @@ function analyzeUploadedDocuments() {
   // ステータスが 'pending' かつ解析対象の書類種別を抽出
   const targets = [];
   for (let i = 1; i < data.length; i++) {
-    const status = data[i][8];
+    const status = data[i][9];
     const docType = data[i][2];
     if (status === 'pending' && ANALYZABLE_TYPES.indexOf(docType) >= 0) {
       targets.push({
@@ -37,8 +37,9 @@ function analyzeUploadedDocuments() {
         clientName: data[i][1],
         docType: data[i][2],
         bankName: data[i][3],
-        pageCount: data[i][4],
-        fileId: data[i][6]
+        userName: data[i][4],
+        pageCount: data[i][5],
+        fileId: data[i][7]
       });
     }
   }
@@ -76,10 +77,10 @@ function analyzeUploadedDocuments() {
         const analysisResult = callGeminiApi(base64Data, target.docType, target.bankName, clientSheet);
 
         // スプレッドシートに書き込み
-        writeAnalysisResult(clientSheet, target.docType, analysisResult, target.bankName);
+        writeAnalysisResult(clientSheet, target.docType, analysisResult, target.bankName, target.userName);
 
         // ステータスを更新
-        sheet.getRange(target.rowIndex, 9).setValue('analyzed');
+        sheet.getRange(target.rowIndex, 10).setValue('analyzed');
 
         resultSummary.push({
           clientName: clientName,
@@ -93,7 +94,7 @@ function analyzeUploadedDocuments() {
 
       } catch (err) {
         console.error(`解析エラー (${clientName}/${target.docType}):`, err);
-        sheet.getRange(target.rowIndex, 9).setValue('analyze_error');
+        sheet.getRange(target.rowIndex, 10).setValue('analyze_error');
       }
     });
   });
@@ -329,7 +330,7 @@ function getOrCreateClientAnalysisSheet(clientName) {
   // シート1: レシート・領収書
   const receiptSheet = ss.getActiveSheet();
   receiptSheet.setName('レシート・領収書');
-  receiptSheet.appendRow(['解析日', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '支払総額', '主な品名', 'インボイス番号', '備考']);
+  receiptSheet.appendRow(['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '支払総額', '主な品名', 'インボイス番号', '備考']);
   receiptSheet.setFrozenRows(1);
 
   // シート2: 通帳
@@ -359,7 +360,7 @@ function getOrCreateClientAnalysisSheet(clientName) {
 // 解析結果をスプレッドシートに書き込み
 // ============================================================
 
-function writeAnalysisResult(clientSheet, docType, rows, bankName) {
+function writeAnalysisResult(clientSheet, docType, rows, bankName, userName) {
   const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
   let sheet;
 
@@ -369,6 +370,7 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName) {
       rows.forEach(row => {
         sheet.appendRow([
           today,
+          userName || '',
           row['日付'] || '',
           row['相手先名称'] || '',
           row['10%対象額'] || 0,

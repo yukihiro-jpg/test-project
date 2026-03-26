@@ -64,7 +64,7 @@ function doGet(e) {
 // ============================================================
 
 function saveBatchToDrive(data) {
-  const { images, clientId, clientName, docType, bankName, timestamp, pageCount, fileName } = data;
+  const { images, clientId, clientName, docType, bankName, userName, timestamp, pageCount, fileName } = data;
 
   // 顧問先フォルダを取得 or 作成
   const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
@@ -128,7 +128,7 @@ function saveBatchToDrive(data) {
   doc.saveAndClose();
 
   // PDFとしてエクスポート
-  const pdfFileName = buildPdfFileName(docType, bankName, timestamp, pageCount);
+  const pdfFileName = buildPdfFileName(docType, bankName, userName, timestamp, pageCount);
   const pdfBlob = DriveApp.getFileById(doc.getId())
     .getAs('application/pdf')
     .setName(pdfFileName);
@@ -143,7 +143,7 @@ function saveBatchToDrive(data) {
   DriveApp.getFileById(doc.getId()).setTrashed(true);
 
   // ログ記録
-  logUpload(clientId, clientName, docType, bankName, timestamp, pageCount, pdfFile.getId(), allOcrText);
+  logUpload(clientId, clientName, docType, bankName, userName, timestamp, pageCount, pdfFile.getId(), allOcrText);
 
   return { fileId: pdfFile.getId() };
 }
@@ -151,11 +151,12 @@ function saveBatchToDrive(data) {
 /**
  * PDFファイル名を生成
  */
-function buildPdfFileName(docType, bankName, timestamp, pageCount) {
+function buildPdfFileName(docType, bankName, userName, timestamp, pageCount) {
   const date = new Date(timestamp);
   const dateStr = Utilities.formatDate(date, 'Asia/Tokyo', 'yyyyMMdd_HHmm');
   let name = `${dateStr}_${docType}`;
   if (bankName) name += `_${bankName}`;
+  if (userName) name += `_${userName}`;
   name += `_${pageCount}p.pdf`;
   return name;
 }
@@ -170,7 +171,7 @@ function getOrCreateFolder(parent, name) {
 // アップロードログ
 // ============================================================
 
-function logUpload(clientId, clientName, docType, bankName, timestamp, pageCount, fileId, ocrText) {
+function logUpload(clientId, clientName, docType, bankName, userName, timestamp, pageCount, fileId, ocrText) {
   const ss = getOrCreateLogSheet();
   const sheet = ss.getSheetByName('アップロード履歴');
   sheet.appendRow([
@@ -178,6 +179,7 @@ function logUpload(clientId, clientName, docType, bankName, timestamp, pageCount
     clientName,
     docType,
     bankName || '',
+    userName || '',
     pageCount,
     new Date(timestamp),
     fileId,
@@ -200,7 +202,7 @@ function getOrCreateLogSheet() {
   const logSheet = ss.getActiveSheet();
   logSheet.setName('アップロード履歴');
   logSheet.appendRow([
-    '受信日時', '顧問先名', '書類種別', '銀行名',
+    '受信日時', '顧問先名', '書類種別', '銀行名', '使用者名',
     'ページ数', '撮影日時', 'ファイルID', 'OCRテキスト', 'ステータス'
   ]);
   logSheet.setFrozenRows(1);
@@ -302,17 +304,18 @@ function sendDailySummaryEmail() {
 
   const pendingRows = [];
   for (let i = 1; i < data.length; i++) {
-    if (data[i][8] === 'pending' || data[i][8] === 'analyzed') {
+    if (data[i][9] === 'pending' || data[i][9] === 'analyzed') {
       pendingRows.push({
         rowIndex: i + 1,
         logDate: data[i][0],
         clientName: data[i][1],
         docType: data[i][2],
         bankName: data[i][3],
-        pageCount: data[i][4],
-        timestamp: data[i][5],
-        fileId: data[i][6],
-        ocrText: data[i][7]
+        userName: data[i][4],
+        pageCount: data[i][5],
+        timestamp: data[i][6],
+        fileId: data[i][7],
+        ocrText: data[i][8]
       });
     }
   }
@@ -431,7 +434,7 @@ function sendDailySummaryEmail() {
   );
 
   pendingRows.forEach(row => {
-    sheet.getRange(row.rowIndex, 9).setValue('notified');
+    sheet.getRange(row.rowIndex, 10).setValue('notified');
   });
 
   console.log(`通知メール送信完了: ${pendingRows.length}件`);

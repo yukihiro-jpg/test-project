@@ -320,6 +320,10 @@
                 <label>銀行名</label>
                 <input type="text" id="bankName" placeholder="例: 三菱UFJ銀行">
             </div>
+            <div style="margin-top: 12px;">
+                <label>使用者名 <span style="font-size: 12px; color: #aaa;">※ 分ける必要がなければ空欄でOK</span></label>
+                <input type="text" id="userName" placeholder="例: 山田太郎">
+            </div>
         </div>
 
         <div class="correction-toggle">
@@ -621,6 +625,7 @@
 
         const docType = document.getElementById('docType').value;
         const bankName = docType === '通帳' ? document.getElementById('bankName').value : '';
+        const userName = document.getElementById('userName').value.trim();
 
         if (docType === '通帳' && !bankName.trim()) {
             showToast('銀行名を入力してください');
@@ -637,6 +642,7 @@
         // Build descriptive filename
         let fileLabel = docType;
         if (bankName) fileLabel += `_${bankName}`;
+        if (userName) fileLabel += `_${userName}`;
 
         const payload = {
             images: capturedPages.map(d => d.split(',')[1]),
@@ -644,6 +650,7 @@
             clientName: CONFIG.CLIENT_NAME,
             docType: docType,
             bankName: bankName,
+            userName: userName,
             timestamp: timestamp,
             pageCount: capturedPages.length,
             fileName: `${fileLabel}_${capturedPages.length}p_${Date.now()}`
@@ -676,6 +683,7 @@
             capturedPages = [];
             updateThumbStrip();
             document.getElementById('bankName').value = '';
+            document.getElementById('userName').value = '';
         } catch (error) {
             console.error('Upload error:', error);
             updateHistory(historyId, 'error');
