@@ -77,11 +77,6 @@ function saveBatchToDrive(data) {
   const doc = DocumentApp.create(fileName);
   const body = doc.getBody();
 
-  // 最初の空の段落を削除
-  if (body.getNumChildren() > 0) {
-    body.removeChild(body.getChild(0));
-  }
-
   for (let i = 0; i < images.length; i++) {
     const imageBlob = Utilities.newBlob(
       Utilities.base64Decode(images[i]),
