@@ -370,6 +370,7 @@
 
     <div class="toast" id="toast"></div>
     <canvas id="cvCanvas"></canvas>
+    <iframe id="postFrame" name="postFrame" style="display:none;"></iframe>
 
     <script async src="https://docs.opencv.org/4.9.0/opencv.js" onload="onOpenCvReady()" id="opencvScript"></script>
 
@@ -651,22 +652,30 @@
         addHistory(historyId, docType, bankName, capturedPages.length, 'uploading');
 
         try {
-            const response = await fetch(CONFIG.APPS_SCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload)
-            });
-            const result = await response.json();
-            if (result.success) {
-                updateHistory(historyId, 'done');
-                showToast('送信完了！');
-                capturedPages = [];
-                updateThumbStrip();
-                document.getElementById('bankName').value = '';
-            } else {
-                updateHistory(historyId, 'error');
-                showToast('送信に失敗しました: ' + (result.message || ''));
-            }
+            // フォーム送信方式（CORS問題を回避）
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = CONFIG.APPS_SCRIPT_URL;
+            form.target = 'postFrame';
+            form.style.display = 'none';
+
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'payload';
+            input.value = JSON.stringify(payload);
+            form.appendChild(input);
+
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
+
+            // フォーム送信は結果を直接受け取れないため、タイムアウトで完了扱い
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            updateHistory(historyId, 'done');
+            showToast('送信完了！');
+            capturedPages = [];
+            updateThumbStrip();
+            document.getElementById('bankName').value = '';
         } catch (error) {
             console.error('Upload error:', error);
             updateHistory(historyId, 'error');

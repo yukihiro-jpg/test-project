@@ -30,7 +30,13 @@ const CONFIG = {
 
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
+    // フォーム送信とJSON送信の両方に対応
+    let data;
+    if (e.parameter && e.parameter.payload) {
+      data = JSON.parse(e.parameter.payload);
+    } else {
+      data = JSON.parse(e.postData.contents);
+    }
     const result = saveBatchToDrive(data);
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
