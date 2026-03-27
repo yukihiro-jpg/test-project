@@ -397,6 +397,7 @@
     // ============================================================
     let cvReady = false;
     let capturedPages = []; // Array of base64 image strings
+    let currentBatchBankName = null; // 撮影中の通帳の銀行名を追跡
 
     function onOpenCvReady() {
         cvReady = true;
@@ -425,7 +426,58 @@
     // Camera Capture
     // ============================================================
     function startCapture() {
+        const docType = document.getElementById('docType').value;
+
+        // 通帳モードで銀行名が未入力なら撮影をブロック
+        if (docType === '通帳') {
+            const bankName = document.getElementById('bankName').value.trim();
+            if (!bankName) {
+                showToast('銀行名を入力してから撮影してください');
+                return;
+            }
+
+            // 撮影済みがある場合、銀行名の変更を検知
+            if (capturedPages.length > 0 && currentBatchBankName !== null && bankName !== currentBatchBankName) {
+                showBankChangeDialog(currentBatchBankName, bankName);
+                return;
+            }
+        }
+
         document.getElementById('fileInput').click();
+    }
+
+    // 銀行名変更時の確認ダイアログ
+    function showBankChangeDialog(oldBank, newBank) {
+        // オーバーレイ作成
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:300;display:flex;justify-content:center;align-items:center;';
+        const dialog = document.createElement('div');
+        dialog.style.cssText = 'background:white;border-radius:16px;padding:24px;max-width:320px;width:90%;text-align:center;';
+        dialog.innerHTML = `
+            <p style="font-size:16px;font-weight:600;margin-bottom:12px;color:#333;">銀行が変わりました</p>
+            <p style="font-size:14px;color:#666;margin-bottom:20px;line-height:1.6;">
+                「${oldBank}」の通帳 ${capturedPages.length}ページが未送信です。<br>
+                先に送信してから「${newBank}」の撮影を始めますか？
+            </p>
+            <button id="dlgSend" style="width:100%;padding:14px;background:#34a853;color:white;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;margin-bottom:10px;">
+                ${oldBank}を先に送信する
+            </button>
+            <button id="dlgCancel" style="width:100%;padding:14px;background:#f1f3f4;color:#333;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;">
+                キャンセル
+            </button>
+        `;
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        document.getElementById('dlgSend').onclick = async function() {
+            document.body.removeChild(overlay);
+            // 現在の銀行名で自動送信
+            await sendAll();
+            showToast(`${oldBank}の通帳を送信しました。${newBank}の撮影を始めてください。`);
+        };
+        document.getElementById('dlgCancel').onclick = function() {
+            document.body.removeChild(overlay);
+        };
     }
 
     function handleFileSelect(event) {
@@ -589,6 +641,11 @@
     // Batch Page Management
     // ============================================================
     function addPage(dataUrl) {
+        // 通帳の場合、最初の撮影時に銀行名を記録
+        const docType = document.getElementById('docType').value;
+        if (docType === '通帳' && capturedPages.length === 0) {
+            currentBatchBankName = document.getElementById('bankName').value.trim();
+        }
         capturedPages.push(dataUrl);
         updateThumbStrip();
         showToast(`${capturedPages.length}ページ目を追加しました`);
@@ -609,12 +666,14 @@
         if (count === 0) {
             strip.classList.remove('active');
             sendArea.classList.remove('active');
+            currentBatchBankName = null;
             return;
         }
 
         strip.classList.add('active');
         sendArea.classList.add('active');
-        title.textContent = `撮影済み: ${count}ページ`;
+        const bankLabel = currentBatchBankName ? `${currentBatchBankName} - ` : '';
+        title.textContent = `${bankLabel}撮影済み: ${count}ページ`;
 
         grid.innerHTML = '';
         capturedPages.forEach((dataUrl, i) => {
