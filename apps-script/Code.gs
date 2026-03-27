@@ -64,7 +64,7 @@ function doGet(e) {
 // ============================================================
 
 function saveBatchToDrive(data) {
-  const { images, clientId, clientName, docType, bankName, userName, timestamp, pageCount, fileName } = data;
+  const { images, clientId, clientName, docType, bankName, accountNumber, userName, timestamp, pageCount, fileName } = data;
 
   // 顧問先フォルダを取得 or 作成
   const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
@@ -143,7 +143,7 @@ function saveBatchToDrive(data) {
   DriveApp.getFileById(doc.getId()).setTrashed(true);
 
   // ログ記録
-  logUpload(clientId, clientName, docType, bankName, userName, timestamp, pageCount, pdfFile.getId(), allOcrText);
+  logUpload(clientId, clientName, docType, bankName, accountNumber, userName, timestamp, pageCount, pdfFile.getId(), allOcrText);
 
   return { fileId: pdfFile.getId() };
 }
@@ -171,7 +171,7 @@ function getOrCreateFolder(parent, name) {
 // アップロードログ
 // ============================================================
 
-function logUpload(clientId, clientName, docType, bankName, userName, timestamp, pageCount, fileId, ocrText) {
+function logUpload(clientId, clientName, docType, bankName, accountNumber, userName, timestamp, pageCount, fileId, ocrText) {
   const ss = getOrCreateLogSheet();
   const sheet = ss.getSheetByName('アップロード履歴');
   sheet.appendRow([
@@ -179,6 +179,7 @@ function logUpload(clientId, clientName, docType, bankName, userName, timestamp,
     clientName,
     docType,
     bankName || '',
+    accountNumber || '',
     userName || '',
     pageCount,
     new Date(timestamp),
@@ -202,7 +203,7 @@ function getOrCreateLogSheet() {
   const logSheet = ss.getActiveSheet();
   logSheet.setName('アップロード履歴');
   logSheet.appendRow([
-    '受信日時', '顧問先名', '書類種別', '銀行名', '使用者名',
+    '受信日時', '顧問先名', '書類種別', '銀行名', '口座番号', '使用者名',
     'ページ数', '撮影日時', 'ファイルID', 'OCRテキスト', 'ステータス'
   ]);
   logSheet.setFrozenRows(1);
@@ -304,18 +305,19 @@ function sendDailySummaryEmail() {
 
   const pendingRows = [];
   for (let i = 1; i < data.length; i++) {
-    if (data[i][9] === 'pending' || data[i][9] === 'analyzed') {
+    if (data[i][10] === 'pending' || data[i][10] === 'analyzed') {
       pendingRows.push({
         rowIndex: i + 1,
         logDate: data[i][0],
         clientName: data[i][1],
         docType: data[i][2],
         bankName: data[i][3],
-        userName: data[i][4],
-        pageCount: data[i][5],
-        timestamp: data[i][6],
-        fileId: data[i][7],
-        ocrText: data[i][8]
+        accountNumber: data[i][4],
+        userName: data[i][5],
+        pageCount: data[i][6],
+        timestamp: data[i][7],
+        fileId: data[i][8],
+        ocrText: data[i][9]
       });
     }
   }
@@ -434,7 +436,7 @@ function sendDailySummaryEmail() {
   );
 
   pendingRows.forEach(row => {
-    sheet.getRange(row.rowIndex, 10).setValue('notified');
+    sheet.getRange(row.rowIndex, 11).setValue('notified');
   });
 
   console.log(`通知メール送信完了: ${pendingRows.length}件`);
