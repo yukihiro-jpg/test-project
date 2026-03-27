@@ -12,7 +12,7 @@
  * → プロパティ名: GEMINI_API_KEY / 値: あなたのAPIキー
  */
 const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 // 解析対象の書類種別
 const ANALYZABLE_TYPES = ['レシート・領収書', '通帳', '売上請求書', '仕入請求書'];
