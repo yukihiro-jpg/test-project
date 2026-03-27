@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+# PyInstaller generated specs (not build.spec which is our source)
+# *.spec
+.eggs/
+*.whl
+.venv/
+venv/
+env/
+.env

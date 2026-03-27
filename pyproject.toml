@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mjs-pdf-splitter"
+version = "0.1.0"
+description = "MJS電子申告PDFを書類種類ごとに自動分割・リネームするツール"
+requires-python = ">=3.10"
+dependencies = [
+    "pymupdf>=1.24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pyinstaller>=6.0",
+]
+
+[project.scripts]
+mjs-pdf-split = "mjs_pdf_splitter.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
