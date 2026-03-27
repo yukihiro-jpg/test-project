@@ -339,14 +339,8 @@
         </div>
 
         <div class="capture-area">
-            <button class="capture-btn" id="captureBtn" onclick="startSingleCapture()">
-                <span>撮影する（1枚）</span>
-            </button>
-            <button class="capture-btn" id="continuousBtn" onclick="startContinuousCapture()" style="margin-top: 10px; background: #4285f4;">
-                <span>連続撮影する</span>
-            </button>
-            <button class="capture-btn" id="stopBtn" onclick="stopContinuousCapture()" style="margin-top: 10px; background: #ea4335; display: none;">
-                <span>連続撮影を終了</span>
+            <button class="capture-btn" id="captureBtn" onclick="startCapture()">
+                <span>撮影する</span>
             </button>
             <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFileSelect(event)">
             <p class="page-count" id="pageCount"></p>
@@ -434,33 +428,9 @@
         document.getElementById('fileInput').click();
     }
 
-    function startSingleCapture() {
-        continuousMode = false;
-        startCapture();
-    }
-
-    function startContinuousCapture() {
-        continuousMode = true;
-        document.getElementById('captureBtn').style.display = 'none';
-        document.getElementById('continuousBtn').style.display = 'none';
-        document.getElementById('stopBtn').style.display = 'flex';
-        startCapture();
-    }
-
-    function stopContinuousCapture() {
-        continuousMode = false;
-        document.getElementById('captureBtn').style.display = 'flex';
-        document.getElementById('continuousBtn').style.display = 'flex';
-        document.getElementById('stopBtn').style.display = 'none';
-    }
-
     function handleFileSelect(event) {
         const file = event.target.files[0];
-        if (!file) {
-            // カメラをキャンセルした場合、連続撮影を停止
-            if (continuousMode) stopContinuousCapture();
-            return;
-        }
+        if (!file) return;
         const reader = new FileReader();
         reader.onload = function(e) {
             const img = new Image();
@@ -618,16 +588,10 @@
     // ============================================================
     // Batch Page Management
     // ============================================================
-    let continuousMode = false;
-
     function addPage(dataUrl) {
         capturedPages.push(dataUrl);
         updateThumbStrip();
         showToast(`${capturedPages.length}ページ目を追加しました`);
-        // 連続撮影モードなら自動で次の撮影を開始
-        if (continuousMode) {
-            setTimeout(() => startCapture(), 500);
-        }
     }
 
     function removePage(index) {
