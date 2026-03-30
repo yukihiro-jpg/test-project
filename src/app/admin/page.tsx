@@ -18,6 +18,8 @@ export default function AdminPage() {
   const [selectedYear, setSelectedYear] = useState<string>('')
   const [qrImages, setQrImages] = useState<Record<string, string>>({})
   const [appUrl, setAppUrl] = useState('')
+  const [csvStatus, setCsvStatus] = useState<Record<string, string>>({})
+  const [csvUploading, setCsvUploading] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     setAppUrl(window.location.origin)
@@ -35,10 +37,39 @@ export default function AdminPage() {
       .catch(console.error)
   }, [])
 
-  // 年度変更時にQRコードをリセット
+  // 年度変更時にQRコード・CSVステータスをリセット
   useEffect(() => {
     setQrImages({})
+    setCsvStatus({})
   }, [selectedYear])
+
+  const handleCsvUpload = async (clientId: string, file: File) => {
+    setCsvUploading((prev) => ({ ...prev, [clientId]: true }))
+    setCsvStatus((prev) => ({ ...prev, [clientId]: '' }))
+
+    try {
+      const formData = new FormData()
+      formData.append('clientId', clientId)
+      formData.append('yearId', selectedYear)
+      formData.append('csvFile', file)
+
+      const res = await fetch('/api/csv-upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await res.json()
+      if (res.ok) {
+        setCsvStatus((prev) => ({ ...prev, [clientId]: `${data.employeeCount}名の従業員データを登録しました` }))
+      } else {
+        setCsvStatus((prev) => ({ ...prev, [clientId]: `エラー: ${data.error}` }))
+      }
+    } catch {
+      setCsvStatus((prev) => ({ ...prev, [clientId]: 'アップロードに失敗しました' }))
+    } finally {
+      setCsvUploading((prev) => ({ ...prev, [clientId]: false }))
+    }
+  }
 
   const getUploadUrl = (clientId: string) => {
     return `${appUrl}/upload?client=${clientId}&year=${selectedYear}`
@@ -151,6 +182,44 @@ export default function AdminPage() {
                       印刷して従業員に配布してください
                     </p>
                   </div>
+                )}
+              </div>
+
+              {/* JDL CSVアップロード */}
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <label className="block text-sm text-gray-500 mb-2">
+                  JDL年末調整 従業員データCSV
+                </label>
+                <div className="flex items-center gap-2">
+                  <label
+                    className={`px-4 py-2 text-sm rounded-md cursor-pointer ${
+                      csvUploading[client.id]
+                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        : 'bg-green-600 text-white active:bg-green-700'
+                    }`}
+                  >
+                    {csvUploading[client.id] ? 'アップロード中...' : 'CSVをアップロード'}
+                    <input
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      disabled={csvUploading[client.id]}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleCsvUpload(client.id, file)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                </div>
+                {csvStatus[client.id] && (
+                  <p className={`mt-2 text-sm ${
+                    csvStatus[client.id].startsWith('エラー')
+                      ? 'text-red-600'
+                      : 'text-green-600'
+                  }`}>
+                    {csvStatus[client.id]}
+                  </p>
                 )}
               </div>
             </div>
