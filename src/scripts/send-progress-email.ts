@@ -3,8 +3,8 @@
  *
  * 毎朝6:30に実行し、全顧問先の書類提出状況をまとめたメールを送信する。
  *
- * 実行: npm run cron:email
- * cron設定例: 30 6 * * * cd /path/to/project && npm run cron:email
+ * 実行: npm run cron:email -- --year=R8
+ * cron設定例: 30 6 * * * cd /path/to/project && npm run cron:email -- --year=R8
  */
 
 import { config } from 'dotenv'
@@ -12,11 +12,13 @@ config({ path: '.env.local' })
 
 import { getAllClients } from '../lib/clients'
 import { DOCUMENT_TYPES } from '../lib/document-types'
+import { getFiscalYear, getCurrentFiscalYearId } from '../lib/fiscal-year'
 import {
   listSubFolders,
   listFiles,
   findSpreadsheetInFolder,
   readSpreadsheetFromDrive,
+  findOrCreateFolder,
   getGmail,
 } from '../lib/google-drive'
 
@@ -33,6 +35,14 @@ interface ClientProgress {
   docBreakdown: Record<string, number>
 }
 
+function parseYearArg(): string {
+  const yearArg = process.argv.find((a) => a.startsWith('--year='))
+  if (yearArg) {
+    return yearArg.split('=')[1]
+  }
+  return getCurrentFiscalYearId()
+}
+
 async function getEmployeeMaster(clientFolderId: string): Promise<EmployeeMaster[]> {
   const sheet = await findSpreadsheetInFolder(clientFolderId, '従業員一覧')
   if (!sheet) return []
@@ -46,10 +56,14 @@ async function getEmployeeMaster(clientFolderId: string): Promise<EmployeeMaster
 
 async function getClientProgress(
   clientName: string,
-  clientFolderId: string
+  clientFolderId: string,
+  yearLabel: string
 ): Promise<ClientProgress> {
   const employees = await getEmployeeMaster(clientFolderId)
-  const folders = await listSubFolders(clientFolderId)
+
+  // 年度フォルダを探す
+  const yearFolderId = await findOrCreateFolder(clientFolderId, yearLabel)
+  const folders = await listSubFolders(yearFolderId)
 
   const submittedNames = new Set<string>()
   const docBreakdown: Record<string, number> = {}
@@ -62,7 +76,6 @@ async function getClientProgress(
     const files = await listFiles(folder.id, 'application/pdf')
     if (files.length === 0) continue
 
-    // 従業員マスタに含まれる名前のみカウント
     const isEmployee = employees.some((e) => e.name === folder.name)
     if (isEmployee || employees.length === 0) {
       submittedNames.add(folder.name)
@@ -90,10 +103,10 @@ async function getClientProgress(
   }
 }
 
-function buildEmailHtml(progressList: ClientProgress[], date: string): string {
+function buildEmailHtml(progressList: ClientProgress[], yearLabel: string, date: string): string {
   let html = `
     <html><body style="font-family: sans-serif; color: #333;">
-    <h2>年末調整 書類提出状況レポート</h2>
+    <h2>${yearLabel} 年末調整 書類提出状況レポート</h2>
     <p>集計日時: ${date}</p>
     <hr/>
   `
@@ -109,7 +122,6 @@ function buildEmailHtml(progressList: ClientProgress[], date: string): string {
       <p><strong>提出率: ${progress.submittedCount}/${progress.totalEmployees}名 (${pct}%)</strong></p>
     `
 
-    // 書類別の提出数
     html += `<table border="1" cellpadding="4" cellspacing="0" style="border-collapse: collapse; font-size: 14px; margin-bottom: 8px;">
       <tr style="background: #f0f0f0;"><th>書類名</th><th>提出数</th></tr>`
     for (const [docName, count] of Object.entries(progress.docBreakdown)) {
@@ -117,7 +129,6 @@ function buildEmailHtml(progressList: ClientProgress[], date: string): string {
     }
     html += `</table>`
 
-    // 未提出者リスト
     if (progress.unsubmittedNames.length > 0) {
       html += `<p style="color: #c00;">未提出者 (${progress.unsubmittedNames.length}名):</p><ul>`
       for (const name of progress.unsubmittedNames) {
@@ -135,8 +146,8 @@ function buildEmailHtml(progressList: ClientProgress[], date: string): string {
   return html
 }
 
-function buildEmailText(progressList: ClientProgress[], date: string): string {
-  let text = `年末調整 書類提出状況レポート\n集計日時: ${date}\n\n`
+function buildEmailText(progressList: ClientProgress[], yearLabel: string, date: string): string {
+  let text = `${yearLabel} 年末調整 書類提出状況レポート\n集計日時: ${date}\n\n`
 
   for (const progress of progressList) {
     const pct =
@@ -169,7 +180,6 @@ async function sendEmail(
 ) {
   const gmail = getGmail()
 
-  // RFC 2822形式のメールを作成
   const messageParts = [
     `To: ${to}`,
     `Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,
@@ -196,9 +206,7 @@ async function sendEmail(
 
   await gmail.users.messages.send({
     userId: 'me',
-    requestBody: {
-      raw: encodedMessage,
-    },
+    requestBody: { raw: encodedMessage },
   })
 }
 
@@ -209,6 +217,15 @@ async function main() {
     process.exit(1)
   }
 
+  const yearId = parseYearArg()
+  const fiscalYear = getFiscalYear(yearId)
+  if (!fiscalYear) {
+    console.error(`無効な年度: ${yearId}`)
+    process.exit(1)
+  }
+
+  console.log(`対象年度: ${fiscalYear.label}`)
+
   const clients = getAllClients()
   console.log(`${clients.length}件の顧問先の進捗を集計中...`)
 
@@ -217,7 +234,11 @@ async function main() {
   for (const client of clients) {
     console.log(`  集計中: ${client.name}`)
     try {
-      const progress = await getClientProgress(client.name, client.driveFolderId)
+      const progress = await getClientProgress(
+        client.name,
+        client.driveFolderId,
+        fiscalYear.label
+      )
       progressList.push(progress)
     } catch (error) {
       console.error(`  エラー: ${client.name}: ${error}`)
@@ -227,9 +248,9 @@ async function main() {
   const now = new Date()
   const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
-  const subject = `【年末調整】書類提出状況レポート (${dateStr})`
-  const htmlBody = buildEmailHtml(progressList, dateStr)
-  const textBody = buildEmailText(progressList, dateStr)
+  const subject = `【年末調整】${fiscalYear.label} 書類提出状況レポート (${dateStr})`
+  const htmlBody = buildEmailHtml(progressList, fiscalYear.label, dateStr)
+  const textBody = buildEmailText(progressList, fiscalYear.label, dateStr)
 
   console.log(`\nメール送信中: ${notificationEmail}`)
   await sendEmail(notificationEmail, subject, htmlBody, textBody)

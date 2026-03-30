@@ -11,6 +11,7 @@ function UploadForm() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const clientId = searchParams.get('client')
+  const yearId = searchParams.get('year')
 
   const [employeeName, setEmployeeName] = useState('')
   const [capturedImages, setCapturedImages] = useState<Record<string, string>>({})
@@ -18,17 +19,17 @@ function UploadForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [clientName, setClientName] = useState<string | null>(null)
+  const [yearLabel, setYearLabel] = useState<string | null>(null)
   const [clientLoaded, setClientLoaded] = useState(false)
 
-  // 顧問先名を取得
+  // 顧問先名と年度を取得
   useState(() => {
-    if (!clientId) return
-    fetch(`/api/clients?id=${encodeURIComponent(clientId)}`)
+    if (!clientId || !yearId) return
+    fetch(`/api/clients?id=${encodeURIComponent(clientId)}&year=${encodeURIComponent(yearId)}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.name) {
-          setClientName(data.name)
-        }
+        if (data.name) setClientName(data.name)
+        if (data.yearLabel) setYearLabel(data.yearLabel)
         setClientLoaded(true)
       })
       .catch(() => setClientLoaded(true))
@@ -57,7 +58,7 @@ function UploadForm() {
   }, [])
 
   const handleSubmit = async () => {
-    if (!clientId || !employeeName.trim() || Object.keys(capturedFiles).length === 0) {
+    if (!clientId || !yearId || !employeeName.trim() || Object.keys(capturedFiles).length === 0) {
       return
     }
 
@@ -67,6 +68,7 @@ function UploadForm() {
     try {
       const formData = new FormData()
       formData.append('clientId', clientId)
+      formData.append('yearId', yearId)
       formData.append('employeeName', employeeName.trim())
 
       for (const [docTypeId, file] of Object.entries(capturedFiles)) {
@@ -91,12 +93,12 @@ function UploadForm() {
     }
   }
 
-  if (!clientId) {
+  if (!clientId || !yearId) {
     return (
       <div className="flex min-h-screen items-center justify-center p-6">
         <div className="text-center">
           <p className="text-lg text-red-600 font-bold mb-2">
-            顧問先が指定されていません
+            {!clientId ? '顧問先が指定されていません' : '年度が指定されていません'}
           </p>
           <p className="text-gray-500 text-sm">
             QRコードまたは専用URLからアクセスしてください。
@@ -115,9 +117,16 @@ function UploadForm() {
         <h1 className="text-xl font-bold text-gray-800">
           年末調整書類アップロード
         </h1>
-        {clientName && (
-          <p className="text-sm text-blue-600 mt-1">{clientName}</p>
-        )}
+        <div className="flex items-center gap-2 mt-1">
+          {yearLabel && (
+            <span className="inline-block px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-700 rounded">
+              {yearLabel}
+            </span>
+          )}
+          {clientName && (
+            <span className="text-sm text-blue-600">{clientName}</span>
+          )}
+        </div>
       </header>
 
       <NameInput value={employeeName} onChange={setEmployeeName} />

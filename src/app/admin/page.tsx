@@ -7,26 +7,46 @@ interface ClientInfo {
   name: string
 }
 
+interface FiscalYearInfo {
+  id: string
+  label: string
+}
+
 export default function AdminPage() {
   const [clients, setClients] = useState<ClientInfo[]>([])
+  const [fiscalYears, setFiscalYears] = useState<FiscalYearInfo[]>([])
+  const [selectedYear, setSelectedYear] = useState<string>('')
   const [qrImages, setQrImages] = useState<Record<string, string>>({})
   const [appUrl, setAppUrl] = useState('')
 
   useEffect(() => {
-    // アプリURLを取得
     setAppUrl(window.location.origin)
 
-    // 顧問先一覧を取得
     fetch('/api/clients')
       .then((res) => res.json())
-      .then((data) => setClients(data))
+      .then((data) => {
+        setClients(data.clients || [])
+        const years = data.fiscalYears || []
+        setFiscalYears(years)
+        if (years.length > 0) {
+          setSelectedYear(years[0].id)
+        }
+      })
       .catch(console.error)
   }, [])
 
+  // 年度変更時にQRコードをリセット
+  useEffect(() => {
+    setQrImages({})
+  }, [selectedYear])
+
+  const getUploadUrl = (clientId: string) => {
+    return `${appUrl}/upload?client=${clientId}&year=${selectedYear}`
+  }
+
   const generateQR = async (clientId: string) => {
-    const url = `${appUrl}/upload?client=${clientId}`
+    const url = getUploadUrl(clientId)
     try {
-      // QRコードをcanvasで生成（サーバーサイドのqrcodeライブラリの代わりにAPIを使用）
       const res = await fetch(
         `/api/qrcode?text=${encodeURIComponent(url)}`
       )
@@ -40,16 +60,37 @@ export default function AdminPage() {
     }
   }
 
-  const getUploadUrl = (clientId: string) => {
-    return `${appUrl}/upload?client=${clientId}`
-  }
+  const selectedYearLabel =
+    fiscalYears.find((fy) => fy.id === selectedYear)?.label ?? ''
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold text-gray-800 mb-2">管理画面</h1>
-      <p className="text-gray-500 text-sm mb-8">
-        顧問先ごとのアップロードURLとQRコードを管理できます。
+      <p className="text-gray-500 text-sm mb-6">
+        年度を選択し、顧問先ごとのアップロードURLとQRコードを発行できます。
       </p>
+
+      {/* 年度選択 */}
+      <div className="mb-8 bg-white rounded-lg border border-gray-200 p-4">
+        <label
+          htmlFor="fiscal-year"
+          className="block text-sm font-bold text-gray-700 mb-2"
+        >
+          対象年度
+        </label>
+        <select
+          id="fiscal-year"
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(e.target.value)}
+          className="w-full px-3 py-2 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {fiscalYears.map((fy) => (
+            <option key={fy.id} value={fy.id}>
+              {fy.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {clients.length === 0 ? (
         <p className="text-gray-500">顧問先が登録されていません。</p>
@@ -60,9 +101,14 @@ export default function AdminPage() {
               key={client.id}
               className="bg-white rounded-lg border border-gray-200 p-6"
             >
-              <h2 className="text-lg font-bold text-gray-800 mb-3">
-                {client.name}
-              </h2>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-lg font-bold text-gray-800">
+                  {client.name}
+                </h2>
+                <span className="inline-block px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-700 rounded">
+                  {selectedYearLabel}
+                </span>
+              </div>
 
               <div className="mb-4">
                 <label className="block text-sm text-gray-500 mb-1">
@@ -98,7 +144,7 @@ export default function AdminPage() {
                   <div className="mt-3 text-center">
                     <img
                       src={qrImages[client.id]}
-                      alt={`${client.name}のQRコード`}
+                      alt={`${client.name}（${selectedYearLabel}）のQRコード`}
                       className="inline-block w-48 h-48"
                     />
                     <p className="text-xs text-gray-400 mt-2">

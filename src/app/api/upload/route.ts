@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getClient } from '@/lib/clients'
+import { getFiscalYear } from '@/lib/fiscal-year'
 import { getDocumentLabel, DOCUMENT_TYPES } from '@/lib/document-types'
 import { imageToPdf } from '@/lib/pdf-converter'
 import { findOrCreateFolder, uploadPdf } from '@/lib/google-drive'
@@ -9,10 +10,11 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const clientId = formData.get('clientId') as string
     const employeeName = formData.get('employeeName') as string
+    const yearId = formData.get('yearId') as string
 
-    if (!clientId || !employeeName) {
+    if (!clientId || !employeeName || !yearId) {
       return NextResponse.json(
-        { error: '顧問先IDと氏名は必須です' },
+        { error: '顧問先ID、氏名、年度は必須です' },
         { status: 400 }
       )
     }
@@ -25,9 +27,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const fiscalYear = getFiscalYear(yearId)
+    if (!fiscalYear) {
+      return NextResponse.json(
+        { error: '無効な年度が指定されています' },
+        { status: 400 }
+      )
+    }
+
+    // 年度フォルダを作成（なければ）
+    const yearFolderId = await findOrCreateFolder(
+      client.driveFolderId,
+      fiscalYear.label
+    )
+
     // 従業員フォルダを作成（なければ）
     const employeeFolderId = await findOrCreateFolder(
-      client.driveFolderId,
+      yearFolderId,
       employeeName
     )
 
