@@ -32,6 +32,7 @@ interface ClientProgress {
   totalEmployees: number
   submittedCount: number
   unsubmittedNames: string[]
+  newHireNames: string[]
   docBreakdown: Record<string, number>
 }
 
@@ -66,6 +67,7 @@ async function getClientProgress(
   const folders = await listSubFolders(yearFolderId)
 
   const submittedNames = new Set<string>()
+  const newHireNames: string[] = []
   const docBreakdown: Record<string, number> = {}
 
   for (const docType of DOCUMENT_TYPES) {
@@ -76,9 +78,18 @@ async function getClientProgress(
     const files = await listFiles(folder.id, 'application/pdf')
     if (files.length === 0) continue
 
-    const isEmployee = employees.some((e) => e.name === folder.name)
-    if (isEmployee || employees.length === 0) {
-      submittedNames.add(folder.name)
+    const isNewHire = folder.name.startsWith('【本年入社】')
+    const employeeName = isNewHire
+      ? folder.name.replace('【本年入社】', '')
+      : folder.name
+
+    if (isNewHire) {
+      newHireNames.push(employeeName)
+    }
+
+    const isEmployee = employees.some((e) => e.name === employeeName)
+    if (isEmployee || isNewHire || employees.length === 0) {
+      submittedNames.add(employeeName)
 
       for (const file of files) {
         const docName = file.name.replace('.pdf', '')
@@ -99,6 +110,7 @@ async function getClientProgress(
     totalEmployees: employees.length || submittedNames.size,
     submittedCount: submittedNames.size,
     unsubmittedNames,
+    newHireNames,
     docBreakdown,
   }
 }
@@ -129,6 +141,14 @@ function buildEmailHtml(progressList: ClientProgress[], yearLabel: string, date:
     }
     html += `</table>`
 
+    if (progress.newHireNames.length > 0) {
+      html += `<p style="color: #06c;">本年入社 (${progress.newHireNames.length}名):</p><ul>`
+      for (const name of progress.newHireNames) {
+        html += `<li>${name}</li>`
+      }
+      html += `</ul>`
+    }
+
     if (progress.unsubmittedNames.length > 0) {
       html += `<p style="color: #c00;">未提出者 (${progress.unsubmittedNames.length}名):</p><ul>`
       for (const name of progress.unsubmittedNames) {
@@ -157,6 +177,14 @@ function buildEmailText(progressList: ClientProgress[], yearLabel: string, date:
 
     text += `== ${progress.clientName} ==\n`
     text += `提出率: ${progress.submittedCount}/${progress.totalEmployees}名 (${pct}%)\n\n`
+
+    if (progress.newHireNames.length > 0) {
+      text += `本年入社 (${progress.newHireNames.length}名):\n`
+      for (const name of progress.newHireNames) {
+        text += `  - ${name}\n`
+      }
+      text += `\n`
+    }
 
     if (progress.unsubmittedNames.length > 0) {
       text += `未提出者 (${progress.unsubmittedNames.length}名):\n`

@@ -34,6 +34,7 @@ interface EmployeeStatus {
   name: string
   submittedDocs: string[]
   submittedDate: string | null
+  isNewHire: boolean
 }
 
 function parseYearArg(): string {
@@ -63,16 +64,22 @@ async function getEmployeeMaster(clientFolderId: string): Promise<EmployeeMaster
 
 /**
  * 年度フォルダ内の従業員サブフォルダを走査し、提出状況を取得
+ * フォルダ名が「【本年入社】氏名」の場合は本年入社として扱う
  */
 async function getSubmissionStatus(
   yearFolderId: string
-): Promise<Map<string, { docs: string[]; latestDate: string }>> {
+): Promise<Map<string, { docs: string[]; latestDate: string; isNewHire: boolean }>> {
   const folders = await listSubFolders(yearFolderId)
-  const statusMap = new Map<string, { docs: string[]; latestDate: string }>()
+  const statusMap = new Map<string, { docs: string[]; latestDate: string; isNewHire: boolean }>()
 
   for (const folder of folders) {
     const files = await listFiles(folder.id, 'application/pdf')
     if (files.length === 0) continue
+
+    const isNewHire = folder.name.startsWith('【本年入社】')
+    const employeeName = isNewHire
+      ? folder.name.replace('【本年入社】', '')
+      : folder.name
 
     const docNames = files.map((f) => f.name.replace('.pdf', ''))
     const latestDate = files
@@ -80,7 +87,7 @@ async function getSubmissionStatus(
       .sort()
       .reverse()[0]
 
-    statusMap.set(folder.name, { docs: docNames, latestDate })
+    statusMap.set(employeeName, { docs: docNames, latestDate, isNewHire })
   }
 
   return statusMap
@@ -94,11 +101,12 @@ async function updateSpreadsheet(
   clientName: string,
   yearLabel: string,
   employees: EmployeeMaster[],
-  submissions: Map<string, { docs: string[]; latestDate: string }>
+  submissions: Map<string, { docs: string[]; latestDate: string; isNewHire: boolean }>
 ) {
   const sheets = getSheets()
   const docLabels = DOCUMENT_TYPES.map((d) => d.label)
 
+  // 既存従業員の提出状況
   const statusRows: EmployeeStatus[] = employees
     .sort((a, b) => a.code.localeCompare(b.code, 'ja'))
     .map((emp) => {
@@ -108,8 +116,23 @@ async function updateSpreadsheet(
         name: emp.name,
         submittedDocs: sub ? sub.docs : [],
         submittedDate: sub ? sub.latestDate.split('T')[0] : null,
+        isNewHire: false,
       }
     })
+
+  // 本年入社者を追記（従業員マスタに含まれていない人）
+  const masterNames = new Set(employees.map((e) => e.name))
+  submissions.forEach((sub, name) => {
+    if (sub.isNewHire && !masterNames.has(name)) {
+      statusRows.push({
+        code: '本年入社',
+        name,
+        submittedDocs: sub.docs,
+        submittedDate: sub.latestDate.split('T')[0],
+        isNewHire: true,
+      })
+    }
+  })
 
   const headerRow = ['従業員コード', '氏名', '最終提出日', ...docLabels]
 
@@ -165,10 +188,13 @@ async function updateSpreadsheet(
     },
   })
 
+  const newHireCount = statusRows.filter((e) => e.isNewHire).length
+
   return {
     total: employees.length,
-    submitted: statusRows.filter((e) => e.submittedDocs.length > 0).length,
+    submitted: statusRows.filter((e) => e.submittedDocs.length > 0 && !e.isNewHire).length,
     unsubmitted: unsubmittedEmployees.length,
+    newHires: newHireCount,
   }
 }
 
@@ -196,6 +222,7 @@ async function main() {
     total: number
     submitted: number
     unsubmitted: number
+    newHires: number
   }> = []
 
   for (const client of clients) {
@@ -228,7 +255,7 @@ async function main() {
 
       results.push({ clientName: client.name, ...result })
       console.log(
-        `  完了: ${result.submitted}/${result.total}名提出済み（未提出: ${result.unsubmitted}名）`
+        `  完了: ${result.submitted}/${result.total}名提出済み（未提出: ${result.unsubmitted}名, 本年入社: ${result.newHires}名）`
       )
     } catch (error) {
       console.error(`  エラー: ${error}`)
@@ -237,7 +264,7 @@ async function main() {
 
   console.log('\n=== 処理完了 ===')
   for (const r of results) {
-    console.log(`${r.clientName}: ${r.submitted}/${r.total}名提出済み`)
+    console.log(`${r.clientName}: ${r.submitted}/${r.total}名提出済み（本年入社: ${r.newHires}名）`)
   }
 }
 

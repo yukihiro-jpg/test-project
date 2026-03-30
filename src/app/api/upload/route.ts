@@ -41,10 +41,15 @@ export async function POST(request: NextRequest) {
       fiscalYear.label
     )
 
+    const isNewHire = formData.get('isNewHire') === 'true'
+
+    // 本年入社の場合はフォルダ名に「【本年入社】」を付与
+    const folderName = isNewHire ? `【本年入社】${employeeName}` : employeeName
+
     // 従業員フォルダを作成（なければ）
     const employeeFolderId = await findOrCreateFolder(
       yearFolderId,
-      employeeName
+      folderName
     )
 
     // 各書類を処理
