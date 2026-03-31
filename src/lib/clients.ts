@@ -1,30 +1,44 @@
 /**
- * 顧問先（法人）管理
+ * 顧問先（法人）管理 - 動的クライアントルックアップ
  *
- * 顧問先情報はGoogle Driveの年度フォルダ内に _clients.json として保存される。
- * フォルダ構造: 年末調整ルート / 令和〇年度 / 法人コード_法人名 /
+ * 顧問先情報はGoogle Driveの年度フォルダ内 _clients.json から動的に読み込む。
  */
 
+import { getFiscalYear } from './fiscal-year'
+import { getOrCreateYearFolder, loadClients } from './client-registry'
+
 export interface Client {
-  /** 法人コード (例: "001") */
   code: string
-  /** 法人名 (例: "株式会社サンプル") */
   name: string
-  /** Google Drive上の法人フォルダID */
   driveFolderId: string
 }
 
-/**
- * URLパラメータ用のクライアントID
- * 法人コードをそのまま使用する
- */
-export function getClientId(code: string): string {
-  return code
+export function getClientFolderName(code: string, name: string): string {
+  return `${code}_${name}`
 }
 
 /**
- * Google Driveのフォルダ名
+ * 年度を指定してクライアントを動的に取得
  */
-export function getClientFolderName(code: string, name: string): string {
-  return `${code}_${name}`
+export async function getClientDynamic(
+  yearId: string,
+  clientCode: string
+): Promise<Client | null> {
+  const fiscalYear = getFiscalYear(yearId)
+  if (!fiscalYear) return null
+
+  const yearFolderId = await getOrCreateYearFolder(fiscalYear.label)
+  const clients = await loadClients(yearFolderId)
+  return clients.find((c) => c.code === clientCode) ?? null
+}
+
+/**
+ * 年度を指定して全クライアントを動的に取得
+ */
+export async function getAllClientsDynamic(yearId: string): Promise<Client[]> {
+  const fiscalYear = getFiscalYear(yearId)
+  if (!fiscalYear) return []
+
+  const yearFolderId = await getOrCreateYearFolder(fiscalYear.label)
+  return loadClients(yearFolderId)
 }

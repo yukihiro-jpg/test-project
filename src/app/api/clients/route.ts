@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getClient, getAllClients } from '@/lib/clients'
+import { getClientDynamic, getAllClientsDynamic } from '@/lib/clients'
 import { getFiscalYear, FISCAL_YEARS } from '@/lib/fiscal-year'
 
 export async function GET(request: NextRequest) {
@@ -7,22 +7,30 @@ export async function GET(request: NextRequest) {
   const id = searchParams.get('id')
   const yearId = searchParams.get('year')
 
-  if (id) {
-    const client = getClient(id)
+  if (id && yearId) {
+    const client = await getClientDynamic(yearId, id)
     if (!client) {
       return NextResponse.json({ error: '顧問先が見つかりません' }, { status: 404 })
     }
 
-    const fiscalYear = yearId ? getFiscalYear(yearId) : null
-
+    const fiscalYear = getFiscalYear(yearId)
     return NextResponse.json({
-      id: client.id,
+      code: client.code,
       name: client.name,
       yearLabel: fiscalYear?.label ?? null,
     })
   }
 
-  const clients = getAllClients().map((c) => ({ id: c.id, name: c.name }))
+  // 管理画面用: 年度指定で登録済み会社一覧を返す
   const fiscalYears = FISCAL_YEARS.map((fy) => ({ id: fy.id, label: fy.label }))
-  return NextResponse.json({ clients, fiscalYears })
+
+  if (yearId) {
+    const clients = await getAllClientsDynamic(yearId)
+    return NextResponse.json({
+      clients: clients.map((c) => ({ code: c.code, name: c.name })),
+      fiscalYears,
+    })
+  }
+
+  return NextResponse.json({ clients: [], fiscalYears })
 }

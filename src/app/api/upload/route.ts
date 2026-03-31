@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getClient } from '@/lib/clients'
+import { getClientDynamic } from '@/lib/clients'
 import { getFiscalYear } from '@/lib/fiscal-year'
 import { getDocumentLabel, DOCUMENT_TYPES } from '@/lib/document-types'
 import { imageToPdf } from '@/lib/pdf-converter'
-import { findOrCreateFolder, uploadPdf } from '@/lib/google-drive'
+import {
+  findOrCreateFolderInDrive,
+  uploadPdfToDrive,
+  writeJsonToFolder,
+} from '@/lib/client-registry'
+import type { ConfirmedEmployeeInfo } from '@/lib/employee-data'
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const clientId = formData.get('clientId') as string
-    const employeeName = formData.get('employeeName') as string
     const yearId = formData.get('yearId') as string
+    const employeeName = formData.get('employeeName') as string
+    const isNewHire = formData.get('isNewHire') === 'true'
+    const confirmedInfoJson = formData.get('confirmedInfo') as string | null
 
     if (!clientId || !employeeName || !yearId) {
       return NextResponse.json(
@@ -19,38 +26,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const client = getClient(clientId)
+    const client = await getClientDynamic(yearId, clientId)
     if (!client) {
-      return NextResponse.json(
-        { error: '顧問先が見つかりません' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: '顧問先が見つかりません' }, { status: 404 })
     }
 
     const fiscalYear = getFiscalYear(yearId)
     if (!fiscalYear) {
-      return NextResponse.json(
-        { error: '無効な年度が指定されています' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: '無効な年度です' }, { status: 400 })
     }
 
-    // 年度フォルダを作成（なければ）
-    const yearFolderId = await findOrCreateFolder(
-      client.driveFolderId,
-      fiscalYear.label
-    )
-
-    const isNewHire = formData.get('isNewHire') === 'true'
-
-    // 本年入社の場合はフォルダ名に「【本年入社】」を付与
+    // 従業員フォルダを作成（法人フォルダ直下）
     const folderName = isNewHire ? `【本年入社】${employeeName}` : employeeName
-
-    // 従業員フォルダを作成（なければ）
-    const employeeFolderId = await findOrCreateFolder(
-      yearFolderId,
+    const employeeFolderId = await findOrCreateFolderInDrive(
+      client.driveFolderId,
       folderName
     )
+
+    // 確認済み従業員情報を保存
+    if (confirmedInfoJson) {
+      const confirmedInfo: ConfirmedEmployeeInfo = JSON.parse(confirmedInfoJson)
+      await writeJsonToFolder(employeeFolderId, '_confirmed_info.json', confirmedInfo)
+    }
 
     // 各書類を処理
     const uploadedDocs: string[] = []
@@ -62,12 +59,9 @@ export async function POST(request: NextRequest) {
       const arrayBuffer = await file.arrayBuffer()
       const imageBuffer = Buffer.from(arrayBuffer)
 
-      // 画像→PDF変換
       const pdfBuffer = await imageToPdf(imageBuffer)
-
-      // Google Driveにアップロード
       const fileName = `${getDocumentLabel(docType.id)}.pdf`
-      await uploadPdf(employeeFolderId, fileName, pdfBuffer)
+      await uploadPdfToDrive(employeeFolderId, fileName, pdfBuffer)
 
       uploadedDocs.push(docType.id)
     }

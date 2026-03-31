@@ -1,201 +1,132 @@
 /**
  * 進捗管理スプレッドシート更新スクリプト
  *
- * 毎日0:00（締め）に実行し、各顧問先のアップロード状況をスプレッドシートに反映する。
- * - 「提出状況」シート: 従業員コード順に全員の提出状況を一覧表示
- * - 「未提出者」シート: まだ1つも書類を提出していない従業員を表示
- *
  * 実行: npm run cron:spreadsheet -- --year=R8
- * cron設定例: 0 0 * * * cd /path/to/project && npm run cron:spreadsheet -- --year=R8
  */
 
 import { config } from 'dotenv'
 config({ path: '.env.local' })
 
-import { getAllClients } from '../lib/clients'
 import { DOCUMENT_TYPES } from '../lib/document-types'
 import { getFiscalYear, getCurrentFiscalYearId } from '../lib/fiscal-year'
 import {
-  listSubFolders,
-  listFiles,
-  findSpreadsheetInFolder,
-  readSpreadsheetFromDrive,
-  findOrCreateFolder,
-  getSheets,
-} from '../lib/google-drive'
+  getOrCreateYearFolder,
+  loadClients,
+  loadEmployeeDataFromDrive,
+  listSubFoldersInDrive,
+  listFilesInDrive,
+  readJsonFromFolder,
+} from '../lib/client-registry'
+import type { ConfirmedEmployeeInfo, EmployeeData } from '../lib/employee-data'
+import { google } from 'googleapis'
 
-interface EmployeeMaster {
-  code: string
-  name: string
+function getAuth() {
+  return new google.auth.GoogleAuth({
+    credentials: {
+      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    },
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  })
 }
 
-interface EmployeeStatus {
-  code: string
-  name: string
-  submittedDocs: string[]
-  submittedDate: string | null
-  isNewHire: boolean
+function getSheets() {
+  return google.sheets({ version: 'v4', auth: getAuth() })
 }
+
+const MAX_DEPENDENTS = 10
 
 function parseYearArg(): string {
   const yearArg = process.argv.find((a) => a.startsWith('--year='))
-  if (yearArg) {
-    return yearArg.split('=')[1]
-  }
-  return getCurrentFiscalYearId()
+  return yearArg ? yearArg.split('=')[1] : getCurrentFiscalYearId()
 }
 
-/**
- * 顧問先フォルダ内の「従業員一覧」スプレッドシートを読み取り、従業員マスタを取得
- */
-async function getEmployeeMaster(clientFolderId: string): Promise<EmployeeMaster[]> {
-  const sheet = await findSpreadsheetInFolder(clientFolderId, '従業員一覧')
-  if (!sheet) {
-    console.warn(`従業員一覧が見つかりません: folderId=${clientFolderId}`)
-    return []
-  }
-
-  const rows = await readSpreadsheetFromDrive(sheet.id)
-  return rows.slice(1).map((row) => ({
-    code: row[0] || '',
-    name: row[1] || '',
-  })).filter((e) => e.code && e.name)
+interface SubmissionInfo {
+  docs: string[]
+  latestDate: string
+  isNewHire: boolean
+  confirmed: ConfirmedEmployeeInfo | null
 }
 
-/**
- * 年度フォルダ内の従業員サブフォルダを走査し、提出状況を取得
- * フォルダ名が「【本年入社】氏名」の場合は本年入社として扱う
- */
 async function getSubmissionStatus(
-  yearFolderId: string
-): Promise<Map<string, { docs: string[]; latestDate: string; isNewHire: boolean }>> {
-  const folders = await listSubFolders(yearFolderId)
-  const statusMap = new Map<string, { docs: string[]; latestDate: string; isNewHire: boolean }>()
+  companyFolderId: string
+): Promise<Map<string, SubmissionInfo>> {
+  const folders = await listSubFoldersInDrive(companyFolderId)
+  const statusMap = new Map<string, SubmissionInfo>()
 
   for (const folder of folders) {
-    const files = await listFiles(folder.id, 'application/pdf')
+    // _employee_data.json等のシステムファイルはスキップ
+    if (folder.name.startsWith('_')) continue
+
+    const files = await listFilesInDrive(folder.id, 'application/pdf')
     if (files.length === 0) continue
 
     const isNewHire = folder.name.startsWith('【本年入社】')
-    const employeeName = isNewHire
-      ? folder.name.replace('【本年入社】', '')
-      : folder.name
+    const employeeName = isNewHire ? folder.name.replace('【本年入社】', '') : folder.name
 
     const docNames = files.map((f) => f.name.replace('.pdf', ''))
-    const latestDate = files
-      .map((f) => f.modifiedTime)
-      .sort()
-      .reverse()[0]
+    const latestDate = files.map((f) => f.modifiedTime).sort().reverse()[0]
 
-    statusMap.set(employeeName, { docs: docNames, latestDate, isNewHire })
+    // _confirmed_info.json を読み込み
+    const confirmed = await readJsonFromFolder<ConfirmedEmployeeInfo>(folder.id, '_confirmed_info.json')
+
+    statusMap.set(employeeName, { docs: docNames, latestDate, isNewHire, confirmed })
   }
 
   return statusMap
 }
 
-/**
- * スプレッドシートを更新
- */
-async function updateSpreadsheet(
-  spreadsheetId: string,
-  clientName: string,
-  yearLabel: string,
-  employees: EmployeeMaster[],
-  submissions: Map<string, { docs: string[]; latestDate: string; isNewHire: boolean }>
-) {
-  const sheets = getSheets()
+function buildHeaderRow(): string[] {
   const docLabels = DOCUMENT_TYPES.map((d) => d.label)
 
-  // 既存従業員の提出状況
-  const statusRows: EmployeeStatus[] = employees
-    .sort((a, b) => a.code.localeCompare(b.code, 'ja'))
-    .map((emp) => {
-      const sub = submissions.get(emp.name)
-      return {
-        code: emp.code,
-        name: emp.name,
-        submittedDocs: sub ? sub.docs : [],
-        submittedDate: sub ? sub.latestDate.split('T')[0] : null,
-        isNewHire: false,
-      }
-    })
+  const header = [
+    '従業員コード', '氏名', '最終提出日',
+    ...docLabels,
+    '前年相違', '住所', '障碍者区分', '寡婦ひとり親',
+  ]
 
-  // 本年入社者を追記（従業員マスタに含まれていない人）
-  const masterNames = new Set(employees.map((e) => e.name))
-  submissions.forEach((sub, name) => {
-    if (sub.isNewHire && !masterNames.has(name)) {
-      statusRows.push({
-        code: '本年入社',
-        name,
-        submittedDocs: sub.docs,
-        submittedDate: sub.latestDate.split('T')[0],
-        isNewHire: true,
-      })
+  // 扶養親族1〜MAX_DEPENDENTS
+  for (let i = 1; i <= MAX_DEPENDENTS; i++) {
+    header.push(
+      `扶養${i}氏名`, `扶養${i}続柄`, `扶養${i}生年月日`,
+      `扶養${i}障碍者`, `扶養${i}年収`
+    )
+  }
+
+  return header
+}
+
+function buildDataRow(
+  code: string,
+  name: string,
+  sub: SubmissionInfo | undefined,
+  docLabels: string[]
+): string[] {
+  const row: string[] = [
+    code,
+    name,
+    sub ? sub.latestDate.split('T')[0] : '未提出',
+    ...docLabels.map((label) => (sub?.docs.includes(label) ? '○' : '')),
+  ]
+
+  // 確認済み情報
+  const ci = sub?.confirmed
+  row.push(ci?.infoChanged ? '○' : '')
+  row.push(ci?.employee.address || '')
+  row.push(ci?.employee.disability || '')
+  row.push(ci?.employee.widowSingleParent || '')
+
+  // 扶養親族
+  for (let i = 0; i < MAX_DEPENDENTS; i++) {
+    const dep = ci?.dependents[i]
+    if (dep) {
+      row.push(dep.name, dep.relationship, dep.birthday, dep.disability, dep.annualIncome)
+    } else {
+      row.push('', '', '', '', '')
     }
-  })
-
-  const headerRow = ['従業員コード', '氏名', '最終提出日', ...docLabels]
-
-  const dataRows = statusRows.map((emp) => [
-    emp.code,
-    emp.name,
-    emp.submittedDate || '未提出',
-    ...docLabels.map((label) => (emp.submittedDocs.includes(label) ? '○' : '')),
-  ])
-
-  // シート名に年度を含める
-  const statusSheetName = `${yearLabel}_${clientName}`
-  const unsubmittedSheetName = `${yearLabel}_${clientName}_未提出者`
-
-  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId })
-  const existingSheets = spreadsheet.data.sheets || []
-
-  const requests: Array<Record<string, unknown>> = []
-
-  if (!existingSheets.some((s) => s.properties?.title === statusSheetName)) {
-    requests.push({ addSheet: { properties: { title: statusSheetName } } })
-  }
-  if (!existingSheets.some((s) => s.properties?.title === unsubmittedSheetName)) {
-    requests.push({ addSheet: { properties: { title: unsubmittedSheetName } } })
   }
 
-  if (requests.length > 0) {
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      requestBody: { requests },
-    })
-  }
-
-  // 提出状況シートを更新
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: `'${statusSheetName}'!A1`,
-    valueInputOption: 'RAW',
-    requestBody: { values: [headerRow, ...dataRows] },
-  })
-
-  // 未提出者リスト
-  const unsubmittedEmployees = statusRows.filter(
-    (emp) => emp.submittedDocs.length === 0
-  )
-
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: `'${unsubmittedSheetName}'!A1`,
-    valueInputOption: 'RAW',
-    requestBody: {
-      values: [['従業員コード', '氏名'], ...unsubmittedEmployees.map((emp) => [emp.code, emp.name])],
-    },
-  })
-
-  const newHireCount = statusRows.filter((e) => e.isNewHire).length
-
-  return {
-    total: employees.length,
-    submitted: statusRows.filter((e) => e.submittedDocs.length > 0 && !e.isNewHire).length,
-    unsubmitted: unsubmittedEmployees.length,
-    newHires: newHireCount,
-  }
+  return row
 }
 
 async function main() {
@@ -214,58 +145,92 @@ async function main() {
 
   console.log(`対象年度: ${fiscalYear.label}`)
 
-  const clients = getAllClients()
-  console.log(`${clients.length}件の顧問先を処理します...`)
+  const yearFolderId = await getOrCreateYearFolder(fiscalYear.label)
+  const clients = await loadClients(yearFolderId)
 
-  const results: Array<{
-    clientName: string
-    total: number
-    submitted: number
-    unsubmitted: number
-    newHires: number
-  }> = []
+  if (clients.length === 0) {
+    console.log('登録済みの顧問先がありません')
+    return
+  }
+
+  const sheets = getSheets()
+  const docLabels = DOCUMENT_TYPES.map((d) => d.label)
+  const headerRow = buildHeaderRow()
 
   for (const client of clients) {
     console.log(`\n処理中: ${client.name}`)
 
     try {
-      const employees = await getEmployeeMaster(client.driveFolderId)
-      if (employees.length === 0) {
-        console.warn(`  従業員一覧が空です。スキップします。`)
-        continue
-      }
+      // 従業員マスタ
+      const employees = await loadEmployeeDataFromDrive(client.driveFolderId)
       console.log(`  従業員数: ${employees.length}名`)
 
-      // 年度フォルダを探す（なければ作成）
-      const yearFolderId = await findOrCreateFolder(
-        client.driveFolderId,
-        fiscalYear.label
-      )
+      // 提出状況
+      const submissions = await getSubmissionStatus(client.driveFolderId)
+      console.log(`  提出済み: ${submissions.size}名`)
 
-      const submissions = await getSubmissionStatus(yearFolderId)
-      console.log(`  提出済みフォルダ数: ${submissions.size}`)
+      // 既存従業員の行
+      const dataRows: string[][] = employees
+        .sort((a, b) => a.code.localeCompare(b.code, 'ja'))
+        .map((emp) => buildDataRow(emp.code, emp.name, submissions.get(emp.name), docLabels))
 
-      const result = await updateSpreadsheet(
+      // 本年入社者を追記
+      const masterNames = new Set(employees.map((e) => e.name))
+      submissions.forEach((sub, name) => {
+        if (sub.isNewHire && !masterNames.has(name)) {
+          dataRows.push(buildDataRow('本年入社', name, sub, docLabels))
+        }
+      })
+
+      // シート名
+      const statusSheetName = `${fiscalYear.label}_${client.name}`
+      const unsubmittedSheetName = `${fiscalYear.label}_${client.name}_未提出者`
+
+      // シート取得/作成
+      const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId })
+      const existingSheets = spreadsheet.data.sheets || []
+      const requests: Array<Record<string, unknown>> = []
+
+      if (!existingSheets.some((s) => s.properties?.title === statusSheetName)) {
+        requests.push({ addSheet: { properties: { title: statusSheetName } } })
+      }
+      if (!existingSheets.some((s) => s.properties?.title === unsubmittedSheetName)) {
+        requests.push({ addSheet: { properties: { title: unsubmittedSheetName } } })
+      }
+      if (requests.length > 0) {
+        await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } })
+      }
+
+      // 提出状況シート更新
+      await sheets.spreadsheets.values.update({
         spreadsheetId,
-        client.name,
-        fiscalYear.label,
-        employees,
-        submissions
-      )
+        range: `'${statusSheetName}'!A1`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [headerRow, ...dataRows] },
+      })
 
-      results.push({ clientName: client.name, ...result })
-      console.log(
-        `  完了: ${result.submitted}/${result.total}名提出済み（未提出: ${result.unsubmitted}名, 本年入社: ${result.newHires}名）`
-      )
+      // 未提出者シート
+      const unsubmitted = employees.filter((e) => !submissions.has(e.name))
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${unsubmittedSheetName}'!A1`,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: [
+            ['従業員コード', '氏名'],
+            ...unsubmitted.map((e) => [e.code, e.name]),
+          ],
+        },
+      })
+
+      const submittedCount = employees.filter((e) => submissions.has(e.name)).length
+      console.log(`  完了: ${submittedCount}/${employees.length}名提出済み`)
     } catch (error) {
       console.error(`  エラー: ${error}`)
     }
   }
 
   console.log('\n=== 処理完了 ===')
-  for (const r of results) {
-    console.log(`${r.clientName}: ${r.submitted}/${r.total}名提出済み（本年入社: ${r.newHires}名）`)
-  }
 }
 
 main().catch((err) => {

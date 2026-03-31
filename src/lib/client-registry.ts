@@ -219,6 +219,192 @@ async function getOrCreateUrlSheet(yearFolderId: string, yearLabel: string): Pro
 }
 
 /**
+ * 法人フォルダからJSONファイルを読み込む汎用関数
+ */
+export async function readJsonFromFolder<T>(folderId: string, fileName: string): Promise<T | null> {
+  const drive = getDrive()
+  const driveId = SHARED_DRIVE_ID()
+
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and name = '${fileName}' and trashed = false`,
+    fields: 'files(id)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    ...(driveId ? { driveId, corpora: 'drive' } : {}),
+  })
+
+  if (!res.data.files || res.data.files.length === 0) return null
+
+  const fileRes = await drive.files.get(
+    { fileId: res.data.files[0].id!, alt: 'media', supportsAllDrives: true },
+    { responseType: 'text' }
+  )
+
+  return JSON.parse(fileRes.data as string) as T
+}
+
+/**
+ * フォルダにJSONファイルを保存（既存なら上書き）
+ */
+export async function writeJsonToFolder(folderId: string, fileName: string, data: unknown): Promise<void> {
+  const drive = getDrive()
+  const driveId = SHARED_DRIVE_ID()
+  const jsonContent = JSON.stringify(data, null, 2)
+
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and name = '${fileName}' and trashed = false`,
+    fields: 'files(id)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    ...(driveId ? { driveId, corpora: 'drive' } : {}),
+  })
+
+  const stream = new Readable()
+  stream.push(jsonContent)
+  stream.push(null)
+
+  if (res.data.files && res.data.files.length > 0) {
+    await drive.files.update({
+      fileId: res.data.files[0].id!,
+      media: { mimeType: 'application/json', body: stream },
+      supportsAllDrives: true,
+    })
+  } else {
+    await drive.files.create({
+      requestBody: { name: fileName, parents: [folderId] },
+      media: { mimeType: 'application/json', body: stream },
+      fields: 'id',
+      supportsAllDrives: true,
+    })
+  }
+}
+
+/**
+ * 法人フォルダ内の _employee_data.json を読み込む
+ */
+export async function loadEmployeeDataFromDrive(companyFolderId: string): Promise<import('./employee-data').EmployeeData[]> {
+  const data = await readJsonFromFolder<import('./employee-data').EmployeeData[]>(companyFolderId, '_employee_data.json')
+  return data || []
+}
+
+/**
+ * フォルダ内のサブフォルダ一覧を取得
+ */
+export async function listSubFoldersInDrive(folderId: string): Promise<Array<{ id: string; name: string }>> {
+  const drive = getDrive()
+  const driveId = SHARED_DRIVE_ID()
+
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    fields: 'files(id, name)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    ...(driveId ? { driveId, corpora: 'drive' } : {}),
+  })
+
+  return (res.data.files || []).map((f) => ({ id: f.id!, name: f.name! }))
+}
+
+/**
+ * フォルダ内のファイル一覧を取得
+ */
+export async function listFilesInDrive(
+  folderId: string,
+  mimeType?: string
+): Promise<Array<{ id: string; name: string; modifiedTime: string }>> {
+  const drive = getDrive()
+  const driveId = SHARED_DRIVE_ID()
+
+  let q = `'${folderId}' in parents and trashed = false`
+  if (mimeType) q += ` and mimeType = '${mimeType}'`
+
+  const res = await drive.files.list({
+    q,
+    fields: 'files(id, name, modifiedTime)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    ...(driveId ? { driveId, corpora: 'drive' } : {}),
+  })
+
+  return (res.data.files || []).map((f) => ({
+    id: f.id!,
+    name: f.name!,
+    modifiedTime: f.modifiedTime!,
+  }))
+}
+
+/**
+ * フォルダを取得 or 作成（汎用）
+ */
+export async function findOrCreateFolderInDrive(parentId: string, folderName: string): Promise<string> {
+  const drive = getDrive()
+  const driveId = SHARED_DRIVE_ID()
+
+  const res = await drive.files.list({
+    q: `'${parentId}' in parents and name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    fields: 'files(id)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    ...(driveId ? { driveId, corpora: 'drive' } : {}),
+  })
+
+  if (res.data.files && res.data.files.length > 0) {
+    return res.data.files[0].id!
+  }
+
+  const createRes = await drive.files.create({
+    requestBody: {
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentId],
+    },
+    fields: 'id',
+    supportsAllDrives: true,
+  })
+
+  return createRes.data.id!
+}
+
+/**
+ * PDFファイルをアップロード（同名は上書き）
+ */
+export async function uploadPdfToDrive(folderId: string, fileName: string, pdfBuffer: Buffer): Promise<string> {
+  const drive = getDrive()
+  const driveId = SHARED_DRIVE_ID()
+
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and name = '${fileName}' and trashed = false`,
+    fields: 'files(id)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    ...(driveId ? { driveId, corpora: 'drive' } : {}),
+  })
+
+  const stream = new Readable()
+  stream.push(pdfBuffer)
+  stream.push(null)
+
+  if (res.data.files && res.data.files.length > 0) {
+    const fileId = res.data.files[0].id!
+    await drive.files.update({
+      fileId,
+      media: { mimeType: 'application/pdf', body: stream },
+      supportsAllDrives: true,
+    })
+    return fileId
+  }
+
+  const createRes = await drive.files.create({
+    requestBody: { name: fileName, parents: [folderId] },
+    media: { mimeType: 'application/pdf', body: stream },
+    fields: 'id',
+    supportsAllDrives: true,
+  })
+
+  return createRes.data.id!
+}
+
+/**
  * URL・QRコード一覧表を更新
  */
 export async function updateUrlSheet(
