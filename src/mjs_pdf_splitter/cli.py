@@ -6,7 +6,12 @@ import sys
 from pathlib import Path
 
 from mjs_pdf_splitter import __version__
-from mjs_pdf_splitter.classifier import find_document_boundaries
+from mjs_pdf_splitter.classifier import (
+    classify_page,
+    extract_company_name_from_pages,
+    extract_fiscal_period,
+    find_document_boundaries,
+)
 from mjs_pdf_splitter.extractor import extract_page_texts
 from mjs_pdf_splitter.splitter import build_filename, split_and_save
 
@@ -36,6 +41,11 @@ def create_parser() -> argparse.ArgumentParser:
         help="実際にファイルを作成せず、分割結果のプレビューのみ表示",
     )
     parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="各ページの抽出テキストと判定結果を表示（問題の診断用）",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="詳細なログを表示",
@@ -46,6 +56,58 @@ def create_parser() -> argparse.ArgumentParser:
         version=f"%(prog)s {__version__}",
     )
     return parser
+
+
+def debug_pdf(input_path: Path) -> None:
+    """PDFの各ページからテキストを抽出し、判定結果を表示する（デバッグ用）。"""
+    print(f"\n===== デバッグ: {input_path.name} =====")
+
+    pages = extract_page_texts(input_path)
+    print(f"総ページ数: {len(pages)}")
+
+    # 会社名抽出
+    company = extract_company_name_from_pages(pages)
+    print(f"検出した会社名: {company}")
+
+    # 決算期抽出
+    for page in pages:
+        fp = extract_fiscal_period(page.full_text)
+        if fp:
+            print(f"検出した決算期: {fp}")
+            break
+
+    print("\n--- ページごとの判定 ---")
+    for page in pages:
+        # ヘッダーで判定
+        header_result = classify_page(page.header_text)
+        # 全文で判定
+        full_result = classify_page(page.full_text)
+        # 採用される判定
+        adopted = header_result or full_result
+
+        print(f"\n【ページ {page.page_index + 1}】")
+        print(f"  判定結果: {adopted or '判定不可'}")
+        print(f"    (ヘッダー判定: {header_result or 'なし'} / "
+              f"全文判定: {full_result or 'なし'})")
+
+        # テキスト表示（先頭200文字）
+        header_preview = page.header_text.replace("\n", " ").strip()[:200]
+        full_preview = page.full_text.replace("\n", " ").strip()[:300]
+        print(f"  ヘッダーテキスト: {header_preview}")
+        print(f"  全文テキスト: {full_preview}")
+
+    print("\n--- 分割結果プレビュー ---")
+    segments = find_document_boundaries(pages)
+    if segments:
+        for seg in segments:
+            page_count = seg.end_page - seg.start_page + 1
+            filename = build_filename(seg)
+            print(
+                f"  ページ {seg.start_page + 1}-{seg.end_page + 1} "
+                f"({page_count}p): {filename}"
+            )
+    else:
+        print("  書類種類を検出できませんでした")
 
 
 def process_single_pdf(
@@ -117,10 +179,22 @@ def main() -> None:
     parser = create_parser()
     args = parser.parse_args()
 
-    if args.verbose:
+    if args.verbose or args.debug:
         logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
     else:
         logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+
+    # デバッグモード
+    if args.debug:
+        for input_path in args.input_files:
+            if not input_path.exists():
+                print(f"エラー: ファイルが見つかりません: {input_path}", file=sys.stderr)
+                continue
+            try:
+                debug_pdf(input_path)
+            except Exception as e:
+                print(f"エラー: {e}", file=sys.stderr)
+        return
 
     success_count = 0
     fail_count = 0
