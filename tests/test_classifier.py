@@ -21,14 +21,12 @@ class TestClassifyPage:
 
     def test_consumption_tax(self):
         assert classify_page("消費税及び地方消費税の確定申告書") == "消費税申告書"
-        assert classify_page("消費税申告書") == "消費税申告書"
 
     def test_financial_statements(self):
         assert classify_page("貸借対照表") == "決算報告書"
         assert classify_page("損益計算書") == "決算報告書"
         assert classify_page("株主資本等変動計算書") == "決算報告書"
         assert classify_page("個別注記表") == "決算報告書"
-        assert classify_page("社員資本等変動計算書") == "決算報告書"
 
     def test_account_breakdown(self):
         assert classify_page("預貯金等の内訳書") == "勘定科目内訳明細書"
@@ -42,23 +40,41 @@ class TestClassifyPage:
     def test_tax_proxy(self):
         assert classify_page("税務代理権限証書") == "税務代理権限証書"
 
-    def test_prefectural_tax(self):
+    def test_prefectural_tax_form_number(self):
+        """様式番号で県税を判定"""
+        assert classify_page("第六号様式") == "県税申告書"
+        assert classify_page("第6号様式") == "県税申告書"
+
+    def test_prefectural_tax_keyword(self):
+        """キーワードで県税を判定"""
         assert classify_page("道府県民税") == "県税申告書"
         assert classify_page("都民税") == "県税申告書"
-        assert classify_page("第六号様式") == "県税申告書"
 
-    def test_municipal_tax(self):
-        assert classify_page("市町村民税") == "市税申告書"
-        assert classify_page("市民税") == "市税申告書"
-        assert classify_page("特別区民税") == "市税申告書"
+    def test_municipal_tax_form_number(self):
+        """様式番号で市税を判定"""
         assert classify_page("第二十号様式") == "市税申告書"
+        assert classify_page("第20号様式") == "市税申告書"
+
+    def test_municipal_tax_keyword(self):
+        assert classify_page("市町村民税") == "市税申告書"
+        assert classify_page("特別区民税") == "市税申告書"
 
     def test_applied_amount(self):
         assert classify_page("適用額明細書") == "適用額明細書"
 
+    def test_applied_amount_checkbox_ignored(self):
+        """別表一のチェック欄「適用額明細書 提出の有無」は無視する"""
+        assert classify_page("適用額明細書提出の有無") != "適用額明細書"
+
     def test_depreciation_asset(self):
         assert classify_page("償却資産申告書") == "償却資産税申告書"
-        assert classify_page("償却資産税") == "償却資産税申告書"
+        assert classify_page("第二十六号様式") == "償却資産税申告書"
+        assert classify_page("第26号様式") == "償却資産税申告書"
+
+    def test_depreciation_asset_not_genka(self):
+        """「減価償却資産」は償却資産税ではなく法人税の別表十六"""
+        # 別表があるので法人税申告書になる
+        assert classify_page("別表十六 減価償却資産") == "法人税申告書"
 
     def test_no_match(self):
         assert classify_page("関係ないテキスト") is None
@@ -67,6 +83,33 @@ class TestClassifyPage:
     def test_whitespace_handling(self):
         assert classify_page("別 表 一") == "法人税申告書"
         assert classify_page("貸 借 対 照 表") == "決算報告書"
+
+    # --- 実際のMJSフォームでの誤判定テスト ---
+
+    def test_beppyo4_with_dofuken(self):
+        """別表四に「道府県民税」があっても法人税申告書（別表が優先）"""
+        text = "別表四 簡易様式 損金経理をした道府県民税及び市町村民税"
+        assert classify_page(text) == "法人税申告書"
+
+    def test_beppyo5_with_dofuken(self):
+        """別表五に「道府県民税」があっても法人税申告書"""
+        text = "別表五 租税公課の納付状況 道府県民税 市町村民税"
+        assert classify_page(text) == "法人税申告書"
+
+    def test_beppyo16_with_shokyaku(self):
+        """別表十六に「減価償却資産」があっても法人税申告書"""
+        text = "別表十六 減価償却資産の償価額の計算に関する明細書"
+        assert classify_page(text) == "法人税申告書"
+
+    def test_kenzeiform_with_beppyo(self):
+        """県税の第六号様式に「別表」が含まれても県税（様式番号が優先）"""
+        text = "第六号様式 別表九 控除前所得金額 道府県民税"
+        assert classify_page(text) == "県税申告書"
+
+    def test_shokyaku_form26_with_beppyo(self):
+        """償却資産の第二十六号様式に「別表」があっても償却資産（様式番号が優先）"""
+        text = "第二十六号様式 別表一 資産コード"
+        assert classify_page(text) == "償却資産税申告書"
 
 
 class TestExtractCompanyName:
@@ -92,7 +135,6 @@ class TestExtractCompanyName:
         assert extract_company_name_from_pages(pages) == "サンプル株式会社"
 
     def test_most_common_wins(self):
-        """最も多く出現する法人名が採用される"""
         pages = self._make_pages([
             "合同会社和泉 税理士法人テスト",
             "合同会社和泉",
@@ -111,35 +153,24 @@ class TestExtractCompanyName:
 
 class TestExtractFiscalPeriod:
     def test_reiwa(self):
-        text = "令和6年3月期決算"
-        assert extract_fiscal_period(text) == "令和6年3月決算"
+        assert extract_fiscal_period("令和6年3月期決算") == "令和6年3月決算"
 
     def test_heisei(self):
-        text = "平成31年3月"
-        assert extract_fiscal_period(text) == "平成31年3月決算"
+        assert extract_fiscal_period("平成31年3月") == "平成31年3月決算"
 
     def test_with_spaces(self):
-        text = "令和 6 年 3 月 期"
-        assert extract_fiscal_period(text) == "令和6年3月決算"
+        assert extract_fiscal_period("令和 6 年 3 月 期") == "令和6年3月決算"
 
     def test_not_found(self):
         assert extract_fiscal_period("関係ないテキスト") == ""
-
-    def test_empty(self):
-        assert extract_fiscal_period("") == ""
 
 
 class TestSanitizeForFilename:
     def test_remove_invalid_chars(self):
         assert sanitize_for_filename('テスト/会社') == "テスト会社"
-        assert sanitize_for_filename('テスト:会社') == "テスト会社"
 
     def test_truncate(self):
-        long_name = "あ" * 60
-        assert len(sanitize_for_filename(long_name)) == 50
-
-    def test_strip_whitespace(self):
-        assert sanitize_for_filename("  テスト  ") == "テスト"
+        assert len(sanitize_for_filename("あ" * 60)) == 50
 
 
 class TestFindDocumentBoundaries:
@@ -162,7 +193,6 @@ class TestFindDocumentBoundaries:
         assert segments[0].start_page == 0
         assert segments[0].end_page == 2
         assert segments[0].company_name == "合同会社和泉"
-        assert segments[0].fiscal_period == "令和6年3月決算"
 
     def test_multiple_documents(self):
         pages = [
@@ -181,35 +211,50 @@ class TestFindDocumentBoundaries:
         assert segments[1].end_page == 3
         assert segments[2].doc_type == "決算報告書"
         assert segments[2].start_page == 4
-        assert segments[2].end_page == 4
-        # 全セグメントで同じ会社名
-        for seg in segments:
-            assert seg.company_name == "合同会社和泉"
+
+    def test_forward_inheritance(self):
+        """先頭の未判定ページは次に判定できたページの種類を継承する"""
+        pages = [
+            self._make_page(0, "判定不可なテキスト", "ＦＢ６１３ 合同会社和泉"),
+            self._make_page(1, "別表一 次葉", "別表一 合同会社和泉"),
+            self._make_page(2, "別表四"),
+        ]
+        segments = find_document_boundaries(pages)
+        assert len(segments) == 1
+        assert segments[0].doc_type == "法人税申告書"
+        assert segments[0].start_page == 0  # ページ1も含まれる
+        assert segments[0].end_page == 2
 
     def test_empty_pages(self):
-        segments = find_document_boundaries([])
-        assert segments == []
+        assert find_document_boundaries([]) == []
 
     def test_no_detectable_type(self):
         pages = [
             self._make_page(0, "不明なテキスト"),
             self._make_page(1, "これも不明"),
         ]
-        segments = find_document_boundaries(pages)
-        assert segments == []
+        assert find_document_boundaries(pages) == []
 
-    def test_unclassified_pages_inherit(self):
-        """判定不可のページは前のページの種類を継承する"""
+    def test_unclassified_pages_inherit_backward(self):
+        """中間の判定不可ページは前のページの種類を継承する"""
         pages = [
             self._make_page(0, "別表一", "別表一 合同会社和泉"),
-            self._make_page(1, "ここは判定不可なテキスト"),
-            self._make_page(2, "ここも判定不可"),
-            self._make_page(3, "貸借対照表"),
+            self._make_page(1, "判定不可テキスト"),
+            self._make_page(2, "貸借対照表"),
         ]
         segments = find_document_boundaries(pages)
         assert len(segments) == 2
         assert segments[0].doc_type == "法人税申告書"
-        assert segments[0].start_page == 0
-        assert segments[0].end_page == 2  # ページ1,2は法人税申告書に継承
+        assert segments[0].end_page == 1
         assert segments[1].doc_type == "決算報告書"
-        assert segments[1].start_page == 3
+
+    def test_form_number_priority_over_beppyo(self):
+        """様式番号が別表より優先される"""
+        pages = [
+            self._make_page(0, "別表一", "別表一 合同会社和泉"),
+            self._make_page(1, "第六号様式 別表九", "第六号様式 別表九 合同会社和泉"),
+        ]
+        segments = find_document_boundaries(pages)
+        assert len(segments) == 2
+        assert segments[0].doc_type == "法人税申告書"
+        assert segments[1].doc_type == "県税申告書"

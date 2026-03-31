@@ -132,6 +132,23 @@ def find_document_boundaries(pages: list[PageText]) -> list[DocumentSegment]:
             detected or "（判定不可→前ページ継承）",
         )
 
+    # 前方継承: 先頭の未判定ページに次に判定できたページの種類を適用
+    # （例: 別表一の1ページ目に「別表」テキストが含まれない場合、
+    #  2ページ目の「別表」判定を1ページ目にも適用する）
+    first_classified = None
+    for i, pt in enumerate(page_types):
+        if pt is not None:
+            first_classified = (i, pt)
+            break
+
+    if first_classified is not None:
+        idx, first_type = first_classified
+        for i in range(idx):
+            page_types[i] = first_type
+            logger.debug(
+                "ページ %d: 前方継承→%s", i + 1, first_type
+            )
+
     # 境界検出: 書類種類が変わったところで分割
     segments: list[DocumentSegment] = []
     current_type: str | None = None
