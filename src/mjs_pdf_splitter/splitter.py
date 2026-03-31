@@ -6,6 +6,7 @@ from pathlib import Path
 import fitz
 
 from mjs_pdf_splitter.classifier import DocumentSegment
+from mjs_pdf_splitter.constants import DOCUMENT_NUMBER_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -13,10 +14,18 @@ logger = logging.getLogger(__name__)
 def build_filename(segment: DocumentSegment) -> str:
     """セグメント情報からファイル名を生成する。
 
-    形式: {書類名}_{和暦〇年〇月決算}_{会社名}.pdf
-    決算期が不明の場合は省略: {書類名}_{会社名}.pdf
+    形式: {番号}-{書類名}_{和暦〇年〇月決算}_{会社名}.pdf
+    番号がない書類: {書類名}_{和暦〇年〇月決算}_{会社名}.pdf
+    決算期が不明の場合は省略
     """
-    parts = [segment.doc_type]
+    # ナンバリング
+    number = DOCUMENT_NUMBER_MAP.get(segment.doc_type, "")
+    if number:
+        doc_name = f"{number}-{segment.doc_type}"
+    else:
+        doc_name = segment.doc_type
+
+    parts = [doc_name]
     if segment.fiscal_period:
         parts.append(segment.fiscal_period)
     parts.append(segment.company_name)

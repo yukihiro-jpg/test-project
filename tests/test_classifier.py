@@ -111,6 +111,29 @@ class TestClassifyPage:
         text = "第二十六号様式 別表一 資産コード"
         assert classify_page(text) == "償却資産税申告書"
 
+    # --- メール詳細・ダイレクト納付 ---
+
+    def test_mail_detail_jushin(self):
+        assert classify_page("受信通知 送信されたデータを受け付けました") == "メール詳細"
+
+    def test_mail_detail_kanryo(self):
+        assert classify_page("申告受付完了通知 送信された申告データを受け付けました") == "メール詳細"
+
+    def test_direct_payment_nofu_kakunin(self):
+        assert classify_page("納付確認 納付・納入金額(総括表)") == "ダイレクト納付情報"
+
+    def test_direct_payment_kubun(self):
+        assert classify_page("受信通知（納付区分番号通知）ダイレクト納付") == "ダイレクト納付情報"
+
+    def test_direct_payment_shiteibi(self):
+        assert classify_page("ダイレクト納付指定日 令和7年05月30日") == "ダイレクト納付情報"
+
+    # --- 消費税 ---
+
+    def test_consumption_tax(self):
+        """消費税は一旦「消費税申告書」として判定される（原則/簡易は後処理）"""
+        assert classify_page("消費税及び地方消費税の確定申告書") == "消費税申告書"
+
 
 class TestExtractCompanyName:
     def _make_pages(self, texts: list[str]) -> list[PageText]:
@@ -258,3 +281,27 @@ class TestFindDocumentBoundaries:
         assert len(segments) == 2
         assert segments[0].doc_type == "法人税申告書"
         assert segments[1].doc_type == "県税申告書"
+
+    def test_consumption_tax_standard(self):
+        """消費税（一般用）→ 原則"""
+        pages = [
+            self._make_page(
+                0, "消費税申告書",
+                "消費税及び地方消費税の確定申告書 一般用 合同会社和泉"
+            ),
+        ]
+        segments = find_document_boundaries(pages)
+        assert len(segments) == 1
+        assert segments[0].doc_type == "消費税申告書（原則）"
+
+    def test_consumption_tax_simplified(self):
+        """消費税（簡易課税用）→ 簡易"""
+        pages = [
+            self._make_page(
+                0, "消費税申告書",
+                "消費税及び地方消費税の確定申告書 簡易課税用 合同会社和泉"
+            ),
+        ]
+        segments = find_document_boundaries(pages)
+        assert len(segments) == 1
+        assert segments[0].doc_type == "消費税申告書（簡易）"

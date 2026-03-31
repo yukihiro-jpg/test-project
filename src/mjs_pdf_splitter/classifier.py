@@ -9,6 +9,7 @@ from mjs_pdf_splitter.constants import (
     DOCUMENT_TYPE_PATTERNS,
     FISCAL_PERIOD_PATTERN,
     INVALID_FILENAME_CHARS,
+    SIMPLIFIED_TAX_PATTERN,
 )
 from mjs_pdf_splitter.extractor import PageText
 
@@ -178,5 +179,19 @@ def find_document_boundaries(pages: list[PageText]) -> list[DocumentSegment]:
             company_name=company_name,
             fiscal_period=fiscal_period,
         ))
+
+    # 消費税申告書の原則/簡易判定
+    for seg in segments:
+        if seg.doc_type == "消費税申告書":
+            is_simplified = False
+            for page in pages[seg.start_page:seg.end_page + 1]:
+                normalized = re.sub(r"\s+", "", page.full_text)
+                if SIMPLIFIED_TAX_PATTERN.search(normalized):
+                    is_simplified = True
+                    break
+            seg.doc_type = (
+                "消費税申告書（簡易）" if is_simplified
+                else "消費税申告書（原則）"
+            )
 
     return segments
