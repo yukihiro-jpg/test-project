@@ -9,7 +9,7 @@ from mjs_pdf_splitter import __version__
 from mjs_pdf_splitter.classifier import (
     classify_page,
     extract_company_name_from_pages,
-    extract_fiscal_period,
+    extract_fiscal_period_from_pages,
     find_document_boundaries,
 )
 from mjs_pdf_splitter.extractor import extract_page_texts
@@ -70,11 +70,9 @@ def debug_pdf(input_path: Path) -> None:
     print(f"検出した会社名: {company}")
 
     # 決算期抽出
-    for page in pages:
-        fp = extract_fiscal_period(page.full_text)
-        if fp:
-            print(f"検出した決算期: {fp}")
-            break
+    fp = extract_fiscal_period_from_pages(pages)
+    if fp:
+        print(f"検出した決算期: {fp}")
 
     print("\n--- ページごとの判定 ---")
     for page in pages:

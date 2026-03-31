@@ -3,7 +3,7 @@
 from mjs_pdf_splitter.classifier import (
     classify_page,
     extract_company_name_from_pages,
-    extract_fiscal_period,
+    extract_fiscal_period_from_pages,
     find_document_boundaries,
     sanitize_for_filename,
 )
@@ -175,17 +175,35 @@ class TestExtractCompanyName:
 
 
 class TestExtractFiscalPeriod:
-    def test_reiwa(self):
-        assert extract_fiscal_period("令和6年3月期決算") == "令和6年3月決算"
+    def _make_pages(self, texts: list[str]) -> list[PageText]:
+        return [
+            PageText(page_index=i, full_text=t, header_text=t)
+            for i, t in enumerate(texts)
+        ]
 
-    def test_heisei(self):
-        assert extract_fiscal_period("平成31年3月") == "平成31年3月決算"
+    def test_prefers_itari_date(self):
+        """「至」の後の日付を優先（設立年月日等を拾わない）"""
+        pages = self._make_pages([
+            "設立年月日 平成27年4月1日 事業年度 自 令和6年4月1日 至 令和7年3月31日",
+        ])
+        assert extract_fiscal_period_from_pages(pages) == "令和7年3月決算"
 
-    def test_with_spaces(self):
-        assert extract_fiscal_period("令和 6 年 3 月 期") == "令和6年3月決算"
+    def test_itari_with_spaces(self):
+        pages = self._make_pages(["至 令和 7 年 3 月 31 日"])
+        assert extract_fiscal_period_from_pages(pages) == "令和7年3月決算"
+
+    def test_fallback_most_common(self):
+        """「至」がない場合は最頻出の日付を採用"""
+        pages = self._make_pages([
+            "平成27年4月 設立",
+            "令和7年3月 申告",
+            "令和7年3月 決算",
+        ])
+        assert extract_fiscal_period_from_pages(pages) == "令和7年3月決算"
 
     def test_not_found(self):
-        assert extract_fiscal_period("関係ないテキスト") == ""
+        pages = self._make_pages(["関係ないテキスト"])
+        assert extract_fiscal_period_from_pages(pages) == ""
 
 
 class TestSanitizeForFilename:

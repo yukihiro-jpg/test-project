@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from mjs_pdf_splitter.constants import (
     COMPANY_NAME_PATTERN,
     DOCUMENT_TYPE_PATTERNS,
-    FISCAL_PERIOD_PATTERN,
+    FISCAL_PERIOD_PATTERN_FALLBACK,
+    FISCAL_PERIOD_PATTERN_PREFERRED,
     INVALID_FILENAME_CHARS,
     SIMPLIFIED_TAX_PATTERN,
 )
@@ -71,20 +72,41 @@ def extract_company_name_from_pages(pages: list[PageText]) -> str:
     return most_common_name
 
 
-def extract_fiscal_period(page_text: str) -> str:
-    """ページテキストから和暦の決算期を抽出する。
+def extract_fiscal_period_from_pages(pages: list[PageText]) -> str:
+    """全ページのテキストから事業年度の終了月（決算期）を抽出する。
 
-    例: "令和6年3月決算"
+    「至 令和7年3月」のように「至」の後に続く日付を優先する。
+    （設立年月日等の無関係な日付を拾わないようにするため）
+
+    例: "令和7年3月決算"
     見つからない場合は空文字を返す。
     """
-    # 空白を正規化してからマッチ
-    normalized = re.sub(r"[\s　]+", "", page_text)
-    match = FISCAL_PERIOD_PATTERN.search(normalized)
-    if match:
-        era = match.group(1)
-        year = match.group(2)
-        month = match.group(3)
-        return f"{era}{year}年{month}月決算"
+    # まず「至」の後の日付を探す（事業年度の終了月）
+    for page in pages:
+        normalized = re.sub(r"[\s　]+", "", page.full_text)
+        match = FISCAL_PERIOD_PATTERN_PREFERRED.search(normalized)
+        if match:
+            era = match.group(1)
+            year = match.group(2)
+            month = match.group(3)
+            result = f"{era}{year}年{month}月決算"
+            logger.debug("決算期（至パターン）: %s", result)
+            return result
+
+    # フォールバック: 最も多く出現する年月を採用
+    from collections import Counter
+    date_counter: Counter[str] = Counter()
+    for page in pages:
+        normalized = re.sub(r"[\s　]+", "", page.full_text)
+        for match in FISCAL_PERIOD_PATTERN_FALLBACK.finditer(normalized):
+            key = f"{match.group(1)}{match.group(2)}年{match.group(3)}月決算"
+            date_counter[key] += 1
+
+    if date_counter:
+        most_common, count = date_counter.most_common(1)[0]
+        logger.debug("決算期（最頻出）: %s (%d回)", most_common, count)
+        return most_common
+
     return ""
 
 
@@ -110,13 +132,8 @@ def find_document_boundaries(pages: list[PageText]) -> list[DocumentSegment]:
     # 会社名をPDF全体から抽出（全セグメント共通）
     company_name = extract_company_name_from_pages(pages)
 
-    # 決算期を最初に見つかったもので統一
-    fiscal_period = ""
-    for page in pages:
-        fp = extract_fiscal_period(page.full_text)
-        if fp:
-            fiscal_period = fp
-            break
+    # 決算期を全ページから抽出（「至」日付を優先）
+    fiscal_period = extract_fiscal_period_from_pages(pages)
 
     # 各ページの書類種類を判定
     page_types: list[str | None] = []
