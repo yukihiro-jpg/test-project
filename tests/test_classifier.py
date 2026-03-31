@@ -59,12 +59,10 @@ class TestClassifyPage:
         assert classify_page("市町村民税") == "市税申告書"
         assert classify_page("特別区民税") == "市税申告書"
 
-    def test_applied_amount(self):
-        assert classify_page("適用額明細書") == "適用額明細書"
-
-    def test_applied_amount_checkbox_ignored(self):
-        """別表一のチェック欄「適用額明細書 提出の有無」は無視する"""
-        assert classify_page("適用額明細書提出の有無") != "適用額明細書"
+    def test_applied_amount_is_unclassified(self):
+        """適用額明細書は法人税申告書の一部として扱う（個別パターンなし）"""
+        # 適用額明細書のみのテキストは判定不可→前ページ継承で法人税申告書に含まれる
+        assert classify_page("適用額明細書") is None
 
     def test_depreciation_asset(self):
         assert classify_page("償却資産申告書") == "償却資産税申告書"
@@ -130,9 +128,18 @@ class TestClassifyPage:
 
     # --- 消費税 ---
 
+    def test_houjinzei_tou_not_matched(self):
+        """決算書の「法人税等 67,432」は法人税申告書にマッチしない"""
+        assert classify_page("法人税等 67,432 保険料 66,800") is None
+
     def test_consumption_tax(self):
         """消費税は一旦「消費税申告書」として判定される（原則/簡易は後処理）"""
         assert classify_page("消費税及び地方消費税の確定申告書") == "消費税申告書"
+
+    def test_consumption_tax_over_uchiwake(self):
+        """消費税は勘定科目内訳明細書より優先される"""
+        text = "消費税額計算表 税率別内訳明細"
+        assert classify_page(text) == "消費税申告書"
 
 
 class TestExtractCompanyName:
