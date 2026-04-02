@@ -69,6 +69,11 @@ function saveBatchToDrive(data) {
   // 顧問先フォルダを取得 or 作成
   const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
   const clientFolder = getOrCreateFolder(rootFolder, clientName);
+  // スマホ撮影/未整理 フォルダに保存
+  const scanFolder = getOrCreateFolder(clientFolder, 'スマホ撮影');
+  const unsortedFolder = getOrCreateFolder(scanFolder, '未整理');
+  // 処理済みフォルダも事前に作成
+  getOrCreateFolder(scanFolder, '処理済み');
 
   // 全画像のOCRテキストを収集
   let allOcrText = '';
@@ -132,7 +137,7 @@ function saveBatchToDrive(data) {
   const pdfBlob = DriveApp.getFileById(doc.getId())
     .getAs('application/pdf')
     .setName(pdfFileName);
-  const pdfFile = clientFolder.createFile(pdfBlob);
+  const pdfFile = unsortedFolder.createFile(pdfBlob);
 
   // OCRテキストをPDFの説明に保存（検索用）
   if (allOcrText) {

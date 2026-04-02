@@ -1,0 +1,45 @@
+# add_client.py の修正箇所
+# ===========================
+#
+# create_drive_folders 関数のサブフォルダリストに
+# 「スマホ撮影」関連フォルダを追加してください。
+#
+# 修正前（42-47行目あたり）:
+# ---------------------------
+    for subfolder in [
+        "顧問先からの受取物（社長用）", "顧問先への送付物（社長用）",
+        "顧問先からの受取物（スタッフ用）", "顧問先への送付物（スタッフ用）",
+        "_sync_logs",
+    ]:
+# ---------------------------
+#
+# 修正後:
+# ---------------------------
+    for subfolder in [
+        "顧問先からの受取物（社長用）", "顧問先への送付物（社長用）",
+        "顧問先からの受取物（スタッフ用）", "顧問先への送付物（スタッフ用）",
+        "_sync_logs",
+    ]:
+        existing_sub = drive.find_folder_by_name(subfolder, parent_id=client_id)
+        if not existing_sub:
+            drive.create_folder(subfolder, client_id)
+            print(f"  サブフォルダ作成: {subfolder}")
+        else:
+            print(f"  サブフォルダ既存: {subfolder}")
+
+    # スマホ撮影フォルダを作成
+    scan_folder_id = drive.find_folder_by_name("スマホ撮影", parent_id=client_id)
+    if not scan_folder_id:
+        scan_folder_id = drive.create_folder("スマホ撮影", client_id)
+        print(f"  サブフォルダ作成: スマホ撮影")
+    else:
+        print(f"  サブフォルダ既存: スマホ撮影")
+
+    for scan_sub in ["未整理", "処理済み"]:
+        existing_scan_sub = drive.find_folder_by_name(scan_sub, parent_id=scan_folder_id)
+        if not existing_scan_sub:
+            drive.create_folder(scan_sub, scan_folder_id)
+            print(f"    サブフォルダ作成: スマホ撮影/{scan_sub}")
+        else:
+            print(f"    サブフォルダ既存: スマホ撮影/{scan_sub}")
+# ---------------------------
