@@ -8,6 +8,7 @@ import {
   TrendingUp, Shield, Gift, FileText, Calculator, Download, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { useState } from 'react';
+import { GoogleDrivePanel } from '@/components/google/GoogleDrivePanel';
 
 interface NavItem {
   label: string;
@@ -66,25 +67,32 @@ export function Sidebar({ caseId }: { caseId: string }) {
 
   return (
     <aside className="w-64 border-r border-gray-200 bg-white h-full overflow-y-auto">
-      <div className="p-4 space-y-1">
-        {navItems.map(renderNavItem)}
+      <div className="p-4 space-y-1 flex flex-col h-full">
+        <div className="flex-1 space-y-1">
+          {navItems.map(renderNavItem)}
 
-        {/* 財産セクション */}
-        <button
-          onClick={() => setAssetsOpen(!assetsOpen)}
-          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 w-full"
-        >
-          {assetsOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-          <span className="font-medium">財産情報</span>
-        </button>
-        {assetsOpen && (
-          <div className="ml-2 space-y-1">
-            {assetItems.map(renderNavItem)}
-          </div>
-        )}
+          {/* 財産セクション */}
+          <button
+            onClick={() => setAssetsOpen(!assetsOpen)}
+            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 w-full"
+          >
+            {assetsOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+            <span className="font-medium">財産情報</span>
+          </button>
+          {assetsOpen && (
+            <div className="ml-2 space-y-1">
+              {assetItems.map(renderNavItem)}
+            </div>
+          )}
 
-        <div className="border-t border-gray-200 my-2" />
-        {bottomItems.map(renderNavItem)}
+          <div className="border-t border-gray-200 my-2" />
+          {bottomItems.map(renderNavItem)}
+        </div>
+
+        {/* Googleドライブ連携 */}
+        <div className="border-t border-gray-200 pt-3 mt-3">
+          <GoogleDrivePanel />
+        </div>
       </div>
     </aside>
   );

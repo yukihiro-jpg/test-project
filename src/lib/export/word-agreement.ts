@@ -159,3 +159,65 @@ export async function exportDivisionAgreement(caseData: Case) {
   const blob = await Packer.toBlob(doc);
   saveAs(blob, `遺産分割協議書_${decedent.name || '未入力'}.docx`);
 }
+
+/**
+ * 遺産分割協議書のBlobを生成（アップロード用）
+ */
+export async function generateDivisionAgreementBlob(caseData: Case): Promise<Blob> {
+  // exportDivisionAgreement と同じロジックだが saveAs を呼ばない
+  const { decedent, heirs, assets, division } = caseData;
+  const deathDateWareki = decedent.deathDate ? toWareki(decedent.deathDate) : '　年　月　日';
+  const sections: Paragraph[] = [];
+
+  sections.push(new Paragraph({
+    children: [text('遺産分割協議書', { bold: true, size: 36 })],
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 400 },
+  }));
+  sections.push(paragraph(
+    `被相続人　${decedent.name || '（氏名）'}（${deathDateWareki}死亡）の遺産について、` +
+    `共同相続人全員で協議を行った結果、次のとおり遺産を分割することに合意した。`
+  ));
+  sections.push(new Paragraph({ spacing: { after: 200 } }));
+
+  const heirAmounts = new Map<string, number>();
+  for (const entry of division.entries) {
+    const current = heirAmounts.get(entry.heirId) || 0;
+    heirAmounts.set(entry.heirId, current + (entry.amount || 0));
+  }
+  let articleNum = 1;
+  if (assets.lands.length > 0) {
+    sections.push(paragraph(`第${articleNum}条（土地）`, { spacing: { before: 200 } }));
+    assets.lands.forEach((land, i) => { sections.push(paragraph(`  ${i + 1}. 所在地: ${land.location}　地番: ${land.landNumber}　地目: ${land.landCategory}　地積: ${land.area}㎡`)); });
+    articleNum++;
+  }
+  if (assets.buildings.length > 0) {
+    sections.push(paragraph(`第${articleNum}条（建物）`, { spacing: { before: 200 } }));
+    assets.buildings.forEach((b, i) => { sections.push(paragraph(`  ${i + 1}. 所在地: ${b.location}　構造: ${b.structureType}　用途: ${b.usage}`)); });
+    articleNum++;
+  }
+  if (assets.cashDeposits.length > 0) {
+    sections.push(paragraph(`第${articleNum}条（預貯金）`, { spacing: { before: 200 } }));
+    assets.cashDeposits.forEach((c, i) => { sections.push(paragraph(`  ${i + 1}. ${c.institutionName}　${c.accountType}　${c.balance.toLocaleString()}円`)); });
+    articleNum++;
+  }
+  sections.push(paragraph(`第${articleNum}条（分割方法）`, { spacing: { before: 200 } }));
+  heirs.forEach(heir => {
+    const amount = heirAmounts.get(heir.id) || 0;
+    sections.push(paragraph(`  ${heir.name || '（氏名）'}（${RELATIONSHIP_LABELS[heir.relationship]}）は、上記遺産のうち${amount.toLocaleString()}円相当額の財産を取得する。`));
+  });
+  sections.push(new Paragraph({ spacing: { after: 200 } }));
+  sections.push(paragraph('以上のとおり、相続人全員による遺産分割協議が成立したことを証するため、この協議書を作成し、各自署名押印の上、各1通を保有する。'));
+  sections.push(new Paragraph({ spacing: { after: 400 } }));
+  sections.push(paragraph('　　年　　月　　日', { alignment: AlignmentType.RIGHT }));
+  sections.push(new Paragraph({ spacing: { after: 200 } }));
+  heirs.forEach(heir => {
+    sections.push(new Paragraph({ spacing: { after: 100 } }));
+    sections.push(paragraph(`住所: ${heir.address || '　　　　　　　　　　　　　　　　　　'}`, { alignment: AlignmentType.LEFT }));
+    sections.push(paragraph(`氏名: ${heir.name || '　　　　　　　　'}　　　　　印`, { alignment: AlignmentType.LEFT }));
+    sections.push(new Paragraph({ children: [text(`（${RELATIONSHIP_LABELS[heir.relationship]}）`, { size: 20, color: '666666' })], spacing: { after: 300 } }));
+  });
+
+  const doc = new Document({ sections: [{ children: sections }] });
+  return Packer.toBlob(doc);
+}
