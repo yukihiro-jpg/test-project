@@ -258,12 +258,21 @@ function registerClient() {
   // クライアントIDを生成（タイムスタンプベースで一意に）
   const clientId = 'c' + Date.now().toString(36);
 
-  // フォルダ作成（顧問先フォルダ + スマホ撮影/未整理/処理済み）
+  // フォルダ作成（顧問先フォルダ + 全サブフォルダ）
   const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
   const clientFolder = getOrCreateFolder(rootFolder, clientName);
+
+  // スマホ撮影フォルダ
   const scanFolder = getOrCreateFolder(clientFolder, 'スマホ撮影');
   getOrCreateFolder(scanFolder, '未整理');
   getOrCreateFolder(scanFolder, '処理済み');
+
+  // 顧問先共有フォルダ（ファイル同期システムと共通）
+  getOrCreateFolder(clientFolder, '顧問先からの受取物（社長用）');
+  getOrCreateFolder(clientFolder, '顧問先への送付物（社長用）');
+  getOrCreateFolder(clientFolder, '顧問先からの受取物（スタッフ用）');
+  getOrCreateFolder(clientFolder, '顧問先への送付物（スタッフ用）');
+  getOrCreateFolder(clientFolder, '_sync_logs');
 
   // URL生成
   const url = `${CONFIG.FRONTEND_URL}?client=${encodeURIComponent(clientId)}&name=${encodeURIComponent(clientName)}`;
