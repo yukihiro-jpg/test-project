@@ -25,8 +25,9 @@ from modules.master import マスタデータ
 from modules.rulebook import ルールブック管理
 from modules.pdf_reader import 請求書PDF解析, 賃金台帳PDF解析
 from modules.bank_parsers import 銀行別通帳解析
-from modules.csv_exporter import CSV出力, レビュー用CSV出力
+from modules.csv_exporter import CSV出力, レビュー用CSV出力, 仕訳バリデーション
 from modules.journal_engine import 仕訳エンジン
+from modules.payroll_parsers import 賃金台帳CSV解析
 
 
 def 顧問先初期化(名前):
@@ -258,47 +259,71 @@ def 顧問先処理(顧問先パス):
             return
         ルールブック.読み込み()
 
-    # エンジン初期化
-    エンジン = 仕訳エンジン(ルールブック, マスタ)
+    # エンジン初期化（顧問先パスを渡して売掛金管理・処理済みログ等を初期化）
+    エンジン = 仕訳エンジン(ルールブック, マスタ, 顧問先パス)
 
     資料フォルダ = os.path.join(顧問先パス, "当月資料")
     if not os.path.isdir(資料フォルダ):
         print(f"当月資料フォルダが空です: {資料フォルダ}")
         return
 
-    # 1. 通帳PDF処理
-    通帳PDF一覧 = [f for f in glob.glob(os.path.join(資料フォルダ, "*.pdf"))
-                   if "通帳" in f or "passbook" in os.path.basename(f).lower()
-                   or os.path.basename(f)[:3].isdigit()]
-    for PDFパス in 通帳PDF一覧:
+    # ファイルを種別ごとに分類（CSV/PDFを自動判定）
+    全ファイル = [os.path.join(資料フォルダ, f) for f in os.listdir(資料フォルダ)
+                if os.path.isfile(os.path.join(資料フォルダ, f))]
+
+    銀行ファイル一覧 = []  # CSV or PDF（通帳・銀行取引）
+    請求書ファイル一覧 = []
+    賃金ファイル一覧 = []
+
+    for ファイルパス in 全ファイル:
+        ファイル名 = os.path.basename(ファイルパス)
+        拡張子 = os.path.splitext(ファイル名)[1].lower()
+
+        if 拡張子 not in (".csv", ".pdf"):
+            continue
+
+        if "請求" in ファイル名 or "invoice" in ファイル名.lower():
+            請求書ファイル一覧.append(ファイルパス)
+        elif "賃金" in ファイル名 or "給与" in ファイル名 or "payroll" in ファイル名.lower():
+            賃金ファイル一覧.append(ファイルパス)
+        elif ファイル名[:3].replace("_", "").isdigit() or "銀行" in ファイル名 or "信金" in ファイル名 or "信組" in ファイル名 or "ゆうちょ" in ファイル名:
+            銀行ファイル一覧.append(ファイルパス)
+        elif 拡張子 == ".pdf":
+            # PDFでファイル名先頭が数字なら通帳とみなす
+            if ファイル名[:1].isdigit():
+                銀行ファイル一覧.append(ファイルパス)
+
+    # 1. 銀行取引処理（CSV優先・PDFフォールバック）
+    for ファイルパス in 銀行ファイル一覧:
         try:
-            取引一覧 = 銀行別通帳解析(PDFパス)
-            print(f"  通帳: {os.path.basename(PDFパス)} → {len(取引一覧)}取引")
+            取引一覧 = 銀行別通帳解析(ファイルパス)
+            種別 = "CSV" if ファイルパス.lower().endswith(".csv") else "PDF"
+            print(f"  通帳[{種別}]: {os.path.basename(ファイルパス)} → {len(取引一覧)}取引")
             エンジン.通帳取引処理(取引一覧)
         except Exception as e:
-            print(f"  通帳エラー: {os.path.basename(PDFパス)} → {e}")
+            print(f"  通帳エラー: {os.path.basename(ファイルパス)} → {e}")
 
-    # 2. 請求書PDF処理
-    請求書PDF一覧 = [f for f in glob.glob(os.path.join(資料フォルダ, "*.pdf"))
-                    if "請求" in f or "invoice" in os.path.basename(f).lower()]
-    for PDFパス in 請求書PDF一覧:
+    # 2. 請求書処理（発生主義: 売掛金/売上 + 売掛金登録）
+    for ファイルパス in 請求書ファイル一覧:
         try:
-            請求書 = 請求書PDF解析(PDFパス)
-            print(f"  請求書: {os.path.basename(PDFパス)} → {請求書.取引先名} ¥{請求書.合計金額:,}")
+            請求書 = 請求書PDF解析(ファイルパス)
+            print(f"  請求書: {os.path.basename(ファイルパス)} → {請求書.取引先名} ¥{請求書.合計金額:,}")
             エンジン.請求書処理([請求書])
         except Exception as e:
-            print(f"  請求書エラー: {os.path.basename(PDFパス)} → {e}")
+            print(f"  請求書エラー: {os.path.basename(ファイルパス)} → {e}")
 
-    # 3. 賃金台帳PDF処理
-    賃金PDF一覧 = [f for f in glob.glob(os.path.join(資料フォルダ, "*.pdf"))
-                  if "賃金" in f or "給与" in f or "payroll" in os.path.basename(f).lower()]
-    for PDFパス in 賃金PDF一覧:
+    # 3. 賃金台帳処理（CSV/PDF自動判定）
+    for ファイルパス in 賃金ファイル一覧:
         try:
-            賃金データ = 賃金台帳PDF解析(PDFパス)
-            print(f"  賃金台帳: {os.path.basename(PDFパス)} → {len(賃金データ)}名分")
+            if ファイルパス.lower().endswith(".csv"):
+                賃金データ = 賃金台帳CSV解析(ファイルパス)
+                print(f"  賃金台帳[CSV]: {os.path.basename(ファイルパス)} → {len(賃金データ)}名分")
+            else:
+                賃金データ = 賃金台帳PDF解析(ファイルパス)
+                print(f"  賃金台帳[PDF]: {os.path.basename(ファイルパス)} → {len(賃金データ)}名分")
             エンジン.給与処理(賃金データ)
         except Exception as e:
-            print(f"  賃金台帳エラー: {os.path.basename(PDFパス)} → {e}")
+            print(f"  賃金台帳エラー: {os.path.basename(ファイルパス)} → {e}")
 
     # 結果出力
     結果 = エンジン.結果取得()
@@ -311,10 +336,32 @@ def 顧問先処理(顧問先パス):
     print(f"    中信頼: {統計['中信頼']}件")
     print(f"    低信頼: {統計['低信頼']}件")
     print(f"  要確認: {統計['要確認数']}件")
+    if 統計.get("スキップ", 0) > 0:
+        print(f"  スキップ: {統計['スキップ']}件（処理済み）")
+    print(f"  新規処理: {統計.get('新規処理', 統計['合計'])}件")
+    if 統計.get("未消込売掛金", 0) > 0:
+        print(f"  未消込売掛金: {統計['未消込売掛金']}件")
 
     if not 結果["確定仕訳"]:
-        print("仕訳データがありません。当月資料フォルダにPDFを配置してください。")
+        print("仕訳データがありません。当月資料フォルダにCSV/PDFを配置してください。")
+        エンジン.処理完了()
         return
+
+    # バリデーション
+    会計期間 = None
+    if マスタ.事業者情報:
+        開始 = マスタ.事業者情報.get("会計期間開始", "").replace("/", "")
+        終了 = マスタ.事業者情報.get("会計期間終了", "").replace("/", "")
+        if 開始 and 終了:
+            会計期間 = (開始, 終了)
+
+    警告一覧 = 仕訳バリデーション(結果["確定仕訳"], マスタ, 会計期間)
+    if 警告一覧:
+        print(f"\n  バリデーション警告: {len(警告一覧)}件")
+        for 警告 in 警告一覧[:10]:
+            print(f"    [{警告['種別']}] 行{警告['行番号']}: {警告['内容']}")
+        if len(警告一覧) > 10:
+            print(f"    ... 他{len(警告一覧) - 10}件")
 
     出力フォルダ = os.path.join(顧問先パス, "output")
     タイムスタンプ = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -330,9 +377,19 @@ def 顧問先処理(顧問先パス):
         レビュー用CSV出力(結果["確定仕訳"], 結果["要確認"], レビューパス)
         print(f"  レビュー用CSV: {レビューパス}")
 
-    print("\nルールブックを更新中...")
+    # 士業報酬CSV（蓄積型）
+    if 結果.get("士業報酬"):
+        士業パス = エンジン.士業報酬CSV出力(顧問先パス, 顧問先名)
+        if 士業パス:
+            print(f"  士業報酬CSV: {士業パス}")
+
+    # ルールブック自動更新（手動不要）
+    print("\nルールブックを自動更新中...")
     ルールブック.ルールブック更新(インポートパス)
     print("ルールブック更新完了。")
+
+    # 処理済みログ保存
+    エンジン.処理完了()
 
 
 def main():
