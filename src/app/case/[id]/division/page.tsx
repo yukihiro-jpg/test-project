@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useCaseStore } from '@/lib/store/case-store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -400,9 +400,9 @@ export default function DivisionPage() {
               </thead>
               <tbody>
                 {groupedRows.map(group => (
-                  <>
+                  <React.Fragment key={`group-${group.label}`}>
                     {/* Category header row */}
-                    <tr key={`cat-${group.label}`} className="bg-gray-100 border-t">
+                    <tr className="bg-gray-100 border-t">
                       <td colSpan={3 + heirs.length + 1} className="px-3 py-1.5 font-semibold text-gray-700">
                         {group.label}
                       </td>
@@ -433,7 +433,7 @@ export default function DivisionPage() {
                       );
                     })}
                     {/* Category subtotal */}
-                    <tr key={`subtotal-${group.label}`} className="border-t bg-gray-50">
+                    <tr className="border-t bg-gray-50">
                       <td className="px-3 py-1.5" />
                       <td className="px-3 py-1.5 text-right font-medium text-gray-600">小計</td>
                       <td className="px-3 py-1.5 text-right font-mono font-medium">
@@ -453,7 +453,7 @@ export default function DivisionPage() {
                         {formatCurrency(group.rows.reduce((s, r) => s + getRowUnallocated(r), 0))}
                       </td>
                     </tr>
-                  </>
+                  </React.Fragment>
                 ))}
               </tbody>
               {/* Grand total footer */}
