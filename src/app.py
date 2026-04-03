@@ -25,8 +25,13 @@ from .services.document_parser import (
 from .services.geocoder import geocode
 from .services.nta_scraper import (
     fetch_multiplier_table,
+    load_multipliers_json,
+    lookup_from_saved_data,
     lookup_multiplier,
     resolve_municipality_code,
+    save_multipliers_csv,
+    save_multipliers_json,
+    scrape_prefecture_multipliers,
 )
 from .services.reinfolib_client import ReinfolibClient
 
@@ -41,6 +46,9 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 config.upload_dir.mkdir(parents=True, exist_ok=True)
 
 _session_data: dict[str, list[PropertyEvaluation]] = {}
+
+DATA_DIR = BASE_DIR.parent / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 reinfolib = ReinfolibClient()
 
@@ -215,10 +223,16 @@ async def evaluate_properties(request: Request):
         else:
             ev.notes.append("住所から座標を特定できませんでした")
 
-        # 倍率表から路線価/倍率判定
-        if multiplier_rows:
-            town = _extract_town_name(ev.uploaded.location, ev.uploaded.chiban)
-            if town:
+        # 倍率表から路線価/倍率判定（保存済みデータ優先→リアルタイムスクレイピング）
+        town = _extract_town_name(ev.uploaded.location, ev.uploaded.chiban)
+        if town and prefecture:
+            pref_key = prefecture.replace("都", "").replace("府", "").replace("県", "").replace("道", "")
+            saved_data = load_multipliers_json(DATA_DIR / f"{pref_key}_multipliers.json")
+            if saved_data and city:
+                ev.multiplier = lookup_from_saved_data(saved_data, city, town)
+                if ev.multiplier.town_name:
+                    ev.data_sources.append("国税庁 評価倍率表（保存済みデータ）")
+            elif multiplier_rows:
                 ev.multiplier = lookup_multiplier(multiplier_rows, town)
                 ev.data_sources.append("国税庁 評価倍率表")
 
@@ -230,6 +244,92 @@ async def evaluate_properties(request: Request):
         "session_id": session_id,
         "municipality_code": municipality_code,
         "evaluations": [_evaluation_to_dict(ev) for ev in evaluations],
+    })
+
+
+# ------------------------------------------------------------------
+# 倍率表バッチスクレイピング
+# ------------------------------------------------------------------
+@app.post("/api/scrape_multipliers")
+async def scrape_multipliers(request: Request):
+    """都道府県の倍率表を一括スクレイピングしてJSON/CSVに保存."""
+    body = await request.json()
+    prefecture = body.get("prefecture", "茨城県")
+
+    pref_key = prefecture.replace("都", "").replace("府", "").replace("県", "").replace("道", "")
+    json_path = DATA_DIR / f"{pref_key}_multipliers.json"
+    csv_path = DATA_DIR / f"{pref_key}_multipliers.csv"
+
+    try:
+        records = await scrape_prefecture_multipliers(prefecture)
+        if not records:
+            return JSONResponse(
+                {"error": f"{prefecture}の倍率表を取得できませんでした"},
+                status_code=500,
+            )
+
+        save_multipliers_json(records, prefecture, json_path)
+        save_multipliers_csv(records, csv_path)
+
+        cities = set(r["municipality"] for r in records)
+        rosenka_count = sum(1 for r in records if r["is_rosenka_area"])
+
+        return JSONResponse({
+            "prefecture": prefecture,
+            "total_records": len(records),
+            "municipality_count": len(cities),
+            "rosenka_count": rosenka_count,
+            "bairitsu_count": len(records) - rosenka_count,
+            "json_path": str(json_path),
+            "csv_path": str(csv_path),
+        })
+
+    except Exception as e:
+        logger.error("スクレイピング失敗: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/multiplier_data/{prefecture}")
+async def get_multiplier_data(prefecture: str):
+    """保存済み倍率データを返す."""
+    pref_key = prefecture.replace("都", "").replace("府", "").replace("県", "").replace("道", "")
+    json_path = DATA_DIR / f"{pref_key}_multipliers.json"
+
+    data = load_multipliers_json(json_path)
+    if not data:
+        return JSONResponse(
+            {"error": f"{prefecture}の倍率データが見つかりません。先にスクレイピングを実行してください。"},
+            status_code=404,
+        )
+
+    return JSONResponse(data)
+
+
+@app.get("/api/multiplier_lookup")
+async def multiplier_lookup(prefecture: str, city: str, town: str):
+    """保存済みデータから倍率情報を検索."""
+    pref_key = prefecture.replace("都", "").replace("府", "").replace("県", "").replace("道", "")
+    json_path = DATA_DIR / f"{pref_key}_multipliers.json"
+
+    data = load_multipliers_json(json_path)
+    if not data:
+        return JSONResponse(
+            {"error": f"{prefecture}の倍率データが見つかりません"},
+            status_code=404,
+        )
+
+    info = lookup_from_saved_data(data, city, town)
+    return JSONResponse({
+        "town_name": info.town_name,
+        "area_name": info.area_name,
+        "leasehold_ratio": info.leasehold_ratio,
+        "is_rosenka_area": info.is_rosenka_area,
+        "residential_multiplier": info.residential_multiplier,
+        "paddy_multiplier": info.paddy_multiplier,
+        "field_multiplier": info.field_multiplier,
+        "forest_multiplier": info.forest_multiplier,
+        "wasteland_multiplier": info.wasteland_multiplier,
+        "notes": info.notes,
     })
 
 

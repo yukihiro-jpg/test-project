@@ -2,13 +2,19 @@
 
 rosenka.nta.go.jp から評価倍率表(HTMLテーブル)を取得し、
 路線価地域/倍率地域の判定と倍率値を抽出する。
+
+バッチモード: 都道府県全体の倍率表を一括取得しJSON/CSVに保存する機能も提供。
 """
 
 from __future__ import annotations
 
+import csv
+import json
 import logging
 import re
+import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -282,3 +288,268 @@ def lookup_multiplier(
 def _clean_text(text: str) -> str:
     """HTMLテキストのクリーンアップ."""
     return re.sub(r"\s+", " ", text).strip()
+
+
+# ------------------------------------------------------------------
+# バッチスクレイピング: 都道府県全体の倍率表を一括取得
+# ------------------------------------------------------------------
+REQUEST_DELAY = 1.0  # リクエスト間隔（秒）
+
+
+async def fetch_municipality_list(
+    prefecture: str,
+) -> list[tuple[str, str]]:
+    """都道府県の市区町村一覧を国税庁サイトから取得.
+
+    Returns:
+        [(市町村名, コード), ...] 例: [("水戸市", "d08201rf"), ...]
+    """
+    import asyncio
+
+    bureau_pref = BUREAU_PREFECTURE_MAP.get(prefecture)
+    if not bureau_pref:
+        logger.warning("都道府県マッピングなし: %s", prefecture)
+        return []
+
+    bureau, pref = bureau_pref
+    city_frm_url = (
+        f"{config.nta_base_url}/{config.nta_year_path}"
+        f"/{bureau}/{pref}/ratios/city_frm.htm"
+    )
+
+    async with httpx.AsyncClient(
+        timeout=30.0, headers=BROWSER_HEADERS, follow_redirects=True
+    ) as client:
+        logger.info("市区町村一覧フレーム取得: %s", city_frm_url)
+        resp = await client.get(city_frm_url)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "lxml")
+
+        # フレームセット対応
+        target_url = city_frm_url
+        frames = soup.find_all("frame")
+        if frames:
+            for frame in frames:
+                src = frame.get("src", "")
+                if any(kw in src.lower() for kw in ("city", "menu", "left")):
+                    base = city_frm_url.rsplit("/", 1)[0]
+                    target_url = src if src.startswith("http") else f"{base}/{src}"
+                    break
+            else:
+                src = frames[0].get("src", "")
+                if src:
+                    base = city_frm_url.rsplit("/", 1)[0]
+                    target_url = src if src.startswith("http") else f"{base}/{src}"
+
+        if target_url != city_frm_url:
+            logger.info("市区町村リストフレーム取得: %s", target_url)
+            await asyncio.sleep(REQUEST_DELAY)
+            resp = await client.get(target_url)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "lxml")
+
+        municipalities: list[tuple[str, str]] = []
+        for a_tag in soup.find_all("a", href=True):
+            link_text = _clean_text(a_tag.get_text())
+            href = a_tag["href"]
+            if not link_text:
+                continue
+            m = re.search(r"([a-z]\d{5}rf)", href)
+            if m:
+                municipalities.append((link_text, m.group(1)))
+
+        logger.info("市区町村数: %d", len(municipalities))
+        return municipalities
+
+
+async def scrape_prefecture_multipliers(
+    prefecture: str,
+) -> list[dict]:
+    """都道府県全体の倍率表を一括スクレイピング.
+
+    Args:
+        prefecture: 都道府県名（例: "茨城県"）
+
+    Returns:
+        各レコードの辞書リスト
+    """
+    import asyncio
+
+    bureau_pref = BUREAU_PREFECTURE_MAP.get(prefecture)
+    if not bureau_pref:
+        return []
+
+    bureau, pref = bureau_pref
+    municipalities = await fetch_municipality_list(prefecture)
+    if not municipalities:
+        return []
+
+    all_records: list[dict] = []
+
+    async with httpx.AsyncClient(
+        timeout=30.0, headers=BROWSER_HEADERS, follow_redirects=True
+    ) as client:
+        total = len(municipalities)
+        for i, (city_name, code) in enumerate(municipalities, 1):
+            logger.info("[%d/%d] %s (%s) を取得中...", i, total, city_name, code)
+
+            try:
+                await asyncio.sleep(REQUEST_DELAY)
+                url = (
+                    f"{config.nta_base_url}/{config.nta_year_path}"
+                    f"/{bureau}/{pref}/ratios/html/{code}.htm"
+                )
+                resp = await client.get(url)
+                resp.raise_for_status()
+                rows = _parse_multiplier_html(resp.text)
+
+                for row in rows:
+                    all_records.append({
+                        "municipality": city_name,
+                        "municipality_code": code,
+                        "town_name": row.town_name,
+                        "area_name": row.area_name,
+                        "leasehold_ratio": row.leasehold_ratio,
+                        "residential": row.residential,
+                        "paddy": row.paddy,
+                        "field": row.field,
+                        "forest": row.forest,
+                        "wasteland": row.wasteland,
+                        "is_rosenka_area": row.residential.strip() == "路線",
+                    })
+
+                logger.info("  → %d 行取得", len(rows))
+
+            except Exception as e:
+                logger.warning("  → 取得失敗 (%s): %s", code, e)
+
+    return all_records
+
+
+def save_multipliers_json(
+    records: list[dict],
+    prefecture: str,
+    path: Path,
+) -> None:
+    """スクレイピング結果をJSONファイルに保存."""
+    data = {
+        "prefecture": prefecture,
+        "year": f"令和{config.nta_year[1:]}年",
+        "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "total_records": len(records),
+        "municipalities": {},
+    }
+
+    for rec in records:
+        city = rec["municipality"]
+        if city not in data["municipalities"]:
+            data["municipalities"][city] = {
+                "code": rec["municipality_code"],
+                "records": [],
+            }
+        data["municipalities"][city]["records"].append({
+            k: v for k, v in rec.items()
+            if k not in ("municipality", "municipality_code")
+        })
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    logger.info("JSON保存: %s (%d レコード)", path, len(records))
+
+
+def save_multipliers_csv(
+    records: list[dict],
+    path: Path,
+) -> None:
+    """スクレイピング結果をCSVファイルに保存."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    fieldnames = [
+        "市区町村", "倍率表コード", "町名", "適用地域名",
+        "借地権割合", "宅地", "田", "畑", "山林", "原野",
+        "路線価地域",
+    ]
+
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for rec in records:
+            writer.writerow({
+                "市区町村": rec["municipality"],
+                "倍率表コード": rec["municipality_code"],
+                "町名": rec["town_name"],
+                "適用地域名": rec["area_name"],
+                "借地権割合": rec["leasehold_ratio"],
+                "宅地": rec["residential"],
+                "田": rec["paddy"],
+                "畑": rec["field"],
+                "山林": rec["forest"],
+                "原野": rec["wasteland"],
+                "路線価地域": "○" if rec["is_rosenka_area"] else "",
+            })
+
+    logger.info("CSV保存: %s (%d レコード)", path, len(records))
+
+
+def load_multipliers_json(path: Path) -> dict:
+    """保存済みJSONから倍率データを読み込み.
+
+    Returns:
+        JSONデータの辞書。読み込み失敗時は空辞書。
+    """
+    if not path.exists():
+        logger.warning("倍率データファイルなし: %s", path)
+        return {}
+
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def lookup_from_saved_data(
+    data: dict,
+    city_name: str,
+    town_name: str,
+) -> MultiplierInfo:
+    """保存済みJSONデータから倍率情報を検索.
+
+    Args:
+        data: load_multipliers_json で読み込んだデータ
+        city_name: 市区町村名
+        town_name: 町名（部分一致）
+
+    Returns:
+        MultiplierInfo
+    """
+    info = MultiplierInfo()
+    municipalities = data.get("municipalities", {})
+
+    # 市区町村名の部分一致検索
+    target_city = None
+    for name in municipalities:
+        if city_name in name or name in city_name:
+            target_city = municipalities[name]
+            break
+
+    if not target_city:
+        info.notes = f"市区町村 '{city_name}' が見つかりませんでした"
+        return info
+
+    # 町名の部分一致検索
+    for rec in target_city.get("records", []):
+        rec_town = rec.get("town_name", "")
+        if town_name in rec_town or rec_town in town_name:
+            info.town_name = rec_town
+            info.area_name = rec.get("area_name", "")
+            info.leasehold_ratio = rec.get("leasehold_ratio", "")
+            info.residential_multiplier = rec.get("residential", "")
+            info.paddy_multiplier = rec.get("paddy", "")
+            info.field_multiplier = rec.get("field", "")
+            info.forest_multiplier = rec.get("forest", "")
+            info.wasteland_multiplier = rec.get("wasteland", "")
+            info.is_rosenka_area = rec.get("is_rosenka_area", False)
+            return info
+
+    info.notes = f"町名 '{town_name}' が見つかりませんでした"
+    return info

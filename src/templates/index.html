@@ -83,6 +83,30 @@
   </header>
 
   <div class="container">
+    <!-- 倍率表スクレイピング -->
+    <div class="card">
+      <h2>倍率表データ管理</h2>
+      <p style="font-size:13px; color:#666; margin-bottom:12px;">
+        国税庁サイトから都道府県の倍率表を一括取得します。事前にスクレイピングしておくと、評価時にオフラインで倍率情報を参照できます。
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>都道府県</label>
+          <select id="scrapePref">
+            <option value="茨城県" selected>茨城県</option>
+          </select>
+        </div>
+        <div class="form-group" style="display:flex; align-items:flex-end;">
+          <button class="btn btn-primary" id="scrapeBtn" onclick="runScrape()">一括スクレイピング実行</button>
+        </div>
+        <div class="form-group" style="display:flex; align-items:flex-end;">
+          <button class="btn btn-outline" onclick="checkSavedData()">保存済みデータを確認</button>
+        </div>
+      </div>
+      <div id="scrapeStatus"></div>
+      <div id="scrapeResult" class="hidden"></div>
+    </div>
+
     <!-- Step 1: 入力モード選択 -->
     <div class="card">
       <h2>Step 1: 不動産情報の入力</h2>
@@ -174,6 +198,75 @@
     let sessionId = '';
     let extractedProperties = [];
     let manualEntryCount = 1;
+
+    // --- 倍率表スクレイピング ---
+    async function runScrape() {
+      const btn = document.getElementById('scrapeBtn');
+      const status = document.getElementById('scrapeStatus');
+      const pref = document.getElementById('scrapePref').value;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>スクレイピング中（数分かかります）...';
+      status.innerHTML = '<div class="status status-info">国税庁サイトから ' + pref + ' の全市区町村倍率表を取得しています。サーバーに負荷をかけないよう1秒間隔でアクセスするため、数分かかります...</div>';
+
+      try {
+        const resp = await fetch('/api/scrape_multipliers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prefecture: pref })
+        });
+        const data = await resp.json();
+        if (data.error) {
+          status.innerHTML = '<div class="status status-error">エラー: ' + data.error + '</div>';
+        } else {
+          status.innerHTML = '<div class="status status-success">スクレイピング完了！</div>';
+          showScrapeResult(data);
+        }
+      } catch (e) {
+        status.innerHTML = '<div class="status status-error">エラー: ' + e.message + '</div>';
+      }
+      btn.disabled = false;
+      btn.textContent = '一括スクレイピング実行';
+    }
+
+    function showScrapeResult(data) {
+      const area = document.getElementById('scrapeResult');
+      area.classList.remove('hidden');
+      area.innerHTML = `
+        <table class="results-table" style="margin-top:12px;">
+          <tr><td style="width:200px; font-weight:600;">都道府県</td><td>${data.prefecture}</td></tr>
+          <tr><td style="font-weight:600;">市区町村数</td><td>${data.municipality_count}</td></tr>
+          <tr><td style="font-weight:600;">総レコード数</td><td>${data.total_records.toLocaleString()}</td></tr>
+          <tr><td style="font-weight:600;">路線価地域</td><td>${data.rosenka_count.toLocaleString()} 件</td></tr>
+          <tr><td style="font-weight:600;">倍率地域</td><td>${data.bairitsu_count.toLocaleString()} 件</td></tr>
+        </table>`;
+    }
+
+    async function checkSavedData() {
+      const pref = document.getElementById('scrapePref').value;
+      const status = document.getElementById('scrapeStatus');
+      try {
+        const resp = await fetch('/api/multiplier_data/' + encodeURIComponent(pref));
+        const data = await resp.json();
+        if (data.error) {
+          status.innerHTML = '<div class="status status-warn">' + data.error + '</div>';
+        } else {
+          status.innerHTML = '<div class="status status-success">保存済みデータあり（' + data.scraped_at + ' 取得、' + data.total_records + ' レコード）</div>';
+          // 市区町村一覧を表示
+          const cities = Object.keys(data.municipalities);
+          const area = document.getElementById('scrapeResult');
+          area.classList.remove('hidden');
+          let html = '<div style="margin-top:12px;"><strong>市区町村一覧（' + cities.length + '件）:</strong><div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">';
+          cities.forEach(c => {
+            const count = data.municipalities[c].records.length;
+            html += '<span style="background:#eef3f9; padding:4px 10px; border-radius:4px; font-size:12px;">' + c + ' (' + count + ')</span>';
+          });
+          html += '</div></div>';
+          area.innerHTML = html;
+        }
+      } catch (e) {
+        status.innerHTML = '<div class="status status-error">エラー: ' + e.message + '</div>';
+      }
+    }
 
     // --- タブ切替 ---
     function switchTab(mode) {
