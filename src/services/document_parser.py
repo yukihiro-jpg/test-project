@@ -19,6 +19,16 @@ from ..models import UploadedProperty
 
 logger = logging.getLogger(__name__)
 
+PREFECTURES = [
+    "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
+    "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+    "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県",
+    "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県",
+    "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県",
+    "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県",
+    "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県",
+]
+
 
 def parse_document(file_path: Path) -> list[UploadedProperty]:
     """書類ファイルから不動産情報を抽出.
@@ -170,6 +180,76 @@ def _extract_from_text(text: str, source_file: str) -> list[UploadedProperty]:
         properties.append(prop)
 
     return properties
+
+
+def extract_address_parts(text: str) -> dict[str, str]:
+    """テキストから都道府県・市区町村・町名を抽出.
+
+    Args:
+        text: 住所を含むテキスト（所在フィールド or フルテキスト）
+
+    Returns:
+        {"prefecture": "東京都", "city": "渋谷区", "town": "神宮前一丁目"}
+    """
+    result: dict[str, str] = {"prefecture": "", "city": "", "town": ""}
+
+    for pref in PREFECTURES:
+        if pref in text:
+            result["prefecture"] = pref
+            # 都道府県以降を取得
+            idx = text.index(pref) + len(pref)
+            remaining = text[idx:].strip()
+            # 市区町村を抽出（政令市の「市○区」にも対応）
+            m = re.match(r"(.+?[市郡])(.+?[区町村])?", remaining)
+            if m:
+                result["city"] = m.group(1)
+                if m.group(2):
+                    result["city"] += m.group(2)
+                rest = remaining[m.end():]
+            else:
+                # 東京23区パターン（○○区）
+                m = re.match(r"(.+?区)", remaining)
+                if m:
+                    result["city"] = m.group(1)
+                    rest = remaining[m.end():]
+                else:
+                    rest = remaining
+            # 町名抽出
+            m2 = re.match(r"([^\d]+?[町丁])", rest)
+            if m2:
+                result["town"] = m2.group(1)
+            elif rest:
+                # 大字パターン
+                m2 = re.match(r"(大字\S+)", rest)
+                if m2:
+                    result["town"] = m2.group(1)
+            break
+
+    return result
+
+
+def detect_prefecture_from_properties(
+    properties: list[UploadedProperty],
+) -> str:
+    """抽出済み物件リストから都道府県を検出."""
+    for prop in properties:
+        text = prop.location + " " + prop.chiban
+        parts = extract_address_parts(text)
+        if parts["prefecture"]:
+            return parts["prefecture"]
+    return ""
+
+
+def detect_city_from_properties(
+    properties: list[UploadedProperty],
+) -> str:
+    """抽出済み物件リストから市区町村を検出."""
+    for prop in properties:
+        text = prop.location + " " + prop.chiban
+        parts = extract_address_parts(text)
+        if parts["city"]:
+            return parts["city"]
+    return ""
 
 
 def _parse_number(s: str) -> Optional[float]:

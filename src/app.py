@@ -4,22 +4,30 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .config import config
 from .excel.exporter import export_to_excel
-from .models import PropertyEvaluation
-from .services.document_parser import parse_document
+from .models import PropertyEvaluation, UploadedProperty
+from .services.document_parser import (
+    detect_city_from_properties,
+    detect_prefecture_from_properties,
+    extract_address_parts,
+    parse_document,
+)
 from .services.geocoder import geocode
-from .services.nta_scraper import fetch_multiplier_table, lookup_multiplier
+from .services.nta_scraper import (
+    fetch_multiplier_table,
+    lookup_multiplier,
+    resolve_municipality_code,
+)
 from .services.reinfolib_client import ReinfolibClient
 
 logging.basicConfig(level=logging.INFO)
@@ -30,10 +38,8 @@ app = FastAPI(title="相続税土地評価 基礎情報収集アプリ")
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-# アップロード先を作成
 config.upload_dir.mkdir(parents=True, exist_ok=True)
 
-# セッションデータ（簡易的にメモリ保持）
 _session_data: dict[str, list[PropertyEvaluation]] = {}
 
 reinfolib = ReinfolibClient()
@@ -53,26 +59,22 @@ async def index(request: Request):
 
 
 # ------------------------------------------------------------------
-# 書類アップロード
+# 書類アップロード（PDFモード）
 # ------------------------------------------------------------------
 @app.post("/api/upload")
-async def upload_documents(
-    files: list[UploadFile] = File(...),
-    prefecture: str = Form(""),
-    municipality_code: str = Form(""),
-):
-    """書類をアップロードしてテキスト抽出."""
+async def upload_documents(files: list[UploadFile] = File(...)):
+    """書類をアップロードしてテキスト抽出。都道府県・市区町村を自動検出。"""
     session_id = str(uuid.uuid4())[:8]
     all_properties: list[dict[str, Any]] = []
+    uploaded_models: list[UploadedProperty] = []
 
     for f in files:
-        # ファイル保存
         file_path = config.upload_dir / f"{session_id}_{f.filename}"
         content = await f.read()
         file_path.write_bytes(content)
 
-        # パース
         extracted = parse_document(file_path)
+        uploaded_models.extend(extracted)
         for prop in extracted:
             all_properties.append({
                 "location": prop.location,
@@ -84,12 +86,56 @@ async def upload_documents(
                 "source_file": f.filename,
             })
 
+    # 都道府県・市区町村を自動検出
+    detected_prefecture = detect_prefecture_from_properties(uploaded_models)
+    detected_city = detect_city_from_properties(uploaded_models)
+
     return JSONResponse({
         "session_id": session_id,
         "properties": all_properties,
         "file_count": len(files),
-        "prefecture": prefecture,
-        "municipality_code": municipality_code,
+        "detected_prefecture": detected_prefecture,
+        "detected_city": detected_city,
+    })
+
+
+# ------------------------------------------------------------------
+# 手入力モード
+# ------------------------------------------------------------------
+@app.post("/api/manual_input")
+async def manual_input(request: Request):
+    """地番を手入力して物件情報を作成。"""
+    body = await request.json()
+    entries = body.get("entries", [])
+    session_id = str(uuid.uuid4())[:8]
+
+    all_properties: list[dict[str, Any]] = []
+    detected_prefecture = ""
+    detected_city = ""
+
+    for entry in entries:
+        address = entry.get("address", "")
+        parts = extract_address_parts(address)
+        if not detected_prefecture and parts["prefecture"]:
+            detected_prefecture = parts["prefecture"]
+        if not detected_city and parts["city"]:
+            detected_city = parts["city"]
+
+        all_properties.append({
+            "location": address,
+            "chiban": entry.get("chiban", ""),
+            "chimoku": entry.get("chimoku", ""),
+            "land_area_sqm": entry.get("land_area_sqm"),
+            "fixed_asset_value": entry.get("fixed_asset_value"),
+            "owner": "",
+            "source_file": "手入力",
+        })
+
+    return JSONResponse({
+        "session_id": session_id,
+        "properties": all_properties,
+        "detected_prefecture": detected_prefecture,
+        "detected_city": detected_city,
     })
 
 
@@ -102,24 +148,29 @@ async def evaluate_properties(request: Request):
     body = await request.json()
     properties_data = body.get("properties", [])
     prefecture = body.get("prefecture", "")
-    municipality_code = body.get("municipality_code", "")
+    city = body.get("city", "")
     session_id = body.get("session_id", "default")
 
     evaluations: list[PropertyEvaluation] = []
 
-    # 倍率表を事前取得（全物件共通）
+    # 倍率表コードを自動解決し、倍率表を取得
     multiplier_rows = []
-    if prefecture and municipality_code:
+    municipality_code = ""
+    if prefecture and city:
         try:
-            multiplier_rows = await fetch_multiplier_table(prefecture, municipality_code)
-            logger.info("倍率表取得成功: %d行", len(multiplier_rows))
+            municipality_code = await resolve_municipality_code(prefecture, city)
+            if municipality_code:
+                multiplier_rows = await fetch_multiplier_table(prefecture, municipality_code)
+                logger.info("倍率表取得成功: %s %s → %s (%d行)",
+                            prefecture, city, municipality_code, len(multiplier_rows))
+            else:
+                logger.warning("倍率表コード解決失敗: %s %s", prefecture, city)
         except Exception as e:
             logger.warning("倍率表取得失敗: %s", e)
 
     for idx, prop_data in enumerate(properties_data):
         ev = PropertyEvaluation(property_id=idx + 1)
 
-        # 書類情報を設定
         ev.uploaded.location = prop_data.get("location", "")
         ev.uploaded.chiban = prop_data.get("chiban", "")
         ev.uploaded.chimoku = prop_data.get("chimoku", "")
@@ -139,27 +190,25 @@ async def evaluate_properties(request: Request):
 
             # API情報を並行取得
             try:
-                zoning_task = reinfolib.get_zoning(ev.latitude, ev.longitude)
-                urban_task = reinfolib.get_urban_planning_area(ev.latitude, ev.longitude)
-                hazard_task = reinfolib.get_hazard_info(ev.latitude, ev.longitude)
-
                 zoning, urban_area, hazard = await asyncio.gather(
-                    zoning_task, urban_task, hazard_task,
+                    reinfolib.get_zoning(ev.latitude, ev.longitude),
+                    reinfolib.get_urban_planning_area(ev.latitude, ev.longitude),
+                    reinfolib.get_hazard_info(ev.latitude, ev.longitude),
                     return_exceptions=True,
                 )
 
-                if isinstance(zoning, Exception):
-                    ev.notes.append(f"用途地域取得エラー: {zoning}")
-                else:
+                if not isinstance(zoning, Exception):
                     ev.zoning = zoning
                     ev.zoning.urban_planning_area = urban_area if isinstance(urban_area, str) else ""
                     ev.data_sources.append("不動産情報ライブラリAPI (XKT002/XKT003)")
-
-                if isinstance(hazard, Exception):
-                    ev.notes.append(f"ハザード情報取得エラー: {hazard}")
                 else:
+                    ev.notes.append(f"用途地域取得エラー: {zoning}")
+
+                if not isinstance(hazard, Exception):
                     ev.hazard = hazard
                     ev.data_sources.append("不動産情報ライブラリAPI (ハザード)")
+                else:
+                    ev.notes.append(f"ハザード情報取得エラー: {hazard}")
 
             except Exception as e:
                 ev.notes.append(f"API取得エラー: {e}")
@@ -168,7 +217,6 @@ async def evaluate_properties(request: Request):
 
         # 倍率表から路線価/倍率判定
         if multiplier_rows:
-            # 地番から町名部分を抽出
             town = _extract_town_name(ev.uploaded.location, ev.uploaded.chiban)
             if town:
                 ev.multiplier = lookup_multiplier(multiplier_rows, town)
@@ -176,11 +224,11 @@ async def evaluate_properties(request: Request):
 
         evaluations.append(ev)
 
-    # セッションに保存
     _session_data[session_id] = evaluations
 
     return JSONResponse({
         "session_id": session_id,
+        "municipality_code": municipality_code,
         "evaluations": [_evaluation_to_dict(ev) for ev in evaluations],
     })
 
@@ -190,7 +238,6 @@ async def evaluate_properties(request: Request):
 # ------------------------------------------------------------------
 @app.get("/api/export/{session_id}")
 async def export_excel(session_id: str):
-    """評価結果をExcelでダウンロード."""
     evaluations = _session_data.get(session_id, [])
     if not evaluations:
         return JSONResponse({"error": "セッションデータが見つかりません"}, status_code=404)
@@ -207,15 +254,10 @@ async def export_excel(session_id: str):
 # ヘルパー
 # ------------------------------------------------------------------
 def _extract_town_name(location: str, chiban: str) -> str:
-    """所在・地番から町名部分を抽出."""
-    # 「○○市○○町」→「○○町」の部分を取る
-    import re
     combined = location + chiban
-    # 町・丁目・大字パターン
     m = re.search(r"([^\d市区郡県都府道]+?[町丁村])", combined)
     if m:
         return m.group(1)
-    # 大字パターン
     m = re.search(r"(大字\S+)", combined)
     if m:
         return m.group(1)
@@ -223,7 +265,6 @@ def _extract_town_name(location: str, chiban: str) -> str:
 
 
 def _evaluation_to_dict(ev: PropertyEvaluation) -> dict[str, Any]:
-    """PropertyEvaluationをJSON化可能なdictに変換."""
     return {
         "property_id": ev.property_id,
         "address": ev.address,

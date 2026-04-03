@@ -97,6 +97,83 @@ class MultiplierRow:
     wasteland: str    # 原野
 
 
+async def resolve_municipality_code(
+    prefecture: str,
+    city_name: str,
+) -> str:
+    """市区町村名から倍率表のページコード（例: d21104rf）を自動解決.
+
+    国税庁の市区町村一覧フレームページをスクレイピングして、
+    市区町村名→倍率表HTMLファイル名のマッピングを行う。
+
+    Args:
+        prefecture: 都道府県名（例: "東京都"）
+        city_name: 市区町村名（例: "渋谷区", "八王子市"）
+
+    Returns:
+        倍率表コード（例: "d21104rf"）。見つからない場合は空文字。
+    """
+    bureau_pref = BUREAU_PREFECTURE_MAP.get(prefecture)
+    if not bureau_pref:
+        logger.warning("都道府県マッピングなし: %s", prefecture)
+        return ""
+
+    bureau, pref = bureau_pref
+    # 倍率表の市区町村一覧ページ
+    city_list_url = (
+        f"{config.nta_base_url}/{config.nta_year_path}"
+        f"/{bureau}/{pref}/ratios/city_frm.htm"
+    )
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=15.0, headers=BROWSER_HEADERS, follow_redirects=True
+        ) as client:
+            resp = await client.get(city_list_url)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "lxml")
+
+            # フレームセットの場合、市区町村リストのフレームURLを取得
+            frames = soup.find_all("frame")
+            city_list_frame_url = ""
+            for frame in frames:
+                src = frame.get("src", "")
+                if "city" in src.lower() or "menu" in src.lower():
+                    if src.startswith("http"):
+                        city_list_frame_url = src
+                    else:
+                        # 相対URL解決
+                        base = city_list_url.rsplit("/", 1)[0]
+                        city_list_frame_url = f"{base}/{src}"
+                    break
+
+            # フレームがなければ直接パース
+            if city_list_frame_url:
+                resp2 = await client.get(city_list_frame_url)
+                resp2.raise_for_status()
+                soup = BeautifulSoup(resp2.text, "lxml")
+
+            # リンクから市区町村名→コードのマッピングを構築
+            for a_tag in soup.find_all("a", href=True):
+                link_text = _clean_text(a_tag.get_text())
+                href = a_tag["href"]
+
+                # 市区町村名が部分一致するか
+                if city_name in link_text or link_text in city_name:
+                    # href から倍率表コードを抽出
+                    # 例: "html/d21104rf.htm" → "d21104rf"
+                    m = re.search(r"([a-z]\d{5}rf)", href)
+                    if m:
+                        code = m.group(1)
+                        logger.info("倍率表コード解決: %s → %s", city_name, code)
+                        return code
+
+    except Exception as e:
+        logger.warning("市区町村コード解決失敗 (%s, %s): %s", prefecture, city_name, e)
+
+    return ""
+
+
 async def fetch_multiplier_table(
     prefecture: str,
     municipality_code: str,
