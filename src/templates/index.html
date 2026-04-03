@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>相続税土地評価 基礎情報収集</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Yu Gothic', 'Hiragino Kaku Gothic Pro', sans-serif; background: #f5f7fa; color: #333; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    header { background: #1F4E79; color: #fff; padding: 20px 0; margin-bottom: 24px; }
+    header h1 { text-align: center; font-size: 22px; font-weight: 600; }
+    header p { text-align: center; font-size: 13px; opacity: 0.8; margin-top: 4px; }
+
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); padding: 24px; margin-bottom: 20px; }
+    .card h2 { font-size: 16px; color: #1F4E79; border-left: 4px solid #1F4E79; padding-left: 10px; margin-bottom: 16px; }
+
+    .form-row { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+    .form-group { flex: 1; min-width: 200px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #555; }
+    .form-group input, .form-group select { width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    .form-group input:focus, .form-group select:focus { border-color: #1F4E79; outline: none; }
+
+    .upload-area { border: 2px dashed #aac; border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; transition: border-color 0.2s; background: #fafbfd; }
+    .upload-area:hover { border-color: #1F4E79; }
+    .upload-area.dragover { border-color: #1F4E79; background: #eef3f9; }
+    .upload-area p { color: #777; font-size: 14px; }
+    .upload-area .icon { font-size: 40px; color: #aac; margin-bottom: 8px; }
+    input[type="file"] { display: none; }
+    .file-list { margin-top: 10px; font-size: 13px; color: #555; }
+    .file-list div { padding: 4px 0; }
+
+    .btn { display: inline-block; padding: 10px 24px; border: none; border-radius: 4px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    .btn-primary { background: #1F4E79; color: #fff; }
+    .btn-primary:hover { background: #163a5c; }
+    .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+    .btn-success { background: #2e7d32; color: #fff; }
+    .btn-success:hover { background: #1b5e20; }
+    .btn-group { display: flex; gap: 12px; margin-top: 16px; }
+
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 6px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status { padding: 10px 16px; border-radius: 4px; margin: 12px 0; font-size: 13px; }
+    .status-info { background: #e3f2fd; color: #1565c0; }
+    .status-success { background: #e8f5e9; color: #2e7d32; }
+    .status-error { background: #fce4ec; color: #c62828; }
+
+    /* 結果テーブル */
+    .results-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .results-table th { background: #1F4E79; color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; white-space: nowrap; }
+    .results-table td { padding: 7px 10px; border-bottom: 1px solid #e0e0e0; }
+    .results-table tr:hover td { background: #f5f9ff; }
+    .section-row td { background: #D6E4F0; font-weight: 600; color: #1F4E79; padding: 6px 10px; }
+    .warn { background: #fff8e1; }
+
+    .property-block { margin-bottom: 24px; }
+    .property-block h3 { font-size: 15px; color: #1F4E79; padding: 8px 12px; background: #eef3f9; border-radius: 4px; margin-bottom: 8px; }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>相続税土地評価 基礎情報収集アプリ</h1>
+    <p>書類アップロード + API連携で評価基礎情報を自動収集</p>
+  </header>
+
+  <div class="container">
+    <!-- Step 1: 基本情報入力 -->
+    <div class="card">
+      <h2>Step 1: 基本情報</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>都道府県</label>
+          <select id="prefecture">
+            <option value="">選択してください</option>
+            <option value="北海道">北海道</option><option value="青森県">青森県</option>
+            <option value="岩手県">岩手県</option><option value="宮城県">宮城県</option>
+            <option value="秋田県">秋田県</option><option value="山形県">山形県</option>
+            <option value="福島県">福島県</option><option value="茨城県">茨城県</option>
+            <option value="栃木県">栃木県</option><option value="群馬県">群馬県</option>
+            <option value="埼玉県">埼玉県</option><option value="千葉県">千葉県</option>
+            <option value="東京都">東京都</option><option value="神奈川県">神奈川県</option>
+            <option value="新潟県">新潟県</option><option value="富山県">富山県</option>
+            <option value="石川県">石川県</option><option value="福井県">福井県</option>
+            <option value="山梨県">山梨県</option><option value="長野県">長野県</option>
+            <option value="岐阜県">岐阜県</option><option value="静岡県">静岡県</option>
+            <option value="愛知県">愛知県</option><option value="三重県">三重県</option>
+            <option value="滋賀県">滋賀県</option><option value="京都府">京都府</option>
+            <option value="大阪府">大阪府</option><option value="兵庫県">兵庫県</option>
+            <option value="奈良県">奈良県</option><option value="和歌山県">和歌山県</option>
+            <option value="鳥取県">鳥取県</option><option value="島根県">島根県</option>
+            <option value="岡山県">岡山県</option><option value="広島県">広島県</option>
+            <option value="山口県">山口県</option><option value="徳島県">徳島県</option>
+            <option value="香川県">香川県</option><option value="愛媛県">愛媛県</option>
+            <option value="高知県">高知県</option><option value="福岡県">福岡県</option>
+            <option value="佐賀県">佐賀県</option><option value="長崎県">長崎県</option>
+            <option value="熊本県">熊本県</option><option value="大分県">大分県</option>
+            <option value="宮崎県">宮崎県</option><option value="鹿児島県">鹿児島県</option>
+            <option value="沖縄県">沖縄県</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>市区町村コード（倍率表用）</label>
+          <input type="text" id="municipality_code" placeholder="例: d21104rf">
+        </div>
+      </div>
+      <p style="font-size:12px; color:#888; margin-top:4px;">
+        ※ 倍率表コードは<a href="https://www.rosenka.nta.go.jp/" target="_blank">国税庁サイト</a>の倍率表ページURLから確認できます
+      </p>
+    </div>
+
+    <!-- Step 2: 書類アップロード -->
+    <div class="card">
+      <h2>Step 2: 書類アップロード</h2>
+      <p style="font-size:13px; color:#666; margin-bottom:12px;">
+        謄本、固定資産税評価証明書（課税明細書）、名寄帳、農地台帳をアップロード
+      </p>
+      <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+        <div class="icon">&#128196;</div>
+        <p>クリックまたはドラッグ＆ドロップでファイルをアップロード</p>
+        <p style="font-size:12px; margin-top:4px;">対応形式: PDF, TXT, CSV</p>
+      </div>
+      <input type="file" id="fileInput" multiple accept=".pdf,.txt,.csv">
+      <div class="file-list" id="fileList"></div>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="uploadBtn" onclick="uploadFiles()" disabled>アップロード＆解析</button>
+      </div>
+      <div id="uploadStatus"></div>
+    </div>
+
+    <!-- Step 3: 抽出データ確認・編集 -->
+    <div class="card hidden" id="editCard">
+      <h2>Step 3: 抽出データ確認・編集</h2>
+      <p style="font-size:13px; color:#666; margin-bottom:12px;">
+        書類から抽出された情報を確認・修正してください。住所欄を編集するとAPI取得の精度が上がります。
+      </p>
+      <div id="editArea"></div>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="evalBtn" onclick="runEvaluation()">基礎情報を取得</button>
+      </div>
+      <div id="evalStatus"></div>
+    </div>
+
+    <!-- Step 4: 結果表示 -->
+    <div class="card hidden" id="resultCard">
+      <h2>Step 4: 基礎情報一覧</h2>
+      <div id="resultArea"></div>
+      <div class="btn-group">
+        <button class="btn btn-success" id="exportBtn" onclick="exportExcel()">Excelダウンロード</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let sessionId = '';
+    let extractedProperties = [];
+
+    // ドラッグ＆ドロップ
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+    uploadArea.addEventListener('drop', e => {
+      e.preventDefault();
+      uploadArea.classList.remove('dragover');
+      fileInput.files = e.dataTransfer.files;
+      updateFileList();
+    });
+    fileInput.addEventListener('change', updateFileList);
+
+    function updateFileList() {
+      const list = document.getElementById('fileList');
+      const files = fileInput.files;
+      list.innerHTML = '';
+      for (const f of files) {
+        list.innerHTML += `<div>&#128206; ${f.name} (${(f.size / 1024).toFixed(1)} KB)</div>`;
+      }
+      document.getElementById('uploadBtn').disabled = files.length === 0;
+    }
+
+    async function uploadFiles() {
+      const btn = document.getElementById('uploadBtn');
+      const status = document.getElementById('uploadStatus');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>解析中...';
+      status.innerHTML = '<div class="status status-info">書類を解析しています...</div>';
+
+      const formData = new FormData();
+      for (const f of fileInput.files) formData.append('files', f);
+      formData.append('prefecture', document.getElementById('prefecture').value);
+      formData.append('municipality_code', document.getElementById('municipality_code').value);
+
+      try {
+        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+        const data = await resp.json();
+        sessionId = data.session_id;
+        extractedProperties = data.properties;
+
+        status.innerHTML = `<div class="status status-success">${data.file_count}件のファイルから${extractedProperties.length}筆の不動産情報を抽出しました</div>`;
+        renderEditArea();
+        document.getElementById('editCard').classList.remove('hidden');
+      } catch (e) {
+        status.innerHTML = `<div class="status status-error">エラー: ${e.message}</div>`;
+      }
+      btn.disabled = false;
+      btn.textContent = 'アップロード＆解析';
+    }
+
+    function renderEditArea() {
+      const area = document.getElementById('editArea');
+      let html = '';
+      extractedProperties.forEach((p, i) => {
+        html += `
+          <div class="property-block" style="border:1px solid #ddd; border-radius:6px; padding:12px; margin-bottom:12px;">
+            <h3>物件 ${i + 1}</h3>
+            <div class="form-row">
+              <div class="form-group"><label>所在</label><input type="text" data-idx="${i}" data-field="location" value="${p.location || ''}"></div>
+              <div class="form-group"><label>地番</label><input type="text" data-idx="${i}" data-field="chiban" value="${p.chiban || ''}"></div>
+              <div class="form-group"><label>地目</label><input type="text" data-idx="${i}" data-field="chimoku" value="${p.chimoku || ''}"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>地積(m2)</label><input type="number" data-idx="${i}" data-field="land_area_sqm" value="${p.land_area_sqm || ''}"></div>
+              <div class="form-group"><label>固定資産税評価額(円)</label><input type="number" data-idx="${i}" data-field="fixed_asset_value" value="${p.fixed_asset_value || ''}"></div>
+              <div class="form-group"><label>検索住所(上書可)</label><input type="text" data-idx="${i}" data-field="address" value="" placeholder="都道府県+所在+地番"></div>
+            </div>
+          </div>`;
+      });
+      // 手動追加ボタン
+      html += '<button class="btn" style="background:#eee; color:#555; margin-top:8px;" onclick="addProperty()">+ 物件を手動追加</button>';
+      area.innerHTML = html;
+    }
+
+    function addProperty() {
+      extractedProperties.push({ location: '', chiban: '', chimoku: '', land_area_sqm: null, fixed_asset_value: null, source_file: '手動入力' });
+      renderEditArea();
+    }
+
+    async function runEvaluation() {
+      // フォームからデータ取得
+      document.querySelectorAll('#editArea input').forEach(input => {
+        const idx = parseInt(input.dataset.idx);
+        const field = input.dataset.field;
+        if (field === 'land_area_sqm' || field === 'fixed_asset_value') {
+          extractedProperties[idx][field] = input.value ? Number(input.value) : null;
+        } else {
+          extractedProperties[idx][field] = input.value;
+        }
+      });
+
+      const btn = document.getElementById('evalBtn');
+      const status = document.getElementById('evalStatus');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>API取得中...';
+      status.innerHTML = '<div class="status status-info">不動産情報ライブラリAPI・国税庁倍率表を取得しています...</div>';
+
+      try {
+        const resp = await fetch('/api/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            properties: extractedProperties,
+            prefecture: document.getElementById('prefecture').value,
+            municipality_code: document.getElementById('municipality_code').value,
+          })
+        });
+        const data = await resp.json();
+        sessionId = data.session_id;
+        status.innerHTML = '<div class="status status-success">基礎情報の取得が完了しました</div>';
+        renderResults(data.evaluations);
+        document.getElementById('resultCard').classList.remove('hidden');
+      } catch (e) {
+        status.innerHTML = `<div class="status status-error">エラー: ${e.message}</div>`;
+      }
+      btn.disabled = false;
+      btn.textContent = '基礎情報を取得';
+    }
+
+    function renderResults(evaluations) {
+      const area = document.getElementById('resultArea');
+      let html = '';
+
+      evaluations.forEach(ev => {
+        html += `<div class="property-block">`;
+        html += `<h3>物件 ${ev.property_id}: ${ev.address}</h3>`;
+        html += `<table class="results-table">`;
+
+        // 書類抽出情報
+        html += sectionRow('書類抽出情報');
+        html += dataRow('所在', ev.uploaded.location);
+        html += dataRow('地番', ev.uploaded.chiban);
+        html += dataRow('地目', ev.uploaded.chimoku);
+        html += dataRow('地積', ev.uploaded.land_area_sqm ? ev.uploaded.land_area_sqm + ' m2' : '');
+        html += dataRow('固定資産税評価額', ev.uploaded.fixed_asset_value ? Number(ev.uploaded.fixed_asset_value).toLocaleString() + ' 円' : '');
+
+        // 用途地域
+        html += sectionRow('用途地域・都市計画情報（API取得）');
+        html += dataRow('用途地域', ev.zoning.zone_type);
+        html += dataRow('建ぺい率', ev.zoning.building_coverage_ratio ? ev.zoning.building_coverage_ratio + '%' : '');
+        html += dataRow('容積率', ev.zoning.floor_area_ratio ? ev.zoning.floor_area_ratio + '%' : '');
+        html += dataRow('都市計画区域', ev.zoning.urban_planning_area);
+
+        // 前面道路
+        html += sectionRow('前面道路情報');
+        html += dataRow('幅員', ev.road.road_width_m ? ev.road.road_width_m + ' m' : '');
+        html += dataRow('方位', ev.road.road_direction);
+        html += dataRow('種類', ev.road.road_type);
+
+        // ハザード
+        html += sectionRow('ハザード情報（API取得）');
+        html += hazardRow('洪水浸水想定', ev.hazard.flood_risk);
+        html += hazardRow('土砂災害警戒', ev.hazard.landslide_risk);
+        html += hazardRow('津波浸水想定', ev.hazard.tsunami_risk);
+        html += hazardRow('高潮浸水想定', ev.hazard.storm_surge_risk);
+
+        // 倍率情報
+        html += sectionRow('路線価/倍率情報（国税庁）');
+        html += dataRow('評価方式', ev.multiplier.is_rosenka_area ? '路線価地域' : '倍率地域');
+        html += dataRow('町名', ev.multiplier.town_name);
+        html += dataRow('適用地域名', ev.multiplier.area_name);
+        html += dataRow('借地権割合', ev.multiplier.leasehold_ratio);
+        html += dataRow('宅地倍率', ev.multiplier.residential_multiplier);
+        html += dataRow('田倍率', ev.multiplier.paddy_multiplier);
+        html += dataRow('畑倍率', ev.multiplier.field_multiplier);
+        html += dataRow('山林倍率', ev.multiplier.forest_multiplier);
+
+        // データソース
+        html += sectionRow('データソース');
+        ev.data_sources.forEach(s => { html += `<tr><td colspan="2" style="padding-left:20px; font-size:12px; color:#666;">${s}</td></tr>`; });
+
+        // 注記
+        if (ev.notes.length > 0) {
+          html += sectionRow('注記');
+          ev.notes.forEach(n => { html += `<tr><td colspan="2" style="padding-left:20px; font-size:12px; color:#c62828;">${n}</td></tr>`; });
+        }
+
+        html += `</table></div>`;
+      });
+
+      area.innerHTML = html;
+    }
+
+    function sectionRow(title) {
+      return `<tr class="section-row"><td colspan="2">${title}</td></tr>`;
+    }
+    function dataRow(label, value) {
+      return `<tr><td style="width:180px; font-weight:600;">${label}</td><td>${value || '-'}</td></tr>`;
+    }
+    function hazardRow(label, value) {
+      const cls = value ? ' class="warn"' : '';
+      return `<tr${cls}><td style="width:180px; font-weight:600;">${label}</td><td>${value || '該当なし'}</td></tr>`;
+    }
+
+    function exportExcel() {
+      if (!sessionId) return;
+      window.location.href = `/api/export/${sessionId}`;
+    }
+  </script>
+</body>
+</html>
