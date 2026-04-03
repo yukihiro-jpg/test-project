@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils/cn';
 import {
   Home, User, Users, LayoutList, MapPin, Building2, Banknote,
   TrendingUp, Shield, Gift, FileText, Calculator, Download, ChevronDown, ChevronRight,
+  ArrowRightLeft, TrendingDown,
 } from 'lucide-react';
 import { useState } from 'react';
 import { GoogleDrivePanel } from '@/components/google/GoogleDrivePanel';
@@ -45,7 +46,8 @@ export function Sidebar({ caseId }: { caseId: string }) {
   const bottomItems: NavItem[] = [
     { label: '遺産分割', href: `${base}/division`, icon: <LayoutList size={18} /> },
     { label: '相続税シミュレーション', href: `${base}/simulation`, icon: <Calculator size={18} /> },
-    { label: '贈与シミュレーション', href: `${base}/gift`, icon: <Gift size={18} /> },
+    { label: '二次相続シミュレーション', href: `${base}/secondary-inheritance`, icon: <ArrowRightLeft size={18} /> },
+    { label: '節税シミュレーション', href: `${base}/tax-saving`, icon: <TrendingDown size={18} /> },
     { label: '書類出力', href: `${base}/export`, icon: <Download size={18} /> },
   ];
 

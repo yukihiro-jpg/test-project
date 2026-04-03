@@ -32,6 +32,8 @@ export interface Case {
   assets: Assets;
   division: DivisionPlan;
   giftSimulation?: GiftPlan;
+  secondaryConfig?: SecondaryInheritanceConfig;
+  taxSavingStrategies?: TaxSavingStrategy[];
   createdAt: string;
   updatedAt: string;
 }
@@ -276,4 +278,109 @@ export interface GiftTaxResultEntry {
   giftTax: number;
   cumulativeGift: number;
   cumulativeGiftTax: number;
+}
+
+// --- 二次相続シミュレーション ---
+export interface SecondaryInheritanceConfig {
+  // 一次相続で配偶者が取得する割合（0-1）
+  spouseAcquisitionRatio: number;
+  // 配偶者の固有財産
+  spouseOwnAssets: number;
+  // 配偶者の推定死亡年齢（年齢）
+  spouseExpectedDeathAge: number;
+  // 二次相続時の推定財産増減（運用益や消費）
+  estimatedAssetChangeRate: number; // 年率（例: -0.02 = 毎年2%減少）
+  // 二次相続時の相続人（一次の子供たち、配偶者を除く）
+  // 自動的に一次相続の子・養子・代襲相続人から判定
+}
+
+export interface SecondaryInheritanceResult {
+  // 一次相続
+  primaryTax: number;
+  primarySpouseAcquired: number;
+  primaryOtherHeirsTax: number;
+  // 二次相続
+  secondaryEstateValue: number;
+  secondaryBasicDeduction: number;
+  secondaryTaxableAmount: number;
+  secondaryTotalTax: number;
+  secondaryHeirDetails: SecondaryHeirDetail[];
+  // 合計
+  combinedTotalTax: number;
+  // 比較用：配偶者取得割合を変えた場合のシミュレーション
+  ratioSimulations: RatioSimulationResult[];
+}
+
+export interface SecondaryHeirDetail {
+  heirId: string;
+  heirName: string;
+  acquiredValue: number;
+  tax: number;
+}
+
+export interface RatioSimulationResult {
+  spouseRatio: number; // 0, 0.25, 0.5 (法定), 0.75, 1.0 etc.
+  label: string;
+  primaryTotalTax: number;
+  secondaryTotalTax: number;
+  combinedTotalTax: number;
+}
+
+// --- 節税シミュレーション ---
+export type TaxSavingStrategyType =
+  | 'gift'                    // 生前贈与
+  | 'life_insurance'          // 生命保険活用
+  | 'real_estate'             // 不動産活用（賃貸建物建築等）
+  | '養子縁組'                // 養子縁組
+  | 'education_fund'          // 教育資金一括贈与
+  | 'housing_fund'            // 住宅取得資金贈与
+  | 'marriage_child_fund'     // 結婚・子育て資金一括贈与
+  | 'small_land_special'      // 小規模宅地等の特例活用
+  | 'spouse_deduction';       // 配偶者控除最大活用
+
+export interface TaxSavingStrategy {
+  id: string;
+  type: TaxSavingStrategyType;
+  enabled: boolean;
+  // 生前贈与
+  giftPlan?: GiftPlan;
+  // 生命保険
+  insurancePlan?: InsuranceSavingPlan;
+  // その他は金額ベースで効果を指定
+  estimatedReduction?: number;
+  description?: string;
+}
+
+export interface InsuranceSavingPlan {
+  // 新規加入する生命保険の死亡保険金額
+  additionalDeathBenefit: number;
+  // 保険料（一時払い等）- 現金からの移動
+  premiumAmount: number;
+  // 受取人
+  beneficiaryHeirIds: string[];
+}
+
+export interface TaxSavingSimulationResult {
+  // 対策前
+  beforeTax: number;
+  // 各対策の効果
+  strategyResults: StrategyResult[];
+  // 対策後
+  afterTax: number;
+  // 総節税額
+  totalSaving: number;
+  // 二次相続を含めた効果（二次相続設定がある場合）
+  withSecondary?: {
+    beforeCombined: number;
+    afterCombined: number;
+    combinedSaving: number;
+  };
+}
+
+export interface StrategyResult {
+  strategyId: string;
+  type: TaxSavingStrategyType;
+  label: string;
+  saving: number;
+  detail: string;
 }
