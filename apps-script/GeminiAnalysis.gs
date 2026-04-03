@@ -15,7 +15,7 @@ const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMI
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 // 解析対象の書類種別
-const ANALYZABLE_TYPES = ['レシート・領収書', '通帳', '売上請求書', '仕入請求書'];
+const ANALYZABLE_TYPES = ['レシート・領収書', 'クレジットカード利用明細書', '通帳', '売上請求書', '仕入請求書'];
 
 // ============================================================
 // メイン: 日次解析処理（AM3:00トリガー）
@@ -187,6 +187,24 @@ function buildPrompt(docType, bankName, clientSheet) {
 JSON配列のみを返してください。説明文は不要です。`;
 
     case '通帳':
+    case 'クレジットカード利用明細書':
+      return `この画像はクレジットカード利用明細書です。
+全ての利用明細を1行ずつJSON配列で抽出してください。
+
+各オブジェクトのキー:
+- "利用日": "YYYY/MM/DD"形式
+- "利用先名称": 店舗名・サービス名
+- "利用金額": 利用金額（数値）
+- "支払区分": 1回払い/分割/リボ等（記載があれば）、なければ空文字""
+- "備考": 読み取りが不確実な箇所があれば「読取不確実」と記載、なければ空文字""
+
+重要:
+- 年会費、利息、手数料なども1行として記録してください
+- 金額のカンマは除去し、数値型で返してください
+
+JSON配列のみを返してください。説明文は不要です。`;
+
+    case '通帳':
       return `この画像は銀行通帳のページです${bankName ? `（${bankName}）` : ''}。
 全ての取引明細を1行ずつJSON配列で抽出してください。
 
@@ -334,7 +352,12 @@ function getOrCreateClientAnalysisSheet(clientName) {
   receiptSheet.appendRow(['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '支払総額', '主な品名', 'インボイス番号', '備考']);
   receiptSheet.setFrozenRows(1);
 
-  // シート2: 通帳
+  // シート2: クレジットカード利用明細書
+  const ccSheet = ss.insertSheet('クレジットカード利用明細書');
+  ccSheet.appendRow(['解析日', '利用日', '利用先名称', '利用金額', '支払区分', '備考']);
+  ccSheet.setFrozenRows(1);
+
+  // シート3: 通帳
   const bankSheet = ss.insertSheet('通帳');
   bankSheet.appendRow(['解析日', '銀行名', '口座番号', '年月日', '摘要', '入金額', '出金額', '残高', '備考']);
   bankSheet.setFrozenRows(1);
@@ -379,6 +402,20 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber
           row['支払総額'] || 0,
           row['主な品名'] || '',
           row['インボイス番号'] || '',
+          row['備考'] || ''
+        ]);
+      });
+      break;
+
+    case 'クレジットカード利用明細書':
+      sheet = clientSheet.getSheetByName('クレジットカード利用明細書');
+      rows.forEach(row => {
+        sheet.appendRow([
+          today,
+          row['利用日'] || '',
+          row['利用先名称'] || '',
+          row['利用金額'] || 0,
+          row['支払区分'] || '',
           row['備考'] || ''
         ]);
       });
