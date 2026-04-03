@@ -186,12 +186,12 @@ function buildPrompt(docType, bankName, clientSheet) {
 
 JSON配列のみを返してください。説明文は不要です。`;
 
-    case '通帳':
     case 'クレジットカード利用明細書':
       return `この画像はクレジットカード利用明細書です。
 全ての利用明細を1行ずつJSON配列で抽出してください。
 
 各オブジェクトのキー:
+- "カード会社名": クレジットカード会社名（例: 三井住友カード、楽天カード等）
 - "利用日": "YYYY/MM/DD"形式
 - "利用先名称": 店舗名・サービス名
 - "利用金額": 利用金額（数値）
@@ -201,6 +201,7 @@ JSON配列のみを返してください。説明文は不要です。`;
 重要:
 - 年会費、利息、手数料なども1行として記録してください
 - 金額のカンマは除去し、数値型で返してください
+- カード会社名が明細書のヘッダー等に記載されていれば、全行に同じ値を入れてください
 
 JSON配列のみを返してください。説明文は不要です。`;
 
@@ -354,7 +355,7 @@ function getOrCreateClientAnalysisSheet(clientName) {
 
   // シート2: クレジットカード利用明細書
   const ccSheet = ss.insertSheet('クレジットカード利用明細書');
-  ccSheet.appendRow(['解析日', '利用日', '利用先名称', '利用金額', '支払区分', '備考']);
+  ccSheet.appendRow(['解析日', 'カード会社名', '利用日', '利用先名称', '利用金額', '支払区分', '備考']);
   ccSheet.setFrozenRows(1);
 
   // シート3: 通帳
@@ -412,6 +413,7 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber
       rows.forEach(row => {
         sheet.appendRow([
           today,
+          row['カード会社名'] || '',
           row['利用日'] || '',
           row['利用先名称'] || '',
           row['利用金額'] || 0,
