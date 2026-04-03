@@ -223,6 +223,16 @@ function getOrCreateLogSheet() {
   urlSheet.setColumnWidth(4, 120);
   urlSheet.setColumnWidth(5, 500);
 
+  // シート3: メールアドレス対応表（将来のメール自動振分用）
+  const emailSheet = ss.insertSheet('メールアドレス対応表');
+  emailSheet.appendRow(['メールアドレス', '顧問先名', '区分', '登録日', '備考']);
+  emailSheet.setFrozenRows(1);
+  emailSheet.setColumnWidth(1, 300);
+  emailSheet.setColumnWidth(2, 200);
+  emailSheet.setColumnWidth(3, 100);
+  emailSheet.setColumnWidth(4, 120);
+  emailSheet.setColumnWidth(5, 200);
+
   // ファイルをルートフォルダに移動
   const file = DriveApp.getFileById(ss.getId());
   rootFolder.addFile(file);
