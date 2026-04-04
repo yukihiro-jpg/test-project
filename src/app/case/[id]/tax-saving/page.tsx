@@ -15,7 +15,7 @@ import { calculateInsuranceExemption } from '@/lib/tax/asset-valuation';
 import { INSURANCE_EXEMPTION_PER_HEIR, BASIC_DEDUCTION_PER_HEIR } from '@/lib/tax/tax-tables';
 import { RELATIONSHIP_LABELS } from '@/types';
 import type { GiftPlanEntry, GiftTaxSystem } from '@/types';
-import { Calculator, Plus, Trash2, Shield, Home, Users, GraduationCap, Gift, Building2, Heart, TrendingDown } from 'lucide-react';
+import { Calculator, Plus, Trash2, Shield, Home, Users, Gift, Building2, TrendingDown } from 'lucide-react';
 
 // 節税対策の種類
 interface TaxStrategy {
@@ -54,7 +54,6 @@ const STRATEGY_OPTIONS = [
   { value: 'gift', label: '生前贈与', icon: Gift },
   { value: 'life_insurance', label: '生命保険活用', icon: Shield },
   { value: 'adoption', label: '養子縁組', icon: Users },
-  { value: 'education_fund', label: '教育資金一括贈与', icon: GraduationCap },
   { value: 'housing_fund', label: '住宅取得資金贈与', icon: Home },
   { value: 'real_estate', label: '不動産活用', icon: Building2 },
 ];
@@ -102,9 +101,6 @@ export default function TaxSavingPage() {
         break;
       case 'adoption':
         base.adoptionCount = 1;
-        break;
-      case 'education_fund':
-        base.educationFundAmount = 15_000_000;
         break;
       case 'housing_fund':
         base.housingFundAmount = 10_000_000;
@@ -184,18 +180,6 @@ export default function TaxSavingPage() {
             saving,
             giftTax: 0,
             detail: `基礎控除+${formatManyen(additionalDeduction)}、保険非課税枠+${formatManyen(additionalInsExemption)}`,
-          });
-          break;
-        }
-        case 'education_fund': {
-          const amount = Math.min(strategy.educationFundAmount || 0, 15_000_000);
-          const saving = Math.floor(amount * marginalRate);
-          results.push({
-            id: strategy.id, type: strategy.type,
-            label: '教育資金一括贈与',
-            saving,
-            giftTax: 0,
-            detail: `1,500万円まで非課税（30歳未満の子・孫へ）`,
           });
           break;
         }
@@ -377,17 +361,6 @@ export default function TaxSavingPage() {
                 <p className="text-xs text-gray-500">
                   実子がいる場合は1人、いない場合は2人までが法定相続人にカウントされます。
                   基礎控除が600万円、保険金非課税枠が500万円増加します。
-                </p>
-              </div>
-            )}
-
-            {/* 教育資金 */}
-            {strategy.type === 'education_fund' && (
-              <div className="space-y-2">
-                <CurrencyInput label="贈与額" value={strategy.educationFundAmount || 0}
-                  onChange={v => updateStrategy(strategy.id, { educationFundAmount: Math.min(v, 15_000_000) })} />
-                <p className="text-xs text-gray-500">
-                  30歳未満の子・孫への教育資金として信託銀行等に預ける。1人1,500万円まで非課税。
                 </p>
               </div>
             )}
