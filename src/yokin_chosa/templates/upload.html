@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="container">
+    <h2>{{ case.decedent_name }} - 口座登録 & PDFアップロード</h2>
+    <p class="subtitle">相続開始日: {{ case.date_of_death }} / 調査期間: {{ case.investigation_period_years }}年 / 閾値: ¥{{ "{:,}".format(case.threshold_amount) }}</p>
+
+    <form action="/case/{{ case.case_id }}/add-account" method="post" enctype="multipart/form-data" class="form-card">
+        <h3>口座を追加</h3>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="bank_name">銀行名</label>
+                <input type="text" id="bank_name" name="bank_name" required placeholder="例: 三菱UFJ銀行">
+            </div>
+            <div class="form-group">
+                <label for="branch_name">支店名</label>
+                <input type="text" id="branch_name" name="branch_name" placeholder="例: 東京支店">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="account_type">口座種別</label>
+                <select id="account_type" name="account_type">
+                    <option value="普通">普通</option>
+                    <option value="定期">定期</option>
+                    <option value="貯蓄">貯蓄</option>
+                    <option value="当座">当座</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="account_number">口座番号</label>
+                <input type="text" id="account_number" name="account_number" required placeholder="例: 1234567">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="account_holder">名義人</label>
+                <input type="text" id="account_holder" name="account_holder" required placeholder="例: 田中太郎">
+            </div>
+            <div class="form-group">
+                <label for="holder_type">名義区分</label>
+                <select id="holder_type" name="holder_type">
+                    <option value="被相続人">被相続人</option>
+                    <option value="相続人">相続人</option>
+                    <option value="親族">親族</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="pdf_file">通帳PDF（OCR済み）</label>
+            <input type="file" id="pdf_file" name="pdf_file" accept=".pdf" required>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">口座を追加</button>
+        </div>
+    </form>
+
+    {% if case.accounts %}
+    <div class="form-card">
+        <h3>登録済み口座 ({{ case.accounts | length }}件)</h3>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>銀行名</th>
+                    <th>支店名</th>
+                    <th>種別</th>
+                    <th>口座番号</th>
+                    <th>名義人</th>
+                    <th>区分</th>
+                    <th>取引数</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for acc in case.accounts %}
+                <tr>
+                    <td>{{ acc.bank_name }}</td>
+                    <td>{{ acc.branch_name }}</td>
+                    <td>{{ acc.account_type.value }}</td>
+                    <td>{{ acc.account_number }}</td>
+                    <td>{{ acc.account_holder }}</td>
+                    <td>{{ acc.holder_type.value }}</td>
+                    <td>{{ transaction_counts.get(acc.id, 0) }}</td>
+                    <td>
+                        <form action="/case/{{ case.case_id }}/remove-account/{{ acc.id }}" method="post" style="display:inline">
+                            <button type="submit" class="btn btn-danger btn-small">削除</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="form-actions">
+        <form action="/case/{{ case.case_id }}/analyze" method="post">
+            <button type="submit" class="btn btn-primary btn-large">分析を実行</button>
+        </form>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

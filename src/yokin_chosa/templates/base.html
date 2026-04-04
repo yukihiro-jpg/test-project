@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>預金調査ツール</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+    <header>
+        <nav>
+            <h1><a href="/">預金調査ツール</a></h1>
+            <div class="nav-links">
+                <a href="/" class="nav-link">案件一覧</a>
+            </div>
+        </nav>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    <footer>
+        <p>預金調査ツール v0.1.0 - 相続税申告用</p>
+    </footer>
+</body>
+</html>

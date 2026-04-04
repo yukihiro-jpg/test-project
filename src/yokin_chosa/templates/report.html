@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="container">
+    <h2>レポートダウンロード完了</h2>
+    <p>Excelファイルがダウンロードされました。</p>
+    <div class="form-actions">
+        <a href="/case/{{ case_id }}/review" class="btn btn-primary">分析結果に戻る</a>
+        <a href="/" class="btn btn-secondary">トップに戻る</a>
+    </div>
+</section>
+{% endblock %}

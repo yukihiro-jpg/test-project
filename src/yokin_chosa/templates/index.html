@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="container">
+    <h2>新規案件作成</h2>
+    <form action="/case/create" method="post" class="form-card">
+        <div class="form-group">
+            <label for="decedent_name">被相続人名</label>
+            <input type="text" id="decedent_name" name="decedent_name" required placeholder="例: 田中太郎">
+        </div>
+        <div class="form-group">
+            <label for="date_of_death">相続開始日</label>
+            <input type="date" id="date_of_death" name="date_of_death" required>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="investigation_period_years">調査期間（年）</label>
+                <select id="investigation_period_years" name="investigation_period_years">
+                    <option value="5" selected>5年</option>
+                    <option value="7">7年</option>
+                    <option value="10">10年</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="threshold_amount">フラグ閾値（円）</label>
+                <input type="number" id="threshold_amount" name="threshold_amount" value="500000" min="100000" step="100000">
+            </div>
+        </div>
+
+        <h3>相続人情報</h3>
+        <div id="heirs-container">
+            <div class="heir-entry">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>相続人名</label>
+                        <input type="text" name="heir_name[]" placeholder="例: 田中花子">
+                    </div>
+                    <div class="form-group">
+                        <label>続柄</label>
+                        <select name="heir_relationship[]">
+                            <option value="配偶者">配偶者</option>
+                            <option value="長男">長男</option>
+                            <option value="長女">長女</option>
+                            <option value="次男">次男</option>
+                            <option value="次女">次女</option>
+                            <option value="その他">その他</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <button type="button" class="btn btn-secondary" onclick="addHeir()">+ 相続人を追加</button>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">案件を作成して次へ</button>
+        </div>
+    </form>
+</section>
+
+{% if cases %}
+<section class="container">
+    <h2>既存の案件</h2>
+    <div class="case-list">
+        {% for case in cases %}
+        <div class="case-card">
+            <h3>{{ case.decedent_name }}</h3>
+            <p>相続開始日: {{ case.date_of_death }}</p>
+            <p>口座数: {{ case.accounts | length }}</p>
+            <a href="/case/{{ case.case_id }}/upload" class="btn btn-primary">開く</a>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<script>
+function addHeir() {
+    const container = document.getElementById('heirs-container');
+    const entry = document.createElement('div');
+    entry.className = 'heir-entry';
+    entry.innerHTML = `
+        <div class="form-row">
+            <div class="form-group">
+                <label>相続人名</label>
+                <input type="text" name="heir_name[]" placeholder="例: 田中一郎">
+            </div>
+            <div class="form-group">
+                <label>続柄</label>
+                <select name="heir_relationship[]">
+                    <option value="配偶者">配偶者</option>
+                    <option value="長男">長男</option>
+                    <option value="長女">長女</option>
+                    <option value="次男">次男</option>
+                    <option value="次女">次女</option>
+                    <option value="その他">その他</option>
+                </select>
+            </div>
+            <button type="button" class="btn btn-danger btn-small" onclick="this.parentElement.parentElement.remove()">削除</button>
+        </div>
+    `;
+    container.appendChild(entry);
+}
+</script>
+{% endblock %}

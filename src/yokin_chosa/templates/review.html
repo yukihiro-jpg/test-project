@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="container">
+    <h2>{{ case.decedent_name }} - 分析結果</h2>
+    <p class="subtitle">フラグ付き取引: {{ flagged | length }}件</p>
+
+    <div class="tabs">
+        <button class="tab active" onclick="showTab('movement')">預金移動表</button>
+        <button class="tab" onclick="showTab('confirmation')">要確認リスト</button>
+        <button class="tab" onclick="showTab('nominal')">名義預金</button>
+        <button class="tab" onclick="showTab('gift')">贈与税</button>
+        <button class="tab" onclick="showTab('summary')">サマリー</button>
+    </div>
+
+    <div id="tab-movement" class="tab-content active">
+        <h3>預金移動表</h3>
+        {% if movement_table %}
+        <div class="table-scroll">
+            <table class="data-table movement-table">
+                <thead>
+                    <tr>
+                        {% for col in movement_table.columns %}
+                        <th>{{ col }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for _, row in movement_table.iterrows() %}
+                    <tr class="result-{{ row.get('検証結果', '') | replace(' ', '-') }}">
+                        {% for col in movement_table.columns %}
+                        <td>
+                            {% if row[col] is not none and row[col] != '' %}
+                                {% if col.endswith('_入金') or col.endswith('_出金') %}
+                                    {% if row[col] is number %}¥{{ "{:,}".format(row[col] | int) }}{% endif %}
+                                {% else %}
+                                    {{ row[col] }}
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p>フラグ付き取引がありません。</p>
+        {% endif %}
+    </div>
+
+    <div id="tab-confirmation" class="tab-content">
+        <h3>要確認リスト</h3>
+        {% if flagged %}
+        <form action="/case/{{ case.case_id }}/update-verification" method="post">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>日付</th>
+                        <th>摘要</th>
+                        <th>入金</th>
+                        <th>出金</th>
+                        <th>フラグ理由</th>
+                        <th>検証結果</th>
+                        <th>備考</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in flagged %}
+                    <tr class="result-{{ f.verification_result.value }}">
+                        <td>{{ f.transaction.date.strftime('%Y/%m/%d') }}</td>
+                        <td>{{ f.transaction.description }}</td>
+                        <td class="amount">{% if f.transaction.deposit %}¥{{ "{:,}".format(f.transaction.deposit) }}{% endif %}</td>
+                        <td class="amount">{% if f.transaction.withdrawal %}¥{{ "{:,}".format(f.transaction.withdrawal) }}{% endif %}</td>
+                        <td>{{ f.flag_reasons | map(attribute='value') | join(', ') }}</td>
+                        <td>
+                            <select name="result_{{ f.transaction.id }}">
+                                <option value="資金移動" {{ 'selected' if f.verification_result.value == '資金移動' }}>資金移動</option>
+                                <option value="要確認" {{ 'selected' if f.verification_result.value == '要確認' }}>要確認</option>
+                                <option value="確認済" {{ 'selected' if f.verification_result.value == '確認済' }}>確認済</option>
+                                <option value="名義預金疑い" {{ 'selected' if f.verification_result.value == '名義預金疑い' }}>名義預金疑い</option>
+                                <option value="贈与税要検討" {{ 'selected' if f.verification_result.value == '贈与税要検討' }}>贈与税要検討</option>
+                            </select>
+                        </td>
+                        <td><input type="text" name="note_{{ f.transaction.id }}" value="{{ f.notes }}" placeholder="メモ"></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">検証結果を更新</button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+
+    <div id="tab-nominal" class="tab-content">
+        <h3>名義預金チェック</h3>
+        {% if nominal_findings %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>口座</th>
+                    <th>名義人</th>
+                    <th>疑わしい金額合計</th>
+                    <th>検出根拠</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in nominal_findings %}
+                <tr>
+                    <td>{{ f.account.display_name }}</td>
+                    <td>{{ f.account.account_holder }}</td>
+                    <td class="amount">¥{{ "{:,}".format(f.total_suspected_amount) }}</td>
+                    <td>
+                        <ul>
+                            {% for e in f.evidence %}
+                            <li>{{ e }}</li>
+                            {% endfor %}
+                        </ul>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>名義預金の疑いがある口座は検出されませんでした。</p>
+        {% endif %}
+    </div>
+
+    <div id="tab-gift" class="tab-content">
+        <h3>贈与税チェック</h3>
+        {% if gift_tax_findings %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>相続人</th>
+                    <th>年</th>
+                    <th>年間振込合計</th>
+                    <th>基礎控除超過</th>
+                    <th>取引数</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in gift_tax_findings %}
+                <tr class="{{ 'warning' if f.exceeds_exemption }}">
+                    <td>{{ f.to_heir_name }}</td>
+                    <td>{{ f.year }}</td>
+                    <td class="amount">¥{{ "{:,}".format(f.total_amount) }}</td>
+                    <td>{{ "超過" if f.exceeds_exemption else "範囲内" }}</td>
+                    <td>{{ f.transactions | length }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>贈与税の問題は検出されませんでした。</p>
+        {% endif %}
+    </div>
+
+    <div id="tab-summary" class="tab-content">
+        <h3>案件概要</h3>
+        <table class="data-table">
+            <tbody>
+                <tr><td>被相続人</td><td>{{ case.decedent_name }}</td></tr>
+                <tr><td>相続開始日</td><td>{{ case.date_of_death }}</td></tr>
+                <tr><td>調査期間</td><td>{{ case.investigation_start_date }} 〜 {{ case.date_of_death }}</td></tr>
+                <tr><td>フラグ閾値</td><td>¥{{ "{:,}".format(case.threshold_amount) }}</td></tr>
+                <tr><td>口座数</td><td>{{ case.accounts | length }}</td></tr>
+                <tr><td>フラグ付き取引数</td><td>{{ flagged | length }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="form-actions">
+        <a href="/case/{{ case.case_id }}/download-excel" class="btn btn-primary btn-large">Excelダウンロード</a>
+        <a href="/case/{{ case.case_id }}/upload" class="btn btn-secondary">口座管理に戻る</a>
+    </div>
+</section>
+
+<script>
+function showTab(name) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    event.target.classList.add('active');
+}
+</script>
+{% endblock %}
