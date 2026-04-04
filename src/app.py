@@ -17,24 +17,17 @@ from fastapi.templating import Jinja2Templates
 from .config import config
 from .excel.exporter import export_to_excel
 from .models import (
-    KoteiShisanBuilding,
-    KoteiShisanLand,
-    NayosechoBuilding,
-    NayosechoLand,
-    NochiDaicho,
     PropertyEvaluation,
-    TohonBuilding,
-    TohonLand,
+    TohonLand, TohonBuilding,
+    KoteiShisanLand, KoteiShisanBuilding,
+    NayosechoLand, NayosechoBuilding,
+    NochiDaicho,
 )
 from .services.document_parser import (
+    parse_tohon, parse_kotei_shisan, parse_nayosecho, parse_nochi_daicho,
     calculate_ownership,
-    detect_city_from_properties,
-    detect_prefecture_from_properties,
+    detect_prefecture_from_properties, detect_city_from_properties,
     extract_address_parts,
-    parse_kotei_shisan,
-    parse_nayosecho,
-    parse_nochi_daicho,
-    parse_tohon,
 )
 from .services.geocoder import geocode
 from .services.nta_scraper import (
@@ -110,80 +103,69 @@ async def upload_documents(
     target_name: str = Form(default=""),
     reference_date: str = Form(default=""),
 ):
-    """4種類の書類を資料種別ごとにアップロード・解析."""
+    """資料種別ごとにアップロード・解析."""
     session_id = str(uuid.uuid4())[:8]
     sd = SessionData(target_name=target_name, reference_date=reference_date)
 
-    async def save_file(f: UploadFile) -> Path:
-        path = config.upload_dir / f"{session_id}_{f.filename}"
-        path.write_bytes(await f.read())
-        return path
-
     # 謄本
     for f in tohon_files:
-        path = await save_file(f)
+        path = await _save_file(f, session_id)
         lands, buildings = parse_tohon(path)
         sd.tohon_lands.extend(lands)
         sd.tohon_buildings.extend(buildings)
 
     # 固定資産評価証明
     for f in kotei_files:
-        path = await save_file(f)
+        path = await _save_file(f, session_id)
         lands, buildings = parse_kotei_shisan(path)
         sd.kotei_lands.extend(lands)
         sd.kotei_buildings.extend(buildings)
 
     # 名寄帳
     for f in nayosecho_files:
-        path = await save_file(f)
+        path = await _save_file(f, session_id)
         lands, buildings = parse_nayosecho(path)
         sd.nayosecho_lands.extend(lands)
         sd.nayosecho_buildings.extend(buildings)
 
     # 農地台帳
     for f in nochi_files:
-        path = await save_file(f)
+        path = await _save_file(f, session_id)
         entries = parse_nochi_daicho(path)
         sd.nochi_daichos.extend(entries)
 
+    _sessions[session_id] = sd
+
     # 持分計算
-    ownership_results = {}
+    ownership_results = []
     if target_name:
-        for i, tl in enumerate(sd.tohon_lands):
+        for tl in sd.tohon_lands:
             if tl.ownership_history:
-                result = calculate_ownership(
-                    tl.ownership_history, target_name, reference_date
-                )
-                ownership_results[f"land_{i}"] = {
+                ores = calculate_ownership(tl.ownership_history, target_name, reference_date)
+                ownership_results.append({
                     "location": tl.location,
                     "chiban": tl.chiban,
-                    "share": result.current_share,
-                    "fraction": result.share_fraction,
-                    "history": result.history_summary,
-                }
+                    "current_share": ores.current_share,
+                    "share_fraction": ores.share_fraction,
+                    "history_summary": ores.history_summary,
+                })
 
-    # 都道府県・市区町村自動検出
+    # 都道府県・市区町村を自動検出
     all_props = sd.tohon_lands + sd.kotei_lands + sd.nayosecho_lands + sd.nochi_daichos
     detected_pref = detect_prefecture_from_properties(all_props)
     detected_city = detect_city_from_properties(all_props)
-
-    _sessions[session_id] = sd
 
     return JSONResponse({
         "session_id": session_id,
         "detected_prefecture": detected_pref,
         "detected_city": detected_city,
-        "target_name": target_name,
-        "reference_date": reference_date,
-        "parsed": {
-            "tohon_lands": [_tohon_land_dict(t) for t in sd.tohon_lands],
-            "tohon_buildings": [_tohon_building_dict(b) for b in sd.tohon_buildings],
-            "kotei_lands": [_kotei_land_dict(k) for k in sd.kotei_lands],
-            "kotei_buildings": [_kotei_building_dict(b) for b in sd.kotei_buildings],
-            "nayosecho_lands": [_nayosecho_land_dict(n) for n in sd.nayosecho_lands],
-            "nayosecho_buildings": [_nayosecho_building_dict(b) for b in sd.nayosecho_buildings],
-            "nochi_daichos": [_nochi_dict(n) for n in sd.nochi_daichos],
-        },
+        "tohon_lands": [_tohon_land_dict(tl) for tl in sd.tohon_lands],
+        "tohon_buildings": [_tohon_building_dict(tb) for tb in sd.tohon_buildings],
+        "kotei_lands": [_kotei_land_dict(kl) for kl in sd.kotei_lands],
+        "kotei_buildings": [_kotei_building_dict(kb) for kb in sd.kotei_buildings],
+        "nayosecho_lands": [_nayosecho_land_dict(nl) for nl in sd.nayosecho_lands],
+        "nayosecho_buildings": [_nayosecho_building_dict(nb) for nb in sd.nayosecho_buildings],
+        "nochi_daichos": [_nochi_dict(nd) for nd in sd.nochi_daichos],
         "ownership_results": ownership_results,
         "counts": {
             "tohon_land": len(sd.tohon_lands),
@@ -206,7 +188,11 @@ async def manual_input(request: Request):
     body = await request.json()
     entries = body.get("entries", [])
     session_id = str(uuid.uuid4())[:8]
-    sd = SessionData()
+
+    sd = SessionData(
+        target_name=body.get("target_name", ""),
+        reference_date=body.get("reference_date", ""),
+    )
 
     for entry in entries:
         address = entry.get("address", "")
@@ -219,34 +205,18 @@ async def manual_input(request: Request):
         )
         sd.tohon_lands.append(tl)
 
+    _sessions[session_id] = sd
+
     all_props = sd.tohon_lands
     detected_pref = detect_prefecture_from_properties(all_props)
     detected_city = detect_city_from_properties(all_props)
-
-    _sessions[session_id] = sd
 
     return JSONResponse({
         "session_id": session_id,
         "detected_prefecture": detected_pref,
         "detected_city": detected_city,
-        "parsed": {
-            "tohon_lands": [_tohon_land_dict(t) for t in sd.tohon_lands],
-            "tohon_buildings": [],
-            "kotei_lands": [],
-            "kotei_buildings": [],
-            "nayosecho_lands": [],
-            "nayosecho_buildings": [],
-            "nochi_daichos": [],
-        },
-        "counts": {
-            "tohon_land": len(sd.tohon_lands),
-            "tohon_building": 0,
-            "kotei_land": 0,
-            "kotei_building": 0,
-            "nayosecho_land": 0,
-            "nayosecho_building": 0,
-            "nochi": 0,
-        },
+        "tohon_lands": [_tohon_land_dict(tl) for tl in sd.tohon_lands],
+        "counts": {"tohon_land": len(sd.tohon_lands)},
     })
 
 
@@ -270,42 +240,35 @@ async def evaluate_properties(request: Request):
     municipality_code = ""
     if prefecture and city:
         try:
-            # 保存済みデータ優先
-            pref_key = prefecture.replace("都", "").replace("府", "").replace("県", "").replace("道", "")
-            saved_data = load_multipliers_json(DATA_DIR / f"{pref_key}_multipliers.json")
-            if not saved_data:
-                municipality_code = await resolve_municipality_code(prefecture, city)
-                if municipality_code:
-                    multiplier_rows = await fetch_multiplier_table(prefecture, municipality_code)
+            municipality_code = await resolve_municipality_code(prefecture, city)
+            if municipality_code:
+                multiplier_rows = await fetch_multiplier_table(prefecture, municipality_code)
         except Exception as e:
             logger.warning("倍率表取得失敗: %s", e)
 
     evaluations: list[PropertyEvaluation] = []
     prop_id = 0
 
-    # 土地の評価（謄本ベース、他の書類をマッチ）
+    # 土地の評価情報構築
     for tl in sd.tohon_lands:
         prop_id += 1
-        ev = PropertyEvaluation(
-            property_id=prop_id,
-            property_type="土地",
-            address=f"{tl.location} {tl.chiban}".strip(),
-            tohon_land=tl,
-        )
+        ev = PropertyEvaluation(property_id=prop_id, property_type="土地")
+        ev.tohon_land = tl
+        ev.address = f"{prefecture}{tl.location}{tl.chiban}"
 
-        # 固定資産評価証明とマッチ（所在+地番）
+        # 固定資産評価証明とのマッチング（所在+地番で）
         for kl in sd.kotei_lands:
             if _match_property(tl.location, tl.chiban, kl.location, kl.chiban):
                 ev.kotei_land = kl
                 break
 
-        # 名寄帳とマッチ
+        # 名寄帳とのマッチング
         for nl in sd.nayosecho_lands:
             if _match_property(tl.location, tl.chiban, nl.location, nl.chiban):
                 ev.nayosecho_land = nl
                 break
 
-        # 農地台帳とマッチ
+        # 農地台帳とのマッチング
         for nd in sd.nochi_daichos:
             if _match_property(tl.location, tl.chiban, nd.location, nd.chiban):
                 ev.nochi_daicho = nd
@@ -314,54 +277,42 @@ async def evaluate_properties(request: Request):
         # 持分計算
         if sd.target_name and tl.ownership_history:
             ev.ownership = calculate_ownership(
-                tl.ownership_history, sd.target_name, sd.reference_date
+                tl.ownership_history, sd.target_name, sd.reference_date,
             )
 
-        ev.data_sources.append("謄本（全部事項証明書）")
-        if ev.kotei_land:
-            ev.data_sources.append("固定資産評価証明")
-        if ev.nayosecho_land:
-            ev.data_sources.append("名寄帳")
-        if ev.nochi_daicho:
-            ev.data_sources.append("農地台帳")
-
         # ジオコーディング + API
-        await _enrich_with_api(ev, prefecture, city, saved_data, multiplier_rows)
+        await _enrich_with_apis(ev, prefecture)
+
+        # 倍率表
+        _apply_multiplier(ev, prefecture, city, multiplier_rows)
 
         evaluations.append(ev)
 
-    # 謄本にない固定資産評価証明のみの土地
-    matched_kotei = {id(ev.kotei_land) for ev in evaluations if ev.kotei_land}
-    for kl in sd.kotei_lands:
-        if id(kl) not in matched_kotei:
-            prop_id += 1
-            ev = PropertyEvaluation(
-                property_id=prop_id,
-                property_type="土地",
-                address=f"{kl.location} {kl.chiban}".strip(),
-                kotei_land=kl,
-            )
-            ev.data_sources.append("固定資産評価証明")
-            await _enrich_with_api(ev, prefecture, city, saved_data, multiplier_rows)
-            evaluations.append(ev)
-
-    # 建物の評価
+    # 建物の評価情報
     for tb in sd.tohon_buildings:
         prop_id += 1
-        ev = PropertyEvaluation(
-            property_id=prop_id,
-            property_type="建物",
-            address=f"{tb.location} {tb.kaoku_bango}".strip(),
-            tohon_building=tb,
-        )
-        # 固定資産評価証明とマッチ
+        ev = PropertyEvaluation(property_id=prop_id, property_type="建物")
+        ev.tohon_building = tb
+        ev.address = f"{prefecture}{tb.location}{tb.kaoku_bango}"
+
+        # 固定資産評価証明の建物マッチング
         for kb in sd.kotei_buildings:
             if tb.kaoku_bango and tb.kaoku_bango in (kb.kaoku_bango or ""):
                 ev.kotei_building = kb
                 break
-        ev.data_sources.append("謄本（全部事項証明書）")
-        if ev.kotei_building:
-            ev.data_sources.append("固定資産評価証明")
+
+        # 名寄帳の建物マッチング
+        for nb in sd.nayosecho_buildings:
+            if tb.kaoku_bango and tb.kaoku_bango in (nb.kaoku_bango or ""):
+                ev.nayosecho_building = nb
+                break
+
+        if sd.target_name and tb.ownership_history:
+            ev.ownership = calculate_ownership(
+                tb.ownership_history, sd.target_name, sd.reference_date,
+            )
+
+        await _enrich_with_apis(ev, prefecture)
         evaluations.append(ev)
 
     sd.evaluations = evaluations
@@ -374,53 +325,6 @@ async def evaluate_properties(request: Request):
     })
 
 
-async def _enrich_with_api(
-    ev: PropertyEvaluation,
-    prefecture: str,
-    city: str,
-    saved_data: dict,
-    multiplier_rows: list,
-):
-    """ジオコーディング + reinfolib API + 倍率表で情報を補完."""
-    address = ev.address
-    if not address:
-        return
-
-    coords = await geocode(address)
-    if coords:
-        ev.latitude, ev.longitude = coords
-        ev.data_sources.append("国土地理院ジオコーディング")
-
-        try:
-            zoning, urban_area, hazard = await asyncio.gather(
-                reinfolib.get_zoning(ev.latitude, ev.longitude),
-                reinfolib.get_urban_planning_area(ev.latitude, ev.longitude),
-                reinfolib.get_hazard_info(ev.latitude, ev.longitude),
-                return_exceptions=True,
-            )
-            if not isinstance(zoning, Exception):
-                ev.zoning = zoning
-                ev.zoning.urban_planning_area = urban_area if isinstance(urban_area, str) else ""
-                ev.data_sources.append("不動産情報ライブラリAPI")
-            if not isinstance(hazard, Exception):
-                ev.hazard = hazard
-        except Exception as e:
-            ev.notes.append(f"API取得エラー: {e}")
-    else:
-        ev.notes.append("住所から座標を特定できませんでした")
-
-    # 倍率表
-    town = _extract_town_name(ev.location, ev.chiban)
-    if town and prefecture:
-        if saved_data and city:
-            ev.multiplier = lookup_from_saved_data(saved_data, city, town)
-            if ev.multiplier.town_name:
-                ev.data_sources.append("国税庁 評価倍率表（保存済みデータ）")
-        elif multiplier_rows:
-            ev.multiplier = lookup_multiplier(multiplier_rows, town)
-            ev.data_sources.append("国税庁 評価倍率表")
-
-
 # ------------------------------------------------------------------
 # 倍率表バッチスクレイピング
 # ------------------------------------------------------------------
@@ -428,7 +332,7 @@ async def _enrich_with_api(
 async def scrape_multipliers(request: Request):
     body = await request.json()
     prefecture = body.get("prefecture", "茨城県")
-    pref_key = prefecture.replace("都", "").replace("府", "").replace("県", "").replace("道", "")
+    pref_key = _pref_key(prefecture)
     json_path = DATA_DIR / f"{pref_key}_multipliers.json"
     csv_path = DATA_DIR / f"{pref_key}_multipliers.csv"
 
@@ -448,13 +352,14 @@ async def scrape_multipliers(request: Request):
             "bairitsu_count": len(records) - rosenka_count,
         })
     except Exception as e:
+        logger.error("スクレイピング失敗: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.get("/api/multiplier_data/{prefecture}")
 async def get_multiplier_data(prefecture: str):
-    pref_key = prefecture.replace("都", "").replace("府", "").replace("県", "").replace("道", "")
-    data = load_multipliers_json(DATA_DIR / f"{pref_key}_multipliers.json")
+    json_path = DATA_DIR / f"{_pref_key(prefecture)}_multipliers.json"
+    data = load_multipliers_json(json_path)
     if not data:
         return JSONResponse({"error": f"{prefecture}の倍率データが見つかりません"}, status_code=404)
     return JSONResponse(data)
@@ -462,8 +367,8 @@ async def get_multiplier_data(prefecture: str):
 
 @app.get("/api/multiplier_lookup")
 async def multiplier_lookup(prefecture: str, city: str, town: str):
-    pref_key = prefecture.replace("都", "").replace("府", "").replace("県", "").replace("道", "")
-    data = load_multipliers_json(DATA_DIR / f"{pref_key}_multipliers.json")
+    json_path = DATA_DIR / f"{_pref_key(prefecture)}_multipliers.json"
+    data = load_multipliers_json(json_path)
     if not data:
         return JSONResponse({"error": f"{prefecture}の倍率データが見つかりません"}, status_code=404)
     info = lookup_from_saved_data(data, city, town)
@@ -488,19 +393,30 @@ async def export_excel(session_id: str):
     return Response(
         content=excel_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=eval_{session_id}.xlsx"},
+        headers={"Content-Disposition": f"attachment; filename=inheritance_tax_eval_{session_id}.xlsx"},
     )
 
 
 # ------------------------------------------------------------------
 # ヘルパー
 # ------------------------------------------------------------------
+async def _save_file(f: UploadFile, session_id: str) -> Path:
+    path = config.upload_dir / f"{session_id}_{f.filename}"
+    content = await f.read()
+    path.write_bytes(content)
+    return path
+
+
+def _pref_key(prefecture: str) -> str:
+    return prefecture.replace("都", "").replace("府", "").replace("県", "").replace("道", "")
+
+
 def _match_property(loc1: str, chiban1: str, loc2: str, chiban2: str) -> bool:
-    """2つの不動産が同一筆かを判定（部分一致）."""
-    if not loc1 and not loc2:
+    """所在+地番で同一物件か判定（部分一致）."""
+    if not loc1 or not loc2:
         return False
-    loc_match = loc1 in loc2 or loc2 in loc1 if (loc1 and loc2) else False
-    chiban_match = chiban1 == chiban2 if (chiban1 and chiban2) else False
+    loc_match = loc1 in loc2 or loc2 in loc1
+    chiban_match = chiban1 and chiban2 and (chiban1 in chiban2 or chiban2 in chiban1)
     return loc_match and chiban_match
 
 
@@ -515,100 +431,146 @@ def _extract_town_name(location: str, chiban: str) -> str:
     return location
 
 
+async def _enrich_with_apis(ev: PropertyEvaluation, prefecture: str):
+    """ジオコーディング + reinfolib API で情報を付加."""
+    address = ev.address
+    if not address:
+        return
+
+    coords = await geocode(address)
+    if coords:
+        ev.latitude, ev.longitude = coords
+        ev.data_sources.append("国土地理院ジオコーディング")
+        try:
+            zoning, urban_area, hazard = await asyncio.gather(
+                reinfolib.get_zoning(ev.latitude, ev.longitude),
+                reinfolib.get_urban_planning_area(ev.latitude, ev.longitude),
+                reinfolib.get_hazard_info(ev.latitude, ev.longitude),
+                return_exceptions=True,
+            )
+            if not isinstance(zoning, Exception):
+                ev.zoning = zoning
+                ev.zoning.urban_planning_area = urban_area if isinstance(urban_area, str) else ""
+                ev.data_sources.append("不動産情報ライブラリAPI")
+            if not isinstance(hazard, Exception):
+                ev.hazard = hazard
+                ev.data_sources.append("不動産情報ライブラリAPI (ハザード)")
+        except Exception as e:
+            ev.notes.append(f"API取得エラー: {e}")
+    else:
+        ev.notes.append("住所から座標を特定できませんでした")
+
+
+def _apply_multiplier(ev: PropertyEvaluation, prefecture: str, city: str, multiplier_rows):
+    """倍率表情報を適用（保存済みデータ優先）."""
+    location = ev.location or ""
+    chiban = ev.chiban or ""
+    town = _extract_town_name(location, chiban)
+    if not town or not prefecture:
+        return
+
+    # 保存済みデータから検索
+    saved_data = load_multipliers_json(DATA_DIR / f"{_pref_key(prefecture)}_multipliers.json")
+    if saved_data and city:
+        ev.multiplier = lookup_from_saved_data(saved_data, city, town)
+        if ev.multiplier.town_name:
+            ev.data_sources.append("国税庁 評価倍率表（保存済み）")
+            return
+
+    # リアルタイムスクレイピングの結果
+    if multiplier_rows:
+        from .services.nta_scraper import lookup_multiplier as _lookup
+        ev.multiplier = _lookup(multiplier_rows, town)
+        ev.data_sources.append("国税庁 評価倍率表")
+
+
 # ------------------------------------------------------------------
 # シリアライズ
 # ------------------------------------------------------------------
-def _tohon_land_dict(t: TohonLand) -> dict:
+def _tohon_land_dict(tl: TohonLand) -> dict:
     return {
-        "location": t.location, "chiban": t.chiban,
-        "chimoku_registry": t.chimoku_registry,
-        "area_registry_sqm": t.area_registry_sqm,
+        "location": tl.location, "chiban": tl.chiban,
+        "chimoku_registry": tl.chimoku_registry,
+        "area_registry_sqm": tl.area_registry_sqm,
         "ownership_history": [
-            {"date": e.registration_date, "type": e.entry_type,
-             "cause": e.cause, "owner": e.owner_name, "share": e.share}
-            for e in t.ownership_history
+            {"registration_date": e.registration_date, "cause": e.cause,
+             "entry_type": e.entry_type, "owner_name": e.owner_name, "share": e.share}
+            for e in tl.ownership_history
         ],
         "other_rights": [
-            {"date": e.registration_date, "type": e.right_type,
+            {"registration_date": e.registration_date, "right_type": e.right_type,
              "holder": e.holder, "details": e.details}
-            for e in t.other_rights
+            for e in tl.other_rights
         ],
-        "source_file": t.source_file,
+        "source_file": tl.source_file,
     }
 
 
-def _tohon_building_dict(b: TohonBuilding) -> dict:
+def _tohon_building_dict(tb: TohonBuilding) -> dict:
     return {
-        "location": b.location, "kaoku_bango": b.kaoku_bango,
-        "kind": b.kind, "structure": b.structure,
-        "floor_areas": [{"floor": f.floor, "area_sqm": f.area_sqm} for f in b.floor_areas],
-        "source_file": b.source_file,
+        "location": tb.location, "kaoku_bango": tb.kaoku_bango,
+        "kind": tb.kind, "structure": tb.structure,
+        "floor_areas": [{"floor": fa.floor, "area_sqm": fa.area_sqm} for fa in tb.floor_areas],
+        "source_file": tb.source_file,
     }
 
 
-def _kotei_land_dict(k: KoteiShisanLand) -> dict:
+def _kotei_land_dict(kl: KoteiShisanLand) -> dict:
     return {
-        "location": k.location, "chiban": k.chiban,
-        "chimoku_tax": k.chimoku_tax, "area_tax_sqm": k.area_tax_sqm,
-        "assessed_value": k.assessed_value, "source_file": k.source_file,
+        "location": kl.location, "chiban": kl.chiban,
+        "chimoku_tax": kl.chimoku_tax, "area_tax_sqm": kl.area_tax_sqm,
+        "assessed_value": kl.assessed_value, "source_file": kl.source_file,
     }
 
 
-def _kotei_building_dict(b: KoteiShisanBuilding) -> dict:
+def _kotei_building_dict(kb: KoteiShisanBuilding) -> dict:
     return {
-        "location": b.location, "kaoku_bango": b.kaoku_bango,
-        "kind": b.kind, "structure": b.structure,
-        "area_tax_sqm": b.area_tax_sqm, "assessed_value": b.assessed_value,
-        "construction_year": b.construction_year, "source_file": b.source_file,
+        "location": kb.location, "kaoku_bango": kb.kaoku_bango,
+        "kind": kb.kind, "structure": kb.structure,
+        "area_tax_sqm": kb.area_tax_sqm, "assessed_value": kb.assessed_value,
+        "construction_year": kb.construction_year, "source_file": kb.source_file,
     }
 
 
-def _nayosecho_land_dict(n: NayosechoLand) -> dict:
+def _nayosecho_land_dict(nl: NayosechoLand) -> dict:
     return {
-        "location": n.location, "chiban": n.chiban,
-        "chimoku_tax": n.chimoku_tax, "area_tax_sqm": n.area_tax_sqm,
-        "assessed_value": n.assessed_value, "owner": n.owner,
-        "share": n.share, "source_file": n.source_file,
+        "location": nl.location, "chiban": nl.chiban,
+        "chimoku_tax": nl.chimoku_tax, "area_tax_sqm": nl.area_tax_sqm,
+        "assessed_value": nl.assessed_value, "owner": nl.owner, "share": nl.share,
     }
 
 
-def _nayosecho_building_dict(b: NayosechoBuilding) -> dict:
+def _nayosecho_building_dict(nb: NayosechoBuilding) -> dict:
     return {
-        "location": b.location, "kaoku_bango": b.kaoku_bango,
-        "kind": b.kind, "structure": b.structure,
-        "area_tax_sqm": b.area_tax_sqm, "assessed_value": b.assessed_value,
-        "source_file": b.source_file,
+        "location": nb.location, "kaoku_bango": nb.kaoku_bango,
+        "kind": nb.kind, "structure": nb.structure,
+        "area_tax_sqm": nb.area_tax_sqm, "assessed_value": nb.assessed_value,
     }
 
 
-def _nochi_dict(n: NochiDaicho) -> dict:
+def _nochi_dict(nd: NochiDaicho) -> dict:
     return {
-        "location": n.location, "chiban": n.chiban,
-        "chimoku": n.chimoku, "area_sqm": n.area_sqm,
-        "farm_category": n.farm_category, "farmer_name": n.farmer_name,
-        "right_type": n.right_type, "right_holder": n.right_holder,
-        "source_file": n.source_file,
+        "location": nd.location, "chiban": nd.chiban,
+        "chimoku": nd.chimoku, "area_sqm": nd.area_sqm,
+        "farm_category": nd.farm_category, "farmer_name": nd.farmer_name,
+        "right_type": nd.right_type, "right_holder": nd.right_holder,
     }
 
 
 def _evaluation_to_dict(ev: PropertyEvaluation) -> dict[str, Any]:
-    result: dict[str, Any] = {
+    d: dict[str, Any] = {
         "property_id": ev.property_id,
         "property_type": ev.property_type,
         "address": ev.address,
         "latitude": ev.latitude,
         "longitude": ev.longitude,
-        "registry": {
-            "location": ev.location,
-            "chiban": ev.chiban,
-            "chimoku_registry": ev.chimoku_registry,
-            "area_registry_sqm": ev.area_registry_sqm,
-        },
-        "tax": {
-            "chimoku_tax": ev.chimoku_tax,
-            "area_tax_sqm": ev.area_tax_sqm,
-            "assessed_value": ev.assessed_value,
-        },
+        # 登記情報
+        "chimoku_registry": ev.chimoku_registry,
+        "chimoku_tax": ev.chimoku_tax,
+        "area_registry_sqm": ev.area_registry_sqm,
+        "area_tax_sqm": ev.area_tax_sqm,
+        "assessed_value": ev.assessed_value,
+        # 持分
         "ownership": {
             "target_name": ev.ownership.target_name,
             "reference_date": ev.ownership.reference_date,
@@ -616,8 +578,11 @@ def _evaluation_to_dict(ev: PropertyEvaluation) -> dict[str, Any]:
             "share_fraction": ev.ownership.share_fraction,
             "history_summary": ev.ownership.history_summary,
         },
+        # 建物情報
         "building": None,
+        # 農地情報
         "nochi": None,
+        # 用途地域
         "zoning": {
             "zone_type": ev.zoning.zone_type,
             "building_coverage_ratio": ev.zoning.building_coverage_ratio,
@@ -653,11 +618,9 @@ def _evaluation_to_dict(ev: PropertyEvaluation) -> dict[str, Any]:
     # 建物情報
     if ev.tohon_building:
         tb = ev.tohon_building
-        result["building"] = {
-            "kaoku_bango": tb.kaoku_bango,
-            "kind": tb.kind,
-            "structure": tb.structure,
-            "floor_areas": [{"floor": f.floor, "area_sqm": f.area_sqm} for f in tb.floor_areas],
+        d["building"] = {
+            "kaoku_bango": tb.kaoku_bango, "kind": tb.kind, "structure": tb.structure,
+            "floor_areas": [{"floor": fa.floor, "area_sqm": fa.area_sqm} for fa in tb.floor_areas],
             "area_tax_sqm": ev.kotei_building.area_tax_sqm if ev.kotei_building else None,
             "assessed_value": ev.kotei_building.assessed_value if ev.kotei_building else None,
             "construction_year": ev.kotei_building.construction_year if ev.kotei_building else "",
@@ -666,11 +629,25 @@ def _evaluation_to_dict(ev: PropertyEvaluation) -> dict[str, Any]:
     # 農地情報
     if ev.nochi_daicho:
         nd = ev.nochi_daicho
-        result["nochi"] = {
-            "farm_category": nd.farm_category,
-            "farmer_name": nd.farmer_name,
-            "right_type": nd.right_type,
-            "right_holder": nd.right_holder,
+        d["nochi"] = {
+            "farm_category": nd.farm_category, "farmer_name": nd.farmer_name,
+            "right_type": nd.right_type, "right_holder": nd.right_holder,
         }
 
-    return result
+    # 甲区要約
+    if ev.tohon_land and ev.tohon_land.ownership_history:
+        d["ownership_history"] = [
+            {"registration_date": e.registration_date, "cause": e.cause,
+             "entry_type": e.entry_type, "owner_name": e.owner_name, "share": e.share}
+            for e in ev.tohon_land.ownership_history
+        ]
+
+    # 乙区要約
+    if ev.tohon_land and ev.tohon_land.other_rights:
+        d["other_rights"] = [
+            {"registration_date": e.registration_date, "right_type": e.right_type,
+             "holder": e.holder, "details": e.details}
+            for e in ev.tohon_land.other_rights
+        ]
+
+    return d
