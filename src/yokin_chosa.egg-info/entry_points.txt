@@ -1,2 +1,0 @@
-[console_scripts]
-yokin-chosa = yokin_chosa.main:main
