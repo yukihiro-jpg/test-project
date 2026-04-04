@@ -39,6 +39,9 @@ function makeExtracted(overrides: Partial<ExtractedInsuranceData>): ExtractedIns
     paymentReason: null,
     documentType: '保険証券',
     rawNotes: null,
+    insuranceProceedsType: null,
+    isMedicalBenefit: false,
+    isBeneficiaryInsuredPerson: null,
     ...overrides,
   };
 }
@@ -164,6 +167,99 @@ describe('classify - 資産区分の自動判��', () => {
       });
       expect(classify(extracted, baseDecedent)).toBe(
         AssetCategory.NON_LIFE_INSURANCE_CONTRACT_RIGHTS,
+      );
+    });
+  });
+
+  describe('10. 入院給付金等（受取人=被相続人）', () => {
+    it('isMedicalBenefitフラグで判定、受取人=被相続人', () => {
+      const extracted = makeExtracted({
+        isMedicalBenefit: true,
+        paymentReason: '入院',
+        paidOutAmount: 300000,
+        beneficiary: '山田太郎',
+        isBeneficiaryInsuredPerson: true,
+      });
+      expect(classify(extracted, baseDecedent)).toBe(
+        AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT,
+      );
+    });
+
+    it('paymentReasonに「手術」を含む場合も医療系と判定', () => {
+      const extracted = makeExtracted({
+        isMedicalBenefit: false,
+        paymentReason: '手術給付',
+        paidOutAmount: 200000,
+        beneficiary: '山田太郎',
+      });
+      expect(classify(extracted, baseDecedent)).toBe(
+        AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT,
+      );
+    });
+
+    it('全角スペースを含む受取人名でもマッチする', () => {
+      const extracted = makeExtracted({
+        isMedicalBenefit: true,
+        paymentReason: '通院',
+        paidOutAmount: 50000,
+        beneficiary: '山田　太郎',
+      });
+      expect(classify(extracted, baseDecedent)).toBe(
+        AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT,
+      );
+    });
+
+    it('受取人がnullで被保険者=被相続人の場合は本人受取とみなす', () => {
+      const extracted = makeExtracted({
+        isMedicalBenefit: true,
+        insuredPerson: '山田太郎',
+        beneficiary: null,
+        paidOutAmount: 100000,
+      });
+      expect(classify(extracted, baseDecedent)).toBe(
+        AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT,
+      );
+    });
+  });
+
+  describe('11. 入院給付金等（受取人=相���人）', () => {
+    it('医療系給付金で受取人が相続人の場合', () => {
+      const extracted = makeExtracted({
+        isMedicalBenefit: true,
+        paymentReason: '入院',
+        paidOutAmount: 300000,
+        beneficiary: '山田花子',
+        isBeneficiaryInsuredPerson: false,
+      });
+      expect(classify(extracted, baseDecedent)).toBe(
+        AssetCategory.HOSPITALIZATION_BENEFITS_HEIR,
+      );
+    });
+
+    it('insuranceProceedsTypeで判定', () => {
+      const extracted = makeExtracted({
+        isMedicalBenefit: false,
+        insuranceProceedsType: '高度障害',
+        paidOutAmount: 5000000,
+        beneficiary: '山田花子',
+      });
+      expect(classify(extracted, baseDecedent)).toBe(
+        AssetCategory.HOSPITALIZATION_BENEFITS_HEIR,
+      );
+    });
+  });
+
+  describe('医療系給付金は死亡保険金より優先される', () => {
+    it('isMedicalBenefit=trueの場合、死亡保険金フラグがあっても入院給付金として分類', () => {
+      const extracted = makeExtracted({
+        isMedicalBenefit: true,
+        paymentReason: '入院',
+        paidOutAmount: 500000,
+        deathBenefitAmount: null,
+        beneficiary: '山田太郎',
+      });
+      expect(classify(extracted, baseDecedent)).toBe(
+        AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT,
       );
     });
   });

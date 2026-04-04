@@ -39,6 +39,9 @@ function makeExtracted(overrides: Partial<ExtractedInsuranceData>): ExtractedIns
     paymentReason: null,
     documentType: '保険証券',
     rawNotes: null,
+    insuranceProceedsType: null,
+    isMedicalBenefit: false,
+    isBeneficiaryInsuredPerson: null,
     ...overrides,
   };
 }
@@ -151,6 +154,66 @@ describe('valuator - 評価額計算', () => {
       // 最大は PV計算値 ≈ 1106万
       const assessed = parseInt(result.assessedValue);
       expect(assessed).toBeGreaterThan(9000000);
+    });
+  });
+
+  describe('入院給付金等（受取人=被相続人）', () => {
+    it('受取額をそのまま計上（非課税枠なし）', () => {
+      const extracted = makeExtracted({
+        paidOutAmount: 300000,
+        isMedicalBenefit: true,
+      });
+      const result = calculate(
+        extracted,
+        AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT,
+        decedent,
+      );
+
+      expect(result.assessedValue).toBe('300000');
+      expect(result.breakdown.type).toBe('hospitalization_benefit');
+      if (result.breakdown.type === 'hospitalization_benefit') {
+        expect(result.breakdown.beneficiaryType).toBe('decedent');
+        expect(result.breakdown.isTaxable).toBe(true);
+      }
+    });
+
+    it('500万円×法定相続人数の非課税枠は適用されない', () => {
+      // 死亡保険金なら非課税枠で0円になる金額でも、入院給付金はそのまま課税
+      const extracted = makeExtracted({
+        paidOutAmount: 10000000,
+        isMedicalBenefit: true,
+      });
+      const result = calculate(
+        extracted,
+        AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT,
+        decedent,
+      );
+
+      // 非課税枠なしなので1000万円がそのまま評価額
+      expect(result.assessedValue).toBe('10000000');
+    });
+  });
+
+  describe('入院給付金等（受取人=相続人）', () => {
+    it('相続税対象外のため評価額は0円', () => {
+      const extracted = makeExtracted({
+        paidOutAmount: 500000,
+        isMedicalBenefit: true,
+      });
+      const result = calculate(
+        extracted,
+        AssetCategory.HOSPITALIZATION_BENEFITS_HEIR,
+        decedent,
+      );
+
+      expect(result.assessedValue).toBe('0');
+      expect(result.breakdown.type).toBe('hospitalization_benefit');
+      if (result.breakdown.type === 'hospitalization_benefit') {
+        expect(result.breakdown.beneficiaryType).toBe('heir');
+        expect(result.breakdown.isTaxable).toBe(false);
+        // 元の支払金額は参考として記録される
+        expect(result.breakdown.paidOutAmount).toBe('500000');
+      }
     });
   });
 });

@@ -9,7 +9,8 @@ export type ValuationBreakdown =
   | AnnuityThreeWayBreakdown
   | PerpetualAnnuityBreakdown
   | PreEventAnnuityBreakdown
-  | ContractRightsBreakdown;
+  | ContractRightsBreakdown
+  | HospitalizationBenefitBreakdown;
 
 export interface DeathInsuranceBreakdown {
   type: 'death_insurance';
@@ -53,4 +54,14 @@ export interface ContractRightsBreakdown {
   type: 'contract_rights';
   /** 解約返戻金相当額 */
   surrenderValue: string;
+}
+
+export interface HospitalizationBenefitBreakdown {
+  type: 'hospitalization_benefit';
+  /** 支払金額 */
+  paidOutAmount: string;
+  /** 受取人の種別 */
+  beneficiaryType: 'decedent' | 'heir';
+  /** 相続税の課税対象かどうか */
+  isTaxable: boolean;
 }

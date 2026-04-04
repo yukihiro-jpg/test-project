@@ -49,4 +49,10 @@ export interface ExtractedInsuranceData {
   documentType: '保険証券' | '支払通知書' | 'その他';
   /** その他特記事項 */
   rawNotes: string | null;
+  /** 給付金の種類 ('死亡' | '入院' | '手術' | '通院' | '高度障害' | '満期' | '年金' | 'その他') */
+  insuranceProceedsType: string | null;
+  /** 入院給付金・手術給付金・通院給付金等の医療系給付金かどうか */
+  isMedicalBenefit: boolean;
+  /** 受取人が被保険者本人として指定されているか */
+  isBeneficiaryInsuredPerson: boolean | null;
 }

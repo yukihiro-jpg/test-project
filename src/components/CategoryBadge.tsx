@@ -13,6 +13,8 @@ const CATEGORY_COLORS: Record<AssetCategory, string> = {
   [AssetCategory.NON_CONTRACTUAL_ANNUITY]: 'bg-purple-100 text-purple-800',
   [AssetCategory.LIFE_INSURANCE_CONTRACT_RIGHTS]: 'bg-blue-100 text-blue-800',
   [AssetCategory.NON_LIFE_INSURANCE_CONTRACT_RIGHTS]: 'bg-indigo-100 text-indigo-800',
+  [AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT]: 'bg-orange-100 text-orange-800',
+  [AssetCategory.HOSPITALIZATION_BENEFITS_HEIR]: 'bg-gray-100 text-gray-500',
 };
 
 interface CategoryBadgeProps {

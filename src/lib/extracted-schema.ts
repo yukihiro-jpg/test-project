@@ -26,4 +26,7 @@ export const ExtractedInsuranceDataSchema = z.object({
   paymentReason: z.string().nullable(),
   documentType: z.enum(['保険証券', '支払通知書', 'その他']),
   rawNotes: z.string().nullable(),
+  insuranceProceedsType: z.string().nullable(),
+  isMedicalBenefit: z.boolean(),
+  isBeneficiaryInsuredPerson: z.boolean().nullable(),
 });

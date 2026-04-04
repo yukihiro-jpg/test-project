@@ -7,6 +7,7 @@ import { ASSET_CATEGORY_LABELS } from '@/lib/constants';
 import CategoryBadge from './CategoryBadge';
 import { classify } from '@/lib/classifier';
 import { calculate } from '@/lib/valuator';
+import { NON_TAXABLE_CATEGORIES } from '@/lib/constants';
 import type { DecedentInfo } from '@/types/decedent';
 import type { ExtractedInsuranceData } from '@/types/extracted';
 
@@ -38,8 +39,10 @@ export default function AssetCard({ asset, decedent, onUpdate, onRemove }: Asset
     setIsEditing(false);
   };
 
+  const isNonTaxable = NON_TAXABLE_CATEGORIES.has(asset.category);
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-5 space-y-4">
+    <div className={`border rounded-lg shadow-sm p-5 space-y-4 ${isNonTaxable ? 'bg-gray-50 border-gray-300 opacity-75' : 'bg-white border-gray-200'}`}>
       <div className="flex items-start justify-between">
         <div>
           <h3 className="font-semibold text-gray-800">
@@ -69,7 +72,14 @@ export default function AssetCard({ asset, decedent, onUpdate, onRemove }: Asset
         </div>
         <div>
           <span className="text-gray-500">受取人:</span>{' '}
-          <span className="text-gray-800">{asset.extracted.beneficiary ?? '-'}</span>
+          <span className={`${asset.extracted.isMedicalBenefit ? 'font-semibold text-orange-700' : 'text-gray-800'}`}>
+            {asset.extracted.beneficiary ?? '-'}
+          </span>
+          {asset.extracted.isMedicalBenefit && (
+            <span className="ml-1 text-xs text-orange-600">
+              ({asset.extracted.isBeneficiaryInsuredPerson ? '本人' : '相続人'})
+            </span>
+          )}
         </div>
         <div>
           <span className="text-gray-500">保険種類:</span>{' '}
@@ -116,6 +126,17 @@ export default function AssetCard({ asset, decedent, onUpdate, onRemove }: Asset
           </div>
         )}
       </div>
+
+      {isNonTaxable && (
+        <div className="bg-gray-100 border border-gray-300 rounded px-3 py-2 text-sm text-gray-600">
+          この給付金は相続人が受取人のため、相続税の課税対象外です（相続人固有の財産）
+        </div>
+      )}
+      {asset.category === AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT && (
+        <div className="bg-orange-50 border border-orange-200 rounded px-3 py-2 text-sm text-orange-700">
+          受取人が被相続人本人のため、本来の相続財産として課税対象です（500万円×法定相続人数の非課税枠は適用されません）
+        </div>
+      )}
 
       <div className="border-t pt-3 flex items-center justify-between">
         <div className="space-y-1">

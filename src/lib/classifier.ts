@@ -37,6 +37,15 @@ export function classify(
     decedent.contractHolder,
   );
 
+  // 0. 入院給付金等の医療系給付金: 受取人により取扱いが異なる
+  if (isMedicalBenefitPayment(extracted)) {
+    const beneficiaryIsDecedent = isBeneficiaryDecedent(extracted, decedent);
+    if (beneficiaryIsDecedent) {
+      return AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT;
+    }
+    return AssetCategory.HOSPITALIZATION_BENEFITS_HEIR;
+  }
+
   // 1. 死亡保険金: 被保険者=被相続人 AND 死亡による支払い
   const isDeathPayout =
     extracted.paymentReason?.includes('死亡') ||
@@ -86,4 +95,44 @@ export function classify(
 
   // 4. フォールバック
   return AssetCategory.NON_CONTRACTUAL_ANNUITY;
+}
+
+const MEDICAL_PAYMENT_REASONS = ['入院', '手術', '通院', '高度障害', '先進医療'];
+
+/**
+ * 医療系給付金の支払いかどうかを判定
+ */
+function isMedicalBenefitPayment(extracted: ExtractedInsuranceData): boolean {
+  if (extracted.isMedicalBenefit) return true;
+  if (extracted.insuranceProceedsType !== null) {
+    return MEDICAL_PAYMENT_REASONS.some((r) =>
+      extracted.insuranceProceedsType!.includes(r),
+    );
+  }
+  if (extracted.paymentReason !== null) {
+    return MEDICAL_PAYMENT_REASONS.some((r) =>
+      extracted.paymentReason!.includes(r),
+    );
+  }
+  return false;
+}
+
+/**
+ * 受取人が被相続人（被保険者本人）かどうかを判定
+ * - isBeneficiaryInsuredPerson フラグがある場合はそれを使用
+ * - なければ beneficiary と被相続人名を比較
+ * - 受取人情報がない場合は被保険者=被相続人なら本人受取とみなす
+ */
+function isBeneficiaryDecedent(
+  extracted: ExtractedInsuranceData,
+  decedent: DecedentInfo,
+): boolean {
+  if (extracted.isBeneficiaryInsuredPerson !== null) {
+    return extracted.isBeneficiaryInsuredPerson;
+  }
+  if (extracted.beneficiary !== null) {
+    return namesMatch(extracted.beneficiary, decedent.name);
+  }
+  // 入院給付金等は通常、被保険者本人が受取人
+  return namesMatch(extracted.insuredPerson, decedent.name);
 }

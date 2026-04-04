@@ -15,6 +15,8 @@ export const ASSET_CATEGORY_LABELS: Record<AssetCategory, string> = {
   [AssetCategory.NON_CONTRACTUAL_ANNUITY]: '契約に基づかない定期金に関する権利',
   [AssetCategory.LIFE_INSURANCE_CONTRACT_RIGHTS]: '生命保険契約に関する権利',
   [AssetCategory.NON_LIFE_INSURANCE_CONTRACT_RIGHTS]: '損害保険契約に関する権利',
+  [AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT]: '入院給付金等（本来の相続財産）',
+  [AssetCategory.HOSPITALIZATION_BENEFITS_HEIR]: '入院給付金等（相続税対象外）',
 };
 
 /** 資産区分の法的根拠 */
@@ -28,7 +30,14 @@ export const ASSET_CATEGORY_LAW_REFS: Record<AssetCategory, string> = {
   [AssetCategory.NON_CONTRACTUAL_ANNUITY]: '相続税法第3条第1項第6号',
   [AssetCategory.LIFE_INSURANCE_CONTRACT_RIGHTS]: '相続税法第26条',
   [AssetCategory.NON_LIFE_INSURANCE_CONTRACT_RIGHTS]: '相続税法第26条',
+  [AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT]: '本来の相続財産（未収入金）',
+  [AssetCategory.HOSPITALIZATION_BENEFITS_HEIR]: '相続人固有の財産（非課税）',
 };
+
+/** 相続税の課税対象外となる資産区分 */
+export const NON_TAXABLE_CATEGORIES = new Set<AssetCategory>([
+  AssetCategory.HOSPITALIZATION_BENEFITS_HEIR,
+]);
 
 /**
  * 有期定期金の残存期間に応じた割合

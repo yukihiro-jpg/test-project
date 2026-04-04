@@ -9,6 +9,7 @@ import type {
   PerpetualAnnuityBreakdown,
   PreEventAnnuityBreakdown,
   ContractRightsBreakdown,
+  HospitalizationBenefitBreakdown,
 } from '@/types/valuation';
 import { NON_TAXABLE_PER_HEIR, remainingYearsRatio } from './constants';
 import { decimalMax, floorToYen, toDecimalOrNull } from './decimal-helpers';
@@ -40,6 +41,10 @@ export function calculate(
     case AssetCategory.LIFE_INSURANCE_CONTRACT_RIGHTS:
     case AssetCategory.NON_LIFE_INSURANCE_CONTRACT_RIGHTS:
       return calculateContractRights(extracted);
+    case AssetCategory.HOSPITALIZATION_BENEFITS_DECEDENT:
+      return calculateHospitalizationBenefitsDecedent(extracted);
+    case AssetCategory.HOSPITALIZATION_BENEFITS_HEIR:
+      return calculateHospitalizationBenefitsHeir(extracted);
   }
 }
 
@@ -174,4 +179,43 @@ function calculateContractRights(
   };
 
   return { assessedValue: assessed.toString(), breakdown };
+}
+
+/**
+ * 入院給付金等（受取人=被相続人）: 本来の相続財産
+ * 受取金額をそのまま計上（500万円×法定相続人数の非課税枠は適用されない）
+ */
+function calculateHospitalizationBenefitsDecedent(
+  extracted: ExtractedInsuranceData,
+): ValuationResult {
+  const amount = new Decimal(extracted.paidOutAmount ?? 0);
+  const assessed = floorToYen(amount);
+
+  const breakdown: HospitalizationBenefitBreakdown = {
+    type: 'hospitalization_benefit',
+    paidOutAmount: assessed.toString(),
+    beneficiaryType: 'decedent',
+    isTaxable: true,
+  };
+
+  return { assessedValue: assessed.toString(), breakdown };
+}
+
+/**
+ * 入院給付金等（受取人=相続人）: 相続税の対象外
+ * 相続人固有の財産のため、相続税は非課税。参考記録として0円で計上。
+ */
+function calculateHospitalizationBenefitsHeir(
+  extracted: ExtractedInsuranceData,
+): ValuationResult {
+  const amount = new Decimal(extracted.paidOutAmount ?? 0);
+
+  const breakdown: HospitalizationBenefitBreakdown = {
+    type: 'hospitalization_benefit',
+    paidOutAmount: amount.toString(),
+    beneficiaryType: 'heir',
+    isTaxable: false,
+  };
+
+  return { assessedValue: '0', breakdown };
 }
