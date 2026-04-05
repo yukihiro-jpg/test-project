@@ -7,7 +7,13 @@ import {
   findOrCreateFolderInDrive,
   uploadPdfToDrive,
   writeJsonToFolder,
+  getOrCreateYearFolder,
 } from '@/lib/client-registry'
+import {
+  updateCompanyProgress,
+  appendUploadLog,
+  checkAllSubmitted,
+} from '@/lib/progress-tracker'
 import type { ConfirmedEmployeeInfo } from '@/lib/employee-data'
 
 export async function POST(request: NextRequest) {
@@ -51,6 +57,7 @@ export async function POST(request: NextRequest) {
 
     // 各書類を処理
     const uploadedDocs: string[] = []
+    const uploadedDocLabels: string[] = []
 
     for (const docType of DOCUMENT_TYPES) {
       const file = formData.get(docType.id) as File | null
@@ -64,6 +71,7 @@ export async function POST(request: NextRequest) {
       await uploadPdfToDrive(employeeFolderId, fileName, pdfBuffer)
 
       uploadedDocs.push(docType.id)
+      uploadedDocLabels.push(getDocumentLabel(docType.id))
     }
 
     if (uploadedDocs.length === 0) {
@@ -73,12 +81,54 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({
+    // レスポンスを先に返し、バックグラウンドで進捗更新
+    const response = NextResponse.json({
       success: true,
       employeeName,
       uploadedDocuments: uploadedDocs,
       message: `${uploadedDocs.length}件の書類をアップロードしました`,
     })
+
+    // バックグラウンド処理（失敗しても従業員のレスポンスに影響しない）
+    const backgroundTasks = async () => {
+      try {
+        const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
+        if (spreadsheetId) {
+          await updateCompanyProgress(spreadsheetId, fiscalYear.label, client)
+        }
+      } catch (err) {
+        console.error('スプレッドシート更新エラー:', err)
+      }
+
+      try {
+        const yearFolderId = await getOrCreateYearFolder(fiscalYear.label)
+        const today = new Date().toISOString().split('T')[0]
+        await appendUploadLog(yearFolderId, {
+          date: today,
+          clientCode: client.code,
+          clientName: client.name,
+          employeeName,
+          docs: uploadedDocLabels,
+          isNewHire,
+        })
+      } catch (err) {
+        console.error('アップロードログ追記エラー:', err)
+      }
+
+      try {
+        const result = await checkAllSubmitted(client.driveFolderId)
+        if (result.allSubmitted) {
+          console.log(`★ 全員提出完了: ${client.name}（${result.total}名）`)
+        }
+      } catch (err) {
+        console.error('全員提出チェックエラー:', err)
+      }
+    }
+
+    // fire-and-forget
+    backgroundTasks()
+
+    return response
   } catch (error) {
     console.error('Upload error:', error)
     return NextResponse.json(
