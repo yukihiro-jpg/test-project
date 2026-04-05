@@ -330,6 +330,73 @@ function openClientUrlList() {
 }
 
 // ============================================================
+// スプレッドシートから顧問先を自動登録
+// ============================================================
+
+/**
+ * 「顧問先URL一覧」シートに顧問先名だけ入力すれば、
+ * フォルダ作成・URL生成・QRコード生成を自動実行する。
+ *
+ * 使い方:
+ *   1. _書類スキャン管理 → 「顧問先URL一覧」シートを開く
+ *   2. A列（顧問先名）に新しい顧問先名を入力
+ *   3. B列以降が空欄なら未登録と判断し、自動で登録処理が走る
+ *
+ * この関数は onEdit トリガーまたは手動実行で動作する。
+ */
+function autoRegisterClients() {
+  const ss = getOrCreateLogSheet();
+  const urlSheet = ss.getSheetByName('顧問先URL一覧');
+  const data = urlSheet.getDataRange().getValues();
+  const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
+
+  let registered = 0;
+
+  for (let i = 1; i < data.length; i++) {
+    const clientName = (data[i][0] || '').toString().trim();
+    const clientId = (data[i][1] || '').toString().trim();
+
+    // 顧問先名があり、クライアントIDが空欄 = 未登録
+    if (clientName && !clientId) {
+      const newClientId = 'c' + Date.now().toString(36) + i;
+
+      // フォルダ作成
+      const clientFolder = getOrCreateFolder(rootFolder, clientName);
+      const scanFolder = getOrCreateFolder(clientFolder, 'スマホ撮影');
+      getOrCreateFolder(scanFolder, '未整理');
+      getOrCreateFolder(scanFolder, '処理済み');
+      getOrCreateFolder(clientFolder, '顧問先からの受取物（社長用）');
+      getOrCreateFolder(clientFolder, '顧問先への送付物（社長用）');
+      getOrCreateFolder(clientFolder, '顧問先からの受取物（スタッフ用）');
+      getOrCreateFolder(clientFolder, '顧問先への送付物（スタッフ用）');
+      getOrCreateFolder(clientFolder, '_sync_logs');
+
+      // URL生成
+      const url = `${CONFIG.FRONTEND_URL}?client=${encodeURIComponent(newClientId)}&name=${encodeURIComponent(clientName)}`;
+      const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(url)}&size=300&margin=2`;
+
+      // シートに書き込み（B〜E列）
+      const row = i + 1;
+      urlSheet.getRange(row, 2).setValue(newClientId);
+      urlSheet.getRange(row, 3).setValue(url);
+      urlSheet.getRange(row, 4).setValue(new Date());
+      urlSheet.getRange(row, 5).setValue(qrUrl);
+
+      console.log(`自動登録完了: ${clientName} → ${url}`);
+      registered++;
+    }
+  }
+
+  if (registered === 0) {
+    console.log('新規登録対象はありませんでした。');
+  } else {
+    console.log(`${registered}件の顧問先を自動登録しました。`);
+  }
+}
+  console.log(url);
+}
+
+// ============================================================
 // 定時メール通知
 // ============================================================
 
