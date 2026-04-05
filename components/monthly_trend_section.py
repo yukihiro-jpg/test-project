@@ -33,7 +33,9 @@ def render_monthly_trend(monthly_pl: pd.DataFrame, budget_comparison: pd.DataFra
             "販売費及び一般管理費", "営業利益", "経常利益", "当期純利益",
         ]
         display_df = monthly_pl[display_cols].copy()
-        display_df["year_month"] = display_df["year_month"].astype(str)
+        display_df["year_month"] = display_df["year_month"].apply(
+            lambda p: f"{str(p).split('-')[0]}年{int(str(p).split('-')[1])}月" if "-" in str(p) else str(p)
+        )
         display_df = display_df.rename(columns={"year_month": "年月"})
 
         # 数値フォーマット

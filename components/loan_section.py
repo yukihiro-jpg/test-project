@@ -43,7 +43,9 @@ def render_loan_section(df: pd.DataFrame):
     # 返済スケジュールテーブル
     with st.expander("返済実績データ"):
         display = loan_balance.copy()
-        display["year_month"] = display["year_month"].astype(str)
+        display["year_month"] = display["year_month"].apply(
+            lambda p: f"{str(p).split('-')[0]}年{int(str(p).split('-')[1])}月" if "-" in str(p) else str(p)
+        )
         display = display.rename(columns={"year_month": "年月"})
         numeric_cols = display.select_dtypes(include="number").columns
         st.dataframe(

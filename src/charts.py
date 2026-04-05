@@ -7,6 +7,19 @@ import pandas as pd
 from config import COLORS
 
 
+def _format_months_jp(year_month_series) -> list[str]:
+    """year_monthを '2025年4月' 形式の日本語に変換"""
+    result = []
+    for p in year_month_series:
+        s = str(p)
+        if "-" in s:
+            parts = s.split("-")
+            result.append(f"{parts[0]}年{int(parts[1])}月")
+        else:
+            result.append(s)
+    return result
+
+
 def _common_layout(fig, title="", height=450):
     """共通のレイアウト設定"""
     fig.update_layout(
@@ -31,7 +44,7 @@ def create_monthly_trend_chart(monthly_pl: pd.DataFrame) -> go.Figure:
     """月次売上・利益推移チャート（棒グラフ+折れ線）"""
     fig = go.Figure()
 
-    months = [str(p) for p in monthly_pl["year_month"]]
+    months = _format_months_jp(monthly_pl["year_month"])
 
     fig.add_trace(go.Bar(
         x=months, y=monthly_pl["売上高"],
@@ -67,7 +80,7 @@ def create_cumulative_chart(cumulative_pl: pd.DataFrame) -> go.Figure:
     """累計推移チャート"""
     fig = go.Figure()
 
-    months = [str(p) for p in cumulative_pl["year_month"]]
+    months = _format_months_jp(cumulative_pl["year_month"])
 
     for item, color in [
         ("売上高", COLORS["primary"]),
@@ -89,7 +102,7 @@ def create_budget_comparison_chart(comparison_df: pd.DataFrame) -> go.Figure:
     """予算対比チャート"""
     fig = go.Figure()
 
-    months = [str(p) for p in comparison_df["year_month"]]
+    months = _format_months_jp(comparison_df["year_month"])
 
     fig.add_trace(go.Bar(
         x=months, y=comparison_df["予算_売上高"],
@@ -168,7 +181,7 @@ def create_yoy_chart(yoy_df: pd.DataFrame) -> go.Figure:
     """前年対比チャート"""
     fig = go.Figure()
 
-    months = [str(p) for p in yoy_df["year_month"]]
+    months = _format_months_jp(yoy_df["year_month"])
 
     fig.add_trace(go.Bar(
         x=months, y=yoy_df["売上高_前期"],
@@ -199,7 +212,7 @@ def create_margin_trend_chart(monthly_pl_with_margins: pd.DataFrame) -> go.Figur
     """利益率推移チャート"""
     fig = go.Figure()
 
-    months = [str(p) for p in monthly_pl_with_margins["year_month"]]
+    months = _format_months_jp(monthly_pl_with_margins["year_month"])
 
     for item, color in [
         ("売上総利益率", COLORS["primary"]),
@@ -286,7 +299,7 @@ def create_cashflow_chart(cf_df: pd.DataFrame) -> go.Figure:
     """キャッシュフローチャート"""
     fig = go.Figure()
 
-    months = [str(p) for p in cf_df["year_month"]]
+    months = _format_months_jp(cf_df["year_month"])
 
     fig.add_trace(go.Bar(
         x=months, y=cf_df["営業CF"],
@@ -321,7 +334,7 @@ def create_loan_balance_chart(loan_balance: pd.DataFrame) -> go.Figure:
     """借入金残高推移チャート"""
     fig = go.Figure()
 
-    months = [str(p) for p in loan_balance["year_month"]]
+    months = _format_months_jp(loan_balance["year_month"])
 
     fig.add_trace(go.Bar(
         x=months, y=loan_balance["長期借入金_残高"],
@@ -420,7 +433,7 @@ def create_breakeven_chart(breakeven_data: dict) -> go.Figure:
         name=f"損益分岐点: {bep:,.0f}円",
         mode="markers+text",
         marker=dict(size=12, color=COLORS["accent_red"], symbol="star"),
-        text=[f"BEP: {bep:,.0f}円"],
+        text=[f"損益分岐点: {bep:,.0f}円"],
         textposition="top right",
     ))
 

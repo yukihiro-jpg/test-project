@@ -20,7 +20,9 @@ def render_yoy(yoy_df: pd.DataFrame):
         display_cols.extend([f"{item}_当期", f"{item}_前期", f"{item}_増減", f"{item}_増減率(%)"])
 
     display_df = yoy_df[["year_month"] + [c for c in display_cols[1:] if c in yoy_df.columns]].copy()
-    display_df["year_month"] = display_df["year_month"].astype(str)
+    display_df["year_month"] = display_df["year_month"].apply(
+            lambda p: f"{str(p).split('-')[0]}年{int(str(p).split('-')[1])}月" if "-" in str(p) else str(p)
+        )
     display_df = display_df.rename(columns={"year_month": "年月"})
 
     numeric_cols = display_df.select_dtypes(include="number").columns
