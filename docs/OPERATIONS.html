@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>書類スキャンシステム 運用マニュアル</title>
+<style>
+  body {
+    font-family: 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic', sans-serif;
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 0 30px;
+    color: #24292f;
+    line-height: 1.8;
+    font-size: 14px;
+  }
+  h1 {
+    font-size: 24px;
+    border-bottom: 3px solid #1a73e8;
+    padding-bottom: 10px;
+    color: #1a73e8;
+  }
+  h2 {
+    font-size: 20px;
+    margin-top: 40px;
+    padding: 8px 12px;
+    background: #f0f4ff;
+    border-left: 4px solid #1a73e8;
+    color: #1a53a8;
+  }
+  h3 {
+    font-size: 16px;
+    margin-top: 24px;
+    color: #333;
+  }
+  hr {
+    border: none;
+    border-top: 1px solid #ddd;
+    margin: 30px 0;
+  }
+  code {
+    background: #f6f8fa;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+  }
+  pre {
+    background: #f6f8fa;
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+    border: 1px solid #e1e4e8;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+  }
+  th {
+    background: #f0f4ff;
+    padding: 10px 12px;
+    text-align: left;
+    border: 1px solid #d0d7de;
+    font-size: 13px;
+  }
+  td {
+    padding: 10px 12px;
+    border: 1px solid #d0d7de;
+    font-size: 13px;
+  }
+  ul, ol {
+    padding-left: 24px;
+  }
+  li {
+    margin: 4px 0;
+  }
+  strong {
+    color: #1a53a8;
+  }
+  .note {
+    background: #fff8e1;
+    border-left: 4px solid #f9ab00;
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 4px;
+  }
+  @media print {
+    body { margin: 20px; }
+    h2 { break-before: auto; }
+  }
+</style>
+</head>
+<body>
+
+<h1>書類スキャンシステム 運用マニュアル</h1>
+
+<hr>
+
+<h2>1. 新しい顧問先を追加する</h2>
+
+<h3>手順</h3>
+
+<p><strong>① Apps Scriptを開く</strong></p>
+<p><a href="https://script.google.com">https://script.google.com</a> を開き、「モバイルスキャンアプリ(claude)」プロジェクトを開く</p>
+
+<p><strong>② 顧問先名を入力する</strong></p>
+<p>コードの中から以下の行を探す（239行目あたり）：</p>
+<pre><code>const clientName = 'ここに顧問先名を入力';</code></pre>
+<p><code>ここに顧問先名を入力</code> を顧問先名に書き換える：</p>
+<pre><code>const clientName = '田中商事';</code></pre>
+
+<p><strong>③ 実行する</strong></p>
+<ul>
+  <li>上部の関数選択で <code>registerClient</code> を選ぶ</li>
+  <li>「実行」ボタンを押す</li>
+</ul>
+
+<p><strong>④ URLを確認する</strong></p>
+<ul>
+  <li>下の「実行ログ」に配布用URLが表示される</li>
+  <li>このURLをコピーして顧問先に渡す</li>
+</ul>
+
+<pre><code>========================================
+登録完了: 田中商事
+
+配布用URL:
+https://yukihiro-jpg.github.io/test-project/frontend/?client=xxx&name=田中商事
+========================================</code></pre>
+
+<p><strong>⑤ 次の顧問先を登録する場合</strong></p>
+<p>②の名前を書き換えて、もう一度③を実行するだけ</p>
+
+<hr>
+
+<h2>2. 顧問先のURLを再確認する</h2>
+
+<p>顧問先から「URLがわからなくなった」と言われたとき：</p>
+
+<p><strong>① Google Driveを開く</strong></p>
+<p><strong>②「顧問先_書類スキャン」フォルダの中の <code>_書類スキャン管理</code> を開く</strong></p>
+<p><strong>③「顧問先URL一覧」シートを確認する</strong></p>
+
+<table>
+  <tr><th>顧問先名</th><th>URL</th><th>登録日</th></tr>
+  <tr><td>株式会社MUUU</td><td>https://yukihiro-jpg.github.io/...</td><td>2026/03/26</td></tr>
+  <tr><td>田中商事</td><td>https://yukihiro-jpg.github.io/...</td><td>2026/03/27</td></tr>
+</table>
+
+<p>該当するURLをコピーして顧問先に再送する</p>
+
+<hr>
+
+<h2>3. 毎日の確認作業</h2>
+
+<h3>毎朝やること</h3>
+
+<p><strong>① Gmailを確認する</strong></p>
+<ul>
+  <li>毎朝6時に「【書類スキャン】○件の新規アップロード」というメールが届く</li>
+  <li>前日にアップロードがなければメールは届かない</li>
+</ul>
+
+<p><strong>② メール内のリンクからファイルを確認する</strong></p>
+<ul>
+  <li>メール内の「開く」リンクで個別のPDFを確認</li>
+  <li>「Google Driveフォルダを開く」で全体を確認</li>
+</ul>
+
+<p><strong>③ AI解析結果を確認する</strong></p>
+<ul>
+  <li>メール内の「○○の解析結果」リンクでスプレッドシートを開く</li>
+  <li>レシート・通帳・請求書の読み取り結果が自動で記録されている</li>
+</ul>
+
+<hr>
+
+<h2>4. アップロード履歴を確認する</h2>
+
+<p><strong>① Google Driveの <code>_書類スキャン管理</code> を開く</strong></p>
+<p><strong>②「アップロード履歴」シートを確認する</strong></p>
+
+<table>
+  <tr><th>受信日時</th><th>顧問先名</th><th>書類種別</th><th>銀行名</th><th>ページ数</th></tr>
+  <tr><td>3/26 15:12</td><td>株式会社MUUU</td><td>レシート・領収書</td><td></td><td>2</td></tr>
+  <tr><td>3/27 10:30</td><td>田中商事</td><td>通帳</td><td>三菱UFJ銀行</td><td>5</td></tr>
+</table>
+
+<hr>
+
+<h2>5. Google Driveのフォルダ構成</h2>
+
+<pre><code>顧問先_書類スキャン/
+├── 株式会社MUUU/
+│   ├── 20260326_1512_レシート・領収書_2p.pdf
+│   ├── 20260327_0900_通帳_三菱UFJ銀行_5p.pdf
+│   └── 株式会社MUUU_解析結果（スプレッドシート）
+├── 田中商事/
+│   ├── 20260327_1030_売上請求書_3p.pdf
+│   └── 田中商事_解析結果（スプレッドシート）
+└── _書類スキャン管理（スプレッドシート）
+    ├── アップロード履歴シート
+    └── 顧問先URL一覧シート</code></pre>
+
+<hr>
+
+<h2>6. 顧問先への案内テンプレート</h2>
+
+<p>以下をコピーして顧問先にメールやLINEで送る：</p>
+
+<pre><code>【書類スキャンのご案内】
+
+下記URLをスマートフォンで開いてください。
+（ブックマークしておくと便利です）
+
+URL: ここにURLを貼り付け
+
+【使い方】
+1. URLを開く
+2. 書類の種類を選ぶ（通帳の場合は銀行名も入力）
+3.「撮影する」をタップして書類を撮影
+4. 複数ページある場合は続けて撮影
+5. 全て撮り終わったら「まとめて送信する」をタップ
+
+※ アプリのインストールは不要です
+※ 多少斜めでも自動補正されますが、
+  なるべく明るい場所で撮影してください
+※ Googleアカウントは不要です</code></pre>
+
+<hr>
+
+<h2>7. 書類の種類一覧</h2>
+
+<table>
+  <tr><th>書類種別</th><th>備考</th></tr>
+  <tr><td>通帳</td><td>銀行名の入力あり</td></tr>
+  <tr><td>現金出納帳</td><td></td></tr>
+  <tr><td>レシート・領収書</td><td></td></tr>
+  <tr><td>売上請求書</td><td></td></tr>
+  <tr><td>仕入請求書</td><td></td></tr>
+  <tr><td>借入金の返済予定表</td><td></td></tr>
+  <tr><td>リース契約の支払予定表</td><td></td></tr>
+</table>
+
+<hr>
+
+<h2>8. 自動処理のスケジュール</h2>
+
+<table>
+  <tr><th>時刻</th><th>処理内容</th></tr>
+  <tr><td>日中</td><td>顧問先がスマホで書類を撮影・送信</td></tr>
+  <tr><td>AM 3:00</td><td>Gemini AIが書類を自動解析 → 顧問先別スプシに書き込み</td></tr>
+  <tr><td>AM 6:00</td><td>Gmailに日次レポート送信（解析結果スプシURL付き）</td></tr>
+</table>
+
+<hr>
+
+<h2>9. トラブル対応</h2>
+
+<h3>顧問先から「撮影できない」と言われた</h3>
+<ul>
+  <li>スマホのブラウザでカメラの許可を求められたら「許可」を押してもらう</li>
+  <li>URLが正しいか「顧問先URL一覧」シートで確認する</li>
+</ul>
+
+<h3>ファイルがDriveに届かない</h3>
+<ul>
+  <li>Apps Scriptエディタの「実行数」（左メニュー時計アイコン）で <code>doPost</code> のエラーを確認</li>
+  <li>再デプロイが必要な場合：「デプロイ」→「デプロイを管理」→ ✏️ →「新バージョン」→「デプロイ」</li>
+</ul>
+
+<h3>メール通知が届かない</h3>
+<ul>
+  <li>Apps Scriptエディタで <code>testSendEmail</code> を選んで「実行」→ 手動でメール送信テスト</li>
+  <li>迷惑メールフォルダを確認</li>
+</ul>
+
+<h3>AI解析が動かない</h3>
+<ul>
+  <li>Apps Scriptエディタで <code>testAnalyze</code> を選んで「実行」→ 実行ログでエラー内容を確認</li>
+  <li>Gemini APIキーが正しいか：歯車アイコン → スクリプトプロパティで確認</li>
+</ul>
+
+<h3>Apps Scriptのコードを更新した場合</h3>
+<div class="note">
+  保存（Ctrl+S）だけでは反映されない。必ず再デプロイが必要：<br>
+  「デプロイ」→「デプロイを管理」→ ✏️ →「新バージョン」→「デプロイ」
+</div>
+
+</body>
+</html>

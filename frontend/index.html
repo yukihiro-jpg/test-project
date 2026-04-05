@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a73e8">
+    <title>書類スキャン</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: #1a73e8;
+            color: white;
+            padding: 16px 20px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header .client-label {
+            font-size: 13px;
+            opacity: 0.85;
+            margin-top: 4px;
+        }
+        .main {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .card label {
+            font-size: 14px;
+            color: #666;
+            display: block;
+            margin-bottom: 6px;
+        }
+        .card select, .card input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            background: #fafafa;
+        }
+        .bank-name-row {
+            margin-top: 12px;
+            display: none;
+        }
+        .bank-name-row.active { display: block; }
+        .capture-area {
+            width: 100%;
+            max-width: 500px;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .capture-btn {
+            width: 100%;
+            padding: 18px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .capture-btn:active { background: #1557b0; }
+        .capture-btn:disabled { background: #ccc; }
+        .page-count {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+        /* Thumbnail strip for batch photos */
+        .thumb-strip {
+            width: 100%;
+            max-width: 500px;
+            display: none;
+        }
+        .thumb-strip.active { display: block; }
+        .thumb-strip-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .thumb-strip-header h3 {
+            font-size: 15px;
+            color: #333;
+        }
+        .thumb-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .thumb-item {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .thumb-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .thumb-item .page-num {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            font-size: 11px;
+            text-align: center;
+            padding: 2px;
+        }
+        .thumb-item .remove-btn {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(234,67,53,0.9);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            font-size: 13px;
+            cursor: pointer;
+            line-height: 22px;
+            text-align: center;
+        }
+        .send-area {
+            width: 100%;
+            max-width: 500px;
+            display: none;
+        }
+        .send-area.active { display: block; }
+        .send-btn {
+            width: 100%;
+            padding: 18px;
+            background: #34a853;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .send-btn:active { background: #2d8e47; }
+        .send-btn:disabled { background: #ccc; }
+        .help-text {
+            font-size: 13px;
+            color: #888;
+            text-align: center;
+            padding: 8px 20px;
+            line-height: 1.6;
+        }
+        .correction-toggle {
+            width: 100%;
+            max-width: 500px;
+            background: white;
+            border-radius: 12px;
+            padding: 14px 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .correction-toggle label {
+            font-size: 14px;
+            color: #333;
+        }
+        .switch {
+            position: relative;
+            width: 50px;
+            height: 28px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #ccc;
+            border-radius: 28px;
+            transition: 0.3s;
+        }
+        .slider:before {
+            content: "";
+            position: absolute;
+            height: 22px; width: 22px;
+            left: 3px; bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+        .switch input:checked + .slider { background: #1a73e8; }
+        .switch input:checked + .slider:before { transform: translateX(22px); }
+        .processing-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+        .processing-overlay.active { display: flex; }
+        .processing-box {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            max-width: 280px;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1a73e8;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+            max-width: 90%;
+            text-align: center;
+        }
+        .toast.show { opacity: 1; }
+        .history-list {
+            width: 100%;
+            max-width: 500px;
+        }
+        .history-item {
+            background: white;
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+        }
+        .history-item .info { flex: 1; }
+        .history-item .info .name { font-size: 14px; font-weight: 500; }
+        .history-item .info .detail { font-size: 12px; color: #888; }
+        .history-item .status-icon { font-size: 20px; }
+        .status-uploading { color: #f9ab00; }
+        .status-done { color: #34a853; }
+        .status-error { color: #ea4335; }
+        #fileInput { display: none; }
+        canvas { display: none; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>書類スキャン</div>
+        <div class="client-label" id="clientLabel"></div>
+    </div>
+    <div class="main">
+        <div class="card">
+            <label>書類の種類</label>
+            <select id="docType" onchange="onDocTypeChange()">
+                <option value="通帳">通帳</option>
+                <option value="現金出納帳">現金出納帳</option>
+                <option value="レシート・領収書" selected>レシート・領収書</option>
+                <option value="クレジットカード利用明細書">クレジットカード利用明細書</option>
+                <option value="売上請求書">売上請求書</option>
+                <option value="仕入請求書">仕入請求書</option>
+                <option value="借入金の返済予定表">借入金の返済予定表</option>
+                <option value="リース契約の支払予定表">リース契約の支払予定表</option>
+            </select>
+            <div class="bank-name-row" id="bankNameRow">
+                <label>銀行名</label>
+                <input type="text" id="bankName" placeholder="例: 三菱UFJ銀行">
+                <div style="margin-top: 8px;">
+                    <label>口座番号</label>
+                    <input type="text" id="accountNumber" placeholder="例: 1234567">
+                </div>
+            </div>
+            <div class="bank-name-row" id="userNameRow">
+                <label>使用者名 <span style="font-size: 12px; color: #aaa;">※ 分ける必要がなければ空欄でOK</span></label>
+                <input type="text" id="userName" placeholder="例: 山田太郎">
+            </div>
+        </div>
+
+        <div class="correction-toggle">
+            <label>自動台形補正</label>
+            <div class="switch">
+                <input type="checkbox" id="autoCorrect" checked>
+                <span class="slider"></span>
+            </div>
+        </div>
+
+        <div class="capture-area">
+            <button class="capture-btn" id="captureBtn" onclick="startCapture()">
+                <span>撮影する</span>
+            </button>
+            <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFileSelect(event)">
+            <p class="page-count" id="pageCount"></p>
+        </div>
+
+        <div class="thumb-strip" id="thumbStrip">
+            <div class="card">
+                <div class="thumb-strip-header">
+                    <h3 id="thumbTitle">撮影済み: 0ページ</h3>
+                </div>
+                <div class="thumb-grid" id="thumbGrid"></div>
+            </div>
+        </div>
+
+        <div class="send-area" id="sendArea">
+            <button class="send-btn" id="sendBtn" onclick="sendAll()">
+                <span>まとめて送信する</span>
+            </button>
+        </div>
+
+        <p class="help-text">
+            1枚ずつ撮影してください。複数ページは1つのPDFにまとまります。<br>
+            全て撮り終わったら「まとめて送信する」を押してください。
+        </p>
+
+        <div class="history-list" id="historyList"></div>
+    </div>
+
+    <div class="processing-overlay" id="processingOverlay">
+        <div class="processing-box">
+            <div class="spinner"></div>
+            <p id="processingText">画像を補正中...</p>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <canvas id="cvCanvas"></canvas>
+    <iframe id="postFrame" name="postFrame" style="display:none;"></iframe>
+
+    <script async src="https://docs.opencv.org/4.9.0/opencv.js" onload="onOpenCvReady()" id="opencvScript"></script>
+
+    <script>
+    // ============================================================
+    // Configuration
+    // ============================================================
+    const CONFIG = {
+        APPS_SCRIPT_URL: 'https://script.google.com/a/macros/kskac.com/s/AKfycbxE7E8l19Y4zES8Cdxe6QK6zvOAKGFk-kAsLBWeYqqKeIpKjCv0vZ008yZyNIZOlI3agA/exec', // ← デプロイ後のURLをここに貼り付け
+        CLIENT_ID: new URLSearchParams(window.location.search).get('client') || 'default',
+        CLIENT_NAME: decodeURIComponent(new URLSearchParams(window.location.search).get('name') || 'お客様'),
+    };
+
+    // ============================================================
+    // State
+    // ============================================================
+    let cvReady = false;
+    let capturedPages = []; // Array of base64 image strings
+    let currentBatchBankName = null; // 撮影中の通帳の銀行名を追跡
+
+    function onOpenCvReady() {
+        cvReady = true;
+    }
+
+    // ============================================================
+    // Init
+    // ============================================================
+    document.getElementById('clientLabel').textContent = CONFIG.CLIENT_NAME;
+    if (CONFIG.CLIENT_NAME !== 'お客様') {
+        document.title = `書類スキャン - ${CONFIG.CLIENT_NAME}`;
+    }
+
+    // ============================================================
+    // Document type change - show/hide bank name
+    // ============================================================
+    function onDocTypeChange() {
+        const docType = document.getElementById('docType').value;
+        document.getElementById('bankNameRow').classList.toggle('active', docType === '通帳');
+        document.getElementById('userNameRow').classList.toggle('active', docType === 'レシート・領収書');
+    }
+    // 初期表示時にレシートが選択されているので使用者名欄を表示
+    onDocTypeChange();
+
+    // ============================================================
+    // Camera Capture
+    // ============================================================
+    function startCapture() {
+        const docType = document.getElementById('docType').value;
+
+        // 通帳モードで銀行名が未入力なら撮影をブロック
+        if (docType === '通帳') {
+            const bankName = document.getElementById('bankName').value.trim();
+            if (!bankName) {
+                showToast('銀行名を入力してから撮影してください');
+                return;
+            }
+
+            // 撮影済みがある場合、銀行名の変更を検知
+            if (capturedPages.length > 0 && currentBatchBankName !== null && bankName !== currentBatchBankName) {
+                showBankChangeDialog(currentBatchBankName, bankName);
+                return;
+            }
+        }
+
+        document.getElementById('fileInput').click();
+    }
+
+    // 銀行名変更時の確認ダイアログ
+    function showBankChangeDialog(oldBank, newBank) {
+        // オーバーレイ作成
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:300;display:flex;justify-content:center;align-items:center;';
+        const dialog = document.createElement('div');
+        dialog.style.cssText = 'background:white;border-radius:16px;padding:24px;max-width:320px;width:90%;text-align:center;';
+        dialog.innerHTML = `
+            <p style="font-size:16px;font-weight:600;margin-bottom:12px;color:#333;">銀行が変わりました</p>
+            <p style="font-size:14px;color:#666;margin-bottom:20px;line-height:1.6;">
+                「${oldBank}」の通帳 ${capturedPages.length}ページが未送信です。<br>
+                先に送信してから「${newBank}」の撮影を始めますか？
+            </p>
+            <button id="dlgSend" style="width:100%;padding:14px;background:#34a853;color:white;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;margin-bottom:10px;">
+                ${oldBank}を先に送信する
+            </button>
+            <button id="dlgCancel" style="width:100%;padding:14px;background:#f1f3f4;color:#333;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;">
+                キャンセル
+            </button>
+        `;
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        document.getElementById('dlgSend').onclick = async function() {
+            document.body.removeChild(overlay);
+            // 現在の銀行名で自動送信
+            await sendAll();
+            showToast(`${oldBank}の通帳を送信しました。${newBank}の撮影を始めてください。`);
+        };
+        document.getElementById('dlgCancel').onclick = function() {
+            document.body.removeChild(overlay);
+        };
+    }
+
+    function handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() { processImage(img); };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+        event.target.value = '';
+    }
+
+    // ============================================================
+    // Image Processing (Perspective Correction)
+    // ============================================================
+    function processImage(img) {
+        const autoCorrect = document.getElementById('autoCorrect').checked;
+
+        if (!autoCorrect || !cvReady) {
+            const dataUrl = resizeImage(img);
+            addPage(dataUrl);
+            return;
+        }
+
+        showProcessing('画像を補正中...');
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                try {
+                    const dataUrl = correctPerspective(img);
+                    addPage(dataUrl);
+                } catch(e) {
+                    const dataUrl = resizeImage(img);
+                    addPage(dataUrl);
+                    showToast('自動補正できませんでした。元の画像を使用します。');
+                }
+                hideProcessing();
+            }, 100);
+        });
+    }
+
+    function resizeImage(img) {
+        const canvas = document.getElementById('cvCanvas');
+        const ctx = canvas.getContext('2d');
+        const maxDim = 2000;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+            const ratio = Math.min(maxDim / w, maxDim / h);
+            w = Math.round(w * ratio);
+            h = Math.round(h * ratio);
+        }
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(img, 0, 0, w, h);
+        return canvas.toDataURL('image/jpeg', 0.92);
+    }
+
+    function correctPerspective(img) {
+        const canvas = document.getElementById('cvCanvas');
+        const ctx = canvas.getContext('2d');
+        const maxDim = 2000;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+            const ratio = Math.min(maxDim / w, maxDim / h);
+            w = Math.round(w * ratio);
+            h = Math.round(h * ratio);
+        }
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(img, 0, 0, w, h);
+
+        let src = cv.imread(canvas);
+        let gray = new cv.Mat();
+        let blur = new cv.Mat();
+        let edges = new cv.Mat();
+
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
+        cv.Canny(blur, edges, 50, 150);
+        let kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+        cv.dilate(edges, edges, kernel, new cv.Point(-1, -1), 2);
+
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+        let maxArea = 0;
+        let docCorners = null;
+
+        for (let i = 0; i < contours.size(); i++) {
+            let cnt = contours.get(i);
+            let area = cv.contourArea(cnt);
+            if (area < (w * h * 0.1)) continue;
+            let peri = cv.arcLength(cnt, true);
+            let approx = new cv.Mat();
+            cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+            if (approx.rows === 4 && area > maxArea) {
+                maxArea = area;
+                docCorners = [];
+                for (let j = 0; j < 4; j++) {
+                    docCorners.push({ x: approx.data32S[j * 2], y: approx.data32S[j * 2 + 1] });
+                }
+            }
+            approx.delete();
+        }
+
+        if (docCorners && maxArea > (w * h * 0.15)) {
+            docCorners = orderPoints(docCorners);
+
+            // 検出した角を少し外側に広げて見切れを防止（5%マージン）
+            const margin = 0.05;
+            const cx = (docCorners[0].x + docCorners[1].x + docCorners[2].x + docCorners[3].x) / 4;
+            const cy = (docCorners[0].y + docCorners[1].y + docCorners[2].y + docCorners[3].y) / 4;
+            docCorners = docCorners.map(p => ({
+                x: Math.max(0, Math.min(w, p.x + (p.x - cx) * margin)),
+                y: Math.max(0, Math.min(h, p.y + (p.y - cy) * margin))
+            }));
+
+            const widthA = Math.hypot(docCorners[2].x - docCorners[3].x, docCorners[2].y - docCorners[3].y);
+            const widthB = Math.hypot(docCorners[1].x - docCorners[0].x, docCorners[1].y - docCorners[0].y);
+            const maxWidth = Math.round(Math.max(widthA, widthB));
+            const heightA = Math.hypot(docCorners[1].x - docCorners[2].x, docCorners[1].y - docCorners[2].y);
+            const heightB = Math.hypot(docCorners[0].x - docCorners[3].x, docCorners[0].y - docCorners[3].y);
+            const maxHeight = Math.round(Math.max(heightA, heightB));
+
+            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                docCorners[0].x, docCorners[0].y, docCorners[1].x, docCorners[1].y,
+                docCorners[2].x, docCorners[2].y, docCorners[3].x, docCorners[3].y
+            ]);
+            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                0, 0, maxWidth, 0, maxWidth, maxHeight, 0, maxHeight
+            ]);
+            let M = cv.getPerspectiveTransform(srcTri, dstTri);
+            let dst = new cv.Mat();
+            cv.warpPerspective(src, dst, M, new cv.Size(maxWidth, maxHeight));
+            canvas.width = maxWidth;
+            canvas.height = maxHeight;
+            cv.imshow(canvas, dst);
+            dst.delete(); M.delete(); srcTri.delete(); dstTri.delete();
+        } else {
+            cv.imshow(canvas, src);
+        }
+
+        src.delete(); gray.delete(); blur.delete(); edges.delete();
+        kernel.delete(); contours.delete(); hierarchy.delete();
+
+        return canvas.toDataURL('image/jpeg', 0.92);
+    }
+
+    function orderPoints(pts) {
+        let sorted = [...pts].sort((a, b) => (a.x + a.y) - (b.x + b.y));
+        let tl = sorted[0], br = sorted[3];
+        let sorted2 = [...pts].sort((a, b) => (a.y - a.x) - (b.y - b.x));
+        let tr = sorted2[0], bl = sorted2[3];
+        return [tl, tr, br, bl];
+    }
+
+    // ============================================================
+    // Batch Page Management
+    // ============================================================
+    function addPage(dataUrl) {
+        // 通帳の場合、最初の撮影時に銀行名を記録
+        const docType = document.getElementById('docType').value;
+        if (docType === '通帳' && capturedPages.length === 0) {
+            currentBatchBankName = document.getElementById('bankName').value.trim();
+        }
+        capturedPages.push(dataUrl);
+        updateThumbStrip();
+        showToast(`${capturedPages.length}ページ目を追加しました`);
+    }
+
+    function removePage(index) {
+        capturedPages.splice(index, 1);
+        updateThumbStrip();
+    }
+
+    function updateThumbStrip() {
+        const strip = document.getElementById('thumbStrip');
+        const grid = document.getElementById('thumbGrid');
+        const title = document.getElementById('thumbTitle');
+        const sendArea = document.getElementById('sendArea');
+        const count = capturedPages.length;
+
+        if (count === 0) {
+            strip.classList.remove('active');
+            sendArea.classList.remove('active');
+            currentBatchBankName = null;
+            return;
+        }
+
+        strip.classList.add('active');
+        sendArea.classList.add('active');
+        const bankLabel = currentBatchBankName ? `${currentBatchBankName} - ` : '';
+        title.textContent = `${bankLabel}撮影済み: ${count}ページ`;
+
+        grid.innerHTML = '';
+        capturedPages.forEach((dataUrl, i) => {
+            const item = document.createElement('div');
+            item.className = 'thumb-item';
+            item.innerHTML = `
+                <img src="${dataUrl}" alt="Page ${i + 1}">
+                <span class="page-num">${i + 1}</span>
+                <button class="remove-btn" onclick="removePage(${i})">×</button>
+            `;
+            grid.appendChild(item);
+        });
+    }
+
+    // ============================================================
+    // Upload (batch)
+    // ============================================================
+    async function sendAll() {
+        if (capturedPages.length === 0) return;
+        if (!CONFIG.APPS_SCRIPT_URL) {
+            showToast('サーバーURLが設定されていません');
+            return;
+        }
+
+        const docType = document.getElementById('docType').value;
+        const bankName = docType === '通帳' ? document.getElementById('bankName').value : '';
+        const accountNumber = docType === '通帳' ? document.getElementById('accountNumber').value.trim() : '';
+        const userName = docType === 'レシート・領収書' ? document.getElementById('userName').value.trim() : '';
+
+        if (docType === '通帳' && !bankName.trim()) {
+            showToast('銀行名を入力してください');
+            return;
+        }
+
+        const sendBtn = document.getElementById('sendBtn');
+        sendBtn.disabled = true;
+        showProcessing(`${capturedPages.length}ページを送信中...`);
+
+        const timestamp = new Date().toISOString();
+        const historyId = Date.now();
+
+        // Build descriptive filename
+        let fileLabel = docType;
+        if (bankName) fileLabel += `_${bankName}`;
+        if (accountNumber) fileLabel += `_${accountNumber}`;
+        if (userName) fileLabel += `_${userName}`;
+
+        const payload = {
+            images: capturedPages.map(d => d.split(',')[1]),
+            clientId: CONFIG.CLIENT_ID,
+            clientName: CONFIG.CLIENT_NAME,
+            docType: docType,
+            bankName: bankName,
+            accountNumber: accountNumber,
+            userName: userName,
+            timestamp: timestamp,
+            pageCount: capturedPages.length,
+            fileName: `${fileLabel}_${capturedPages.length}p_${Date.now()}`
+        };
+
+        addHistory(historyId, docType, bankName, capturedPages.length, 'uploading');
+
+        try {
+            // フォーム送信方式（CORS問題を回避）
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = CONFIG.APPS_SCRIPT_URL;
+            form.target = 'postFrame';
+            form.style.display = 'none';
+
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'payload';
+            input.value = JSON.stringify(payload);
+            form.appendChild(input);
+
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
+
+            // フォーム送信は結果を直接受け取れないため、タイムアウトで完了扱い
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            updateHistory(historyId, 'done');
+            showToast('送信完了！');
+            capturedPages = [];
+            updateThumbStrip();
+            document.getElementById('bankName').value = '';
+            document.getElementById('accountNumber').value = '';
+            document.getElementById('userName').value = '';
+        } catch (error) {
+            console.error('Upload error:', error);
+            updateHistory(historyId, 'error');
+            showToast('送信に失敗しました。再度お試しください。');
+        }
+
+        hideProcessing();
+        sendBtn.disabled = false;
+    }
+
+    // ============================================================
+    // Send History UI
+    // ============================================================
+    function addHistory(id, docType, bankName, pages, status) {
+        const list = document.getElementById('historyList');
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        item.id = `history-${id}`;
+        const label = bankName ? `${docType}（${bankName}）` : docType;
+        item.innerHTML = `
+            <div class="info">
+                <div class="name">${label}</div>
+                <div class="detail">${pages}ページ | <span id="history-status-${id}">送信中...</span></div>
+            </div>
+            <span class="status-icon status-uploading" id="history-icon-${id}">⏳</span>
+        `;
+        list.prepend(item);
+    }
+
+    function updateHistory(id, status) {
+        const statusEl = document.getElementById(`history-status-${id}`);
+        const iconEl = document.getElementById(`history-icon-${id}`);
+        if (!statusEl || !iconEl) return;
+        if (status === 'done') {
+            statusEl.textContent = '送信完了';
+            iconEl.textContent = '✓';
+            iconEl.className = 'status-icon status-done';
+        } else if (status === 'error') {
+            statusEl.textContent = '送信失敗';
+            iconEl.textContent = '✕';
+            iconEl.className = 'status-icon status-error';
+        }
+    }
+
+    // ============================================================
+    // UI Helpers
+    // ============================================================
+    function showProcessing(text) {
+        document.getElementById('processingText').textContent = text;
+        document.getElementById('processingOverlay').classList.add('active');
+    }
+    function hideProcessing() {
+        document.getElementById('processingOverlay').classList.remove('active');
+    }
+    function showToast(message, duration = 3000) {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), duration);
+    }
+
+    // ============================================================
+    // Service Worker
+    // ============================================================
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+    </script>
+</body>
+</html>
