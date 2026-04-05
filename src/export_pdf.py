@@ -27,26 +27,40 @@ from src.loan_analyzer import get_loan_summary
 from config import format_currency
 
 
-def _get_font_path() -> str | None:
-    """NotoSansJPフォントのパスを取得"""
+def _get_font_path() -> str:
+    """NotoSansJPフォントのパスを取得。なければ自動ダウンロード"""
     base = os.path.dirname(os.path.dirname(__file__))
-    font_path = os.path.join(base, "fonts", "NotoSansJP-Regular.ttf")
+    font_dir = os.path.join(base, "fonts")
+    font_path = os.path.join(font_dir, "NotoSansJP-Regular.ttf")
+
     if os.path.exists(font_path):
         return font_path
-    return None
+
+    # 自動ダウンロード
+    import urllib.request
+    os.makedirs(font_dir, exist_ok=True)
+    url = "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf"
+    try:
+        urllib.request.urlretrieve(url, font_path)
+        return font_path
+    except Exception:
+        raise RuntimeError(
+            "日本語フォントのダウンロードに失敗しました。\n"
+            "手動で fonts/NotoSansJP-Regular.ttf を配置してください。\n"
+            "ダウンロード元: https://fonts.google.com/noto/specimen/Noto+Sans+JP"
+        )
 
 
 class ReportPDF(FPDF):
-    def __init__(self, client_name: str, font_path: str | None = None):
+    def __init__(self, client_name: str, font_path: str = None):
         super().__init__()
         self.client_name = client_name
-        self.font_path = font_path
 
-        if font_path:
-            self.add_font("NotoSansJP", "", font_path, uni=True)
-            self.default_font = "NotoSansJP"
-        else:
-            self.default_font = "Helvetica"
+        if font_path is None:
+            font_path = _get_font_path()
+
+        self.add_font("NotoSansJP", "", font_path, uni=True)
+        self.default_font = "NotoSansJP"
 
     def header(self):
         self.set_font(self.default_font, size=8)
@@ -164,8 +178,7 @@ def generate_pdf(
     if not HAS_FPDF:
         raise ImportError("fpdf2がインストールされていません。pip install fpdf2 を実行してください。")
 
-    font_path = _get_font_path()
-    pdf = ReportPDF(client_name, font_path)
+    pdf = ReportPDF(client_name)
     pdf.alias_nb_pages()
 
     periods = list(period_pls.keys())
