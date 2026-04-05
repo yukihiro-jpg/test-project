@@ -1,0 +1,67 @@
+/* カスタムCSS */
+
+/* メトリクスカードのスタイル */
+[data-testid="stMetric"] {
+    background-color: #FFFFFF;
+    border: 1px solid #E8E8E8;
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+[data-testid="stMetricLabel"] {
+    font-size: 0.85rem !important;
+    color: #666666 !important;
+}
+
+[data-testid="stMetricValue"] {
+    font-size: 1.4rem !important;
+    font-weight: 700 !important;
+    color: #1E3A5F !important;
+}
+
+/* タブのスタイル */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 4px;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 6px 6px 0 0;
+    padding: 8px 16px;
+    font-size: 0.9rem;
+}
+
+/* サイドバーのスタイル */
+[data-testid="stSidebar"] {
+    background-color: #F8F9FA;
+}
+
+[data-testid="stSidebar"] h2 {
+    color: #1E3A5F;
+    font-size: 1.1rem;
+}
+
+/* データフレームのスタイル */
+[data-testid="stDataFrame"] {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* ヘッダー */
+.main-header {
+    color: #1E3A5F;
+    border-bottom: 3px solid #1E3A5F;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+}
+
+/* ボタン */
+.stButton > button {
+    border-radius: 6px;
+}
+
+/* エキスパンダー */
+.streamlit-expanderHeader {
+    font-size: 0.9rem;
+    color: #1E3A5F;
+}
