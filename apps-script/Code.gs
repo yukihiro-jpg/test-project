@@ -233,6 +233,14 @@ function getOrCreateLogSheet() {
   emailSheet.setColumnWidth(4, 120);
   emailSheet.setColumnWidth(5, 200);
 
+  // シート4: 同期ファイル解析ログ
+  const syncLogSheet = ss.insertSheet('同期ファイル解析ログ');
+  syncLogSheet.appendRow([
+    '解析日時', '顧問先名', '元フォルダ', 'ファイル名',
+    '判定種別', '判定確度', 'ファイルID', '備考'
+  ]);
+  syncLogSheet.setFrozenRows(1);
+
   // ファイルをルートフォルダに移動
   const file = DriveApp.getFileById(ss.getId());
   rootFolder.addFile(file);

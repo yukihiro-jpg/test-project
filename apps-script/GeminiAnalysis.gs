@@ -107,7 +107,11 @@ function analyzeUploadedDocuments() {
     );
   }
 
-  console.log(`解析処理完了: ${resultSummary.length}件`);
+  console.log(`スマホスキャン解析完了: ${resultSummary.length}件`);
+
+  // 同期ファイルの解析も実行
+  console.log('--- 同期ファイル解析を開始 ---');
+  analyzeSyncedFiles();
 }
 
 // ============================================================
@@ -477,9 +481,223 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber
 }
 
 // ============================================================
+// 同期ファイル解析（顧問先からの受取物フォルダを自動解析）
+// ============================================================
+
+/**
+ * 顧問先からの受取物フォルダ内の未解析ファイルをGemini AIで自動解析
+ * - 書類種別を自動判定（通帳/請求書/レシート等）
+ * - 通帳の場合は銀行名・口座番号も自動読み取り
+ * - 請求書の場合は売上/仕入を顧問先名から自動判定
+ */
+function analyzeSyncedFiles() {
+  const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
+  const ss = getOrCreateLogSheet();
+
+  // 同期ファイル解析ログシートを取得or作成
+  let syncLogSheet = ss.getSheetByName('同期ファイル解析ログ');
+  if (!syncLogSheet) {
+    syncLogSheet = ss.insertSheet('同期ファイル解析ログ');
+    syncLogSheet.appendRow([
+      '解析日時', '顧問先名', '元フォルダ', 'ファイル名',
+      '判定種別', '判定確度', 'ファイルID', '備考'
+    ]);
+    syncLogSheet.setFrozenRows(1);
+  }
+
+  // 解析済みファイルIDを収集（二重処理防止）
+  const logData = syncLogSheet.getDataRange().getValues();
+  const processedIds = new Set();
+  for (let i = 1; i < logData.length; i++) {
+    if (logData[i][6]) processedIds.add(logData[i][6]);
+  }
+
+  // 顧問先URL一覧から顧問先名リストを取得
+  const urlSheet = ss.getSheetByName('顧問先URL一覧');
+  const urlData = urlSheet ? urlSheet.getDataRange().getValues() : [];
+  const clientNames = [];
+  for (let i = 1; i < urlData.length; i++) {
+    if (urlData[i][0]) clientNames.push(urlData[i][0]);
+  }
+
+  const resultSummary = [];
+  const targetFolders = ['顧問先からの受取物（社長用）', '顧問先からの受取物（スタッフ用）'];
+
+  // 各顧問先フォルダを走査
+  const clientFolders = rootFolder.getFolders();
+  while (clientFolders.hasNext()) {
+    const clientFolder = clientFolders.next();
+    const clientName = clientFolder.getName();
+
+    // _で始まるフォルダはスキップ
+    if (clientName.startsWith('_')) continue;
+
+    for (const targetFolderName of targetFolders) {
+      const folders = clientFolder.getFoldersByName(targetFolderName);
+      if (!folders.hasNext()) continue;
+      const targetFolder = folders.next();
+
+      // フォルダ内のファイルを取得
+      const files = targetFolder.getFiles();
+      while (files.hasNext()) {
+        const file = files.next();
+        const fileId = file.getId();
+
+        // 既に解析済みならスキップ
+        if (processedIds.has(fileId)) continue;
+
+        // 対象拡張子チェック
+        const fileName = file.getName();
+        const ext = fileName.toLowerCase().split('.').pop();
+        if (!['pdf', 'jpg', 'jpeg', 'png', 'xlsx', 'xls', 'csv'].includes(ext)) continue;
+
+        try {
+          console.log(`同期ファイル解析中: ${clientName}/${targetFolderName}/${fileName}`);
+
+          const blob = file.getBlob();
+          const base64Data = Utilities.base64Encode(blob.getBytes());
+          const mimeType = blob.getContentType();
+
+          // Step1: 書類種別を自動判定
+          const classification = classifyDocument(base64Data, mimeType, clientName);
+          console.log(`  判定: ${classification.docType} (確度: ${classification.confidence})`);
+
+          // ログに記録
+          syncLogSheet.appendRow([
+            new Date(), clientName, targetFolderName, fileName,
+            classification.docType, classification.confidence, fileId,
+            classification.note || ''
+          ]);
+
+          // 対象外・判定不能はスキップ
+          if (classification.docType === 'その他' || classification.confidence === '判定不能') {
+            console.log(`  スキップ: ${classification.docType}`);
+            continue;
+          }
+
+          // Step2: 詳細解析
+          const clientSheet = getOrCreateClientAnalysisSheet(clientName);
+          const bankName = classification.bankName || '';
+          const accountNumber = classification.accountNumber || '';
+          const userName = '';
+
+          const analysisResult = callGeminiApi(base64Data, classification.docType, bankName, clientSheet);
+          writeAnalysisResult(clientSheet, classification.docType, analysisResult, bankName, accountNumber, userName);
+
+          resultSummary.push({
+            clientName: clientName,
+            docType: classification.docType,
+            bankName: bankName,
+            rows: analysisResult.length,
+            sheetUrl: clientSheet.getUrl(),
+            source: 'sync'
+          });
+
+          console.log(`  解析完了: ${analysisResult.length}行`);
+
+        } catch (err) {
+          console.error(`同期ファイル解析エラー (${clientName}/${fileName}):`, err);
+          syncLogSheet.appendRow([
+            new Date(), clientName, targetFolderName, fileName,
+            'エラー', '', fileId, err.message
+          ]);
+        }
+      }
+    }
+  }
+
+  // 解析結果サマリーを既存のサマリーに追記
+  if (resultSummary.length > 0) {
+    const existingJson = PropertiesService.getScriptProperties().getProperty('lastAnalysisSummary');
+    let existing = [];
+    if (existingJson) {
+      try { existing = JSON.parse(existingJson); } catch(e) {}
+    }
+    existing = existing.concat(resultSummary);
+    PropertiesService.getScriptProperties().setProperty(
+      'lastAnalysisSummary', JSON.stringify(existing)
+    );
+  }
+
+  console.log(`同期ファイル解析完了: ${resultSummary.length}件`);
+}
+
+/**
+ * Gemini AIで書類種別を自動判定
+ */
+function classifyDocument(base64Data, mimeType, clientName) {
+  const prompt = `あなたは税理士事務所のAIアシスタントです。この書類の種別を判定してください。
+
+顧問先名: ${clientName}
+
+以下の種別から最も適切なものを1つ選んでください:
+- "レシート・領収書": 店舗のレシート、領収書
+- "クレジットカード利用明細書": クレジットカード会社からの利用明細
+- "通帳": 銀行通帳のコピーや取引明細
+- "売上請求書": この顧問先（${clientName}）が発行した請求書（${clientName}が請求元・発行者として記載されている）
+- "仕入請求書": この顧問先（${clientName}）が受け取った請求書（${clientName}が宛先・請求先として記載されている）
+- "その他": 上記のいずれにも該当しない書類
+
+判定のポイント:
+- 請求書の場合、「${clientName}」またはそれに類する名称が請求元（発行者）に記載されていれば「売上請求書」
+- 「${clientName}」またはそれに類する名称が宛先（請求先・お客様名）に記載されていれば「仕入請求書」
+- 会社名の表記揺れ（株式会社の有無、略称等）も考慮してください
+
+以下のJSON形式で回答してください:
+{
+  "docType": "判定した種別",
+  "confidence": "確定" または "要確認",
+  "bankName": "通帳の場合の銀行名（通帳でなければ空文字）",
+  "accountNumber": "通帳の場合の口座番号（通帳でなければ空文字）",
+  "note": "判定理由や補足（簡潔に）"
+}
+
+JSONのみを返してください。`;
+
+  const requestBody = {
+    contents: [{
+      parts: [
+        { text: prompt },
+        { inline_data: { mime_type: mimeType, data: base64Data } }
+      ]
+    }],
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: 'application/json'
+    }
+  };
+
+  const response = UrlFetchApp.fetch(
+    `${GEMINI_URL}?key=${GEMINI_API_KEY}`,
+    {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(requestBody),
+      muteHttpExceptions: true
+    }
+  );
+
+  if (response.getResponseCode() !== 200) {
+    return { docType: 'その他', confidence: '判定不能', note: 'API エラー' };
+  }
+
+  try {
+    const result = JSON.parse(response.getContentText());
+    const text = result.candidates[0].content.parts[0].text;
+    return JSON.parse(text);
+  } catch (e) {
+    return { docType: 'その他', confidence: '判定不能', note: '応答解析エラー' };
+  }
+}
+
+// ============================================================
 // テスト用
 // ============================================================
 
 function testAnalyze() {
   analyzeUploadedDocuments();
+}
+
+function testAnalyzeSyncedFiles() {
+  analyzeSyncedFiles();
 }
