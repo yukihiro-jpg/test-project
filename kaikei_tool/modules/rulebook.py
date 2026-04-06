@@ -59,10 +59,10 @@ class ルールブック管理:
                         self.カタカナ変換表[部品[0]] = 部品[1]
 
             elif 現在セクション番号 == 2:  # 仕訳パターン
-                if 行.startswith("  ") and "→" in 行:
-                    self._パターン行解析(行.strip())
-                elif 行.startswith("[") and "]" in 行:
+                if 行.startswith("["):
                     pass  # 口座ヘッダー行はスキップ
+                elif "→" in 行:
+                    self._パターン行解析(行)
 
             elif 現在セクション番号 == 3:  # 源泉税対象
                 if 行.startswith("- "):
