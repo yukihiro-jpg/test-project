@@ -41,33 +41,39 @@ class ルールブック管理:
 
     def _ルールブック解析(self, テキスト):
         """ルールブックテキストをパースして内部データに変換"""
-        現在セクション = ""
+        現在セクション番号 = -1
         for 行 in テキスト.split("\n"):
             行 = 行.strip()
             if 行.startswith("## "):
-                現在セクション = 行
+                # セクション番号で判定（日本語テキストに依存しない）
+                for i in range(10):
+                    if f"## {i}." in 行 or f"## {i} " in 行:
+                        現在セクション番号 = i
+                        break
                 continue
 
-            if "1. カタカナ→正式摘要" in 現在セクション:
+            if 現在セクション番号 == 1:  # カタカナ→正式摘要
                 if 行.startswith('"'):
                     部品 = self._CSV行解析(行)
                     if len(部品) >= 2:
                         self.カタカナ変換表[部品[0]] = 部品[1]
 
-            elif "2. 仕訳パターン" in 現在セクション:
+            elif 現在セクション番号 == 2:  # 仕訳パターン
                 if 行.startswith("  ") and "→" in 行:
                     self._パターン行解析(行.strip())
+                elif 行.startswith("[") and "]" in 行:
+                    pass  # 口座ヘッダー行はスキップ
 
-            elif "3. 源泉税対象" in 現在セクション:
+            elif 現在セクション番号 == 3:  # 源泉税対象
                 if 行.startswith("- "):
                     self.源泉税対象先[行[2:].strip()] = True
 
-            elif "6. 勘定科目マスタ" in 現在セクション:
+            elif 現在セクション番号 == 6:  # 勘定科目マスタ
                 部品 = 行.split(",", 1)
                 if len(部品) == 2 and 部品[0].strip().isdigit():
                     self.科目一覧[部品[0].strip()] = 部品[1].strip()
 
-            elif "8. 消費税デフォルト" in 現在セクション:
+            elif 現在セクション番号 == 8:  # 消費税デフォルト
                 部品 = 行.split(",")
                 if len(部品) >= 7 and 部品[0].strip().isdigit():
                     self.消費税初期値[部品[0].strip()] = {
@@ -419,7 +425,13 @@ class ルールブック管理:
         return テキスト
 
     def ルールブック更新(self, 新CSV):
-        """新しい仕訳CSVでルールブックを更新（差分追加）"""
+        """新しい仕訳CSVでルールブックを更新（差分追加）
+        既存のカタカナ変換表・仕訳パターン等は保持したまま、科目マスタのみ追加更新する。
+        """
+        # 既存データが読み込まれていなければ、先に読み込む（データ消失防止）
+        if not self.科目一覧 and os.path.isfile(self.ルールブックパス):
+            self.読み込み()
+
         行一覧 = self._仕訳CSV読み込み(新CSV)
         for 行 in 行一覧:
             if len(行) < 26:
