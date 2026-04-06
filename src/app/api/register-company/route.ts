@@ -89,8 +89,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Register company error:', error)
+    const message = error instanceof Error ? error.message : '不明なエラー'
     return NextResponse.json(
-      { error: '会社登録中にエラーが発生しました' },
+      { error: `会社登録中にエラーが発生しました: ${message}` },
       { status: 500 }
     )
   }
