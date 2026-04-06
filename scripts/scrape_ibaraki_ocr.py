@@ -355,17 +355,37 @@ def extract_table_from_page(img: Image.Image) -> list[dict]:
         if any(kw in row_text for kw in skip_keywords):
             continue
 
-        # ページ幅の40%を境界として、左側=テキスト、右側=数値 に分離
-        text_boundary = page_width * 0.38
+        # === 内容ベースでテキストと数値を分離 ===
+        text_words = []
+        number_words = []
 
-        text_words = []  # 町名・地域名
-        number_words = []  # 倍率数値
+        # 数値パターン: 1.1, 40, 5.0, .1 等
+        number_pattern = re.compile(r"^[\d.]+$")
+        # 倍率表の特殊値: 路線, 純, 比準, 周比準 等
+        special_values = {"路線", "純", "周", "比準", "周比準"}
 
         for w in row_words:
-            if w["cx"] < text_boundary:
-                text_words.append(w)
+            val = w["text"].strip()
+            # OCRノイズ除去
+            cleaned = re.sub(r"[|｜帆鋼]", "", val).strip()
+            # 「比」→「1」(OCR誤読), 「遅」「逸」→数字の可能性
+            cleaned_for_check = cleaned.replace("比", "1").replace("遅", "1").replace("逸", "1")
+
+            is_number = False
+            if number_pattern.match(cleaned):
+                is_number = True
+            elif cleaned in special_values:
+                is_number = True
+            elif number_pattern.match(cleaned_for_check):
+                is_number = True
+            # 「1.1」のようにドットを含む数値
+            elif re.match(r"^\d+\.\d+$", cleaned):
+                is_number = True
+
+            if is_number:
+                number_words.append({"word": w, "value": cleaned})
             else:
-                number_words.append(w)
+                text_words.append(w)
 
         # テキスト部分を結合
         text_part = " ".join(w["text"] for w in sorted(text_words, key=lambda w: w["cx"]))
@@ -378,27 +398,14 @@ def extract_table_from_page(img: Image.Image) -> list[dict]:
         if re.match(r"^[\d\s.]+$", text_part):
             continue
 
-        # 数値部分: 各単語から数値を抽出
+        # 数値を位置順にソート
         numbers = []
-        for w in sorted(number_words, key=lambda w: w["cx"]):
-            val = w["text"].strip()
-            # OCRノイズ除去
-            val = re.sub(r"[|｜中帆鋼遅逸潤]", "", val).strip()
-            # 「比」は「1」のOCR誤読の可能性
-            val = val.replace("比", "1")
-            if not val:
-                continue
-            # 「路線」はそのまま保持
+        for nw in sorted(number_words, key=lambda x: x["word"]["cx"]):
+            val = nw["value"]
             if "路線" in val:
                 numbers.append("路線")
-                continue
-            # 「純」「純」のように文字だけの場合もそのまま
-            if re.match(r"^[純周中比]$", val):
+            else:
                 numbers.append(val)
-                continue
-            # 数値パターンにマッチするか
-            # 「1.1」「40」「5.0」「純」「路線」等
-            numbers.append(val)
 
         # 町名と地域名の分離
         # テキスト部分から町名と適用地域名を分離
