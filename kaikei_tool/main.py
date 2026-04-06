@@ -200,18 +200,27 @@ def ルールブック生成(顧問先パス):
 
     print(f"  過去仕訳CSV: {len(CSVファイル一覧)}ファイル")
 
-    # 通帳PDF → 通帳取引（あれば）
+    # 通帳CSV/PDF → 通帳取引（あれば）
     通帳取引一覧 = []
     資料フォルダ = os.path.join(顧問先パス, "当月資料")
-    通帳PDF一覧 = glob.glob(os.path.join(資料フォルダ, "*通帳*.pdf")) + \
-                  glob.glob(os.path.join(資料フォルダ, "*passbook*.pdf"))
-    for PDFパス in 通帳PDF一覧:
-        try:
-            取引 = 銀行別通帳解析(PDFパス)
-            通帳取引一覧.extend(取引)
-            print(f"  通帳PDF: {os.path.basename(PDFパス)} → {len(取引)}件")
-        except Exception as e:
-            print(f"  通帳PDF読み取りエラー: {os.path.basename(PDFパス)} → {e}")
+
+    # CSVファイルも含めて銀行データを検索
+    if os.path.isdir(資料フォルダ):
+        for ファイル名 in os.listdir(資料フォルダ):
+            ファイルパス = os.path.join(資料フォルダ, ファイル名)
+            if not os.path.isfile(ファイルパス):
+                continue
+            拡張子 = os.path.splitext(ファイル名)[1].lower()
+            # 銀行データの判定（先頭が数字 or 銀行名を含む）
+            if ファイル名[:1].isdigit() or any(語 in ファイル名 for 語 in ["銀行", "信金", "信組", "ゆうちょ", "通帳"]):
+                if 拡張子 in (".csv", ".pdf"):
+                    try:
+                        取引 = 銀行別通帳解析(ファイルパス)
+                        通帳取引一覧.extend(取引)
+                        種別 = "CSV" if 拡張子 == ".csv" else "PDF"
+                        print(f"  通帳[{種別}]: {ファイル名} → {len(取引)}件")
+                    except Exception as e:
+                        print(f"  通帳読み取りエラー: {ファイル名} → {e}")
 
     ルールブック = ルールブック管理(顧問先パス)
     結果 = ルールブック.過去仕訳から生成(CSVファイル一覧, 通帳取引一覧 or None)
