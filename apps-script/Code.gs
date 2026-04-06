@@ -393,8 +393,6 @@ function autoRegisterClients() {
     console.log(`${registered}件の顧問先を自動登録しました。`);
   }
 }
-  console.log(url);
-}
 
 // ============================================================
 // 定時メール通知
