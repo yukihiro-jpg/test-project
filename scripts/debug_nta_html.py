@@ -21,8 +21,8 @@ BROWSER_HEADERS = {
     "Accept-Language": "ja,en-US;q=0.7,en;q=0.3",
 }
 
-# 水戸市の倍率表URL
-url = "https://www.rosenka.nta.go.jp/main_r07/kanto/ibaraki/ratios/html/c08201rf.htm"
+# 阿見町の倍率表URL（ユーザー確認済み）
+url = "https://www.rosenka.nta.go.jp/main_r07/kanto/ibaraki/ratios/html/c11105rf.htm"
 
 print(f"=== NTA倍率表HTML構造デバッグ ===")
 print(f"URL: {url}\n")
@@ -91,6 +91,45 @@ if iframes:
     print(f"=== iframe: {len(iframes)} 個 ===")
     for iframe in iframes:
         print(f"  src={iframe.get('src', '')}")
+
+# --- 市区町村一覧も取得して最初の5件のコードを表示 ---
+print("\n=== 市区町村一覧（city_frm.htm）から取得 ===")
+city_frm_url = "https://www.rosenka.nta.go.jp/main_r07/kanto/ibaraki/ratios/city_frm.htm"
+resp2 = httpx.get(city_frm_url, headers=BROWSER_HEADERS, follow_redirects=True, timeout=30)
+print(f"Status: {resp2.status_code}")
+soup2 = BeautifulSoup(resp2.text, "lxml")
+
+# フレーム対応
+frames2 = soup2.find_all("frame")
+if frames2:
+    print(f"フレーム数: {len(frames2)}")
+    for f in frames2:
+        print(f"  name={f.get('name','')}, src={f.get('src','')}")
+    # city系フレームを取得
+    for f in frames2:
+        src = f.get("src", "")
+        if any(kw in src.lower() for kw in ("city", "menu", "left")):
+            base = city_frm_url.rsplit("/", 1)[0]
+            frame_url = src if src.startswith("http") else f"{base}/{src}"
+            print(f"\n市区町村リストフレーム取得: {frame_url}")
+            resp3 = httpx.get(frame_url, headers=BROWSER_HEADERS, follow_redirects=True, timeout=30)
+            print(f"Status: {resp3.status_code}")
+            soup2 = BeautifulSoup(resp3.text, "lxml")
+            break
+
+# リンク一覧（最初の10件）
+links = soup2.find_all("a", href=True)
+print(f"\nリンク数: {len(links)}")
+count = 0
+for a in links:
+    text = re.sub(r"\s+", " ", a.get_text()).strip()
+    href = a["href"]
+    if text and ("rf" in href.lower() or "htm" in href.lower()):
+        print(f"  '{text}' → {href}")
+        count += 1
+        if count >= 10:
+            print("  ... (以下省略)")
+            break
 
 print("\n=== 完了 ===")
 print("詳細なHTMLは debug_nta_mito.html を確認してください。")
