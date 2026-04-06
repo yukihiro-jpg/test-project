@@ -324,57 +324,117 @@ def is_data_row(col_texts: list[str]) -> bool:
 
 
 def extract_table_from_page(img: Image.Image) -> list[dict]:
-    """1ページから倍率テーブルを抽出."""
+    """1ページから倍率テーブルを抽出.
+
+    v4: 列位置ではなく、各行のテキストと数値を分離し、
+    数値を順番に倍率列に割り当てる方式。
+    """
     words = extract_words_with_positions(img)
     if not words:
         return []
 
     page_width = img.width
 
-    # 列境界を検出
-    col_boundaries = detect_columns(words, page_width)
-
-    # 列数が足りない場合、固定比率にフォールバック
-    if len(col_boundaries) < 5:
-        # デフォルトの列比率
-        ratios = [0.0, 0.16, 0.32, 0.42, 0.50, 0.58, 0.66, 0.74, 0.82, 0.88, 0.94, 1.0]
-        col_boundaries = [int(r * page_width) for r in ratios]
-
-    n_cols = len(col_boundaries) - 1
-
     # 行にグループ化
     rows = group_into_rows(words)
 
     records = []
-    current_town = ""  # 町名は複数行にまたがることがある
+    current_town = ""
 
     for row_words in rows:
-        col_texts = assign_words_to_columns(row_words, col_boundaries)
+        # 行全体のテキストを結合
+        row_text = " ".join(w["text"] for w in row_words)
 
-        if not is_data_row(col_texts):
+        # ヘッダー・注記をスキップ
+        skip_keywords = [
+            "倍率表", "令和", "市区町村名", "税務署",
+            "固定資産", "借地権割合", "評価倍率", "頁",
+            "町(丁目)", "町（丁目）", "大字名", "適用地域名",
+            "注意", "備考", "イ鱒",
+        ]
+        if any(kw in row_text for kw in skip_keywords):
             continue
 
-        # 列数をCOLUMN_NAMESに合わせる
-        while len(col_texts) < len(COLUMN_NAMES):
-            col_texts.append("")
+        # ページ幅の40%を境界として、左側=テキスト、右側=数値 に分離
+        text_boundary = page_width * 0.38
 
-        # 町名の処理（空の場合は前の行の町名を引き継ぐ）
-        town = col_texts[0].strip()
-        if town:
-            current_town = town
+        text_words = []  # 町名・地域名
+        number_words = []  # 倍率数値
+
+        for w in row_words:
+            if w["cx"] < text_boundary:
+                text_words.append(w)
+            else:
+                number_words.append(w)
+
+        # テキスト部分を結合
+        text_part = " ".join(w["text"] for w in sorted(text_words, key=lambda w: w["cx"]))
+        text_part = text_part.strip()
+
+        if not text_part:
+            continue
+
+        # 数字のみの行（ページ番号等）をスキップ
+        if re.match(r"^[\d\s.]+$", text_part):
+            continue
+
+        # 数値部分: 各単語から数値を抽出
+        numbers = []
+        for w in sorted(number_words, key=lambda w: w["cx"]):
+            val = w["text"].strip()
+            # OCRノイズ除去
+            val = re.sub(r"[|｜中帆鋼遅逸潤]", "", val).strip()
+            # 「比」は「1」のOCR誤読の可能性
+            val = val.replace("比", "1")
+            if not val:
+                continue
+            # 「路線」はそのまま保持
+            if "路線" in val:
+                numbers.append("路線")
+                continue
+            # 「純」「純」のように文字だけの場合もそのまま
+            if re.match(r"^[純周中比]$", val):
+                numbers.append(val)
+                continue
+            # 数値パターンにマッチするか
+            # 「1.1」「40」「5.0」「純」「路線」等
+            numbers.append(val)
+
+        # 町名と地域名の分離
+        # テキスト部分から町名と適用地域名を分離
+        town = ""
+        area = ""
+
+        # 地域キーワードが含まれる場合
+        area_keywords = [
+            "市街化区域", "市街化調整区域", "農業振興", "農用地",
+            "上記以外", "主要地方道", "県道", "国道", "線沿",
+            "バイパス", "以外の地域",
+        ]
+        has_area = any(kw in text_part for kw in area_keywords)
+
+        if has_area:
+            # テキスト全体が地域名の場合（前行の町名を引き継ぐ）
+            area = text_part
+            town = current_town
         else:
-            col_texts[0] = current_town
+            # 町名として扱う
+            town = text_part
+            current_town = town
 
-        record = {}
-        for i, name in enumerate(COLUMN_NAMES):
-            val = col_texts[i].strip() if i < len(col_texts) else ""
-            # 数値らしきものをクリーンアップ
-            if i >= 3:  # 倍率列
-                val = re.sub(r"[|｜中帆]", "", val).strip()
-            record[name] = val
+        # 数値を倍率列に割り当て
+        # 順番: 借地権割合, 宅地, 田, 畑, 山林, 原野, 牧場, 池沼, 雑種地
+        multiplier_cols = COLUMN_NAMES[2:]  # leasehold_ratio以降
+        record = {
+            "town_name": town,
+            "area_name": area,
+        }
+        for i, col in enumerate(multiplier_cols):
+            if i < len(numbers):
+                record[col] = numbers[i]
+            else:
+                record[col] = ""
 
-        # 路線価判定
-        row_text = " ".join(col_texts)
         record["is_rosenka_area"] = "路線" in row_text
 
         records.append(record)
