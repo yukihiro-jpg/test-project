@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from .config import config
@@ -54,6 +54,10 @@ config.upload_dir.mkdir(parents=True, exist_ok=True)
 
 DATA_DIR = BASE_DIR.parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+PDF_CACHE_DIR = DATA_DIR / "pdf_cache"
+PDF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+MANUAL_MULTIPLIER_FILE = DATA_DIR / "manual_multipliers.json"
+MUNICIPALITY_LIST_FILE = DATA_DIR / "ibaraki_municipality_list.json"
 
 reinfolib = ReinfolibClient()
 
@@ -379,6 +383,105 @@ async def multiplier_lookup(prefecture: str, city: str, town: str):
         "paddy_multiplier": info.paddy_multiplier, "field_multiplier": info.field_multiplier,
         "forest_multiplier": info.forest_multiplier, "wasteland_multiplier": info.wasteland_multiplier,
     })
+
+
+# ------------------------------------------------------------------
+# 倍率表PDF / 手入力データ
+# ------------------------------------------------------------------
+@app.get("/api/multiplier_pdf/{municipality_code}")
+async def get_multiplier_pdf(municipality_code: str):
+    """ダウンロード済み倍率表PDFを返す."""
+    code = municipality_code.lower().replace("rt", "").replace(".pdf", "")
+    pdf_path = PDF_CACHE_DIR / f"{code}rt.pdf"
+    if not pdf_path.exists():
+        return JSONResponse({"error": f"PDFが見つかりません: {code}"}, status_code=404)
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename={code}rt.pdf"},
+    )
+
+
+@app.get("/api/municipality_list")
+async def get_municipality_list():
+    """ダウンロード済みPDFキャッシュ + 保存済み市町村一覧を返す."""
+    import json as _json
+
+    saved: list[dict[str, str]] = []
+    if MUNICIPALITY_LIST_FILE.exists():
+        try:
+            saved = _json.loads(MUNICIPALITY_LIST_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            saved = []
+
+    cached_codes = {
+        p.stem.replace("rt", "")
+        for p in PDF_CACHE_DIR.glob("*rt.pdf")
+    }
+
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for m in saved:
+        code = m.get("code", "")
+        items.append({
+            "code": code,
+            "name": m.get("name", code),
+            "cached": code in cached_codes,
+        })
+        seen.add(code)
+    for code in sorted(cached_codes):
+        if code not in seen:
+            items.append({"code": code, "name": code, "cached": True})
+
+    return JSONResponse({"municipalities": items, "cached_count": len(cached_codes)})
+
+
+@app.post("/api/save_multiplier")
+async def save_multiplier(request: Request):
+    """手入力された倍率データを保存."""
+    import json as _json
+
+    body = await request.json()
+    municipality = (body.get("municipality") or "").strip()
+    if not municipality:
+        return JSONResponse({"error": "municipality is required"}, status_code=400)
+
+    record = {
+        "town_name": body.get("town_name", ""),
+        "area_name": body.get("area_name", ""),
+        "leasehold_ratio": body.get("leasehold_ratio", ""),
+        "residential": body.get("residential", ""),
+        "paddy": body.get("paddy", ""),
+        "field": body.get("field", ""),
+        "forest": body.get("forest", ""),
+        "wasteland": body.get("wasteland", ""),
+    }
+
+    data: dict[str, list[dict[str, Any]]] = {}
+    if MANUAL_MULTIPLIER_FILE.exists():
+        try:
+            data = _json.loads(MANUAL_MULTIPLIER_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+    data.setdefault(municipality, []).append(record)
+    MANUAL_MULTIPLIER_FILE.write_text(
+        _json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8",
+    )
+    return JSONResponse({"ok": True, "count": len(data[municipality]), "record": record})
+
+
+@app.get("/api/multipliers/{municipality}")
+async def get_manual_multipliers(municipality: str):
+    """保存済み手入力倍率データを返す."""
+    import json as _json
+
+    if not MANUAL_MULTIPLIER_FILE.exists():
+        return JSONResponse({"municipality": municipality, "records": []})
+    try:
+        data = _json.loads(MANUAL_MULTIPLIER_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+    return JSONResponse({"municipality": municipality, "records": data.get(municipality, [])})
 
 
 # ------------------------------------------------------------------

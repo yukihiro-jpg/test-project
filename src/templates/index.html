@@ -92,6 +92,59 @@
       <div id="scrapeResult" class="hidden"></div>
     </div>
 
+    <!-- 倍率データ管理 (PDF + 手入力) -->
+    <div class="card">
+      <h2>倍率データ管理</h2>
+      <p style="font-size:13px; color:#666; margin-bottom:12px;">PDFをダウンロードし、倍率データを手入力で登録します。</p>
+
+      <div class="btn-group" style="margin-bottom:16px;">
+        <button class="btn btn-primary" id="downloadPdfsBtn" onclick="downloadPdfs()">PDF一括ダウンロード実行</button>
+        <button class="btn btn-outline" onclick="loadMunicipalityList()">市町村一覧を読み込み</button>
+      </div>
+      <div id="pdfDownloadStatus"></div>
+
+      <div class="form-row" style="margin-top:12px;">
+        <div class="form-group">
+          <label>市町村を選択</label>
+          <select id="municipalitySelect" onchange="onMunicipalitySelected()">
+            <option value="">-- 選択してください --</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- PDF表示 -->
+      <div id="pdfViewerContainer" class="hidden" style="margin-top:12px;">
+        <iframe id="pdfViewer" style="width:100%;height:600px;border:1px solid #ccc;border-radius:4px;"></iframe>
+      </div>
+
+      <!-- 手入力フォーム -->
+      <div id="multiplierInputForm" class="hidden" style="margin-top:16px;">
+        <h3 style="font-size:14px; color:#1F4E79; margin-bottom:10px;">倍率データ手入力</h3>
+        <div class="form-row">
+          <div class="form-group"><label>町名</label><input type="text" id="mi_town_name" placeholder="例: 大字○○"></div>
+          <div class="form-group"><label>地区名</label><input type="text" id="mi_area_name" placeholder="例: 全域"></div>
+          <div class="form-group"><label>借地権割合</label><input type="text" id="mi_leasehold" placeholder="例: 40%"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>宅地</label><input type="text" id="mi_residential" placeholder="例: 1.1"></div>
+          <div class="form-group"><label>田</label><input type="text" id="mi_paddy" placeholder="例: 11"></div>
+          <div class="form-group"><label>畑</label><input type="text" id="mi_field" placeholder="例: 8.2"></div>
+          <div class="form-group"><label>山林</label><input type="text" id="mi_forest" placeholder="例: 7.9"></div>
+          <div class="form-group"><label>原野</label><input type="text" id="mi_wasteland" placeholder="例: 3.8"></div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-success" onclick="saveMultiplier()">保存</button>
+        </div>
+        <div id="saveMultiplierStatus" style="margin-top:8px;"></div>
+      </div>
+
+      <!-- 保存済みデータテーブル -->
+      <div id="savedMultipliersContainer" class="hidden" style="margin-top:16px;">
+        <h3 style="font-size:14px; color:#1F4E79; margin-bottom:10px;">保存済み倍率データ</h3>
+        <div id="savedMultipliersTable"></div>
+      </div>
+    </div>
+
     <!-- Step 1: 入力 -->
     <div class="card">
       <h2>Step 1: 不動産情報の入力</h2>
@@ -196,6 +249,102 @@
   <script>
     let sessionId = '';
     let uploadData = null;
+    let currentMunicipalityCode = '';
+    let currentMunicipalityName = '';
+
+    // --- 倍率PDF / 手入力管理 ---
+    async function downloadPdfs() {
+      const btn = document.getElementById('downloadPdfsBtn');
+      const status = document.getElementById('pdfDownloadStatus');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>取得中...';
+      status.innerHTML = '<div class="status status-info">既存スクレイピングを実行中（PDF一括取得は scripts/download_pdfs.py をご利用ください）...</div>';
+      try {
+        const resp = await fetch('/api/scrape_multipliers', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prefecture:'茨城県'}) });
+        const data = await resp.json();
+        if (data.error) status.innerHTML = '<div class="status status-error">'+data.error+'</div>';
+        else status.innerHTML = '<div class="status status-success">スクレイピング完了 ('+data.total_records+'件)</div>';
+      } catch(e) { status.innerHTML = '<div class="status status-error">'+e.message+'</div>'; }
+      btn.disabled = false; btn.textContent = 'PDF一括ダウンロード実行';
+      loadMunicipalityList();
+    }
+
+    async function loadMunicipalityList() {
+      const sel = document.getElementById('municipalitySelect');
+      const status = document.getElementById('pdfDownloadStatus');
+      try {
+        const resp = await fetch('/api/municipality_list');
+        const data = await resp.json();
+        sel.innerHTML = '<option value="">-- 選択してください --</option>';
+        (data.municipalities || []).forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m.code;
+          opt.dataset.name = m.name;
+          opt.textContent = (m.cached ? '[PDF] ' : '[ - ] ') + m.name + ' (' + m.code + ')';
+          sel.appendChild(opt);
+        });
+        status.innerHTML = '<div class="status status-success">市町村 '+(data.municipalities||[]).length+'件 (PDFキャッシュ '+data.cached_count+'件)</div>';
+      } catch(e) { status.innerHTML = '<div class="status status-error">'+e.message+'</div>'; }
+    }
+
+    function onMunicipalitySelected() {
+      const sel = document.getElementById('municipalitySelect');
+      const code = sel.value;
+      if (!code) {
+        document.getElementById('pdfViewerContainer').classList.add('hidden');
+        document.getElementById('multiplierInputForm').classList.add('hidden');
+        document.getElementById('savedMultipliersContainer').classList.add('hidden');
+        return;
+      }
+      currentMunicipalityCode = code;
+      currentMunicipalityName = sel.options[sel.selectedIndex].dataset.name || code;
+      document.getElementById('pdfViewer').src = '/api/multiplier_pdf/' + encodeURIComponent(code);
+      document.getElementById('pdfViewerContainer').classList.remove('hidden');
+      document.getElementById('multiplierInputForm').classList.remove('hidden');
+      document.getElementById('savedMultipliersContainer').classList.remove('hidden');
+      loadSavedMultipliers();
+    }
+
+    async function loadSavedMultipliers() {
+      const key = currentMunicipalityName || currentMunicipalityCode;
+      try {
+        const resp = await fetch('/api/multipliers/' + encodeURIComponent(key));
+        const data = await resp.json();
+        const recs = data.records || [];
+        const container = document.getElementById('savedMultipliersTable');
+        if (!recs.length) { container.innerHTML = '<p style="font-size:13px;color:#888;">保存済みデータはありません。</p>'; return; }
+        let h = '<table class="results-table"><tr><th>町名</th><th>地区</th><th>借地権</th><th>宅地</th><th>田</th><th>畑</th><th>山林</th><th>原野</th></tr>';
+        recs.forEach(r => {
+          h += '<tr><td>'+(r.town_name||'')+'</td><td>'+(r.area_name||'')+'</td><td>'+(r.leasehold_ratio||'')+'</td><td>'+(r.residential||'')+'</td><td>'+(r.paddy||'')+'</td><td>'+(r.field||'')+'</td><td>'+(r.forest||'')+'</td><td>'+(r.wasteland||'')+'</td></tr>';
+        });
+        h += '</table>';
+        container.innerHTML = h;
+      } catch(e) { console.error(e); }
+    }
+
+    async function saveMultiplier() {
+      const status = document.getElementById('saveMultiplierStatus');
+      const key = currentMunicipalityName || currentMunicipalityCode;
+      if (!key) { status.innerHTML = '<div class="status status-error">市町村を選択してください</div>'; return; }
+      const payload = {
+        municipality: key,
+        town_name: document.getElementById('mi_town_name').value,
+        area_name: document.getElementById('mi_area_name').value,
+        leasehold_ratio: document.getElementById('mi_leasehold').value,
+        residential: document.getElementById('mi_residential').value,
+        paddy: document.getElementById('mi_paddy').value,
+        field: document.getElementById('mi_field').value,
+        forest: document.getElementById('mi_forest').value,
+        wasteland: document.getElementById('mi_wasteland').value,
+      };
+      try {
+        const resp = await fetch('/api/save_multiplier', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        const data = await resp.json();
+        if (data.error) { status.innerHTML = '<div class="status status-error">'+data.error+'</div>'; return; }
+        status.innerHTML = '<div class="status status-success">保存しました（'+data.count+'件）</div>';
+        ['mi_town_name','mi_area_name','mi_leasehold','mi_residential','mi_paddy','mi_field','mi_forest','mi_wasteland'].forEach(id => document.getElementById(id).value='');
+        loadSavedMultipliers();
+      } catch(e) { status.innerHTML = '<div class="status status-error">'+e.message+'</div>'; }
+    }
 
     // --- スクレイピング ---
     async function runScrape() {
