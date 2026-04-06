@@ -44,8 +44,16 @@ export async function POST(request: NextRequest) {
       companyName
     )
 
-    // 3. CSVをパースして _employee_data.json として保存
-    const csvText = await csvFile.text()
+    // CSVをパース（Shift_JIS対応）
+    const csvArrayBuffer = await csvFile.arrayBuffer()
+    let csvText: string
+    try {
+      // まずShift_JISで読み込み
+      csvText = new TextDecoder('shift_jis').decode(csvArrayBuffer)
+    } catch {
+      // 失敗したらUTF-8で読み込み
+      csvText = new TextDecoder('utf-8').decode(csvArrayBuffer)
+    }
     const employees = parseJdlCsv(csvText)
 
     if (employees.length === 0) {
