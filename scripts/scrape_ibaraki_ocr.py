@@ -1,4 +1,4 @@
-"""NTA倍率表PDF一括スクレイピングスクリプト（OCR方式）.
+"""NTA倍率表PDF一括スクレイピングスクリプト（OCR方式・改良版）.
 
 使い方:
     python scripts/scrape_ibaraki_ocr.py
@@ -6,15 +6,12 @@
 処理内容:
     1. 国税庁サイトから茨城県の全市区町村PDFをダウンロード
     2. PyMuPDFでPDFページを画像に変換
-    3. TesseractでOCR（日本語テキスト抽出）
-    4. テーブル構造をパースして倍率データを抽出
+    3. Tesseract OCRで単語の位置情報付きテキスト抽出
+    4. 位置情報からテーブル構造を再構成
     5. JSONおよびCSVファイルに保存
-
-前提:
-    - Tesseract OCRがインストール済み
-    - pip install pymupdf pytesseract
 """
 
+import csv
 import json
 import os
 import re
@@ -36,25 +33,50 @@ BROWSER_HEADERS = {
         "Chrome/120.0.0.0 Safari/537.36"
     ),
     "Accept": "*/*",
-    "Accept-Language": "ja,en-US;q=0.7,en;q=0.3",
 }
-REQUEST_DELAY = 1.0  # リクエスト間隔（秒）
+REQUEST_DELAY = 1.0
 OUTPUT_DIR = Path("data")
 PDF_CACHE_DIR = Path("data/pdf_cache")
 
-# Tesseractのパス（Windowsのデフォルト）
+# Tesseractのパス（Windows）
 if sys.platform == "win32":
     tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     if os.path.exists(tesseract_path):
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
 
 
-def fetch_municipality_list() -> list[tuple[str, str]]:
-    """市区町村一覧を取得.
+# === 倍率表の列定義 ===
+# 倍率表の列は左から:
+# 町（丁目）又は大字名 | 適用地域名 | 借地権割合 | 宅地 | 田 | 畑 | 山林 | 原野 | 牧場 | 池沼 | 雑種地
+COLUMN_NAMES = [
+    "town_name", "area_name", "leasehold_ratio",
+    "residential", "paddy", "field", "forest",
+    "wasteland", "pasture", "pond", "misc_land",
+]
 
-    Returns:
-        [(市町村名, PDFコード), ...] 例: [("水戸市", "c08201rt"), ...]
-    """
+
+def _zen_to_han(text: str) -> str:
+    """全角数字・記号を半角に変換."""
+    result = []
+    for ch in text:
+        cp = ord(ch)
+        if 0xFF10 <= cp <= 0xFF19:
+            result.append(chr(cp - 0xFF10 + ord("0")))
+        elif 0xFF21 <= cp <= 0xFF3A:
+            result.append(chr(cp - 0xFF21 + ord("A")))
+        elif 0xFF41 <= cp <= 0xFF5A:
+            result.append(chr(cp - 0xFF41 + ord("a")))
+        elif ch == "．":
+            result.append(".")
+        elif ch == "，":
+            result.append(",")
+        else:
+            result.append(ch)
+    return "".join(result)
+
+
+def fetch_municipality_list() -> list[tuple[str, str]]:
+    """市区町村一覧を取得."""
     from bs4 import BeautifulSoup
 
     city_frm_url = f"{NTA_BASE}/city_frm.htm"
@@ -65,7 +87,6 @@ def fetch_municipality_list() -> list[tuple[str, str]]:
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "lxml")
 
-    # フレーム対応
     frames = soup.find_all("frame")
     if frames:
         for frame in frames:
@@ -86,7 +107,6 @@ def fetch_municipality_list() -> list[tuple[str, str]]:
         href = a_tag["href"]
         if not text:
             continue
-        # HTMLページコード（rf）を抽出し、PDFコード（rt）に変換
         m = re.search(r"([a-z]\d{5})rf", href)
         if m:
             pdf_code = f"{m.group(1)}rt"
@@ -102,7 +122,6 @@ def download_pdf(pdf_code: str) -> Path:
     pdf_path = PDF_CACHE_DIR / f"{pdf_code}.pdf"
 
     if pdf_path.exists():
-        print(f"  キャッシュ使用: {pdf_path}")
         return pdf_path
 
     url = f"{NTA_BASE}/pdf/{pdf_code}.pdf"
@@ -112,7 +131,6 @@ def download_pdf(pdf_code: str) -> Path:
 
     with open(pdf_path, "wb") as f:
         f.write(resp.content)
-
     return pdf_path
 
 
@@ -120,7 +138,6 @@ def pdf_page_to_image(pdf_path: Path, page_num: int, dpi: int = 300) -> Image.Im
     """PDFの指定ページを画像に変換."""
     doc = fitz.open(str(pdf_path))
     page = doc[page_num]
-    # 高解像度でレンダリング
     zoom = dpi / 72
     mat = fitz.Matrix(zoom, zoom)
     pix = page.get_pixmap(matrix=mat)
@@ -129,91 +146,119 @@ def pdf_page_to_image(pdf_path: Path, page_num: int, dpi: int = 300) -> Image.Im
     return img
 
 
-def ocr_image(img: Image.Image) -> str:
-    """画像からテキストを抽出（日本語OCR）."""
-    # Tesseract設定: 日本語、PSM 6（テーブル向き）
-    text = pytesseract.image_to_string(
-        img,
-        lang="jpn",
-        config="--psm 6"
-    )
-    return text
+def extract_table_from_image(img: Image.Image) -> list[dict]:
+    """画像からテーブルデータを抽出（位置情報ベース）.
 
-
-def parse_multiplier_text(text: str) -> list[dict]:
-    """OCRテキストから倍率データをパース.
-
-    倍率表の典型的な構造:
-    町(丁目)又は大字名 | 適用地域名 | 借地権割合 | 宅地 | 田 | 畑 | 山林 | 原野 | ...
+    pytesseractのimage_to_dataで各単語の座標を取得し、
+    座標に基づいてテーブルの行・列を再構成する。
     """
+    # TSV形式で位置情報付きテキストを取得
+    tsv_data = pytesseract.image_to_data(
+        img, lang="jpn", config="--psm 6",
+        output_type=pytesseract.Output.DICT
+    )
+
+    # 有効な単語を抽出（信頼度 > 0）
+    words = []
+    n = len(tsv_data["text"])
+    for i in range(n):
+        text = str(tsv_data["text"][i]).strip()
+        conf = int(tsv_data["conf"][i])
+        if text and conf > 0:
+            words.append({
+                "text": _zen_to_han(text),
+                "x": tsv_data["left"][i],
+                "y": tsv_data["top"][i],
+                "w": tsv_data["width"][i],
+                "h": tsv_data["height"][i],
+                "conf": conf,
+            })
+
+    if not words:
+        return []
+
+    # --- 行のグループ化 ---
+    # Y座標が近い単語を同じ行としてグループ化
+    words.sort(key=lambda w: (w["y"], w["x"]))
+    rows = []
+    current_row = [words[0]]
+    ROW_THRESHOLD = 15  # Y座標がこの範囲内なら同じ行
+
+    for w in words[1:]:
+        if abs(w["y"] - current_row[0]["y"]) <= ROW_THRESHOLD:
+            current_row.append(w)
+        else:
+            rows.append(sorted(current_row, key=lambda w: w["x"]))
+            current_row = [w]
+    if current_row:
+        rows.append(sorted(current_row, key=lambda w: w["x"]))
+
+    # --- 列の境界を推定 ---
+    # ページ幅を取得
+    page_width = img.width
+
+    # 倍率表は11列: 町名 | 適用地域 | 借地権割合 | 宅地 | 田 | 畑 | 山林 | 原野 | 牧場 | 池沼 | 雑種地
+    # 典型的なレイアウト: 左2列が広く、右の数値列は狭い
+    # ヘッダー行を探して列境界を推定
+    header_keywords = ["町", "丁目", "大字", "適用", "地域", "借地", "宅地", "田", "畑", "山林", "原野"]
+
+    # 列境界が不明な場合、ページ幅に基づいて推定
+    # A4横置き300dpi: 幅約3508px
+    # 典型的な列配分（倍率表の左端からの比率）:
+    col_ratios = [0.0, 0.18, 0.36, 0.46, 0.54, 0.62, 0.70, 0.78, 0.86, 0.92, 0.96, 1.0]
+    col_boundaries = [int(r * page_width) for r in col_ratios]
+
+    # --- 各行を列に割り当て ---
     records = []
-    lines = text.strip().split("\n")
+    for row_words in rows:
+        # 行のテキスト全体を結合して確認
+        row_text = " ".join(w["text"] for w in row_words)
 
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-
-        # ヘッダー行や注記をスキップ
-        if any(kw in line for kw in [
-            "町（丁目）", "町(丁目)", "適用地域", "借地権",
-            "固定資産税", "評価倍率", "ページ", "令和",
-            "市区町村", "倍率表"
+        # ヘッダー行・注記行をスキップ
+        if any(kw in row_text for kw in [
+            "町（丁目）", "町(丁目)", "大字名", "適用地域名",
+            "倍率表", "令和", "市区町村", "税務署",
+            "ページ", "固定資産", "借地権割合"
         ]):
             continue
 
-        # 全角数字→半角変換
-        line = _zen_to_han(line)
+        # 列ごとにテキストを割り当て
+        col_texts = [""] * len(COLUMN_NAMES)
+        for w in row_words:
+            center_x = w["x"] + w["w"] // 2
+            # どの列に属するか判定
+            for col_idx in range(len(col_boundaries) - 1):
+                if col_boundaries[col_idx] <= center_x < col_boundaries[col_idx + 1]:
+                    if col_idx < len(col_texts):
+                        if col_texts[col_idx]:
+                            col_texts[col_idx] += " " + w["text"]
+                        else:
+                            col_texts[col_idx] = w["text"]
+                    break
 
-        # スペースやタブで分割
-        parts = re.split(r"[\s\t|｜]+", line)
-        parts = [p.strip() for p in parts if p.strip()]
-
-        if len(parts) < 4:
+        # 有効なデータ行かチェック（町名があること）
+        town = col_texts[0].strip()
+        if not town or len(town) < 1:
             continue
 
-        # 最初の要素が町名かどうか判定（数字のみの行はスキップ）
-        if re.match(r"^\d+$", parts[0]):
+        # 数字のみの行はスキップ（ページ番号など）
+        if re.match(r"^[\d\s]+$", town):
             continue
 
-        record = {
-            "town_name": parts[0] if len(parts) > 0 else "",
-            "area_name": parts[1] if len(parts) > 1 else "",
-            "leasehold_ratio": parts[2] if len(parts) > 2 else "",
-            "residential": parts[3] if len(parts) > 3 else "",
-            "paddy": parts[4] if len(parts) > 4 else "",
-            "field": parts[5] if len(parts) > 5 else "",
-            "forest": parts[6] if len(parts) > 6 else "",
-            "wasteland": parts[7] if len(parts) > 7 else "",
-            "is_rosenka_area": "路線" in line,
-        }
+        record = {}
+        for i, name in enumerate(COLUMN_NAMES):
+            record[name] = col_texts[i].strip() if i < len(col_texts) else ""
+
+        # 路線価地域判定
+        record["is_rosenka_area"] = "路線" in row_text
+
         records.append(record)
 
     return records
 
 
-def _zen_to_han(text: str) -> str:
-    """全角数字・記号を半角に変換."""
-    result = []
-    for ch in text:
-        cp = ord(ch)
-        if 0xFF10 <= cp <= 0xFF19:  # ０-９
-            result.append(chr(cp - 0xFF10 + ord("0")))
-        elif 0xFF21 <= cp <= 0xFF3A:  # Ａ-Ｚ
-            result.append(chr(cp - 0xFF21 + ord("A")))
-        elif 0xFF41 <= cp <= 0xFF5A:  # ａ-ｚ
-            result.append(chr(cp - 0xFF41 + ord("a")))
-        elif ch == "．":
-            result.append(".")
-        elif ch == "，":
-            result.append(",")
-        else:
-            result.append(ch)
-    return "".join(result)
-
-
 def process_municipality(city_name: str, pdf_code: str) -> list[dict]:
-    """1市区町村のPDFをダウンロード→OCR→パース."""
+    """1市区町村のPDFを処理."""
     try:
         pdf_path = download_pdf(pdf_code)
         doc = fitz.open(str(pdf_path))
@@ -224,14 +269,15 @@ def process_municipality(city_name: str, pdf_code: str) -> list[dict]:
         for page_num in range(num_pages):
             print(f"  ページ {page_num + 1}/{num_pages} をOCR中...")
             img = pdf_page_to_image(pdf_path, page_num)
-            text = ocr_image(img)
-            records = parse_multiplier_text(text)
+            records = extract_table_from_image(img)
             all_records.extend(records)
 
         return all_records
 
     except Exception as e:
         print(f"  エラー: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 
@@ -239,7 +285,7 @@ def save_results(all_data: dict, prefecture: str = "茨城県"):
     """結果をJSON/CSVに保存."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # JSON保存
+    # JSON
     json_path = OUTPUT_DIR / "ibaraki_multipliers.json"
     json_data = {
         "prefecture": prefecture,
@@ -249,20 +295,17 @@ def save_results(all_data: dict, prefecture: str = "茨城県"):
         "municipalities": {},
     }
     for city_name, records in all_data.items():
-        json_data["municipalities"][city_name] = {
-            "records": records,
-        }
+        json_data["municipalities"][city_name] = {"records": records}
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(json_data, f, ensure_ascii=False, indent=2)
     print(f"\nJSON保存: {json_path}")
 
-    # CSV保存
-    import csv
+    # CSV
     csv_path = OUTPUT_DIR / "ibaraki_multipliers.csv"
     fieldnames = [
         "市区町村", "町名", "適用地域名", "借地権割合",
-        "宅地", "田", "畑", "山林", "原野", "路線価地域",
+        "宅地", "田", "畑", "山林", "原野", "牧場", "池沼", "雑種地", "路線価地域",
     ]
     with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -279,47 +322,66 @@ def save_results(all_data: dict, prefecture: str = "茨城県"):
                     "畑": rec.get("field", ""),
                     "山林": rec.get("forest", ""),
                     "原野": rec.get("wasteland", ""),
+                    "牧場": rec.get("pasture", ""),
+                    "池沼": rec.get("pond", ""),
+                    "雑種地": rec.get("misc_land", ""),
                     "路線価地域": "○" if rec.get("is_rosenka_area") else "",
                 })
     print(f"CSV保存: {csv_path}")
 
 
+def test_single_page():
+    """阿見町の1ページだけテストして結果を詳細表示."""
+    print("\n--- テスト: 阿見町PDF 2ページ目 ---")
+
+    pdf_path = download_pdf("c11105rt")
+
+    # 2ページ目（インデックス1）をテスト
+    print("  画像変換中...")
+    img = pdf_page_to_image(pdf_path, 1)
+
+    print("  OCR実行中（位置情報付き）...")
+    records = extract_table_from_image(img)
+
+    print(f"\n  抽出行数: {len(records)}")
+    print(f"\n  === 最初の10行 ===")
+    for i, rec in enumerate(records[:10]):
+        print(f"  [{i+1}] 町名={rec['town_name']}")
+        print(f"       適用地域={rec['area_name']}")
+        print(f"       宅地={rec['residential']}, 田={rec['paddy']}, "
+              f"畑={rec['field']}, 山林={rec['forest']}")
+        print()
+
+    return records
+
+
 def main():
     print("=" * 60)
-    print("茨城県 倍率表一括スクレイピング（OCR方式）")
+    print("茨城県 倍率表一括スクレイピング（OCR方式・改良版）")
     print("=" * 60)
 
-    # Tesseractの確認
+    # Tesseract確認
     try:
         version = pytesseract.get_tesseract_version()
         print(f"Tesseract バージョン: {version}")
     except Exception:
         print("エラー: Tesseractが見つかりません。")
-        print("インストール手順:")
-        print("  1. https://github.com/UB-Mannheim/tesseract/wiki からダウンロード")
-        print("  2. インストール時に「Japanese」言語データにチェック")
         sys.exit(1)
 
-    # 日本語データの確認
     langs = pytesseract.get_languages()
     if "jpn" not in langs:
         print("エラー: 日本語OCRデータがありません。")
-        print("Tesseractを再インストールし、「Japanese」にチェックしてください。")
         sys.exit(1)
     print(f"利用可能言語: {langs}")
 
-    # まずテスト: 1市町村だけ試行
-    print("\n--- テスト: 阿見町のPDFで動作確認 ---")
-    test_records = process_municipality("阿見町（テスト）", "c11105rt")
-    print(f"テスト結果: {len(test_records)} 行抽出")
-    if test_records:
-        print(f"  例: {test_records[0]}")
-    else:
-        print("  テキストが抽出できませんでした。OCR設定を確認してください。")
+    # テスト実行
+    test_records = test_single_page()
 
-    # ユーザーに続行確認
-    print(f"\nテスト結果を確認してください。")
-    answer = input("全市区町村のスクレイピングを続行しますか？ (y/n): ").strip().lower()
+    if not test_records:
+        print("\nテスト失敗: データが抽出できませんでした。")
+        return
+
+    answer = input("\nテスト結果を確認してください。全市区町村を処理しますか？ (y/n): ").strip().lower()
     if answer != "y":
         print("中止しました。")
         return
@@ -335,9 +397,9 @@ def main():
         all_data[city_name] = records
         print(f"  → {len(records)} 行抽出")
 
-    # 保存
     save_results(all_data)
-    print(f"\n完了！ 合計 {sum(len(v) for v in all_data.values())} 行")
+    total = sum(len(v) for v in all_data.values())
+    print(f"\n完了！ 合計 {total} 行")
 
 
 if __name__ == "__main__":
