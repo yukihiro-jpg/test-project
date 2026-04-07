@@ -199,28 +199,98 @@ def parse_tohon(file_path: Path) -> tuple[list[TohonLand], list[TohonBuilding]]:
     text_han = _zen_to_han(text)
 
     # --- 土地 ---
-    land = TohonLand(source_file=file_path.name)
-    m = re.search(r"所在[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-    if m:
-        land.location = m.group(1).strip()
-    m = re.search(r"地番[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-    if m:
-        land.chiban = m.group(1).strip()
-    m = re.search(r"地目[　\s]*[：:]?[　\s]*" + CHIMOKU_PATTERN, text)
-    if m:
-        land.chimoku_registry = m.group(1).strip()
-    m = re.search(r"地積[　\s]*[：:]?[　\s]*([\d.,，０-９]+)\s*[㎡m²]?", text_han)
-    if m:
-        land.area_registry_sqm = _parse_number(m.group(1))
+    # 謄本PDFは表形式で「|」区切り。抹消行には \ue042-\ue044 の私用領域文字が含まれる。
+    STRIKE_CHARS = "\ue042\ue043\ue044"
 
-    # 甲区（所有権）抽出
-    land.ownership_history = _parse_kou_section(text)
+    def _has_strike(s: str) -> bool:
+        return any(c in s for c in STRIKE_CHARS)
 
-    # 乙区（所有権以外）抽出
-    land.other_rights = _parse_otsu_section(text)
+    lines = text.splitlines()
 
-    if land.location or land.chiban:
-        lands.append(land)
+    # 所在（抹消されていない最新の行）
+    location = ""
+    for line in lines:
+        # 「所 在|水戸市加倉井町字西田 |...」
+        m = re.search(r"所\s*在\s*[|｜]\s*([^|｜]+?)\s*[|｜]", line)
+        if m:
+            loc = m.group(1).strip()
+            if loc and not _has_strike(loc):
+                location = loc
+                break
+            # 最後のフォールバック用
+            if loc and not location:
+                location = loc
+
+    # 表題部の表データ：①地番 ②地目 ③地積 のヘッダ以降を走査
+    header_idx = -1
+    for i, line in enumerate(lines):
+        if ("地" in line and "番" in line and "目" in line and "積" in line
+                and ("①" in line or "地　番" in line or "地 番" in line)):
+            header_idx = i
+            break
+
+    land_rows: list[tuple[str, str, Optional[float]]] = []
+    chimoku_re = CHIMOKU_PATTERN  # (宅地|田|...)
+    if header_idx >= 0:
+        for line in lines[header_idx + 1:]:
+            # 権利部（甲区）に達したら終了
+            if "権" in line and "利" in line and "部" in line:
+                break
+            if _has_strike(line):
+                continue
+            # 「937番  |田  | 2790:00 |」のような行
+            row = re.search(
+                r"(\d+番(?:\d+)?)\s*[|｜]\s*(" + chimoku_re[1:-1] + r")\s*[|｜]\s*([\d\s,，:：.]+?)\s*[|｜]",
+                line,
+            )
+            if row:
+                chiban = row.group(1)
+                chimoku = row.group(2)
+                area_raw = _zen_to_han(row.group(3)).replace(" ", "").replace(",", "")
+                # 謄本の地積欄は「整数:小数」のように「:」で区切られることがある
+                area_raw = area_raw.replace("：", ":")
+                if ":" in area_raw:
+                    whole, _, frac = area_raw.partition(":")
+                    if frac and frac.isdigit():
+                        area_str = f"{whole}.{frac}"
+                    else:
+                        area_str = whole
+                else:
+                    area_str = area_raw
+                area = _parse_number(area_str)
+                land_rows.append((chiban, chimoku, area))
+
+    # 甲区・乙区
+    ownership = _parse_kou_section(text)
+    other_rights = _parse_otsu_section(text)
+
+    if land_rows:
+        for chiban, chimoku, area in land_rows:
+            land = TohonLand(source_file=file_path.name)
+            land.location = location
+            land.chiban = chiban
+            land.chimoku_registry = chimoku
+            land.area_registry_sqm = area
+            land.ownership_history = ownership
+            land.other_rights = other_rights
+            lands.append(land)
+    else:
+        # フォールバック：旧パターン
+        land = TohonLand(source_file=file_path.name)
+        land.location = location
+        m = re.search(r"地番[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
+        if m:
+            land.chiban = m.group(1).strip()
+        m = re.search(r"地目[　\s]*[：:]?[　\s]*" + CHIMOKU_PATTERN, text)
+        if m:
+            land.chimoku_registry = m.group(1).strip()
+        m = re.search(r"地積[　\s]*[：:]?[　\s]*([\d.,，０-９]+)\s*[㎡m²]?", text_han)
+        if m:
+            land.area_registry_sqm = _parse_number(m.group(1))
+        land.ownership_history = ownership
+        land.other_rights = other_rights
+        if land.location or land.chiban:
+            lands.append(land)
 
     # --- 建物（家屋番号がある場合）---
     if re.search(r"家屋番号", text):
