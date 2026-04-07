@@ -8,6 +8,7 @@ import {
   classifySpouse,
   classifyDependent,
 } from '@/lib/income-classifier'
+import { lookupPostalCode } from '@/lib/postal-code-lookup'
 import type { NewHireDeclaration } from '@/lib/employee-data'
 
 interface Props {
@@ -133,6 +134,7 @@ export default function NewHireWizard({
   const [dependents, setDependents] = useState<Dependent[]>([])
   const [widowSingleParent, setWidowSingleParent] = useState<string>('非該当')
   const [isWorkingStudent, setIsWorkingStudent] = useState<boolean>(false)
+  const [postalLoading, setPostalLoading] = useState<boolean>(false)
 
   // Step1: 本人情報のバリデーション
   const personalErrors: string[] = []
@@ -350,14 +352,45 @@ export default function NewHireWizard({
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">郵便番号（任意）</label>
-            <input
-              type="text"
-              value={personal.postalCode}
-              onChange={(e) => setPersonal({ ...personal, postalCode: e.target.value })}
-              placeholder="例: 100-0001"
-              className="w-full px-3 py-2 border border-gray-300 rounded text-base"
-            />
+            <label className="block text-xs text-gray-500 mb-1">
+              郵便番号（7桁入力で住所自動入力）
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={personal.postalCode}
+                onChange={async (e) => {
+                  const val = e.target.value
+                  setPersonal((prev) => ({ ...prev, postalCode: val }))
+                  // 7桁入力されたら住所を自動取得
+                  const digits = val.replace(/[^\d]/g, '')
+                  if (digits.length === 7) {
+                    setPostalLoading(true)
+                    try {
+                      const result = await lookupPostalCode(digits)
+                      if (result) {
+                        // 住所欄がまだ空、または自動入力由来の場合のみ上書き
+                        setPersonal((prev) => ({
+                          ...prev,
+                          address: result.fullAddress,
+                        }))
+                      }
+                    } finally {
+                      setPostalLoading(false)
+                    }
+                  }
+                }}
+                placeholder="例: 100-0001 または 1000001"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded text-base"
+              />
+              {postalLoading && (
+                <span className="text-xs text-gray-500">検索中...</span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              ※ 郵便番号を7桁入力すると、住所が自動で入ります。番地以下は手入力してください。
+            </p>
           </div>
 
           <div>
