@@ -236,8 +236,7 @@ def parse_tohon(file_path: Path) -> tuple[list[TohonLand], list[TohonBuilding]]:
             # 権利部（甲区）に達したら終了
             if "権" in line and "利" in line and "部" in line:
                 break
-            if _has_strike(line):
-                continue
+            # 抹消行の判定は地番列のみで行う（原因欄の抹消記号は無視）
             # 「937番  |田  | 2790:00 |」のような行
             row = re.search(
                 r"(\d+番(?:\d+)?)\s*[|｜]\s*(" + chimoku_re[1:-1] + r")\s*[|｜]\s*([\d\s,，:：.]+?)\s*[|｜]",
