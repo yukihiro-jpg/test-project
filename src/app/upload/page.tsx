@@ -48,6 +48,8 @@ interface ConfirmedInfo {
   employeeName: string
   isNewHire: boolean
   infoChanged: boolean
+  personalChanged?: boolean
+  dependentsChanged?: boolean
   confirmedAt: string
   employee: { address: string; disability: string; widowSingleParent: string }
   dependents: DependentInfo[]

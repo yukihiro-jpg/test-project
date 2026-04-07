@@ -51,7 +51,9 @@ export interface ConfirmedEmployeeInfo {
   employeeCode: string
   employeeName: string
   isNewHire: boolean
-  infoChanged: boolean
+  infoChanged: boolean          // 旧: 全体の相違有無（後方互換用）
+  personalChanged?: boolean     // 本人情報の相違
+  dependentsChanged?: boolean   // 扶養親族・配偶者の相違
   confirmedAt: string
   employee: {
     address: string

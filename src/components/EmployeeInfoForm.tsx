@@ -33,6 +33,8 @@ interface ConfirmedResult {
   employeeName: string
   isNewHire: boolean
   infoChanged: boolean
+  personalChanged?: boolean
+  dependentsChanged?: boolean
   confirmedAt: string
   employee: {
     address: string
@@ -93,6 +95,8 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
       employeeName: employee.name,
       isNewHire: false,
       infoChanged: pChanged || dChanged,
+      personalChanged: pChanged,
+      dependentsChanged: dChanged,
       confirmedAt: new Date().toISOString(),
       employee: pChanged
         ? { address, disability, widowSingleParent }

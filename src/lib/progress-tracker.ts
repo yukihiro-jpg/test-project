@@ -70,8 +70,9 @@ function buildHeaderRow(): string[] {
   const docLabels = DOCUMENT_TYPES.map((d) => d.label)
   const header = [
     '従業員コード', '氏名', '最終提出日',
+    '本人前年相違', '扶養親族前年相違',
     ...docLabels,
-    '前年相違', '住所', '障碍者区分', '寡婦ひとり親',
+    '住所', '障碍者区分', '寡婦ひとり親',
   ]
   for (let i = 1; i <= MAX_DEPENDENTS; i++) {
     header.push(`扶養${i}氏名`, `扶養${i}続柄`, `扶養${i}生年月日`, `扶養${i}障碍者`, `扶養${i}年収`)
@@ -82,13 +83,26 @@ function buildHeaderRow(): string[] {
 function buildDataRow(
   code: string, name: string, sub: SubmissionInfo | undefined, docLabels: string[]
 ): string[] {
+  const ci = sub?.confirmed
+
+  // 本人前年相違 / 扶養親族前年相違
+  // 新フォーマットでは personalChanged / dependentsChanged が入っている
+  // 旧データ互換: personalChanged/dependentsChanged が未定義の場合は infoChanged を両方に適用
+  const personalChanged =
+    ci?.personalChanged !== undefined ? ci.personalChanged : !!ci?.infoChanged
+  const dependentsChanged =
+    ci?.dependentsChanged !== undefined
+      ? ci.dependentsChanged
+      : !!ci?.infoChanged
+
   const row: string[] = [
-    code, name,
+    code,
+    name,
     sub ? sub.latestDate.split('T')[0] : '未提出',
+    ci ? (personalChanged ? '○' : '—') : '',
+    ci ? (dependentsChanged ? '○' : '—') : '',
     ...docLabels.map((label) => (sub?.docs.includes(label) ? '○' : '')),
   ]
-  const ci = sub?.confirmed
-  row.push(ci?.infoChanged ? '○' : '')
   row.push(ci?.employee.address || '')
   row.push(ci?.employee.disability || '')
   row.push(ci?.employee.widowSingleParent || '')
