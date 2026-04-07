@@ -83,8 +83,42 @@ export async function POST(request: NextRequest) {
 
     // 書類0件でも送信OK（該当する書類がない従業員のため）
 
-    // レスポンスを先に返し、バックグラウンドで進捗更新
-    const response = NextResponse.json({
+    // 進捗更新処理（Cloud Runではfire-and-forgetが効かないためawaitで実行）
+    // 失敗しても従業員のレスポンスを成功にしたいので個別try/catch
+    try {
+      const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
+      if (spreadsheetId) {
+        await updateCompanyProgress(spreadsheetId, fiscalYear.label, client)
+      }
+    } catch (err) {
+      console.error('スプレッドシート更新エラー:', err)
+    }
+
+    try {
+      const yearFolderId = await getOrCreateYearFolder(fiscalYear.label)
+      const today = new Date().toISOString().split('T')[0]
+      await appendUploadLog(yearFolderId, {
+        date: today,
+        clientCode: client.code,
+        clientName: client.name,
+        employeeName,
+        docs: uploadedDocLabels,
+        isNewHire,
+      })
+    } catch (err) {
+      console.error('アップロードログ追記エラー:', err)
+    }
+
+    try {
+      const result = await checkAllSubmitted(client.driveFolderId)
+      if (result.allSubmitted) {
+        console.log(`★ 全員提出完了: ${client.name}（${result.total}名）`)
+      }
+    } catch (err) {
+      console.error('全員提出チェックエラー:', err)
+    }
+
+    return NextResponse.json({
       success: true,
       employeeName,
       uploadedDocuments: uploadedDocs,
@@ -93,47 +127,6 @@ export async function POST(request: NextRequest) {
           ? `${uploadedDocs.length}件の書類をアップロードしました`
           : '提出書類なしで送信しました',
     })
-
-    // バックグラウンド処理（失敗しても従業員のレスポンスに影響しない）
-    const backgroundTasks = async () => {
-      try {
-        const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
-        if (spreadsheetId) {
-          await updateCompanyProgress(spreadsheetId, fiscalYear.label, client)
-        }
-      } catch (err) {
-        console.error('スプレッドシート更新エラー:', err)
-      }
-
-      try {
-        const yearFolderId = await getOrCreateYearFolder(fiscalYear.label)
-        const today = new Date().toISOString().split('T')[0]
-        await appendUploadLog(yearFolderId, {
-          date: today,
-          clientCode: client.code,
-          clientName: client.name,
-          employeeName,
-          docs: uploadedDocLabels,
-          isNewHire,
-        })
-      } catch (err) {
-        console.error('アップロードログ追記エラー:', err)
-      }
-
-      try {
-        const result = await checkAllSubmitted(client.driveFolderId)
-        if (result.allSubmitted) {
-          console.log(`★ 全員提出完了: ${client.name}（${result.total}名）`)
-        }
-      } catch (err) {
-        console.error('全員提出チェックエラー:', err)
-      }
-    }
-
-    // fire-and-forget
-    backgroundTasks()
-
-    return response
   } catch (error) {
     console.error('Upload error:', error)
     return NextResponse.json(
