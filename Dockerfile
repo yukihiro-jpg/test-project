@@ -41,7 +41,6 @@ RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 nextjs
 
 # standalone出力からファイルをコピー
-COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
