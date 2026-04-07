@@ -220,28 +220,50 @@ function UploadForm() {
     setLoading(true)
     setError(null)
 
+    let phase = '初期化'
     try {
+      phase = 'FormData作成'
       const formData = new FormData()
-      formData.append('clientId', clientId)
-      formData.append('yearId', yearId)
-      formData.append('employeeName', verifiedEmployee.name)
+      formData.append('clientId', String(clientId))
+      formData.append('yearId', String(yearId))
+      formData.append('employeeName', String(verifiedEmployee.name))
       if (isNewHire) formData.append('isNewHire', 'true')
-      if (confirmedInfo) formData.append('confirmedInfo', JSON.stringify(confirmedInfo))
+      if (confirmedInfo) {
+        formData.append('confirmedInfo', JSON.stringify(confirmedInfo))
+      }
 
+      // ファイルを Blob に再構成して append（iOS Safari の File オブジェクト不具合対策）
+      phase = 'ファイル添付'
       for (const [docTypeId, files] of Object.entries(capturedFiles)) {
-        for (const file of files) {
-          formData.append(docTypeId, file)
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i]
+          try {
+            const buffer = await file.arrayBuffer()
+            const blob = new Blob([buffer], { type: file.type || 'image/jpeg' })
+            const safeName = `${docTypeId}_${i + 1}.jpg`
+            formData.append(docTypeId, blob, safeName)
+          } catch (fileErr) {
+            console.error(`ファイル ${docTypeId}[${i}] の読み込みに失敗:`, fileErr)
+            throw new Error(`画像ファイルの読み込みに失敗しました。撮り直してください。`)
+          }
         }
       }
 
+      phase = '送信'
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
+
+      phase = 'レスポンス処理'
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || '送信に失敗しました')
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `送信に失敗しました（HTTP ${res.status}）`)
       }
+
+      phase = '完了画面遷移'
       router.push('/complete')
     } catch (err) {
-      setError(err instanceof Error ? err.message : '送信に失敗しました')
+      const message = err instanceof Error ? err.message : '送信に失敗しました'
+      setError(`[${phase}] ${message}`)
+      console.error('Submit error at phase:', phase, err)
     } finally {
       setLoading(false)
     }
@@ -279,7 +301,7 @@ function UploadForm() {
   return (
     <>
       <NoPullRefresh />
-      <div className="max-w-lg mx-auto px-4 py-6 pb-24">
+      <div className="max-w-lg mx-auto px-4 py-6 pb-32">
         <header className="mb-4">
           <h1 className="text-xl font-bold text-gray-800">年末調整書類アップロード</h1>
           <div className="flex items-center gap-2 mt-1">
