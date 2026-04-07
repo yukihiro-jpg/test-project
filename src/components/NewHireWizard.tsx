@@ -2,11 +2,11 @@
 
 import { useState } from 'react'
 import WidowSingleParentWizard from './WidowSingleParentWizard'
+import BirthdayPicker from './BirthdayPicker'
 import { validateMyNumber, isValidFurigana, normalizeMyNumber } from '@/lib/mynumber-validator'
 import {
   classifySpouse,
   classifyDependent,
-  isEligibleWorkingStudent,
 } from '@/lib/income-classifier'
 import type { NewHireDeclaration } from '@/lib/employee-data'
 
@@ -55,6 +55,20 @@ const INCOME_WARNING = `⚠️ 年収は正確に入力してください
 type Personal = NewHireDeclaration['personal']
 type Spouse = NonNullable<NewHireDeclaration['spouse']>
 type Dependent = NewHireDeclaration['dependents'][number]
+
+// 生年月日YYYY-MM-DDをBirthdayPicker用のyear/month/dayに分解
+function parseBirthdayString(s: string): { year: string; month: string; day: string } {
+  if (!s) return { year: '', month: '', day: '' }
+  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (!m) return { year: '', month: '', day: '' }
+  return { year: m[1], month: String(parseInt(m[2])), day: String(parseInt(m[3])) }
+}
+
+// year/month/dayをYYYY-MM-DD形式に結合
+function combineBirthday(year: string, month: string, day: string): string {
+  if (!year || !month || !day) return ''
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+}
 
 function blankPersonal(lastName: string, firstName: string): Personal {
   return {
@@ -320,12 +334,19 @@ export default function NewHireWizard({
 
           <div>
             <label className="block text-xs text-gray-500 mb-1">生年月日</label>
-            <input
-              type="date"
-              value={personal.birthday}
-              onChange={(e) => setPersonal({ ...personal, birthday: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded text-base"
-            />
+            {(() => {
+              const { year, month, day } = parseBirthdayString(personal.birthday)
+              return (
+                <BirthdayPicker
+                  year={year}
+                  month={month}
+                  day={day}
+                  onChange={(y, m, d) =>
+                    setPersonal({ ...personal, birthday: combineBirthday(y, m, d) })
+                  }
+                />
+              )
+            })()}
           </div>
 
           <div>
@@ -351,6 +372,21 @@ export default function NewHireWizard({
           </div>
 
           <div>
+            <label className="block text-xs text-gray-500 mb-1">世帯主の氏名</label>
+            <input
+              type="text"
+              value={personal.householdHeadName}
+              onChange={(e) =>
+                setPersonal({ ...personal, householdHeadName: e.target.value })
+              }
+              className="w-full px-3 py-2 border border-gray-300 rounded text-base"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              ※ 住民票の世帯の代表者です。一人暮らしの場合はあなた自身の氏名
+            </p>
+          </div>
+
+          <div>
             <label className="block text-xs text-gray-500 mb-1">
               あなたから見て世帯主は？
             </label>
@@ -367,21 +403,6 @@ export default function NewHireWizard({
                 </option>
               ))}
             </select>
-            <p className="text-xs text-gray-400 mt-1">
-              ※ 住民票の世帯の代表者です。一人暮らしの場合は「本人」
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">世帯主の氏名</label>
-            <input
-              type="text"
-              value={personal.householdHeadName}
-              onChange={(e) =>
-                setPersonal({ ...personal, householdHeadName: e.target.value })
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded text-base"
-            />
           </div>
 
           <div>
@@ -514,12 +535,19 @@ export default function NewHireWizard({
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">生年月日</label>
-                <input
-                  type="date"
-                  value={spouse.birthday}
-                  onChange={(e) => setSpouse({ ...spouse, birthday: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-base"
-                />
+                {(() => {
+                  const { year, month, day } = parseBirthdayString(spouse.birthday)
+                  return (
+                    <BirthdayPicker
+                      year={year}
+                      month={month}
+                      day={day}
+                      onChange={(y, m, d) =>
+                        setSpouse({ ...spouse, birthday: combineBirthday(y, m, d) })
+                      }
+                    />
+                  )
+                })()}
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">
@@ -691,12 +719,19 @@ export default function NewHireWizard({
 
               <div>
                 <label className="block text-xs text-gray-500 mb-1">生年月日</label>
-                <input
-                  type="date"
-                  value={dep.birthday}
-                  onChange={(e) => updateDependent(i, 'birthday', e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-                />
+                {(() => {
+                  const { year, month, day } = parseBirthdayString(dep.birthday)
+                  return (
+                    <BirthdayPicker
+                      year={year}
+                      month={month}
+                      day={day}
+                      onChange={(y, m, d) =>
+                        updateDependent(i, 'birthday', combineBirthday(y, m, d))
+                      }
+                    />
+                  )
+                })()}
               </div>
 
               <div>
