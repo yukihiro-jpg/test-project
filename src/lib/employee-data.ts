@@ -70,6 +70,66 @@ export interface ConfirmedEmployeeInfo {
     nonResident: string
     annualIncome: string
   }>
+  // 本年入社の従業員のみ：扶養控除等申告書ウィザードの入力結果
+  newHireDeclaration?: NewHireDeclaration
+}
+
+/**
+ * 本年入社の従業員が記入する扶養控除等申告書の情報
+ */
+export interface NewHireDeclaration {
+  // 本人情報
+  personal: {
+    lastName: string
+    firstName: string
+    lastNameKana: string
+    firstNameKana: string
+    birthday: string
+    postalCode: string
+    address: string
+    householdHeadName: string
+    householdHeadRelation: string
+    myNumber: string
+    disability: string // 非該当 / 一般障害者 / 特別障害者
+  }
+  // 配偶者
+  hasSpouse: boolean
+  spouse?: {
+    lastName: string
+    firstName: string
+    lastNameKana: string
+    firstNameKana: string
+    birthday: string
+    myNumber: string
+    livesTogether: boolean
+    annualIncome: string
+    disability: string
+    deductionType: string // 自動判定
+  }
+  // 扶養家族
+  dependents: Array<{
+    lastName: string
+    firstName: string
+    lastNameKana: string
+    firstNameKana: string
+    relationToEmployee: string
+    birthday: string
+    myNumber: string
+    livesTogether: boolean
+    annualIncome: string
+    disability: string
+    dependentType: string // 自動判定
+  }>
+  // 寡婦/ひとり親（既存ウィザード結果）
+  widowSingleParent: string // 非該当 / 寡婦 / ひとり親
+  // 勤労学生
+  isWorkingStudent: boolean
+  // 前職源泉徴収票の状況
+  previousJobWithholdingSlip:
+    | 'will_capture' // 撮影予定（送信前にチェック）
+    | 'no_previous_job' // 前職なし
+    | 'reissue_requested' // 前職に再発行依頼中
+    | 'will_file_self' // 確定申告で対応
 }
 
 // ---------- JDL カラムインデックス ----------
