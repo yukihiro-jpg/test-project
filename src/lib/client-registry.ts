@@ -310,6 +310,7 @@ export async function uploadPdfToDrive(folderId: string, fileName: string, pdfBu
 
 /**
  * 年度フォルダ内の「会社別URL・QRコード一覧」スプレッドシートを取得 or 作成
+ * 共有ドライブ内に直接作成する（サービスアカウントはマイドライブを持たないため）
  */
 async function getOrCreateUrlSheet(yearFolderId: string, yearLabel: string): Promise<string> {
   const drive = getDrive()
@@ -329,23 +330,32 @@ async function getOrCreateUrlSheet(yearFolderId: string, yearLabel: string): Pro
     return res.data.files[0].id!
   }
 
-  // スプレッドシートを作成
-  const spreadsheet = await sheets.spreadsheets.create({
+  // 共有ドライブ内に直接スプレッドシートを作成
+  const createRes = await drive.files.create({
     requestBody: {
-      properties: { title: URL_SHEET_NAME },
-      sheets: [{ properties: { title: yearLabel } }],
+      name: URL_SHEET_NAME,
+      mimeType: 'application/vnd.google-apps.spreadsheet',
+      parents: [yearFolderId],
     },
+    fields: 'id',
+    supportsAllDrives: true,
   })
 
-  const spreadsheetId = spreadsheet.data.spreadsheetId!
+  const spreadsheetId = createRes.data.id!
 
-  // 年度フォルダに移動
-  await drive.files.update({
-    fileId: spreadsheetId,
-    addParents: yearFolderId,
-    removeParents: 'root',
-    supportsAllDrives: true,
-    fields: 'id',
+  // デフォルトシート名を年度に変更
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          updateSheetProperties: {
+            properties: { sheetId: 0, title: yearLabel },
+            fields: 'title',
+          },
+        },
+      ],
+    },
   })
 
   return spreadsheetId
@@ -383,6 +393,7 @@ export async function updateUrlSheet(
 
 /**
  * 会社フォルダ内の「年末調整管理」スプレッドシートを取得 or 作成
+ * 共有ドライブ内に直接作成する（サービスアカウントはマイドライブを持たないため）
  * 戻り値: スプレッドシートID
  */
 export async function getOrCreateProgressSheet(companyFolderId: string): Promise<string> {
@@ -403,26 +414,37 @@ export async function getOrCreateProgressSheet(companyFolderId: string): Promise
     return res.data.files[0].id!
   }
 
-  // スプレッドシートを作成
-  const spreadsheet = await sheets.spreadsheets.create({
+  // 共有ドライブ内に直接スプレッドシートを作成
+  const createRes = await drive.files.create({
     requestBody: {
-      properties: { title: PROGRESS_SHEET_NAME },
-      sheets: [
-        { properties: { title: '提出状況' } },
-        { properties: { title: '未提出者' } },
-      ],
+      name: PROGRESS_SHEET_NAME,
+      mimeType: 'application/vnd.google-apps.spreadsheet',
+      parents: [companyFolderId],
     },
+    fields: 'id',
+    supportsAllDrives: true,
   })
 
-  const spreadsheetId = spreadsheet.data.spreadsheetId!
+  const spreadsheetId = createRes.data.id!
 
-  // 会社フォルダに移動
-  await drive.files.update({
-    fileId: spreadsheetId,
-    addParents: companyFolderId,
-    removeParents: 'root',
-    supportsAllDrives: true,
-    fields: 'id',
+  // デフォルトシートを「提出状況」にrename + 「未提出者」シート追加
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          updateSheetProperties: {
+            properties: { sheetId: 0, title: '提出状況' },
+            fields: 'title',
+          },
+        },
+        {
+          addSheet: {
+            properties: { title: '未提出者' },
+          },
+        },
+      ],
+    },
   })
 
   return spreadsheetId
