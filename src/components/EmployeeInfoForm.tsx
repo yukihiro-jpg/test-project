@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import ConfirmModal from './ConfirmModal'
 
 interface DependentInfo {
   name: string
@@ -62,6 +63,9 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
     employee.dependents.map((d) => ({ ...d }))
   )
 
+  // 年収未入力警告モーダル
+  const [incomeWarningPending, setIncomeWarningPending] = useState<'noChange' | 'edit' | null>(null)
+
   const noDeps = employee.dependents.length === 0
 
   // 両方確認済みなら親に通知
@@ -111,15 +115,10 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
   // 扶養親族「相違なし」
   const handleDepNoChange = () => {
     if (dependents.some((d) => !d.annualIncome.trim())) {
-      const ok = confirm('年収が未入力の扶養親族がいます。このまま進みますか？\n（給与が0円の場合は0と入力してください）')
-      if (!ok) return
+      setIncomeWarningPending('noChange')
+      return
     }
-    setDepChanged(false)
-    setDepConfirmed(true)
-    setDepEditing(false)
-    if (personalConfirmed) {
-      finalize(personalChanged, false)
-    }
+    finalizeDep(false)
   }
 
   // 扶養親族「相違あり」→ 編集モード
@@ -130,14 +129,30 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
   // 扶養親族の編集を確定
   const handleDepConfirmEdits = () => {
     if (dependents.some((d) => !d.annualIncome.trim())) {
-      const ok = confirm('年収が未入力の扶養親族がいます。このまま進みますか？\n（給与が0円の場合は0と入力してください）')
-      if (!ok) return
+      setIncomeWarningPending('edit')
+      return
     }
-    setDepChanged(true)
+    finalizeDep(true)
+  }
+
+  // 警告モーダルOK後の処理
+  const handleIncomeWarningProceed = () => {
+    const pending = incomeWarningPending
+    setIncomeWarningPending(null)
+    if (pending === 'noChange') finalizeDep(false)
+    else if (pending === 'edit') finalizeDep(true)
+  }
+
+  const finalizeDep = (changed: boolean) => {
+    if (changed) {
+      setDepChanged(true)
+    } else {
+      setDepChanged(false)
+    }
     setDepConfirmed(true)
     setDepEditing(false)
     if (personalConfirmed) {
-      finalize(personalChanged, true)
+      finalize(personalChanged, changed)
     }
   }
 
@@ -432,6 +447,16 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
           {personalConfirmed && !depConfirmed && !noDeps && '扶養親族・配偶者を確認してください'}
         </div>
       )}
+
+      <ConfirmModal
+        open={incomeWarningPending !== null}
+        title="年収が未入力です"
+        message={'年収が未入力の扶養親族がいます。\nこのまま進みますか？\n\n（給与が0円の場合は0と入力してください）'}
+        confirmLabel="このまま進む"
+        cancelLabel="戻って入力する"
+        onConfirm={handleIncomeWarningProceed}
+        onCancel={() => setIncomeWarningPending(null)}
+      />
     </div>
   )
 }
