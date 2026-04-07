@@ -1,7 +1,7 @@
 /**
  * 進捗管理スプレッドシート更新スクリプト（日次バッチ）
  *
- * 全社分の進捗を一括でスプレッドシートに反映する。
+ * 全社分の進捗を一括で各社の「年末調整管理」スプレッドシートに反映する。
  * リアルタイム更新は upload API 側で行われるため、
  * このスクリプトは日次の整合性チェック・補完として動作する。
  *
@@ -24,12 +24,6 @@ function parseYearArg(): string {
 }
 
 async function main() {
-  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
-  if (!spreadsheetId) {
-    console.error('GOOGLE_SPREADSHEET_ID が設定されていません')
-    process.exit(1)
-  }
-
   const yearId = parseYearArg()
   const fiscalYear = getFiscalYear(yearId)
   if (!fiscalYear) {
@@ -52,7 +46,7 @@ async function main() {
   for (const client of clients) {
     console.log(`\n処理中: ${client.name}`)
     try {
-      const result = await updateCompanyProgress(spreadsheetId, fiscalYear.label, client)
+      const result = await updateCompanyProgress(client)
       console.log(`  完了: ${result.submitted}/${result.total}名提出済み`)
     } catch (error) {
       console.error(`  エラー: ${error}`)

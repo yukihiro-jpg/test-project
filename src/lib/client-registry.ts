@@ -1,14 +1,21 @@
 /**
  * Google Driveベースの動的クライアント管理
  *
- * 年度フォルダ内の _clients.json を読み書きして顧問先を管理する。
  * フォルダ構造:
- *   {年末調整ルートフォルダ}/
+ *   {年末調整ルートフォルダ}/                ← 04_年末調整業務
  *     令和8年度/
- *       _clients.json
- *       URL・QRコード一覧表 (Google Spreadsheet)
+ *       会社別URL・QRコード一覧 (Google Spreadsheet)
+ *       _system/                            ← システムファイル隠しフォルダ
+ *         _clients.json
+ *         _upload_log.json
  *       001_株式会社A/
+ *         年末調整管理 (Google Spreadsheet)  ← 会社別進捗管理
+ *         _employee_data.json
+ *         山田太郎/
+ *           生命保険料控除証明書.pdf
+ *           _confirmed_info.json
  *       002_株式会社B/
+ *         ...
  */
 
 import { google } from 'googleapis'
@@ -39,6 +46,9 @@ function getSheets() {
 const ROOT_FOLDER_ID = () => process.env.GOOGLE_ROOT_FOLDER_ID || ''
 const SHARED_DRIVE_ID = () => process.env.GOOGLE_SHARED_DRIVE_ID || ''
 const CLIENTS_FILE = '_clients.json'
+const SYSTEM_FOLDER_NAME = '_system'
+const URL_SHEET_NAME = '会社別URL・QRコード一覧'
+const PROGRESS_SHEET_NAME = '年末調整管理'
 
 /**
  * 年度フォルダを取得 or 作成
@@ -48,7 +58,6 @@ export async function getOrCreateYearFolder(yearLabel: string): Promise<string> 
   const rootId = ROOT_FOLDER_ID()
   const driveId = SHARED_DRIVE_ID()
 
-  // 既存フォルダを検索
   const res = await drive.files.list({
     q: `'${rootId}' in parents and name = '${yearLabel}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
     fields: 'files(id)',
@@ -61,7 +70,6 @@ export async function getOrCreateYearFolder(yearLabel: string): Promise<string> 
     return res.data.files[0].id!
   }
 
-  // 作成
   const createRes = await drive.files.create({
     requestBody: {
       name: yearLabel,
@@ -83,12 +91,29 @@ export async function getOrCreateCompanyFolder(
   companyCode: string,
   companyName: string
 ): Promise<string> {
+  const folderName = `${companyCode}_${companyName}`
+  return findOrCreateFolderInDrive(yearFolderId, folderName)
+}
+
+/**
+ * 年度フォルダ内の _system フォルダを取得 or 作成（隠しシステムフォルダ）
+ */
+export async function getOrCreateSystemFolder(yearFolderId: string): Promise<string> {
+  return findOrCreateFolderInDrive(yearFolderId, SYSTEM_FOLDER_NAME)
+}
+
+/**
+ * フォルダを取得 or 作成（汎用）
+ */
+export async function findOrCreateFolderInDrive(
+  parentId: string,
+  folderName: string
+): Promise<string> {
   const drive = getDrive()
   const driveId = SHARED_DRIVE_ID()
-  const folderName = `${companyCode}_${companyName}`
 
   const res = await drive.files.list({
-    q: `'${yearFolderId}' in parents and name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    q: `'${parentId}' in parents and name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
     fields: 'files(id)',
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
@@ -103,7 +128,7 @@ export async function getOrCreateCompanyFolder(
     requestBody: {
       name: folderName,
       mimeType: 'application/vnd.google-apps.folder',
-      parents: [yearFolderId],
+      parents: [parentId],
     },
     fields: 'id',
     supportsAllDrives: true,
@@ -113,113 +138,24 @@ export async function getOrCreateCompanyFolder(
 }
 
 /**
- * 年度フォルダから _clients.json を読み込む
+ * 年度フォルダ配下の _system/_clients.json を読み込む
  */
 export async function loadClients(yearFolderId: string): Promise<Client[]> {
-  const drive = getDrive()
-  const driveId = SHARED_DRIVE_ID()
-
-  const res = await drive.files.list({
-    q: `'${yearFolderId}' in parents and name = '${CLIENTS_FILE}' and trashed = false`,
-    fields: 'files(id)',
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-    ...(driveId ? { driveId, corpora: 'drive' } : {}),
-  })
-
-  if (!res.data.files || res.data.files.length === 0) {
-    return []
-  }
-
-  const fileRes = await drive.files.get(
-    { fileId: res.data.files[0].id!, alt: 'media', supportsAllDrives: true },
-    { responseType: 'text' }
-  )
-
-  return JSON.parse(fileRes.data as string) as Client[]
+  const systemFolderId = await getOrCreateSystemFolder(yearFolderId)
+  const data = await readJsonFromFolder<Client[]>(systemFolderId, CLIENTS_FILE)
+  return data || []
 }
 
 /**
- * 年度フォルダの _clients.json を更新
+ * 年度フォルダ配下の _system/_clients.json を更新
  */
 export async function saveClients(yearFolderId: string, clients: Client[]): Promise<void> {
-  const drive = getDrive()
-  const driveId = SHARED_DRIVE_ID()
-  const jsonContent = JSON.stringify(clients, null, 2)
-
-  const res = await drive.files.list({
-    q: `'${yearFolderId}' in parents and name = '${CLIENTS_FILE}' and trashed = false`,
-    fields: 'files(id)',
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-    ...(driveId ? { driveId, corpora: 'drive' } : {}),
-  })
-
-  const stream = new Readable()
-  stream.push(jsonContent)
-  stream.push(null)
-
-  if (res.data.files && res.data.files.length > 0) {
-    await drive.files.update({
-      fileId: res.data.files[0].id!,
-      media: { mimeType: 'application/json', body: stream },
-      supportsAllDrives: true,
-    })
-  } else {
-    await drive.files.create({
-      requestBody: { name: CLIENTS_FILE, parents: [yearFolderId] },
-      media: { mimeType: 'application/json', body: stream },
-      fields: 'id',
-      supportsAllDrives: true,
-    })
-  }
+  const systemFolderId = await getOrCreateSystemFolder(yearFolderId)
+  await writeJsonToFolder(systemFolderId, CLIENTS_FILE, clients)
 }
 
 /**
- * URL・QRコード一覧表スプレッドシートを取得 or 作成
- */
-async function getOrCreateUrlSheet(yearFolderId: string, yearLabel: string): Promise<string> {
-  const drive = getDrive()
-  const sheets = getSheets()
-  const driveId = SHARED_DRIVE_ID()
-  const sheetName = `URL・QRコード一覧表`
-
-  const res = await drive.files.list({
-    q: `'${yearFolderId}' in parents and name = '${sheetName}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
-    fields: 'files(id)',
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-    ...(driveId ? { driveId, corpora: 'drive' } : {}),
-  })
-
-  if (res.data.files && res.data.files.length > 0) {
-    return res.data.files[0].id!
-  }
-
-  // スプレッドシートを作成
-  const spreadsheet = await sheets.spreadsheets.create({
-    requestBody: {
-      properties: { title: sheetName },
-      sheets: [{ properties: { title: yearLabel } }],
-    },
-  })
-
-  const spreadsheetId = spreadsheet.data.spreadsheetId!
-
-  // 年度フォルダに移動
-  await drive.files.update({
-    fileId: spreadsheetId,
-    addParents: yearFolderId,
-    removeParents: 'root',
-    supportsAllDrives: true,
-    fields: 'id',
-  })
-
-  return spreadsheetId
-}
-
-/**
- * 法人フォルダからJSONファイルを読み込む汎用関数
+ * フォルダからJSONファイルを読み込む汎用関数
  */
 export async function readJsonFromFolder<T>(folderId: string, fileName: string): Promise<T | null> {
   const drive = getDrive()
@@ -334,38 +270,6 @@ export async function listFilesInDrive(
 }
 
 /**
- * フォルダを取得 or 作成（汎用）
- */
-export async function findOrCreateFolderInDrive(parentId: string, folderName: string): Promise<string> {
-  const drive = getDrive()
-  const driveId = SHARED_DRIVE_ID()
-
-  const res = await drive.files.list({
-    q: `'${parentId}' in parents and name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-    fields: 'files(id)',
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-    ...(driveId ? { driveId, corpora: 'drive' } : {}),
-  })
-
-  if (res.data.files && res.data.files.length > 0) {
-    return res.data.files[0].id!
-  }
-
-  const createRes = await drive.files.create({
-    requestBody: {
-      name: folderName,
-      mimeType: 'application/vnd.google-apps.folder',
-      parents: [parentId],
-    },
-    fields: 'id',
-    supportsAllDrives: true,
-  })
-
-  return createRes.data.id!
-}
-
-/**
  * PDFファイルをアップロード（同名は上書き）
  */
 export async function uploadPdfToDrive(folderId: string, fileName: string, pdfBuffer: Buffer): Promise<string> {
@@ -405,6 +309,49 @@ export async function uploadPdfToDrive(folderId: string, fileName: string, pdfBu
 }
 
 /**
+ * 年度フォルダ内の「会社別URL・QRコード一覧」スプレッドシートを取得 or 作成
+ */
+async function getOrCreateUrlSheet(yearFolderId: string, yearLabel: string): Promise<string> {
+  const drive = getDrive()
+  const sheets = getSheets()
+  const driveId = SHARED_DRIVE_ID()
+
+  // 既存ファイルを検索
+  const res = await drive.files.list({
+    q: `'${yearFolderId}' in parents and name = '${URL_SHEET_NAME}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
+    fields: 'files(id)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    ...(driveId ? { driveId, corpora: 'drive' } : {}),
+  })
+
+  if (res.data.files && res.data.files.length > 0) {
+    return res.data.files[0].id!
+  }
+
+  // スプレッドシートを作成
+  const spreadsheet = await sheets.spreadsheets.create({
+    requestBody: {
+      properties: { title: URL_SHEET_NAME },
+      sheets: [{ properties: { title: yearLabel } }],
+    },
+  })
+
+  const spreadsheetId = spreadsheet.data.spreadsheetId!
+
+  // 年度フォルダに移動
+  await drive.files.update({
+    fileId: spreadsheetId,
+    addParents: yearFolderId,
+    removeParents: 'root',
+    supportsAllDrives: true,
+    fields: 'id',
+  })
+
+  return spreadsheetId
+}
+
+/**
  * URL・QRコード一覧表を更新
  */
 export async function updateUrlSheet(
@@ -432,4 +379,51 @@ export async function updateUrlSheet(
       values: [headerRow, ...dataRows],
     },
   })
+}
+
+/**
+ * 会社フォルダ内の「年末調整管理」スプレッドシートを取得 or 作成
+ * 戻り値: スプレッドシートID
+ */
+export async function getOrCreateProgressSheet(companyFolderId: string): Promise<string> {
+  const drive = getDrive()
+  const sheets = getSheets()
+  const driveId = SHARED_DRIVE_ID()
+
+  // 既存ファイルを検索
+  const res = await drive.files.list({
+    q: `'${companyFolderId}' in parents and name = '${PROGRESS_SHEET_NAME}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
+    fields: 'files(id)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    ...(driveId ? { driveId, corpora: 'drive' } : {}),
+  })
+
+  if (res.data.files && res.data.files.length > 0) {
+    return res.data.files[0].id!
+  }
+
+  // スプレッドシートを作成
+  const spreadsheet = await sheets.spreadsheets.create({
+    requestBody: {
+      properties: { title: PROGRESS_SHEET_NAME },
+      sheets: [
+        { properties: { title: '提出状況' } },
+        { properties: { title: '未提出者' } },
+      ],
+    },
+  })
+
+  const spreadsheetId = spreadsheet.data.spreadsheetId!
+
+  // 会社フォルダに移動
+  await drive.files.update({
+    fileId: spreadsheetId,
+    addParents: companyFolderId,
+    removeParents: 'root',
+    supportsAllDrives: true,
+    fields: 'id',
+  })
+
+  return spreadsheetId
 }

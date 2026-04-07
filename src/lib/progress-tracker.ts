@@ -1,9 +1,10 @@
 /**
  * 進捗管理の共有ライブラリ
  *
- * - スプレッドシートのリアルタイム更新（upload API から呼び出し）
+ * - 会社ごとに個別のスプレッドシート「年末調整管理」を会社フォルダ内に作成
+ * - スプレッドシートに「提出状況」「未提出者」の2シートを持つ
+ * - アップロードログは年度フォルダ内 _system/_upload_log.json に蓄積
  * - 全員提出完了チェック
- * - アップロードログの追記・読み込み・クリア
  */
 
 import { google } from 'googleapis'
@@ -16,6 +17,8 @@ import {
   listFilesInDrive,
   readJsonFromFolder,
   writeJsonToFolder,
+  getOrCreateProgressSheet,
+  getOrCreateSystemFolder,
 } from './client-registry'
 
 const MAX_DEPENDENTS = 10
@@ -124,11 +127,9 @@ async function getSubmissionStatus(companyFolderId: string): Promise<Map<string,
 // ---------- 公開関数 ----------
 
 /**
- * 1社分の進捗をスプレッドシートに反映
+ * 1社分の進捗をその会社専用のスプレッドシート「年末調整管理」に反映
  */
 export async function updateCompanyProgress(
-  spreadsheetId: string,
-  yearLabel: string,
   client: Client,
 ): Promise<{ total: number; submitted: number }> {
   const sheets = getSheets()
@@ -150,40 +151,31 @@ export async function updateCompanyProgress(
     }
   })
 
-  const statusSheetName = `${yearLabel}_${client.name}`
-  const unsubmittedSheetName = `${yearLabel}_${client.name}_未提出者`
+  // 会社別の進捗管理スプレッドシートを取得 or 作成
+  const spreadsheetId = await getOrCreateProgressSheet(client.driveFolderId)
 
-  // シート取得/作成
-  const spreadsheet = await withRetry(() => sheets.spreadsheets.get({ spreadsheetId }))
-  const existingSheets = spreadsheet.data.sheets || []
-  const requests: Array<Record<string, unknown>> = []
+  // 「提出状況」シートを更新
+  await withRetry(() =>
+    sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `'提出状況'!A1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [headerRow, ...dataRows] },
+    }),
+  )
 
-  if (!existingSheets.some((s) => s.properties?.title === statusSheetName)) {
-    requests.push({ addSheet: { properties: { title: statusSheetName } } })
-  }
-  if (!existingSheets.some((s) => s.properties?.title === unsubmittedSheetName)) {
-    requests.push({ addSheet: { properties: { title: unsubmittedSheetName } } })
-  }
-  if (requests.length > 0) {
-    await withRetry(() => sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } }))
-  }
-
-  await withRetry(() => sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: `'${statusSheetName}'!A1`,
-    valueInputOption: 'RAW',
-    requestBody: { values: [headerRow, ...dataRows] },
-  }))
-
+  // 「未提出者」シートを更新
   const unsubmitted = employees.filter((e) => !submissions.has(e.name))
-  await withRetry(() => sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: `'${unsubmittedSheetName}'!A1`,
-    valueInputOption: 'RAW',
-    requestBody: {
-      values: [['従業員コード', '氏名'], ...unsubmitted.map((e) => [e.code, e.name])],
-    },
-  }))
+  await withRetry(() =>
+    sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `'未提出者'!A1`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [['従業員コード', '氏名'], ...unsubmitted.map((e) => [e.code, e.name])],
+      },
+    }),
+  )
 
   const submittedCount = employees.filter((e) => submissions.has(e.name)).length
   return { total: employees.length, submitted: submittedCount }
@@ -210,7 +202,7 @@ export async function checkAllSubmitted(
   }
 }
 
-// ---------- アップロードログ ----------
+// ---------- アップロードログ（_system フォルダ内） ----------
 
 export interface UploadLogEntry {
   date: string
@@ -224,16 +216,17 @@ export interface UploadLogEntry {
 const UPLOAD_LOG_FILE = '_upload_log.json'
 
 /**
- * アップロードログに追記
+ * アップロードログに追記（_system フォルダ内に保存）
  */
 export async function appendUploadLog(
   yearFolderId: string,
   entry: UploadLogEntry,
 ): Promise<void> {
-  const existing = await readJsonFromFolder<UploadLogEntry[]>(yearFolderId, UPLOAD_LOG_FILE)
+  const systemFolderId = await getOrCreateSystemFolder(yearFolderId)
+  const existing = await readJsonFromFolder<UploadLogEntry[]>(systemFolderId, UPLOAD_LOG_FILE)
   const log = existing || []
   log.push(entry)
-  await writeJsonToFolder(yearFolderId, UPLOAD_LOG_FILE, log)
+  await writeJsonToFolder(systemFolderId, UPLOAD_LOG_FILE, log)
 }
 
 /**
@@ -242,10 +235,10 @@ export async function appendUploadLog(
 export async function readAndClearUploadLog(
   yearFolderId: string,
 ): Promise<UploadLogEntry[]> {
-  const log = await readJsonFromFolder<UploadLogEntry[]>(yearFolderId, UPLOAD_LOG_FILE)
+  const systemFolderId = await getOrCreateSystemFolder(yearFolderId)
+  const log = await readJsonFromFolder<UploadLogEntry[]>(systemFolderId, UPLOAD_LOG_FILE)
   if (!log || log.length === 0) return []
 
-  // クリア（空配列で上書き）
-  await writeJsonToFolder(yearFolderId, UPLOAD_LOG_FILE, [])
+  await writeJsonToFolder(systemFolderId, UPLOAD_LOG_FILE, [])
   return log
 }

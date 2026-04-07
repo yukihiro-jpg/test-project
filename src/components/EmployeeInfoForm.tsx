@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import ConfirmModal from './ConfirmModal'
+import WidowSingleParentWizard from './WidowSingleParentWizard'
 
 interface DependentInfo {
   name: string
@@ -46,21 +47,38 @@ interface Props {
   onConfirm: (result: ConfirmedResult) => void
 }
 
+const DISABILITY_OPTIONS = ['非該当', '一般障害者', '特別障害者']
+
+// 扶養親族用の障碍者区分（同居特別障害者も含む）
+const DEPENDENT_DISABILITY_OPTIONS = [
+  '非該当',
+  '一般障害者',
+  '特別障害者',
+  '同居特別障害者',
+]
+
 export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
   // 本人情報
   const [personalEditing, setPersonalEditing] = useState(false)
   const [personalConfirmed, setPersonalConfirmed] = useState(false)
   const [personalChanged, setPersonalChanged] = useState(false)
   const [address, setAddress] = useState(employee.address)
-  const [disability, setDisability] = useState(employee.disability)
-  const [widowSingleParent, setWidowSingleParent] = useState(employee.widowSingleParent)
+  const [disability, setDisability] = useState(
+    DISABILITY_OPTIONS.includes(employee.disability) ? employee.disability : '非該当'
+  )
+  const [widowSingleParent, setWidowSingleParent] = useState(
+    employee.widowSingleParent || '非該当'
+  )
 
   // 扶養親族
   const [depEditing, setDepEditing] = useState(false)
   const [depConfirmed, setDepConfirmed] = useState(false)
   const [depChanged, setDepChanged] = useState(false)
   const [dependents, setDependents] = useState<DependentInfo[]>(
-    employee.dependents.map((d) => ({ ...d }))
+    employee.dependents.map((d) => ({
+      ...d,
+      disability: DEPENDENT_DISABILITY_OPTIONS.includes(d.disability) ? d.disability : '非該当',
+    }))
   )
 
   // 年収未入力警告モーダル
@@ -80,8 +98,8 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
         ? { address, disability, widowSingleParent }
         : {
             address: employee.address,
-            disability: employee.disability,
-            widowSingleParent: employee.widowSingleParent,
+            disability: employee.disability || '非該当',
+            widowSingleParent: employee.widowSingleParent || '非該当',
           },
       dependents: dependents.map((d) => ({ ...d })),
     })
@@ -167,7 +185,16 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
   const addDependent = () => {
     setDependents((prev) => [
       ...prev,
-      { name: '', furigana: '', birthday: '', relationship: '', dependentType: '', disability: '', nonResident: '', annualIncome: '' },
+      {
+        name: '',
+        furigana: '',
+        birthday: '',
+        relationship: '',
+        dependentType: '',
+        disability: '非該当',
+        nonResident: '',
+        annualIncome: '',
+      },
     ])
   }
 
@@ -188,7 +215,7 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
           )}
         </div>
 
-        <dl className="space-y-2 text-sm">
+        <dl className="space-y-3 text-sm">
           <div className="flex">
             <dt className="text-gray-500 w-28 shrink-0">氏名</dt>
             <dd className="text-gray-800 font-medium">{employee.name}</dd>
@@ -198,14 +225,14 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
             <dd className="text-gray-800">{employee.birthday}</dd>
           </div>
           <div className="flex items-start">
-            <dt className="text-gray-500 w-28 shrink-0">住所</dt>
+            <dt className="text-gray-500 w-28 shrink-0 pt-1">住所</dt>
             <dd className="text-gray-800 flex-1">
               {personalEditing ? (
                 <input
                   type="text"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
+                  className="w-full px-2 py-1.5 border border-blue-300 rounded text-sm"
                 />
               ) : (
                 (personalConfirmed && personalChanged ? address : employee.address) || '—'
@@ -213,29 +240,37 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
             </dd>
           </div>
           <div className="flex items-start">
-            <dt className="text-gray-500 w-28 shrink-0">障碍者区分</dt>
+            <dt className="text-gray-500 w-28 shrink-0 pt-1">障碍者区分</dt>
             <dd className="text-gray-800 flex-1">
               {personalEditing ? (
-                <input
-                  type="text"
+                <select
                   value={disability}
                   onChange={(e) => setDisability(e.target.value)}
-                  className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
-                />
+                  className="w-full px-2 py-1.5 border border-blue-300 rounded text-sm bg-white"
+                >
+                  {DISABILITY_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
               ) : (
                 (personalConfirmed && personalChanged ? disability : employee.disability) || '非該当'
               )}
             </dd>
           </div>
           <div className="flex items-start">
-            <dt className="text-gray-500 w-28 shrink-0">寡婦/ひとり親</dt>
+            <dt className="text-gray-500 w-28 shrink-0 pt-1">寡婦/ひとり親</dt>
             <dd className="text-gray-800 flex-1">
               {personalEditing ? (
-                <input
-                  type="text"
-                  value={widowSingleParent}
-                  onChange={(e) => setWidowSingleParent(e.target.value)}
-                  className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
+                <WidowSingleParentWizard
+                  gender={employee.gender}
+                  initialResult={
+                    widowSingleParent === '寡婦' || widowSingleParent === 'ひとり親'
+                      ? widowSingleParent
+                      : '非該当'
+                  }
+                  onChange={(result) => setWidowSingleParent(result)}
                 />
               ) : (
                 (personalConfirmed && personalChanged ? widowSingleParent : employee.widowSingleParent) || '非該当'
@@ -327,46 +362,60 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
                       <div>
                         <label className="text-xs text-gray-500">氏名</label>
                         <input type="text" value={dep.name} onChange={(e) => updateDependent(i, 'name', e.target.value)}
-                          className="w-full px-2 py-1 border border-blue-300 rounded text-sm" />
+                          className="w-full px-2 py-1.5 border border-blue-300 rounded text-sm" />
                       </div>
                       <div>
                         <label className="text-xs text-gray-500">続柄</label>
                         <input type="text" value={dep.relationship} onChange={(e) => updateDependent(i, 'relationship', e.target.value)}
-                          className="w-full px-2 py-1 border border-blue-300 rounded text-sm" />
+                          className="w-full px-2 py-1.5 border border-blue-300 rounded text-sm" />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-xs text-gray-500">生年月日</label>
-                        <input type="text" value={dep.birthday} onChange={(e) => updateDependent(i, 'birthday', e.target.value)}
-                          className="w-full px-2 py-1 border border-blue-300 rounded text-sm" />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500">障碍者区分</label>
-                        <input type="text" value={dep.disability} onChange={(e) => updateDependent(i, 'disability', e.target.value)}
-                          className="w-full px-2 py-1 border border-blue-300 rounded text-sm" />
-                      </div>
+                    <div>
+                      <label className="text-xs text-gray-500">生年月日</label>
+                      <input type="text" value={dep.birthday} onChange={(e) => updateDependent(i, 'birthday', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-blue-300 rounded text-base" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">障碍者区分</label>
+                      <select
+                        value={dep.disability}
+                        onChange={(e) => updateDependent(i, 'disability', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-blue-300 rounded text-sm bg-white"
+                      >
+                        {DEPENDENT_DISABILITY_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <p className="font-medium text-gray-800">
+                    <p className="font-bold text-gray-800 text-base">
                       {dep.name}
                       {dep.relationship && (
-                        <span className="text-gray-500 ml-1">（{dep.relationship}）</span>
+                        <span className="text-gray-500 ml-1 text-sm">（{dep.relationship}）</span>
                       )}
                     </p>
-                    <p className="text-gray-500 text-xs mt-0.5">
-                      {dep.birthday && dep.birthday}
-                      {dep.dependentType && ` / ${dep.dependentType}`}
-                      {dep.disability && dep.disability !== '非該当' && ` / 障碍者: ${dep.disability}`}
-                    </p>
+                    {dep.birthday && (
+                      <p className="text-gray-700 text-base mt-1">
+                        <span className="text-gray-500 text-xs mr-1">生年月日:</span>
+                        {dep.birthday}
+                      </p>
+                    )}
+                    {dep.dependentType && (
+                      <p className="text-gray-600 text-sm mt-0.5">{dep.dependentType}</p>
+                    )}
+                    {dep.disability && dep.disability !== '非該当' && (
+                      <p className="text-gray-600 text-sm mt-0.5">障碍者: {dep.disability}</p>
+                    )}
                   </>
                 )}
 
                 {/* 年収入力（常時表示） */}
-                <div className="mt-2">
-                  <label className="text-xs text-gray-500">
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <label className="text-sm font-medium text-gray-700">
                     年収（円）
                     {!dep.annualIncome.trim() && (
                       <span className="text-yellow-600 ml-1">※未入力</span>
@@ -378,7 +427,7 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
                     value={dep.annualIncome}
                     onChange={(e) => updateDependent(i, 'annualIncome', e.target.value)}
                     placeholder="0"
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mt-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full px-2 py-2 border border-gray-300 rounded text-base mt-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
               </div>

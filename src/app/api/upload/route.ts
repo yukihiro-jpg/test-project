@@ -86,10 +86,8 @@ export async function POST(request: NextRequest) {
     // 進捗更新処理（Cloud Runではfire-and-forgetが効かないためawaitで実行）
     // 失敗しても従業員のレスポンスを成功にしたいので個別try/catch
     try {
-      const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
-      if (spreadsheetId) {
-        await updateCompanyProgress(spreadsheetId, fiscalYear.label, client)
-      }
+      // 会社別の「年末調整管理」スプレッドシートに反映
+      await updateCompanyProgress(client)
     } catch (err) {
       console.error('スプレッドシート更新エラー:', err)
     }
