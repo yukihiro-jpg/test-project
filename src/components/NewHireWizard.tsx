@@ -57,15 +57,7 @@ type Personal = NewHireDeclaration['personal']
 type Spouse = NonNullable<NewHireDeclaration['spouse']>
 type Dependent = NewHireDeclaration['dependents'][number]
 
-// 生年月日YYYY-MM-DDをBirthdayPicker用のyear/month/dayに分解
-function parseBirthdayString(s: string): { year: string; month: string; day: string } {
-  if (!s) return { year: '', month: '', day: '' }
-  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
-  if (!m) return { year: '', month: '', day: '' }
-  return { year: m[1], month: String(parseInt(m[2])), day: String(parseInt(m[3])) }
-}
-
-// year/month/dayをYYYY-MM-DD形式に結合
+// year/month/dayをYYYY-MM-DD形式に結合（3つすべて揃った時のみ有効な文字列を返す）
 function combineBirthday(year: string, month: string, day: string): string {
   if (!year || !month || !day) return ''
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
@@ -135,6 +127,64 @@ export default function NewHireWizard({
   const [widowSingleParent, setWidowSingleParent] = useState<string>('非該当')
   const [isWorkingStudent, setIsWorkingStudent] = useState<boolean>(false)
   const [postalLoading, setPostalLoading] = useState<boolean>(false)
+
+  // 生年月日ピッカー用のローカル状態（personal.birthday等と別管理）
+  // 部分選択（年だけ選択など）時もピッカーの選択状態を保持するため
+  const [personalBd, setPersonalBd] = useState<{ year: string; month: string; day: string }>({
+    year: '',
+    month: '',
+    day: '',
+  })
+  const [spouseBd, setSpouseBd] = useState<{ year: string; month: string; day: string }>({
+    year: '',
+    month: '',
+    day: '',
+  })
+  const [depBds, setDepBds] = useState<
+    Array<{ year: string; month: string; day: string }>
+  >([])
+
+  // ピッカー選択時に本体の birthday 文字列を更新
+  const updatePersonalBd = (year: string, month: string, day: string) => {
+    setPersonalBd({ year, month, day })
+    setPersonal((prev) => ({
+      ...prev,
+      birthday: combineBirthday(year, month, day),
+    }))
+  }
+
+  const updateSpouseBd = (year: string, month: string, day: string) => {
+    setSpouseBd({ year, month, day })
+    setSpouse((prev) => ({
+      ...prev,
+      birthday: combineBirthday(year, month, day),
+    }))
+  }
+
+  const updateDepBd = (index: number, year: string, month: string, day: string) => {
+    setDepBds((prev) => {
+      const next = [...prev]
+      next[index] = { year, month, day }
+      return next
+    })
+    setDependents((prev) => {
+      const next = [...prev]
+      const newBirthday = combineBirthday(year, month, day)
+      const updated = { ...next[index], birthday: newBirthday }
+      // 控除区分を再計算
+      if (newBirthday) {
+        const inc = parseInt(String(updated.annualIncome).replace(/[^\d]/g, '')) || 0
+        updated.dependentType = classifyDependent(
+          newBirthday,
+          inc,
+          updated.livesTogether,
+          fiscalYear,
+        )
+      }
+      next[index] = updated
+      return next
+    })
+  }
 
   // Step1: 本人情報のバリデーション
   const personalErrors: string[] = []
@@ -237,10 +287,12 @@ export default function NewHireWizard({
 
   const addDependent = () => {
     setDependents((prev) => [...prev, blankDependent()])
+    setDepBds((prev) => [...prev, { year: '', month: '', day: '' }])
   }
 
   const removeDependent = (index: number) => {
     setDependents((prev) => prev.filter((_, i) => i !== index))
+    setDepBds((prev) => prev.filter((_, i) => i !== index))
   }
 
   const handleFinalConfirm = () => {
@@ -336,19 +388,12 @@ export default function NewHireWizard({
 
           <div>
             <label className="block text-xs text-gray-500 mb-1">生年月日</label>
-            {(() => {
-              const { year, month, day } = parseBirthdayString(personal.birthday)
-              return (
-                <BirthdayPicker
-                  year={year}
-                  month={month}
-                  day={day}
-                  onChange={(y, m, d) =>
-                    setPersonal({ ...personal, birthday: combineBirthday(y, m, d) })
-                  }
-                />
-              )
-            })()}
+            <BirthdayPicker
+              year={personalBd.year}
+              month={personalBd.month}
+              day={personalBd.day}
+              onChange={updatePersonalBd}
+            />
           </div>
 
           <div>
@@ -568,19 +613,12 @@ export default function NewHireWizard({
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">生年月日</label>
-                {(() => {
-                  const { year, month, day } = parseBirthdayString(spouse.birthday)
-                  return (
-                    <BirthdayPicker
-                      year={year}
-                      month={month}
-                      day={day}
-                      onChange={(y, m, d) =>
-                        setSpouse({ ...spouse, birthday: combineBirthday(y, m, d) })
-                      }
-                    />
-                  )
-                })()}
+                <BirthdayPicker
+                  year={spouseBd.year}
+                  month={spouseBd.month}
+                  day={spouseBd.day}
+                  onChange={updateSpouseBd}
+                />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">
@@ -752,19 +790,12 @@ export default function NewHireWizard({
 
               <div>
                 <label className="block text-xs text-gray-500 mb-1">生年月日</label>
-                {(() => {
-                  const { year, month, day } = parseBirthdayString(dep.birthday)
-                  return (
-                    <BirthdayPicker
-                      year={year}
-                      month={month}
-                      day={day}
-                      onChange={(y, m, d) =>
-                        updateDependent(i, 'birthday', combineBirthday(y, m, d))
-                      }
-                    />
-                  )
-                })()}
+                <BirthdayPicker
+                  year={depBds[i]?.year || ''}
+                  month={depBds[i]?.month || ''}
+                  day={depBds[i]?.day || ''}
+                  onChange={(y, m, d) => updateDepBd(i, y, m, d)}
+                />
               </div>
 
               <div>
