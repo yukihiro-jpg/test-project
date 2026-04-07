@@ -1,3 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html, body {
+  /* プルツーリフレッシュ無効化（誤操作で再読み込みされないように） */
+  overscroll-behavior-y: contain;
+}

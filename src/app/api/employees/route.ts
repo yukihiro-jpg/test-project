@@ -4,6 +4,7 @@ import { loadEmployeeDataFromDrive } from '@/lib/client-registry'
 
 /**
  * 従業員の氏名一覧を返す（個人情報は含まない）
+ * フリガナ順でソート
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -22,7 +23,14 @@ export async function GET(request: NextRequest) {
   try {
     const employees = await loadEmployeeDataFromDrive(client.driveFolderId)
 
-    const nameList = employees.map((e) => ({
+    // フリガナ順でソート（フリガナがない場合は氏名順）
+    const sorted = [...employees].sort((a, b) => {
+      const keyA = (a.furigana || a.name || '').trim()
+      const keyB = (b.furigana || b.name || '').trim()
+      return keyA.localeCompare(keyB, 'ja')
+    })
+
+    const nameList = sorted.map((e) => ({
       code: e.code,
       name: e.name,
     }))

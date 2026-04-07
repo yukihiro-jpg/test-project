@@ -5,16 +5,16 @@ import type { DocumentType } from '@/lib/document-types'
 
 interface Props {
   docType: DocumentType
-  capturedImage: string | null
+  capturedImages: string[]
   onCapture: (docTypeId: string, file: File) => void
-  onRemove: (docTypeId: string) => void
+  onRemoveAt: (docTypeId: string, index: number) => void
 }
 
 export default function DocumentCapture({
   docType,
-  capturedImage,
+  capturedImages,
   onCapture,
-  onRemove,
+  onRemoveAt,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -27,44 +27,54 @@ export default function DocumentCapture({
     e.target.value = ''
   }
 
+  const hasImages = capturedImages.length > 0
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <p className="text-sm font-medium text-gray-700 mb-3">{docType.label}</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-medium text-gray-700">{docType.label}</p>
+        {hasImages && (
+          <span className="text-xs text-gray-500">{capturedImages.length}枚</span>
+        )}
+      </div>
 
-      {capturedImage ? (
-        <div className="relative">
-          <img
-            src={capturedImage}
-            alt={docType.label}
-            className="w-full h-40 object-cover rounded-md"
-          />
-          <div className="flex gap-2 mt-2">
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              className="flex-1 py-2 px-3 text-sm bg-gray-100 text-gray-700 rounded-md active:bg-gray-200"
-            >
-              撮り直す
-            </button>
-            <button
-              type="button"
-              onClick={() => onRemove(docType.id)}
-              className="py-2 px-3 text-sm bg-red-50 text-red-600 rounded-md active:bg-red-100"
-            >
-              削除
-            </button>
-          </div>
+      {hasImages && (
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {capturedImages.map((url, i) => (
+            <div key={i} className="relative">
+              <img
+                src={url}
+                alt={`${docType.label}${i + 1}`}
+                className="w-full h-24 object-cover rounded-md border border-gray-200"
+              />
+              <button
+                type="button"
+                onClick={() => onRemoveAt(docType.id, i)}
+                className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center active:bg-red-600"
+                aria-label="削除"
+              >
+                ×
+              </button>
+              <span className="absolute bottom-1 left-1 px-1 py-0.5 bg-black/60 text-white text-xs rounded">
+                {i + 1}
+              </span>
+            </div>
+          ))}
         </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="w-full py-6 border-2 border-dashed border-gray-300 rounded-md text-gray-500 active:border-blue-400 active:text-blue-600"
-        >
-          <span className="block text-2xl mb-1">📷</span>
-          <span className="text-sm">タップして撮影</span>
-        </button>
       )}
+
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className={`w-full py-3 border-2 border-dashed rounded-md text-sm active:border-blue-400 active:text-blue-600 ${
+          hasImages
+            ? 'border-gray-300 text-gray-600'
+            : 'border-gray-300 text-gray-500'
+        }`}
+      >
+        <span className="text-xl mr-1">📷</span>
+        {hasImages ? 'もう1枚追加する' : 'タップして撮影'}
+      </button>
 
       <input
         ref={inputRef}

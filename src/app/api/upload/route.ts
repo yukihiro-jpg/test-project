@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getClientDynamic } from '@/lib/clients'
 import { getFiscalYear } from '@/lib/fiscal-year'
 import { getDocumentLabel, DOCUMENT_TYPES } from '@/lib/document-types'
-import { imageToPdf } from '@/lib/pdf-converter'
+import { imagesToPdf } from '@/lib/pdf-converter'
 import {
   findOrCreateFolderInDrive,
   uploadPdfToDrive,
@@ -55,18 +55,25 @@ export async function POST(request: NextRequest) {
       await writeJsonToFolder(employeeFolderId, '_confirmed_info.json', confirmedInfo)
     }
 
-    // 各書類を処理
+    // 各書類を処理（複数ファイル対応：同じ docType.id で複数のファイルが送られる）
     const uploadedDocs: string[] = []
     const uploadedDocLabels: string[] = []
 
     for (const docType of DOCUMENT_TYPES) {
-      const file = formData.get(docType.id) as File | null
-      if (!file) continue
+      const files = formData.getAll(docType.id) as File[]
+      if (files.length === 0) continue
 
-      const arrayBuffer = await file.arrayBuffer()
-      const imageBuffer = Buffer.from(arrayBuffer)
+      const imageBuffers: Buffer[] = []
+      for (const file of files) {
+        if (!(file instanceof File) || file.size === 0) continue
+        const arrayBuffer = await file.arrayBuffer()
+        imageBuffers.push(Buffer.from(arrayBuffer))
+      }
 
-      const pdfBuffer = await imageToPdf(imageBuffer)
+      if (imageBuffers.length === 0) continue
+
+      // 複数画像を1つのPDFにまとめる
+      const pdfBuffer = await imagesToPdf(imageBuffers)
       const fileName = `${getDocumentLabel(docType.id)}.pdf`
       await uploadPdfToDrive(employeeFolderId, fileName, pdfBuffer)
 
@@ -74,19 +81,17 @@ export async function POST(request: NextRequest) {
       uploadedDocLabels.push(getDocumentLabel(docType.id))
     }
 
-    if (uploadedDocs.length === 0) {
-      return NextResponse.json(
-        { error: '書類が1つも添付されていません' },
-        { status: 400 }
-      )
-    }
+    // 書類0件でも送信OK（該当する書類がない従業員のため）
 
     // レスポンスを先に返し、バックグラウンドで進捗更新
     const response = NextResponse.json({
       success: true,
       employeeName,
       uploadedDocuments: uploadedDocs,
-      message: `${uploadedDocs.length}件の書類をアップロードしました`,
+      message:
+        uploadedDocs.length > 0
+          ? `${uploadedDocs.length}件の書類をアップロードしました`
+          : '提出書類なしで送信しました',
     })
 
     // バックグラウンド処理（失敗しても従業員のレスポンスに影響しない）

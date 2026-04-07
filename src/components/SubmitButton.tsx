@@ -48,8 +48,10 @@ export default function SubmitButton({
             </svg>
             送信中...
           </span>
+        ) : capturedCount > 0 ? (
+          `送信する（${capturedCount}枚）`
         ) : (
-          `送信する（${capturedCount}件）`
+          '送信する（書類なし）'
         )}
       </button>
     </div>

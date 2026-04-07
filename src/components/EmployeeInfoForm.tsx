@@ -46,42 +46,99 @@ interface Props {
 }
 
 export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
-  const [editing, setEditing] = useState(false)
+  // 本人情報
+  const [personalEditing, setPersonalEditing] = useState(false)
+  const [personalConfirmed, setPersonalConfirmed] = useState(false)
+  const [personalChanged, setPersonalChanged] = useState(false)
   const [address, setAddress] = useState(employee.address)
   const [disability, setDisability] = useState(employee.disability)
   const [widowSingleParent, setWidowSingleParent] = useState(employee.widowSingleParent)
+
+  // 扶養親族
+  const [depEditing, setDepEditing] = useState(false)
+  const [depConfirmed, setDepConfirmed] = useState(false)
+  const [depChanged, setDepChanged] = useState(false)
   const [dependents, setDependents] = useState<DependentInfo[]>(
     employee.dependents.map((d) => ({ ...d }))
   )
 
-  const hasIncomeWarning = dependents.length > 0 && dependents.some((d) => !d.annualIncome.trim())
+  const noDeps = employee.dependents.length === 0
 
-  const handleNoChange = () => {
+  // 両方確認済みなら親に通知
+  const finalize = (pChanged: boolean, dChanged: boolean) => {
     onConfirm({
       employeeCode: employee.code,
       employeeName: employee.name,
       isNewHire: false,
-      infoChanged: false,
+      infoChanged: pChanged || dChanged,
       confirmedAt: new Date().toISOString(),
-      employee: {
-        address: employee.address,
-        disability: employee.disability,
-        widowSingleParent: employee.widowSingleParent,
-      },
+      employee: pChanged
+        ? { address, disability, widowSingleParent }
+        : {
+            address: employee.address,
+            disability: employee.disability,
+            widowSingleParent: employee.widowSingleParent,
+          },
       dependents: dependents.map((d) => ({ ...d })),
     })
   }
 
-  const handleConfirmEdits = () => {
-    onConfirm({
-      employeeCode: employee.code,
-      employeeName: employee.name,
-      isNewHire: false,
-      infoChanged: true,
-      confirmedAt: new Date().toISOString(),
-      employee: { address, disability, widowSingleParent },
-      dependents: dependents.map((d) => ({ ...d })),
-    })
+  // 本人情報「相違なし」
+  const handlePersonalNoChange = () => {
+    setPersonalChanged(false)
+    setPersonalConfirmed(true)
+    setPersonalEditing(false)
+    if (noDeps || depConfirmed) {
+      finalize(false, depChanged)
+    }
+  }
+
+  // 本人情報「相違あり」→ 編集モード
+  const handlePersonalEdit = () => {
+    setPersonalEditing(true)
+  }
+
+  // 本人情報の編集を確定
+  const handlePersonalConfirmEdits = () => {
+    setPersonalChanged(true)
+    setPersonalConfirmed(true)
+    setPersonalEditing(false)
+    if (noDeps || depConfirmed) {
+      finalize(true, depChanged)
+    }
+  }
+
+  // 扶養親族「相違なし」
+  const handleDepNoChange = () => {
+    if (dependents.some((d) => !d.annualIncome.trim())) {
+      const ok = confirm('年収が未入力の扶養親族がいます。このまま進みますか？\n（給与が0円の場合は0と入力してください）')
+      if (!ok) return
+    }
+    setDepChanged(false)
+    setDepConfirmed(true)
+    setDepEditing(false)
+    if (personalConfirmed) {
+      finalize(personalChanged, false)
+    }
+  }
+
+  // 扶養親族「相違あり」→ 編集モード
+  const handleDepEdit = () => {
+    setDepEditing(true)
+  }
+
+  // 扶養親族の編集を確定
+  const handleDepConfirmEdits = () => {
+    if (dependents.some((d) => !d.annualIncome.trim())) {
+      const ok = confirm('年収が未入力の扶養親族がいます。このまま進みますか？\n（給与が0円の場合は0と入力してください）')
+      if (!ok) return
+    }
+    setDepChanged(true)
+    setDepConfirmed(true)
+    setDepEditing(false)
+    if (personalConfirmed) {
+      finalize(personalChanged, true)
+    }
   }
 
   const updateDependent = (index: number, field: keyof DependentInfo, value: string) => {
@@ -105,9 +162,16 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* 本人情報 */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h3 className="text-base font-bold text-gray-800 mb-3">本人情報（前年データ）</h3>
+      {/* ===== 本人情報セクション ===== */}
+      <div className={`bg-white rounded-lg border p-4 ${personalConfirmed ? 'border-green-300' : 'border-gray-200'}`}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-base font-bold text-gray-800">① 本人情報の確認</h3>
+          {personalConfirmed && (
+            <span className={`px-2 py-0.5 text-xs font-bold rounded ${personalChanged ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
+              {personalChanged ? '訂正済み' : '相違なし'}
+            </span>
+          )}
+        </div>
 
         <dl className="space-y-2 text-sm">
           <div className="flex">
@@ -121,7 +185,7 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
           <div className="flex items-start">
             <dt className="text-gray-500 w-28 shrink-0">住所</dt>
             <dd className="text-gray-800 flex-1">
-              {editing ? (
+              {personalEditing ? (
                 <input
                   type="text"
                   value={address}
@@ -129,14 +193,14 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
                   className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
                 />
               ) : (
-                employee.address || '—'
+                (personalConfirmed && personalChanged ? address : employee.address) || '—'
               )}
             </dd>
           </div>
           <div className="flex items-start">
             <dt className="text-gray-500 w-28 shrink-0">障碍者区分</dt>
             <dd className="text-gray-800 flex-1">
-              {editing ? (
+              {personalEditing ? (
                 <input
                   type="text"
                   value={disability}
@@ -144,14 +208,14 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
                   className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
                 />
               ) : (
-                employee.disability || '非該当'
+                (personalConfirmed && personalChanged ? disability : employee.disability) || '非該当'
               )}
             </dd>
           </div>
           <div className="flex items-start">
             <dt className="text-gray-500 w-28 shrink-0">寡婦/ひとり親</dt>
             <dd className="text-gray-800 flex-1">
-              {editing ? (
+              {personalEditing ? (
                 <input
                   type="text"
                   value={widowSingleParent}
@@ -159,44 +223,72 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
                   className="w-full px-2 py-1 border border-blue-300 rounded text-sm"
                 />
               ) : (
-                employee.widowSingleParent || '非該当'
+                (personalConfirmed && personalChanged ? widowSingleParent : employee.widowSingleParent) || '非該当'
               )}
             </dd>
           </div>
         </dl>
 
-        {/* 相違ボタン */}
-        {!editing && (
+        {!personalConfirmed && !personalEditing && (
           <div className="flex gap-2 mt-4">
             <button
               type="button"
-              onClick={handleNoChange}
+              onClick={handlePersonalNoChange}
               className="flex-1 py-2.5 bg-green-600 text-white text-sm font-bold rounded-lg active:bg-green-700"
             >
               前年と相違ありません
             </button>
             <button
               type="button"
-              onClick={() => setEditing(true)}
+              onClick={handlePersonalEdit}
               className="flex-1 py-2.5 bg-orange-500 text-white text-sm font-bold rounded-lg active:bg-orange-600"
             >
               相違があります（訂正する）
             </button>
           </div>
         )}
+
+        {personalEditing && (
+          <button
+            type="button"
+            onClick={handlePersonalConfirmEdits}
+            className="mt-4 w-full py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg active:bg-blue-700"
+          >
+            訂正内容を確定する
+          </button>
+        )}
+
+        {personalConfirmed && (
+          <button
+            type="button"
+            onClick={() => {
+              setPersonalConfirmed(false)
+              setPersonalChanged(false)
+              setPersonalEditing(false)
+            }}
+            className="mt-3 text-xs text-gray-500 underline"
+          >
+            やり直す
+          </button>
+        )}
       </div>
 
-      {/* 扶養親族 */}
-      {dependents.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-base font-bold text-gray-800 mb-3">
-            扶養親族・配偶者
-          </h3>
+      {/* ===== 扶養親族セクション ===== */}
+      {!noDeps && (
+        <div className={`bg-white rounded-lg border p-4 ${depConfirmed ? 'border-green-300' : 'border-gray-200'}`}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-bold text-gray-800">② 扶養親族・配偶者の確認</h3>
+            {depConfirmed && (
+              <span className={`px-2 py-0.5 text-xs font-bold rounded ${depChanged ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
+                {depChanged ? '訂正済み' : '相違なし'}
+              </span>
+            )}
+          </div>
 
-          {/* 年収入力の注意 */}
-          {hasIncomeWarning && (
+          {/* 年収未入力警告 */}
+          {dependents.some((d) => !d.annualIncome.trim()) && (
             <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-              <p className="font-bold">年収が未入力の扶養親族がいます</p>
+              <p className="font-bold">扶養親族の年収を入力してください</p>
               <p>未入力の場合、正しい年末調整計算ができない可能性があります。給与が0円の場合は0と入力してください。</p>
             </div>
           )}
@@ -204,7 +296,7 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
           <div className="space-y-3">
             {dependents.map((dep, i) => (
               <div key={i} className="bg-gray-50 rounded-lg p-3 text-sm relative">
-                {editing && (
+                {depEditing && (
                   <button
                     type="button"
                     onClick={() => removeDependent(i)}
@@ -214,7 +306,7 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
                   </button>
                 )}
 
-                {editing ? (
+                {depEditing ? (
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
@@ -239,11 +331,6 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
                         <input type="text" value={dep.disability} onChange={(e) => updateDependent(i, 'disability', e.target.value)}
                           className="w-full px-2 py-1 border border-blue-300 rounded text-sm" />
                       </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500">住所</label>
-                      <input type="text" value={dep.furigana} onChange={(e) => updateDependent(i, 'furigana', e.target.value)}
-                        className="w-full px-2 py-1 border border-blue-300 rounded text-sm" />
                     </div>
                   </div>
                 ) : (
@@ -283,7 +370,7 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
             ))}
           </div>
 
-          {editing && (
+          {depEditing && (
             <button
               type="button"
               onClick={addDependent}
@@ -292,18 +379,58 @@ export default function EmployeeInfoForm({ employee, onConfirm }: Props) {
               + 扶養親族を追加
             </button>
           )}
+
+          {!depConfirmed && !depEditing && (
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={handleDepNoChange}
+                className="flex-1 py-2.5 bg-green-600 text-white text-sm font-bold rounded-lg active:bg-green-700"
+              >
+                前年と相違ありません
+              </button>
+              <button
+                type="button"
+                onClick={handleDepEdit}
+                className="flex-1 py-2.5 bg-orange-500 text-white text-sm font-bold rounded-lg active:bg-orange-600"
+              >
+                相違があります（訂正する）
+              </button>
+            </div>
+          )}
+
+          {depEditing && (
+            <button
+              type="button"
+              onClick={handleDepConfirmEdits}
+              className="mt-4 w-full py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg active:bg-blue-700"
+            >
+              訂正内容を確定する
+            </button>
+          )}
+
+          {depConfirmed && (
+            <button
+              type="button"
+              onClick={() => {
+                setDepConfirmed(false)
+                setDepChanged(false)
+                setDepEditing(false)
+              }}
+              className="mt-3 text-xs text-gray-500 underline"
+            >
+              やり直す
+            </button>
+          )}
         </div>
       )}
 
-      {/* 編集モードの確定ボタン */}
-      {editing && (
-        <button
-          type="button"
-          onClick={handleConfirmEdits}
-          className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg active:bg-blue-700"
-        >
-          訂正内容を確定する
-        </button>
+      {/* 進行状況 */}
+      {!(personalConfirmed && (noDeps || depConfirmed)) && (
+        <div className="text-center text-sm text-gray-500 py-2">
+          {!personalConfirmed && '本人情報を確認してください'}
+          {personalConfirmed && !depConfirmed && !noDeps && '扶養親族・配偶者を確認してください'}
+        </div>
       )}
     </div>
   )

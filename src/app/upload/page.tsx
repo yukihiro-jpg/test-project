@@ -6,6 +6,7 @@ import { Suspense } from 'react'
 import DocumentList from '@/components/DocumentList'
 import SubmitButton from '@/components/SubmitButton'
 import EmployeeInfoForm from '@/components/EmployeeInfoForm'
+import { DOCUMENT_TYPES, getDocumentLabel } from '@/lib/document-types'
 
 const NEW_HIRE_CODE = '__NEW_HIRE__'
 
@@ -70,9 +71,9 @@ function UploadForm() {
   // 情報確認
   const [confirmedInfo, setConfirmedInfo] = useState<ConfirmedInfo | null>(null)
 
-  // 書類アップロード
-  const [capturedImages, setCapturedImages] = useState<Record<string, string>>({})
-  const [capturedFiles, setCapturedFiles] = useState<Record<string, File>>({})
+  // 書類アップロード（複数枚対応：Record<string, File[]>）
+  const [capturedImages, setCapturedImages] = useState<Record<string, string[]>>({})
+  const [capturedFiles, setCapturedFiles] = useState<Record<string, File[]>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -147,25 +148,54 @@ function UploadForm() {
 
   const handleCapture = useCallback((docTypeId: string, file: File) => {
     const url = URL.createObjectURL(file)
-    setCapturedImages((prev) => ({ ...prev, [docTypeId]: url }))
-    setCapturedFiles((prev) => ({ ...prev, [docTypeId]: file }))
+    setCapturedImages((prev) => ({
+      ...prev,
+      [docTypeId]: [...(prev[docTypeId] || []), url],
+    }))
+    setCapturedFiles((prev) => ({
+      ...prev,
+      [docTypeId]: [...(prev[docTypeId] || []), file],
+    }))
   }, [])
 
-  const handleRemove = useCallback((docTypeId: string) => {
+  const handleRemoveAt = useCallback((docTypeId: string, index: number) => {
     setCapturedImages((prev) => {
+      const arr = [...(prev[docTypeId] || [])]
+      const removed = arr.splice(index, 1)
+      if (removed[0]) URL.revokeObjectURL(removed[0])
       const next = { ...prev }
-      if (next[docTypeId]) { URL.revokeObjectURL(next[docTypeId]); delete next[docTypeId] }
+      if (arr.length === 0) delete next[docTypeId]
+      else next[docTypeId] = arr
       return next
     })
     setCapturedFiles((prev) => {
+      const arr = [...(prev[docTypeId] || [])]
+      arr.splice(index, 1)
       const next = { ...prev }
-      delete next[docTypeId]
+      if (arr.length === 0) delete next[docTypeId]
+      else next[docTypeId] = arr
       return next
     })
   }, [])
 
   const handleSubmit = async () => {
-    if (!clientId || !yearId || !verifiedEmployee || Object.keys(capturedFiles).length === 0) return
+    if (!clientId || !yearId || !verifiedEmployee) return
+
+    // 書類の枚数を計算
+    const docCount = Object.values(capturedFiles).reduce((sum, arr) => sum + arr.length, 0)
+
+    // 撮影済み書類の一覧
+    const docList = DOCUMENT_TYPES
+      .filter((d) => (capturedFiles[d.id] || []).length > 0)
+      .map((d) => `・${getDocumentLabel(d.id)}（${capturedFiles[d.id].length}枚）`)
+      .join('\n')
+
+    // 確認メッセージ
+    const message = docCount === 0
+      ? '提出する書類が一切ありませんが、本当にこのまま送信してもよろしいですか？'
+      : `以下の内容で送信します。よろしいですか？\n\n氏名: ${verifiedEmployee.name}\n\n撮影済み書類:\n${docList}`
+
+    if (!confirm(message)) return
 
     setLoading(true)
     setError(null)
@@ -178,8 +208,11 @@ function UploadForm() {
       if (isNewHire) formData.append('isNewHire', 'true')
       if (confirmedInfo) formData.append('confirmedInfo', JSON.stringify(confirmedInfo))
 
-      for (const [docTypeId, file] of Object.entries(capturedFiles)) {
-        formData.append(docTypeId, file)
+      // 同じキーで複数ファイルを追加
+      for (const [docTypeId, files] of Object.entries(capturedFiles)) {
+        for (const file of files) {
+          formData.append(docTypeId, file)
+        }
       }
 
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
@@ -219,8 +252,9 @@ function UploadForm() {
     )
   }
 
-  const capturedCount = Object.keys(capturedFiles).length
-  const canSubmit = verifiedEmployee !== null && confirmedInfo !== null && capturedCount > 0
+  const totalImages = Object.values(capturedFiles).reduce((sum, arr) => sum + arr.length, 0)
+  // 書類0枚でも送信可能（情報確認が済んでいれば）
+  const canSubmit = verifiedEmployee !== null && confirmedInfo !== null
 
   return (
     <div className="max-w-lg mx-auto px-4 py-6 pb-24">
@@ -328,7 +362,7 @@ function UploadForm() {
           {confirmedInfo && (
             <>
               <div className="mt-6">
-                <DocumentList capturedImages={capturedImages} onCapture={handleCapture} onRemove={handleRemove} />
+                <DocumentList capturedImages={capturedImages} onCapture={handleCapture} onRemoveAt={handleRemoveAt} />
               </div>
 
               {error && (
@@ -337,7 +371,7 @@ function UploadForm() {
                 </div>
               )}
 
-              <SubmitButton disabled={!canSubmit} loading={loading} capturedCount={capturedCount} onClick={handleSubmit} />
+              <SubmitButton disabled={!canSubmit} loading={loading} capturedCount={totalImages} onClick={handleSubmit} />
             </>
           )}
         </>
