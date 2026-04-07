@@ -29,6 +29,10 @@ export default function AdminPage() {
   const [qrImages, setQrImages] = useState<Record<string, string>>({})
   const [appUrl, setAppUrl] = useState('')
 
+  // 検索・折りたたみ
+  const [searchText, setSearchText] = useState('')
+  const [expandedCode, setExpandedCode] = useState<string | null>(null)
+
   useEffect(() => {
     setAppUrl(window.location.origin)
 
@@ -207,71 +211,145 @@ export default function AdminPage() {
 
       {/* ===== 登録済み会社一覧 ===== */}
       <div>
-        <h2 className="text-lg font-bold text-gray-800 mb-4">
+        <h2 className="text-lg font-bold text-gray-800 mb-3">
           登録済み顧問先
           {selectedYearLabel && (
             <span className="ml-2 inline-block px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-700 rounded">
               {selectedYearLabel}
             </span>
           )}
+          {registeredClients.length > 0 && (
+            <span className="ml-2 text-sm font-normal text-gray-500">
+              （{registeredClients.length}件）
+            </span>
+          )}
         </h2>
+
+        {/* 検索ボックス */}
+        {registeredClients.length > 0 && (
+          <div className="mb-4">
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="法人コードまたは会社名で検索..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
 
         {registeredClients.length === 0 ? (
           <p className="text-gray-500 text-sm">この年度にはまだ顧問先が登録されていません。</p>
         ) : (
-          <div className="space-y-4">
-            {registeredClients.map((client) => (
-              <div key={client.code} className="bg-white rounded-lg border border-gray-200 p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs text-gray-400">#{client.code}</span>
-                  <h3 className="text-base font-bold text-gray-800">{client.name}</h3>
-                </div>
-
-                <div className="mb-3">
-                  <label className="block text-xs text-gray-500 mb-1">アップロードURL</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={getUploadUrl(client.code)}
-                      className="flex-1 px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-md"
-                    />
+          <div className="space-y-2">
+            {registeredClients
+              .filter((c) => {
+                if (!searchText.trim()) return true
+                const q = searchText.toLowerCase()
+                return (
+                  c.code.toLowerCase().includes(q) ||
+                  c.name.toLowerCase().includes(q)
+                )
+              })
+              .map((client) => {
+                const isExpanded = expandedCode === client.code
+                return (
+                  <div
+                    key={client.code}
+                    className="bg-white rounded-lg border border-gray-200 overflow-hidden"
+                  >
+                    {/* 折りたたみヘッダー */}
                     <button
-                      onClick={() => navigator.clipboard.writeText(getUploadUrl(client.code))}
-                      className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md active:bg-blue-700"
+                      type="button"
+                      onClick={() =>
+                        setExpandedCode(isExpanded ? null : client.code)
+                      }
+                      className="w-full flex items-center justify-between p-4 text-left active:bg-gray-50"
                     >
-                      コピー
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs text-gray-400 shrink-0">
+                          #{client.code}
+                        </span>
+                        <h3 className="text-base font-bold text-gray-800 truncate">
+                          {client.name}
+                        </h3>
+                      </div>
+                      <span
+                        className={`text-gray-400 transition-transform shrink-0 ml-2 ${
+                          isExpanded ? 'rotate-180' : ''
+                        }`}
+                      >
+                        ▼
+                      </span>
                     </button>
+
+                    {/* 展開時の内容 */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 border-t border-gray-100 pt-3">
+                        <div className="mb-3">
+                          <label className="block text-xs text-gray-500 mb-1">
+                            アップロードURL
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={getUploadUrl(client.code)}
+                              className="flex-1 px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-md"
+                            />
+                            <button
+                              onClick={() =>
+                                navigator.clipboard.writeText(
+                                  getUploadUrl(client.code)
+                                )
+                              }
+                              className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md active:bg-blue-700"
+                            >
+                              コピー
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => generateQR(client.code)}
+                            className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-md active:bg-gray-200"
+                          >
+                            QRコードを表示
+                          </button>
+                          <a
+                            href={`/api/qrcode-pdf?client=${client.code}&year=${selectedYear}`}
+                            download
+                            className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-md active:bg-green-700"
+                          >
+                            📄 QRコードPDF
+                          </a>
+                          <a
+                            href={`/api/download-zip?client=${client.code}&year=${selectedYear}`}
+                            download
+                            className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-md active:bg-purple-700"
+                          >
+                            📦 全PDF一括ダウンロード
+                          </a>
+                        </div>
+
+                        {qrImages[client.code] && (
+                          <div className="mt-3 text-center">
+                            <img
+                              src={qrImages[client.code]}
+                              alt={`${client.name}のQRコード`}
+                              className="inline-block w-48 h-48"
+                            />
+                            <p className="text-xs text-gray-400 mt-1">
+                              印刷して従業員に配布してください
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-
-                <button
-                  onClick={() => generateQR(client.code)}
-                  className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-md active:bg-gray-200"
-                >
-                  QRコードを表示
-                </button>
-
-                <a
-                  href={`/api/download-zip?client=${client.code}&year=${selectedYear}`}
-                  download
-                  className="ml-2 inline-block px-3 py-1.5 text-xs bg-purple-600 text-white rounded-md active:bg-purple-700"
-                >
-                  📦 全PDF一括ダウンロード
-                </a>
-
-                {qrImages[client.code] && (
-                  <div className="mt-3 text-center">
-                    <img
-                      src={qrImages[client.code]}
-                      alt={`${client.name}のQRコード`}
-                      className="inline-block w-48 h-48"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">印刷して従業員に配布してください</p>
-                  </div>
-                )}
-              </div>
-            ))}
+                )
+              })}
           </div>
         )}
       </div>
