@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
           { responseType: 'stream' }
         )
         archive.append(driveRes.data as Readable, {
-          name: `${folder.name}/${file.name}`,
+          name: `${folder.name}_${file.name}`,
         })
         fileCount++
       } catch (err) {
