@@ -363,6 +363,8 @@ async function getOrCreateUrlSheet(yearFolderId: string, yearLabel: string): Pro
 
 /**
  * URL・QRコード一覧表を更新
+ * QRコード列にはGoogle SheetsのIMAGE関数で /api/qrcode を呼び出して
+ * QRコード画像を埋め込む
  */
 export async function updateUrlSheet(
   yearFolderId: string,
@@ -374,21 +376,80 @@ export async function updateUrlSheet(
   const sheets = getSheets()
   const spreadsheetId = await getOrCreateUrlSheet(yearFolderId, yearLabel)
 
-  const headerRow = ['法人コード', '法人名', 'アップロードURL']
-  const dataRows = clients.map((c) => [
-    c.code,
-    c.name,
-    `${appUrl}/upload?client=${c.code}&year=${yearId}`,
-  ])
+  const headerRow = ['法人コード', '法人名', 'アップロードURL', 'QRコード']
+  const dataRows = clients.map((c) => {
+    const uploadUrl = `${appUrl}/upload?client=${c.code}&year=${yearId}`
+    const qrApiUrl = `${appUrl}/api/qrcode?text=${encodeURIComponent(uploadUrl)}`
+    // IMAGE関数 mode 4 = 指定ピクセルサイズ（200x200）
+    const qrFormula = `=IMAGE("${qrApiUrl}", 4, 200, 200)`
+    return [c.code, c.name, uploadUrl, qrFormula]
+  })
 
+  // 値を更新（USER_ENTERED でIMAGE関数を評価）
   await sheets.spreadsheets.values.update({
     spreadsheetId,
     range: `'${yearLabel}'!A1`,
-    valueInputOption: 'RAW',
+    valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [headerRow, ...dataRows],
     },
   })
+
+  // QRコード画像が見えるよう行・列のサイズを調整
+  const meta = await sheets.spreadsheets.get({ spreadsheetId })
+  const sheetMeta = meta.data.sheets?.find(
+    (s) => s.properties?.title === yearLabel,
+  )
+  const sheetId = sheetMeta?.properties?.sheetId
+
+  if (sheetId !== null && sheetId !== undefined) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          // データ行の高さを210pxに（QRコード200pxを表示できる高さ）
+          {
+            updateDimensionProperties: {
+              range: {
+                sheetId,
+                dimension: 'ROWS',
+                startIndex: 1, // 2行目以降
+                endIndex: 1 + dataRows.length,
+              },
+              properties: { pixelSize: 210 },
+              fields: 'pixelSize',
+            },
+          },
+          // QRコード列（D列）の幅を220pxに
+          {
+            updateDimensionProperties: {
+              range: {
+                sheetId,
+                dimension: 'COLUMNS',
+                startIndex: 3,
+                endIndex: 4,
+              },
+              properties: { pixelSize: 220 },
+              fields: 'pixelSize',
+            },
+          },
+          // アップロードURL列（C列）の幅を400pxに
+          {
+            updateDimensionProperties: {
+              range: {
+                sheetId,
+                dimension: 'COLUMNS',
+                startIndex: 2,
+                endIndex: 3,
+              },
+              properties: { pixelSize: 400 },
+              fields: 'pixelSize',
+            },
+          },
+        ],
+      },
+    })
+  }
 }
 
 /**
