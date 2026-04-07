@@ -69,25 +69,40 @@ interface SubmissionInfo {
 function buildHeaderRow(): string[] {
   const docLabels = DOCUMENT_TYPES.map((d) => d.label)
   const header = [
-    '従業員コード', '氏名', '最終提出日',
+    '従業員コード', '氏名', 'フリガナ', '最終提出日',
     '本人前年相違', '扶養親族前年相違',
     ...docLabels,
-    '住所', '障碍者区分', '寡婦ひとり親',
+    '前職源泉徴収票', '住所', 'マイナンバー', '障碍者区分', '寡婦ひとり親', '勤労学生',
   ]
   for (let i = 1; i <= MAX_DEPENDENTS; i++) {
-    header.push(`扶養${i}氏名`, `扶養${i}続柄`, `扶養${i}生年月日`, `扶養${i}障碍者`, `扶養${i}年収`)
+    header.push(
+      `扶養${i}氏名`,
+      `扶養${i}フリガナ`,
+      `扶養${i}続柄`,
+      `扶養${i}生年月日`,
+      `扶養${i}マイナンバー`,
+      `扶養${i}障碍者`,
+      `扶養${i}年収`,
+      `扶養${i}控除区分`,
+    )
   }
   return header
+}
+
+const PREV_JOB_LABEL_MAP: Record<string, string> = {
+  will_capture: '撮影予定',
+  no_previous_job: '前職なし',
+  reissue_requested: '再発行依頼中',
+  will_file_self: '本人確定申告',
 }
 
 function buildDataRow(
   code: string, name: string, sub: SubmissionInfo | undefined, docLabels: string[]
 ): string[] {
   const ci = sub?.confirmed
+  const declaration = ci?.newHireDeclaration
 
   // 本人前年相違 / 扶養親族前年相違
-  // 新フォーマットでは personalChanged / dependentsChanged が入っている
-  // 旧データ互換: personalChanged/dependentsChanged が未定義の場合は infoChanged を両方に適用
   const personalChanged =
     ci?.personalChanged !== undefined ? ci.personalChanged : !!ci?.infoChanged
   const dependentsChanged =
@@ -95,23 +110,83 @@ function buildDataRow(
       ? ci.dependentsChanged
       : !!ci?.infoChanged
 
+  // 本人入社者の場合は申告書ウィザードのデータを優先
+  const furigana = declaration
+    ? `${declaration.personal.lastNameKana}　${declaration.personal.firstNameKana}`
+    : ''
+  const myNumber = declaration ? declaration.personal.myNumber : ''
+  const isWorkingStudent = declaration?.isWorkingStudent ? '該当' : ''
+  const prevJobStatus = declaration
+    ? sub?.docs.includes('前職の源泉徴収票')
+      ? '撮影済み'
+      : PREV_JOB_LABEL_MAP[declaration.previousJobWithholdingSlip] || ''
+    : sub?.docs.includes('前職の源泉徴収票')
+    ? '撮影済み'
+    : ''
+
   const row: string[] = [
     code,
     name,
+    furigana,
     sub ? sub.latestDate.split('T')[0] : '未提出',
     ci ? (personalChanged ? '○' : '—') : '',
     ci ? (dependentsChanged ? '○' : '—') : '',
     ...docLabels.map((label) => (sub?.docs.includes(label) ? '○' : '')),
   ]
+  row.push(prevJobStatus)
   row.push(ci?.employee.address || '')
+  row.push(myNumber)
   row.push(ci?.employee.disability || '')
   row.push(ci?.employee.widowSingleParent || '')
+  row.push(isWorkingStudent)
+
   for (let i = 0; i < MAX_DEPENDENTS; i++) {
     const dep = ci?.dependents[i]
-    if (dep) {
-      row.push(dep.name, dep.relationship, dep.birthday, dep.disability, dep.annualIncome)
+    // 本年入社の場合は申告書ウィザードの扶養家族データを使う
+    const declDep = declaration
+      ? i === 0 && declaration.hasSpouse && declaration.spouse
+        ? declaration.spouse
+        : declaration.dependents[
+            declaration.hasSpouse && declaration.spouse ? i - 1 : i
+          ]
+      : null
+
+    if (declDep) {
+      const isSpouse = i === 0 && declaration?.hasSpouse && declaration.spouse
+      const lastName = (declDep as { lastName: string }).lastName
+      const firstName = (declDep as { firstName: string }).firstName
+      const lastNameKana = (declDep as { lastNameKana: string }).lastNameKana
+      const firstNameKana = (declDep as { firstNameKana: string }).firstNameKana
+      const relation = isSpouse
+        ? '配偶者'
+        : (declDep as { relationToEmployee: string }).relationToEmployee
+      const dependentType = isSpouse
+        ? declaration!.spouse!.deductionType
+        : (declDep as { dependentType: string }).dependentType
+
+      row.push(
+        `${lastName}　${firstName}`,
+        `${lastNameKana}　${firstNameKana}`,
+        relation,
+        declDep.birthday,
+        declDep.myNumber,
+        declDep.disability,
+        declDep.annualIncome,
+        dependentType,
+      )
+    } else if (dep) {
+      row.push(
+        dep.name,
+        dep.furigana,
+        dep.relationship,
+        dep.birthday,
+        '',
+        dep.disability,
+        dep.annualIncome,
+        dep.dependentType,
+      )
     } else {
-      row.push('', '', '', '', '')
+      row.push('', '', '', '', '', '', '', '')
     }
   }
   return row
