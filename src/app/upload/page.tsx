@@ -10,6 +10,7 @@ import BirthdayPicker from '@/components/BirthdayPicker'
 import ConfirmModal from '@/components/ConfirmModal'
 import NoPullRefresh from '@/components/NoPullRefresh'
 import { DOCUMENT_TYPES, getDocumentLabel } from '@/lib/document-types'
+import { compressImage } from '@/lib/image-compress'
 
 const NEW_HIRE_CODE = '__NEW_HIRE__'
 
@@ -232,18 +233,17 @@ function UploadForm() {
         formData.append('confirmedInfo', JSON.stringify(confirmedInfo))
       }
 
-      // ファイルを Blob に再構成して append（iOS Safari の File オブジェクト不具合対策）
-      phase = 'ファイル添付'
+      // ファイルを圧縮して append（iPhone写真の大容量対策＋iOS Safari不具合対策）
+      phase = '画像圧縮'
       for (const [docTypeId, files] of Object.entries(capturedFiles)) {
         for (let i = 0; i < files.length; i++) {
           const file = files[i]
           try {
-            const buffer = await file.arrayBuffer()
-            const blob = new Blob([buffer], { type: file.type || 'image/jpeg' })
+            const blob = await compressImage(file)
             const safeName = `${docTypeId}_${i + 1}.jpg`
             formData.append(docTypeId, blob, safeName)
           } catch (fileErr) {
-            console.error(`ファイル ${docTypeId}[${i}] の読み込みに失敗:`, fileErr)
+            console.error(`ファイル ${docTypeId}[${i}] の圧縮に失敗:`, fileErr)
             throw new Error(`画像ファイルの読み込みに失敗しました。撮り直してください。`)
           }
         }
