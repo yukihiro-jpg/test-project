@@ -252,6 +252,14 @@ export default function AdminPage() {
                   QRコードを表示
                 </button>
 
+                <a
+                  href={`/api/download-zip?client=${client.code}&year=${selectedYear}`}
+                  download
+                  className="ml-2 inline-block px-3 py-1.5 text-xs bg-purple-600 text-white rounded-md active:bg-purple-700"
+                >
+                  📦 全PDF一括ダウンロード
+                </a>
+
                 {qrImages[client.code] && (
                   <div className="mt-3 text-center">
                     <img
