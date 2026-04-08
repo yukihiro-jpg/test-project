@@ -22,6 +22,11 @@ import { isAuthenticated } from '@/lib/admin-auth'
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
+  // ログインAPI自体は認証不要（これがないとログインできない）
+  if (pathname === '/api/admin-login') {
+    return NextResponse.next()
+  }
+
   // 管理画面
   if (pathname.startsWith('/admin')) {
     if (!isAuthenticated(request)) {
@@ -36,7 +41,9 @@ export function middleware(request: NextRequest) {
     '/api/register-company',
     '/api/download-zip',
     '/api/qrcode-pdf',
-    '/api/admin-',
+    '/api/admin-mynumber',
+    '/api/admin-locks',
+    '/api/admin-unlock',
   ]
   if (protectedApiPaths.some((p) => pathname.startsWith(p))) {
     if (!isAuthenticated(request)) {
@@ -53,6 +60,8 @@ export const config = {
     '/api/register-company/:path*',
     '/api/download-zip/:path*',
     '/api/qrcode-pdf/:path*',
-    '/api/admin-:path*',
+    '/api/admin-mynumber/:path*',
+    '/api/admin-locks/:path*',
+    '/api/admin-unlock/:path*',
   ],
 }
