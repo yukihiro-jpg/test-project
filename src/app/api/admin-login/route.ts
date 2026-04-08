@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const response = NextResponse.json({ success: true })
-    return setAuthCookie(response, password)
+    return await setAuthCookie(response, password)
   } catch {
     return NextResponse.json({ error: 'ログイン処理中にエラーが発生しました' }, { status: 500 })
   }

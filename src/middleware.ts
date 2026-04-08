@@ -19,7 +19,7 @@ import { isAuthenticated } from '@/lib/admin-auth'
  * - /api/upload
  * - /api/qrcode
  */
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // ログインAPI自体は認証不要（これがないとログインできない）
@@ -29,7 +29,7 @@ export function middleware(request: NextRequest) {
 
   // 管理画面
   if (pathname.startsWith('/admin')) {
-    if (!isAuthenticated(request)) {
+    if (!(await isAuthenticated(request))) {
       const loginUrl = new URL('/admin-login', request.url)
       loginUrl.searchParams.set('redirect', pathname)
       return NextResponse.redirect(loginUrl)
@@ -46,7 +46,7 @@ export function middleware(request: NextRequest) {
     '/api/admin-unlock',
   ]
   if (protectedApiPaths.some((p) => pathname.startsWith(p))) {
-    if (!isAuthenticated(request)) {
+    if (!(await isAuthenticated(request))) {
       return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
     }
   }
