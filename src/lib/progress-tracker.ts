@@ -20,6 +20,7 @@ import {
   getOrCreateProgressSheet,
   getOrCreateSystemFolder,
 } from './client-registry'
+import { maskMyNumber } from './crypto-util'
 
 const MAX_DEPENDENTS = 10
 const MAX_RETRIES = 3
@@ -114,7 +115,8 @@ function buildDataRow(
   const furigana = declaration
     ? `${declaration.personal.lastNameKana}　${declaration.personal.firstNameKana}`
     : ''
-  const myNumber = declaration ? declaration.personal.myNumber : ''
+  // マイナンバーは末尾4桁のみ表示（マスキング）
+  const myNumber = declaration ? maskMyNumber(declaration.personal.myNumber) : ''
   const isWorkingStudent = declaration?.isWorkingStudent ? '該当' : ''
   const prevJobStatus = declaration
     ? sub?.docs.includes('前職の源泉徴収票')
@@ -169,7 +171,7 @@ function buildDataRow(
         `${lastNameKana}　${firstNameKana}`,
         relation,
         declDep.birthday,
-        declDep.myNumber,
+        maskMyNumber(declDep.myNumber),
         declDep.disability,
         declDep.annualIncome,
         dependentType,

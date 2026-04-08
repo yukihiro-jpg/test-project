@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getClientDynamic } from '@/lib/clients'
 import { loadEmployeeDataFromDrive } from '@/lib/client-registry'
+import { checkLock, recordFailure, resetCount } from '@/lib/rate-limit'
+
+function formatLockDuration(seconds: number): string {
+  if (seconds >= 3600) {
+    const hours = Math.ceil(seconds / 3600)
+    return `約${hours}時間`
+  }
+  const minutes = Math.ceil(seconds / 60)
+  return `約${minutes}分`
+}
 
 /**
  * 氏名 + 生年月日で本人認証し、認証成功時のみ個人情報を返す
@@ -22,6 +32,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '顧問先が見つかりません' }, { status: 404 })
     }
 
+    // ロック状態をチェック
+    const lockStatus = await checkLock(yearId, clientId, employeeCode)
+    if (lockStatus.locked) {
+      return NextResponse.json(
+        {
+          error: `連続して本人確認に失敗したため、${formatLockDuration(
+            lockStatus.remainingSeconds,
+          )}後まで一時的にロックされています。お急ぎの場合は税理士までご連絡ください。`,
+        },
+        { status: 429 },
+      )
+    }
+
     const employees = await loadEmployeeDataFromDrive(client.driveFolderId)
     const employee = employees.find((e) => e.code === employeeCode)
 
@@ -37,11 +60,26 @@ export async function POST(request: NextRequest) {
     const normalizedStored = normalizeBirthday(employee.birthday)
 
     if (normalizedInput !== normalizedStored) {
+      // 失敗を記録
+      const result = await recordFailure(yearId, clientId, employeeCode)
+      if (result.locked) {
+        return NextResponse.json(
+          {
+            error: `生年月日が一致しません。連続${result.fails}回の失敗により一時的にロックされました。お急ぎの場合は税理士までご連絡ください。`,
+          },
+          { status: 429 },
+        )
+      }
       return NextResponse.json(
-        { error: '生年月日が一致しません' },
-        { status: 401 }
+        {
+          error: `生年月日が一致しません（${result.fails}/5回失敗）`,
+        },
+        { status: 401 },
       )
     }
+
+    // 成功したらカウントをリセット
+    await resetCount(yearId, clientId, employeeCode)
 
     // 認証成功：個人情報を返す
     return NextResponse.json({

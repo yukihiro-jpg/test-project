@@ -14,7 +14,33 @@ import {
   appendUploadLog,
   checkAllSubmitted,
 } from '@/lib/progress-tracker'
+import { encryptSensitive } from '@/lib/crypto-util'
 import type { ConfirmedEmployeeInfo } from '@/lib/employee-data'
+
+/**
+ * ConfirmedEmployeeInfo 内のマイナンバーを暗号化する（保存前）
+ */
+function encryptConfirmedInfo(ci: ConfirmedEmployeeInfo): ConfirmedEmployeeInfo {
+  if (!ci.newHireDeclaration) return ci
+  const d = ci.newHireDeclaration
+  return {
+    ...ci,
+    newHireDeclaration: {
+      ...d,
+      personal: {
+        ...d.personal,
+        myNumber: encryptSensitive(d.personal.myNumber),
+      },
+      spouse: d.spouse
+        ? { ...d.spouse, myNumber: encryptSensitive(d.spouse.myNumber) }
+        : undefined,
+      dependents: d.dependents.map((dep) => ({
+        ...dep,
+        myNumber: encryptSensitive(dep.myNumber),
+      })),
+    },
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,10 +75,11 @@ export async function POST(request: NextRequest) {
       folderName
     )
 
-    // 確認済み従業員情報を保存
+    // 確認済み従業員情報を保存（マイナンバーは暗号化）
     if (confirmedInfoJson) {
       const confirmedInfo: ConfirmedEmployeeInfo = JSON.parse(confirmedInfoJson)
-      await writeJsonToFolder(employeeFolderId, '_confirmed_info.json', confirmedInfo)
+      const encryptedInfo = encryptConfirmedInfo(confirmedInfo)
+      await writeJsonToFolder(employeeFolderId, '_confirmed_info.json', encryptedInfo)
     }
 
     // 各書類を処理（複数ファイル対応：同じ docType.id で複数のファイルが送られる）

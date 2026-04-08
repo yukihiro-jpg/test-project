@@ -33,6 +33,28 @@ export default function AdminPage() {
   const [searchText, setSearchText] = useState('')
   const [expandedCode, setExpandedCode] = useState<string | null>(null)
 
+  // ロック一覧
+  interface LockInfo {
+    clientCode: string
+    clientName: string
+    employeeCode: string
+    employeeName: string
+    entry: { fails: number; lastFailAt: string; lockedUntil: string | null }
+  }
+  const [locks, setLocks] = useState<LockInfo[]>([])
+  const [locksLoaded, setLocksLoaded] = useState(false)
+
+  // マイナンバー表示モーダル
+  interface MyNumberData {
+    employeeName: string
+    personal: { name: string; myNumber: string }
+    spouse: { name: string; myNumber: string } | null
+    dependents: Array<{ name: string; relationship: string; myNumber: string }>
+  }
+  const [myNumberModal, setMyNumberModal] = useState<MyNumberData | null>(null)
+  const [myNumberLoading, setMyNumberLoading] = useState(false)
+  const [myNumberEmployee, setMyNumberEmployee] = useState<Record<string, string>>({})
+
   useEffect(() => {
     setAppUrl(window.location.origin)
 
@@ -51,11 +73,60 @@ export default function AdminPage() {
   useEffect(() => {
     if (!selectedYear) return
     setQrImages({})
+    setLocksLoaded(false)
     fetch(`/api/clients?year=${selectedYear}`)
       .then((res) => res.json())
       .then((data) => setRegisteredClients(data.clients || []))
       .catch(() => setRegisteredClients([]))
+
+    // ロック一覧も取得
+    fetch(`/api/admin-locks?year=${selectedYear}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setLocks(data.locks || [])
+        setLocksLoaded(true)
+      })
+      .catch(() => setLocksLoaded(true))
   }, [selectedYear])
+
+  const showMyNumber = async (clientCode: string, employeeName: string) => {
+    setMyNumberLoading(true)
+    try {
+      const res = await fetch(
+        `/api/admin-mynumber?client=${clientCode}&year=${selectedYear}&employeeName=${encodeURIComponent(employeeName)}`,
+      )
+      if (!res.ok) {
+        const data = await res.json()
+        alert(data.error || 'マイナンバーの取得に失敗しました')
+        return
+      }
+      const data = await res.json()
+      setMyNumberModal(data)
+    } catch {
+      alert('通信エラーが発生しました')
+    } finally {
+      setMyNumberLoading(false)
+    }
+  }
+
+  const unlockEmployee = async (clientCode: string, employeeCode: string) => {
+    if (!confirm('このロックを解除しますか？')) return
+    try {
+      const res = await fetch('/api/admin-unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ yearId: selectedYear, clientCode, employeeCode }),
+      })
+      if (res.ok) {
+        // 再取得
+        const locksRes = await fetch(`/api/admin-locks?year=${selectedYear}`)
+        const data = await locksRes.json()
+        setLocks(data.locks || [])
+      }
+    } catch {
+      alert('ロック解除に失敗しました')
+    }
+  }
 
   const handleRegister = async () => {
     const csvFile = csvFileRef.current?.files?.[0]
@@ -333,6 +404,39 @@ export default function AdminPage() {
                           </a>
                         </div>
 
+                        {/* マイナンバー個別確認 */}
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                          <label className="block text-xs text-gray-500 mb-1">
+                            🔐 マイナンバー個別確認（本年入社者）
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={myNumberEmployee[client.code] || ''}
+                              onChange={(e) =>
+                                setMyNumberEmployee((prev) => ({
+                                  ...prev,
+                                  [client.code]: e.target.value,
+                                }))
+                              }
+                              placeholder="従業員氏名（例: 山田　太郎）"
+                              className="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-md"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                showMyNumber(client.code, myNumberEmployee[client.code] || '')
+                              }
+                              disabled={
+                                myNumberLoading || !myNumberEmployee[client.code]?.trim()
+                              }
+                              className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-md active:bg-red-700 disabled:bg-gray-300"
+                            >
+                              表示
+                            </button>
+                          </div>
+                        </div>
+
                         {qrImages[client.code] && (
                           <div className="mt-3 text-center">
                             <img
@@ -353,6 +457,101 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* ===== ロック中の従業員一覧 ===== */}
+      {locksLoaded && locks.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-bold text-gray-800 mb-3">
+            🔒 現在ロック中の従業員 ({locks.length}名)
+          </h2>
+          <p className="text-xs text-gray-500 mb-3">
+            本人確認に連続失敗してロックされた従業員です。正当な本人の場合は手動で解除できます。
+          </p>
+          <div className="space-y-2">
+            {locks.map((lock) => (
+              <div
+                key={`${lock.clientCode}:${lock.employeeCode}`}
+                className="bg-white border border-red-200 rounded-lg p-3 flex items-center justify-between"
+              >
+                <div>
+                  <p className="text-sm font-bold text-gray-800">
+                    {lock.employeeName}
+                    <span className="ml-2 text-xs text-gray-500">
+                      {lock.clientName}
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {lock.entry.fails}回失敗 / 解除予定:{' '}
+                    {lock.entry.lockedUntil
+                      ? new Date(lock.entry.lockedUntil).toLocaleString('ja-JP')
+                      : '—'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => unlockEmployee(lock.clientCode, lock.employeeCode)}
+                  className="px-3 py-1.5 text-xs bg-orange-500 text-white rounded-md active:bg-orange-600"
+                >
+                  ロック解除
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ===== マイナンバー表示モーダル ===== */}
+      {myNumberModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+            <div className="p-5 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-800">
+                🔐 マイナンバー情報
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                この画面を閉じるとマイナンバーは見えなくなります
+              </p>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1 space-y-4 text-sm">
+              <div>
+                <p className="text-xs text-gray-500">本人</p>
+                <p className="font-bold">{myNumberModal.personal.name}</p>
+                <p className="font-mono text-base bg-yellow-50 px-2 py-1 rounded mt-1">
+                  {myNumberModal.personal.myNumber}
+                </p>
+              </div>
+              {myNumberModal.spouse && (
+                <div>
+                  <p className="text-xs text-gray-500">配偶者</p>
+                  <p className="font-bold">{myNumberModal.spouse.name}</p>
+                  <p className="font-mono text-base bg-yellow-50 px-2 py-1 rounded mt-1">
+                    {myNumberModal.spouse.myNumber}
+                  </p>
+                </div>
+              )}
+              {myNumberModal.dependents.map((dep, i) => (
+                <div key={i}>
+                  <p className="text-xs text-gray-500">
+                    扶養親族（{dep.relationship}）
+                  </p>
+                  <p className="font-bold">{dep.name}</p>
+                  <p className="font-mono text-base bg-yellow-50 px-2 py-1 rounded mt-1">
+                    {dep.myNumber}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => setMyNumberModal(null)}
+                className="w-full py-3 bg-gray-600 text-white text-sm font-bold rounded-lg active:bg-gray-700"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
