@@ -123,6 +123,81 @@ def _extract_text(file_path: Path) -> str:
         return ""
 
 
+def _extract_tohon_text_with_underlines(file_path: Path) -> tuple[str, set[int]]:
+    """謄本PDF用: テキスト + 下線(抹消)行インデックスを抽出.
+
+    謄本には「＊ 下線のあるものは抹消事項であることを示す。」とあり、
+    下線付きの 地番/地目/地積 は古い値（抹消済み）を意味する。
+    pdfplumber の page.lines から水平下線を検出し、下線の直上にある
+    文字を含むテキスト行を抹消行として返す。
+
+    Returns:
+        (text, underlined_lines)
+        text: ページを "\n" で連結したテキスト
+        underlined_lines: text.splitlines() したときの抹消行インデックス集合
+    """
+    suffix = file_path.suffix.lower()
+    if suffix != ".pdf":
+        return _extract_text(file_path), set()
+
+    all_lines: list[str] = []
+    underlined: set[int] = set()
+    try:
+        with pdfplumber.open(file_path) as pdf:
+            for page in pdf.pages:
+                # 水平下線（y0==y1）を抽出
+                h_lines = [
+                    ln for ln in page.lines if abs(ln["y0"] - ln["y1"]) < 0.5
+                ]
+
+                # 下線付き文字の (x0, y0) 集合を構築
+                under_pos: set[tuple[float, float]] = set()
+                if h_lines:
+                    for c in page.chars:
+                        cy0 = c["y0"]
+                        for ln in h_lines:
+                            ly = ln["y0"]
+                            # 下線は文字ベースラインから 0〜3pt 下に引かれる
+                            if -1 < (cy0 - ly) < 3:
+                                if not (ln["x1"] < c["x0"] or ln["x0"] > c["x1"]):
+                                    under_pos.add(
+                                        (round(c["x0"], 1), round(c["y0"], 1))
+                                    )
+                                    break
+
+                # 行単位でテキスト抽出 (chars付き) → 各行の下線有無を判定
+                try:
+                    text_lines = page.extract_text_lines()
+                except Exception:
+                    text_lines = []
+
+                if text_lines:
+                    for tl in text_lines:
+                        line_text = tl.get("text", "")
+                        chars = tl.get("chars", [])
+                        has_u = False
+                        if under_pos:
+                            for c in chars:
+                                key = (round(c["x0"], 1), round(c["y0"], 1))
+                                if key in under_pos:
+                                    has_u = True
+                                    break
+                        idx = len(all_lines)
+                        all_lines.append(line_text)
+                        if has_u:
+                            underlined.add(idx)
+                else:
+                    # フォールバック
+                    text = page.extract_text() or ""
+                    for line in text.splitlines():
+                        all_lines.append(line)
+    except Exception as e:
+        logger.error("PDF読み込みエラー (%s): %s", file_path.name, e)
+        return "", set()
+
+    return "\n".join(all_lines), underlined
+
+
 # ------------------------------------------------------------------
 # 住所解析
 # ------------------------------------------------------------------
@@ -190,7 +265,9 @@ def parse_tohon(file_path: Path) -> tuple[list[TohonLand], list[TohonBuilding]]:
     lands: list[TohonLand] = []
     buildings: list[TohonBuilding] = []
 
-    text = _extract_text(file_path)
+    # 謄本は抹消事項が「下線」で示されるため、下線付き行(=旧情報)を
+    # 識別した上でパースする。
+    text, underlined_lines = _extract_tohon_text_with_underlines(file_path)
     if not text:
         return lands, buildings
 
@@ -207,7 +284,7 @@ def parse_tohon(file_path: Path) -> tuple[list[TohonLand], list[TohonBuilding]]:
     sep_trans = str.maketrans({c: "|" for c in SEP_CHARS})
     text_norm = text.translate(sep_trans)
 
-    # 抹消行には \ue042-\ue044 の私用領域文字が含まれる。
+    # 抹消行には \ue042-\ue044 の私用領域文字が含まれるケースもある。
     STRIKE_CHARS = "\ue042\ue043\ue044"
 
     def _has_strike(s: str) -> bool:
@@ -217,11 +294,14 @@ def parse_tohon(file_path: Path) -> tuple[list[TohonLand], list[TohonBuilding]]:
 
     # 所在（抹消されていない最新の行）
     location = ""
-    for line in lines:
+    for i, line in enumerate(lines):
         # 「所 在|水戸市加倉井町字西田 |...」
         m = re.search(r"所\s*在\s*\|\s*([^|]+?)\s*\|", line)
         if m:
             loc = m.group(1).strip()
+            # 下線(抹消)行はスキップ
+            if i in underlined_lines:
+                continue
             if loc and not _has_strike(loc):
                 location = loc
                 break
@@ -240,10 +320,13 @@ def parse_tohon(file_path: Path) -> tuple[list[TohonLand], list[TohonBuilding]]:
     land_rows: list[tuple[str, str, Optional[float]]] = []
     chimoku_re = CHIMOKU_PATTERN  # (宅地|田|...)
     if header_idx >= 0:
-        for line in lines[header_idx + 1:]:
+        for li, line in enumerate(lines[header_idx + 1:], start=header_idx + 1):
             # 権利部（甲区）に達したら終了
             if "権" in line and "利" in line and "部" in line:
                 break
+            # 下線付き(=抹消済み)行は完全にスキップ
+            if li in underlined_lines:
+                continue
             # 抹消行の判定は地番列のみで行う（原因欄の抹消記号は無視）
             # 地番は半角/全角数字どちらもありうるので両対応。
             # 例: "┃２２７９番 │田 │ １５３４： │..." → 正規化後
