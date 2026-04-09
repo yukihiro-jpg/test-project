@@ -1,9 +1,12 @@
-import * as pdfjsLib from 'pdfjs-dist'
 import type { RawTableRow } from './types'
 
-// Worker設定
-if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+// pdfjs-distは動的インポートで読み込む（webpack互換性のため）
+async function getPdfjsLib() {
+  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf')
+  if (typeof window !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`
+  }
+  return pdfjsLib
 }
 
 interface TextItem {
@@ -23,8 +26,9 @@ interface PdfPageResult {
 export async function parsePdfText(
   file: File,
 ): Promise<{ pages: PdfPageResult[]; isTextPdf: boolean }> {
+  const pdfjsLib = await getPdfjsLib()
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
 
   const pages: PdfPageResult[] = []
   let totalTextItems = 0
@@ -138,8 +142,9 @@ export async function renderPdfPageToImage(
   pageNum: number,
   scale: number = 2,
 ): Promise<string> {
+  const pdfjsLib = await getPdfjsLib()
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
   const page = await pdf.getPage(pageNum)
   const viewport = page.getViewport({ scale })
 
@@ -148,14 +153,14 @@ export async function renderPdfPageToImage(
   canvas.height = viewport.height
 
   const ctx = canvas.getContext('2d')!
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await page.render({ canvasContext: ctx, viewport } as any).promise
+  await page.render({ canvasContext: ctx, viewport }).promise
 
   return canvas.toDataURL('image/png')
 }
 
 export async function getPdfPageCount(file: File): Promise<number> {
+  const pdfjsLib = await getPdfjsLib()
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
   return pdf.numPages
 }
