@@ -88,6 +88,13 @@ def _parse_share_fraction(share_str: str) -> Optional[Fraction]:
     return None
 
 
+def _normalize_name(s: str) -> str:
+    """人名から空白(全角/半角)を除去."""
+    if not s:
+        return ""
+    return re.sub(r"[\s　]+", "", s)
+
+
 def _parse_number(s: str) -> Optional[float]:
     """数値文字列→float変換."""
     try:
@@ -412,101 +419,271 @@ def parse_tohon(file_path: Path) -> tuple[list[TohonLand], list[TohonBuilding]]:
 def _parse_kou_section(text: str) -> list[OwnershipEntry]:
     """甲区（所有権に関する事項）を解析.
 
-    順位番号ごとにエントリを分割し、各エントリから
-    受付日、原因、所有者名、持分、登記種別を抽出する。
+    謄本の表形式PDFを前提に、罫線を | に正規化してから
+    4列(順位番号 | 登記の目的 | 受付年月日・受付番号 | 権利者その他の事項)
+    として読み、順位番号ごとにエントリを構築する。
+
+    抹消(下線)行は parse_tohon 側で既に除外済みの text を受け取る想定だが、
+    この関数単体でも動くようにしている。
     """
     entries: list[OwnershipEntry] = []
-
-    # 甲区セクションを抽出
-    kou_match = re.search(
-        r"甲\s*区[　\s]*[\(（]?\s*所有権[^)）]*[\)）]?(.+?)(?:乙\s*区|$)",
-        text, re.DOTALL,
-    )
-    if not kou_match:
+    if not text:
         return entries
 
-    kou_text = _zen_to_han(kou_match.group(1))
+    lines = text.splitlines()
 
-    # 順位番号で分割（"1 ", "2 " 等で始まるブロック）
-    # 順位番号がない場合はテキスト全体を1エントリとして扱う
-    blocks = re.split(r"\n\s*(\d+)\s+", kou_text)
+    def _compact(s: str) -> str:
+        return re.sub(r"[\s　]+", "", s)
 
-    # blocks[0] は最初の順位番号の前のテキスト（通常空）
-    # blocks[1], blocks[2] = 順位番号1, そのテキスト
-    # blocks[3], blocks[4] = 順位番号2, そのテキスト ...
-    if len(blocks) < 3:
-        # 順位番号分割できなかった場合、全体を1ブロックとして処理
-        entry = _parse_single_kou_entry(kou_text)
-        if entry:
-            entries.append(entry)
+    # --- 甲区セクションの範囲特定 ---
+    start = -1
+    end = len(lines)
+    for i, line in enumerate(lines):
+        c = _compact(line)
+        if "甲区" in c and ("権利部" in c or "所有権" in c):
+            start = i
+            break
+    if start < 0:
         return entries
+    for i in range(start + 1, len(lines)):
+        c = _compact(lines[i])
+        if "乙区" in c and ("権利部" in c or "所有権以外" in c):
+            end = i
+            break
 
-    i = 1
-    while i < len(blocks) - 1:
-        block_text = blocks[i + 1] if i + 1 < len(blocks) else ""
-        entry = _parse_single_kou_entry(block_text)
-        if entry:
-            entries.append(entry)
-        i += 2
+    # --- 各行を4列に正規化 ---
+    sep_trans = str.maketrans({c: "|" for c in "|｜│┃"})
+    border_re = re.compile(r"^[─━┠┨┼╂┯┷┏┓┗┛┳┻\s　]*$")
+    STRIKE_CHARS = "\ue042\ue043\ue044"
+
+    rows: list[list[str]] = []
+    for raw in lines[start + 1 : end]:
+        if border_re.match(raw):
+            continue
+        # 抹消記号しか持たないセルは空扱い
+        cleaned = raw.translate(sep_trans)
+        parts = cleaned.split("|")
+        if len(parts) < 2:
+            continue
+        # 外枠1つ分の空列を除去
+        if parts and parts[0].strip() == "":
+            parts = parts[1:]
+        if parts and parts[-1].strip() == "":
+            parts = parts[:-1]
+        if len(parts) < 4:
+            continue
+        if len(parts) > 4:
+            parts = parts[:3] + ["|".join(parts[3:])]
+        # 各セルから抹消記号を除去
+        stripped = []
+        for p in parts:
+            s = p.strip()
+            for ch in STRIKE_CHARS:
+                s = s.replace(ch, "")
+            stripped.append(s.strip())
+        rows.append(stripped)
+
+    # --- 順位番号ごとにブロック分け ---
+    blocks: list[list[list[str]]] = []
+    current: list[list[str]] = []
+    for cols in rows:
+        rank_han = _zen_to_han(cols[0])
+        if re.fullmatch(r"\d+", rank_han):
+            if current:
+                blocks.append(current)
+            current = [cols]
+        elif current:
+            current.append(cols)
+    if current:
+        blocks.append(current)
+
+    for block in blocks:
+        block_entries = _parse_kou_block(block)
+        entries.extend(block_entries)
 
     return entries
 
 
-def _parse_single_kou_entry(block: str) -> Optional[OwnershipEntry]:
-    """甲区の1エントリ（1順位番号分）を解析."""
-    if not block.strip():
-        return None
+def _parse_kou_block(block: list[list[str]]) -> list[OwnershipEntry]:
+    """順位番号1つ分のブロック(複数行×4列)から OwnershipEntry 群を構築.
 
-    entry = OwnershipEntry()
+    共有者が複数名いる場合は持分＋氏名の組をそれぞれ独立したエントリとして返す。
+    単独所有者の場合は長さ1のリストを返す。
+    """
+    if not block:
+        return []
 
-    # 登記種別（所有権保存、所有権移転、持分全部移転 等）
-    type_match = re.search(
+    purpose_col = " ".join(row[1] for row in block if len(row) > 1 and row[1])
+    receipt_col = " ".join(row[2] for row in block if len(row) > 2 and row[2])
+    rights_lines = [row[3] for row in block if len(row) > 3 and row[3]]
+
+    # --- 登記種別 ---
+    entry_type = ""
+    tm = re.search(
         r"(所有権保存|所有権移転|共有者全員持分全部移転|持分全部移転|持分一部移転|持分移転)",
-        block,
+        purpose_col,
     )
-    if type_match:
-        entry.entry_type = type_match.group(1)
+    if tm:
+        entry_type = tm.group(1)
 
-    # 受付日
-    date_match = re.search(
-        r"(?:受付|登記)[　\s]*(?:年月日)?[　\s]*[：:]?[　\s]*((?:令和|平成|昭和)\d+年\d+月\d+日)",
-        block,
-    )
-    if date_match:
-        entry.registration_date = date_match.group(1)
+    # --- 受付年月日 ---
+    registration_date = ""
+    receipt_han = _zen_to_han(receipt_col)
+    rm = re.search(r"((?:令和|平成|昭和)\d+年\d+月\d+日)", receipt_han)
+    if rm:
+        registration_date = rm.group(1)
 
-    # 原因（日付+原因種別）
-    cause_match = re.search(
-        r"原因[　\s]*[：:]?[　\s]*((?:令和|平成|昭和)\d+年\d+月\d+日)?\s*(売買|相続|贈与|遺贈|交換|共有物分割|遺産分割|分割|錯誤|判決|調停)?",
-        block,
+    # --- 原因 ---
+    cause = ""
+    cause_date = ""
+    rights_han = _zen_to_han(" ".join(rights_lines))
+    cm = re.search(
+        r"原因[　\s]*((?:令和|平成|昭和)\d+年\d+月\d+日)?\s*"
+        r"(売買|相続|贈与|遺贈|交換|共有物分割|遺産分割|分割|錯誤|判決|調停)?",
+        rights_han,
     )
-    if cause_match:
+    if cm:
         parts = []
-        if cause_match.group(1):
-            entry.cause_date = cause_match.group(1)
-            parts.append(cause_match.group(1))
-        if cause_match.group(2):
-            parts.append(cause_match.group(2))
-        entry.cause = " ".join(parts)
+        if cm.group(1):
+            cause_date = cm.group(1)
+            parts.append(cause_date)
+        if cm.group(2):
+            parts.append(cm.group(2))
+        if parts:
+            cause = " ".join(parts)
 
-    # 所有者/共有者と持分
-    owner_match = re.search(
-        r"(?:所有者|共有者)[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", block
-    )
-    if owner_match:
-        owner_text = owner_match.group(1).strip()
-        # 持分が含まれているか
-        share_match = re.search(r"持分[　\s]*([\d０-９]+分の[\d０-９]+|\d+/\d+)", block)
-        if share_match:
-            entry.share = _zen_to_han(share_match.group(1))
-            # 持分テキストを除いた部分が所有者名
-            entry.owner_name = re.sub(
-                r"持分[　\s]*[\d０-９]+分の[\d０-９]+[　\s]*", "", owner_text
+    # --- 所有者・共有者の氏名/持分を抽出 ---
+    owners = _parse_owners_from_rights_lines(rights_lines)
+
+    # 氏名が1件も取れない場合でも、登記種別だけでエントリを作る
+    if not owners:
+        entry = OwnershipEntry()
+        entry.entry_type = entry_type
+        entry.registration_date = registration_date
+        entry.cause = cause
+        entry.cause_date = cause_date
+        return [entry] if (entry.entry_type or entry.cause) else []
+
+    result: list[OwnershipEntry] = []
+    for share, name in owners:
+        entry = OwnershipEntry()
+        entry.entry_type = entry_type
+        entry.registration_date = registration_date
+        entry.cause = cause
+        entry.cause_date = cause_date
+        entry.share = share
+        entry.owner_name = name
+        result.append(entry)
+    return result
+
+
+# 氏名抽出のヒューリスティック用定数
+_FOOTER_WORDS = (
+    "移記", "規定", "省令", "附則", "順位", "原因", "売買", "相続",
+    "贈与", "遺贈", "交換", "錯誤", "判決", "調停", "年月日", "受付",
+    "番号", "共有物分割", "遺産分割", "記載", "申告",
+)
+_ADDRESS_WORDS = (
+    "市", "郡", "町", "村", "区", "番地", "丁目", "字",
+)
+_CORPORATE_RE = re.compile(
+    r"財団法人|社団法人|株式会社|有限会社|合同会社|一般法人|公社|協同組合|学校法人|宗教法人"
+)
+
+
+def _is_name_line(line: str) -> bool:
+    """その行が個人/法人の氏名候補であるか判定."""
+    c = _normalize_name(line)
+    if not c or len(c) < 2:
+        return False
+    if re.search(r"[\d０-９]", c):
+        return False
+    if any(w in c for w in _FOOTER_WORDS):
+        return False
+    if _CORPORATE_RE.search(c):
+        return True
+    if any(w in c for w in _ADDRESS_WORDS):
+        return False
+    return True
+
+
+def _parse_owners_from_rights_lines(lines: list[str]) -> list[tuple[str, str]]:
+    """権利者列の行リストから (持分, 氏名) のタプルリストを抽出.
+
+    謄本甲区の典型構造:
+        原因 ...
+        所有者 <住所>
+         <氏名>
+        順位X番の登記を移記
+
+    または共有者の場合:
+        共有者 <住所>
+            持分 <分数>
+             <氏名1>
+            <住所>
+            持分 <分数>
+             <氏名2>
+
+    行単位で「所有者/共有者」ラベルの後続行から、住所語・数字・フッタ語を
+    含まない行を氏名として採用する。
+    """
+    results: list[tuple[str, str]] = []
+    in_owner_section = False
+    current_share = ""
+
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
+
+        # 「所有者」「共有者」ラベル行 → セクション開始
+        if re.search(r"所有者|共有者", line):
+            in_owner_section = True
+            sm = re.search(
+                r"持分[　\s]*([\d０-９]+分の[\d０-９]+|[\d０-９]+/[\d０-９]+)",
+                line,
+            )
+            current_share = _zen_to_han(sm.group(1)) if sm else ""
+
+            # 行内に「所有者 <名前>」とインライン記載されているケース
+            after = re.sub(r".*?(?:所有者|共有者)[　\s]*", "", line)
+            after = re.sub(
+                r"持分[　\s]*[\d０-９]+分の[\d０-９]+[　\s]*", "", after
+            )
+            after = re.sub(
+                r"持分[　\s]*[\d０-９]+/[\d０-９]+[　\s]*", "", after
+            )
+            after = after.strip()
+            if after and _is_name_line(after):
+                results.append((current_share, _normalize_name(after)))
+                # インラインで氏名が取れたらセクション継続(次の住所/持分用)
+            continue
+
+        if not in_owner_section:
+            continue
+
+        # 行内の持分記載を拾う(住所と持分が別行のケース)
+        sm = re.search(
+            r"持分[　\s]*([\d０-９]+分の[\d０-９]+|[\d０-９]+/[\d０-９]+)",
+            line,
+        )
+        if sm:
+            current_share = _zen_to_han(sm.group(1))
+            remainder = re.sub(
+                r"持分[　\s]*[\d０-９]+分の[\d０-９]+", "", line
+            )
+            remainder = re.sub(
+                r"持分[　\s]*[\d０-９]+/[\d０-９]+", "", remainder
             ).strip()
-        else:
-            entry.owner_name = owner_text
+            if remainder and _is_name_line(remainder):
+                results.append((current_share, _normalize_name(remainder)))
+            continue
 
-    return entry if (entry.owner_name or entry.entry_type) else None
+        # 氏名行か?
+        if _is_name_line(line):
+            results.append((current_share, _normalize_name(line)))
+
+    return results
 
 
 def _parse_otsu_section(text: str) -> list[OtherRightEntry]:
@@ -578,10 +755,11 @@ def calculate_ownership(
     ロジック:
     1. 各エントリを時系列で処理
     2. entry_type に応じて持分を追跡:
-       - 所有権保存/移転: 新所有者が全部取得（or 持分指定あり）
-       - 持分移転: 指定された持分が移転
-    3. target_name が所有者の場合は持分を加算、
-       他者に移転された場合は持分を減算
+       - 所有権保存/移転: 新所有者が全部取得（持分指定なし=単独所有）
+       - 持分全部/一部移転: 指定された持分が移転
+    3. 同じ順位番号内の共有者は同一登記として複数エントリになっている
+       可能性がある(持分合算)。
+    4. 氏名比較は空白を無視して部分一致。
     """
     result = OwnershipResult(
         target_name=target_name,
@@ -591,51 +769,89 @@ def calculate_ownership(
     if not ownership_history:
         return result
 
-    # 対象者の現在の持分を追跡
-    target_share: Optional[Fraction] = None  # None=所有権なし
+    target_norm = _normalize_name(target_name) if target_name else ""
+
+    # 順位番号(registration_date+entry_type)でグルーピングして
+    # 同じ登記イベントに属する共有者エントリをまとめる。
+    # 簡易化のため連続するエントリを同一グループとみなす:
+    #   同じ registration_date & entry_type ならグループ
+    target_share: Optional[Fraction] = None  # None=未判定
     history_lines: list[str] = []
 
-    for entry in ownership_history:
-        # 履歴サマリー作成
-        summary = entry.registration_date or ""
-        if entry.cause:
-            summary += f" {entry.cause}"
-        if entry.entry_type:
-            summary += f" [{entry.entry_type}]"
-        if entry.owner_name:
-            summary += f" → {entry.owner_name}"
-        if entry.share:
-            summary += f"（持分: {entry.share}）"
-        if summary.strip():
-            history_lines.append(summary.strip())
+    def _event_key(e: OwnershipEntry) -> tuple[str, str]:
+        return (e.registration_date or "", e.entry_type or "")
 
-        # 持分計算
-        is_full_transfer = entry.entry_type in (
+    grouped: list[list[OwnershipEntry]] = []
+    for entry in ownership_history:
+        if grouped and _event_key(grouped[-1][0]) == _event_key(entry):
+            grouped[-1].append(entry)
+        else:
+            grouped.append([entry])
+
+    for group in grouped:
+        first = group[0]
+        # 履歴サマリー (グループ単位で1行)
+        summary_parts: list[str] = []
+        if first.registration_date:
+            summary_parts.append(first.registration_date)
+        if first.cause:
+            summary_parts.append(first.cause)
+        if first.entry_type:
+            summary_parts.append(f"[{first.entry_type}]")
+        if group:
+            names = []
+            for e in group:
+                disp = e.owner_name or ""
+                if e.share:
+                    disp = f"{disp}(持分{e.share})"
+                if disp:
+                    names.append(disp)
+            if names:
+                summary_parts.append("→ " + " / ".join(names))
+        summary = " ".join(summary_parts).strip()
+        if summary:
+            history_lines.append(summary)
+
+        is_full_transfer = first.entry_type in (
             "所有権保存", "所有権移転", "共有者全員持分全部移転",
         )
-        is_share_transfer = entry.entry_type in (
+        is_share_transfer = first.entry_type in (
             "持分全部移転", "持分一部移転", "持分移転",
         )
 
-        if target_name and entry.owner_name:
-            if target_name in entry.owner_name:
-                # 対象者が所有権/持分を取得
-                if entry.share:
-                    target_share = _parse_share_fraction(entry.share)
+        # グループ内で target_name にマッチするエントリの持分を合算
+        target_matched_share: Optional[Fraction] = None
+        other_has_entry = False
+        for e in group:
+            owner_norm = _normalize_name(e.owner_name)
+            if target_norm and owner_norm and target_norm in owner_norm:
+                # 持分指定があればそれを使い、無ければ 1/1 (単独所有)
+                if e.share:
+                    share_frac = _parse_share_fraction(e.share)
+                    if share_frac is not None:
+                        if target_matched_share is None:
+                            target_matched_share = share_frac
+                        else:
+                            target_matched_share += share_frac
                 else:
-                    # 持分指定なし = 単独所有
+                    target_matched_share = Fraction(1, 1)
+            elif e.owner_name:
+                other_has_entry = True
+
+        if target_matched_share is not None:
+            # 対象者がこの登記で所有権/持分を取得
+            if is_share_transfer:
+                # 持分一部移転: 既存持分に加算
+                target_share = (target_share or Fraction(0, 1)) + target_matched_share
+                if target_share > Fraction(1, 1):
                     target_share = Fraction(1, 1)
-            elif is_full_transfer:
-                # 別の人に所有権が完全に移転 → 対象者の持分消滅
-                if not entry.share:
-                    # 全部移転
-                    target_share = Fraction(0, 1)
-                # 持分指定ありの場合は、他の人がその持分を取得しただけ
-                # （対象者の持分は変わらない）
-            elif is_share_transfer:
-                # 別の人に持分移転 → 誰の持分が移転されたかは
-                # テキストから判断が必要（簡易: 対象者の持分は維持）
-                pass
+            else:
+                # 所有権移転/保存: 新規取得で上書き
+                target_share = target_matched_share
+        elif is_full_transfer and other_has_entry:
+            # 対象者以外に全部移転 → 対象者の持分消滅
+            target_share = Fraction(0, 1)
+        # is_share_transfer で対象者が関与していない場合は既存持分維持
 
     result.history_summary = history_lines
 
