@@ -584,9 +584,17 @@
         html += dRow('登記地積', ev.area_registry_sqm ? ev.area_registry_sqm+' ㎡' : '');
         // 課税情報
         html += secRow('課税情報（固定資産評価証明等）');
-        html += dRow('課税地目', ev.chimoku_tax);
+        html += dRow('課税地目（現況）', ev.chimoku_tax);
         html += dRow('課税地積', ev.area_tax_sqm ? ev.area_tax_sqm+' ㎡' : '');
         html += dRow('固定資産税評価額', ev.assessed_value ? Number(ev.assessed_value).toLocaleString()+' 円' : '');
+        // 書類間整合性チェック
+        if (ev.consistency_checks?.length) {
+          html += secRow('書類間整合性チェック');
+          ev.consistency_checks.forEach(c => {
+            const cls = c.is_match ? '' : ' class="warn"';
+            html += '<tr'+cls+'><td style="width:180px;font-weight:600;">'+c.field_name+' ('+c.other_source+')</td><td>'+c.message+'</td></tr>';
+          });
+        }
         // 持分
         if (ev.ownership?.current_share) {
           html += secRow('持分情報');
@@ -635,6 +643,30 @@
         html += dRow('田倍率', ev.multiplier.paddy_multiplier);
         html += dRow('畑倍率', ev.multiplier.field_multiplier);
         html += dRow('山林倍率', ev.multiplier.forest_multiplier);
+        // 倍率方式 評価結果
+        if (ev.valuation) {
+          const v = ev.valuation;
+          html += secRow('相続税評価額（倍率方式）');
+          html += dRow('評価方式', v.method);
+          html += dRow('評価地目', v.chimoku_used);
+          html += dRow('適用倍率', v.multiplier_raw);
+          html += dRow('固定資産税評価額', v.assessed_value ? Number(v.assessed_value).toLocaleString()+' 円' : '');
+          if (v.evaluated_value !== null && v.evaluated_value !== undefined) {
+            html += dRow('相続税評価額（持分前）', Number(v.evaluated_value).toLocaleString()+' 円');
+          }
+          if (v.share_fraction !== null && v.share_fraction !== undefined) {
+            html += dRow('持分', v.share_fraction.toFixed(4));
+          }
+          if (v.final_value !== null && v.final_value !== undefined) {
+            html += '<tr><td style="width:180px;font-weight:600;background:#e8f5e9;">相続税評価額（持分後）</td><td style="background:#e8f5e9;font-weight:600;font-size:14px;">'+Number(v.final_value).toLocaleString()+' 円</td></tr>';
+          }
+          if (v.formula) {
+            html += '<tr><td colspan="2" style="padding-left:20px;font-size:11px;color:#555;">'+v.formula+'</td></tr>';
+          }
+          if (v.warnings?.length) {
+            v.warnings.forEach(w => { html += '<tr class="warn"><td colspan="2" style="padding-left:20px;font-size:11px;">⚠ '+w+'</td></tr>'; });
+          }
+        }
         // ソース
         html += secRow('データソース');
         ev.data_sources.forEach(s => { html += '<tr><td colspan="2" style="padding-left:20px;font-size:12px;color:#666;">'+s+'</td></tr>'; });

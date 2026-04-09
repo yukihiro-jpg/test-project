@@ -76,7 +76,9 @@ class KoteiShisanLand:
 
     location: str = ""                 # 所在
     chiban: str = ""                   # 地番
+    chimoku_registry: str = ""         # 登記地目
     chimoku_tax: str = ""              # 課税地目（現況地目）
+    area_registry_sqm: Optional[float] = None  # 登記地積(㎡)
     area_tax_sqm: Optional[float] = None  # 課税地積(㎡)
     assessed_value: Optional[int] = None  # 固定資産税評価額(円)
     source_file: str = ""
@@ -196,6 +198,44 @@ class MultiplierInfo:
 
 
 # =====================================================================
+# 倍率方式 評価結果
+# =====================================================================
+@dataclass
+class ValuationResult:
+    """倍率方式による相続税評価額の算出結果."""
+
+    method: str = ""                   # 評価方式（倍率方式 / 路線価方式 / 宅地比準方式 等）
+    chimoku_used: str = ""             # 評価に用いた地目（宅地/田/畑/山林/原野）
+    multiplier_raw: str = ""           # 倍率表の生値（例: "1.1", "純18", "比準"）
+    multiplier_value: Optional[float] = None  # 数値化した倍率（該当しなければNone）
+    multiplier_prefix: str = ""        # プレフィックス（純/中/周/比準 等）
+    assessed_value: Optional[int] = None    # 固定資産税評価額（円）
+    evaluated_value: Optional[int] = None   # 相続税評価額（円, 持分考慮前）
+    share_fraction: Optional[float] = None  # 持分
+    final_value: Optional[int] = None       # 持分考慮後の評価額（円）
+    town_name: str = ""                # 倍率表の町名
+    area_name: str = ""                # 倍率表の適用地域名
+    leasehold_ratio: str = ""          # 借地権割合
+    formula: str = ""                  # 計算式の表示
+    warnings: list[str] = field(default_factory=list)  # 評価上の注意点
+
+
+# =====================================================================
+# 書類間整合性チェック
+# =====================================================================
+@dataclass
+class ConsistencyCheck:
+    """書類間の整合性チェック結果（1項目分）."""
+
+    field_name: str = ""               # 項目名（例: "登記地目", "地積"）
+    tohon_value: str = ""              # 謄本の値
+    other_value: str = ""              # 比較対象の値
+    other_source: str = ""             # 比較対象の書類名
+    is_match: bool = True              # 一致しているか
+    message: str = ""                  # メッセージ
+
+
+# =====================================================================
 # 持分計算結果
 # =====================================================================
 @dataclass
@@ -250,6 +290,12 @@ class PropertyEvaluation:
 
     # 国税庁スクレイピング
     multiplier: MultiplierInfo = field(default_factory=MultiplierInfo)
+
+    # 倍率方式 評価結果
+    valuation: Optional[ValuationResult] = None
+
+    # 書類間整合性チェック
+    consistency_checks: list[ConsistencyCheck] = field(default_factory=list)
 
     # メタ情報
     data_sources: list[str] = field(default_factory=list)

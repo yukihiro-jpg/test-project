@@ -41,6 +41,11 @@ from .services.nta_scraper import (
     scrape_prefecture_multipliers,
 )
 from .services.reinfolib_client import ReinfolibClient
+from .services.valuation import (
+    calculate_valuation,
+    check_consistency,
+    select_valuation_chimoku,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -251,6 +256,9 @@ async def evaluate_properties(request: Request):
         except Exception as e:
             logger.warning("倍率表取得失敗: %s", e)
 
+    # Excel取込済み倍率表を先読み
+    imported_multipliers = _load_imported_multipliers()
+
     evaluations: list[PropertyEvaluation] = []
     prop_id = 0
 
@@ -279,6 +287,9 @@ async def evaluate_properties(request: Request):
                 ev.nochi_daicho = nd
                 break
 
+        # 書類間整合性チェック
+        ev.consistency_checks = check_consistency(ev.tohon_land, ev.kotei_land)
+
         # 持分計算
         if sd.target_name and tl.ownership_history:
             ev.ownership = calculate_ownership(
@@ -289,7 +300,10 @@ async def evaluate_properties(request: Request):
         await _enrich_with_apis(ev, prefecture)
 
         # 倍率表
-        _apply_multiplier(ev, prefecture, city, multiplier_rows)
+        _apply_multiplier(ev, prefecture, city, multiplier_rows, imported_multipliers)
+
+        # 倍率方式 評価額算出
+        _apply_valuation(ev, imported_multipliers, city)
 
         evaluations.append(ev)
 
@@ -666,15 +680,71 @@ async def _enrich_with_apis(ev: PropertyEvaluation, prefecture: str):
         ev.notes.append("住所から座標を特定できませんでした")
 
 
-def _apply_multiplier(ev: PropertyEvaluation, prefecture: str, city: str, multiplier_rows):
-    """倍率表情報を適用（保存済みデータ優先）."""
+def _load_imported_multipliers() -> dict[str, list[dict[str, Any]]]:
+    """Excel取込済み倍率表を読み込む."""
+    import json as _json
+
+    if not IMPORTED_MULTIPLIER_FILE.exists():
+        return {}
+    try:
+        return _json.loads(IMPORTED_MULTIPLIER_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _lookup_imported_multiplier(
+    imported_data: dict[str, list[dict[str, Any]]],
+    city: str,
+    town: str,
+) -> dict[str, Any] | None:
+    """Excel取込倍率表から市町村+町名で1件抽出（部分一致）."""
+    if not city or not town:
+        return None
+    records = imported_data.get(city, [])
+    if not records:
+        return None
+    # 町名部分一致
+    for r in records:
+        if town in r.get("town_name", ""):
+            return r
+    # 前方一致
+    for r in records:
+        if r.get("town_name", "").startswith(town):
+            return r
+    return None
+
+
+def _apply_multiplier(
+    ev: PropertyEvaluation,
+    prefecture: str,
+    city: str,
+    multiplier_rows,
+    imported_data: dict[str, list[dict[str, Any]]] | None = None,
+):
+    """倍率表情報を適用（Excel取込データ最優先）."""
     location = ev.location or ""
     chiban = ev.chiban or ""
     town = _extract_town_name(location, chiban)
     if not town or not prefecture:
         return
 
-    # 保存済みデータから検索
+    # 1. Excel取込データ最優先
+    if imported_data:
+        rec = _lookup_imported_multiplier(imported_data, city, town)
+        if rec:
+            ev.multiplier.town_name = rec.get("town_name", "")
+            ev.multiplier.area_name = rec.get("area_name", "")
+            ev.multiplier.leasehold_ratio = rec.get("leasehold_ratio", "")
+            ev.multiplier.residential_multiplier = rec.get("residential", "")
+            ev.multiplier.paddy_multiplier = rec.get("paddy", "")
+            ev.multiplier.field_multiplier = rec.get("field", "")
+            ev.multiplier.forest_multiplier = rec.get("forest", "")
+            ev.multiplier.wasteland_multiplier = rec.get("wasteland", "")
+            ev.multiplier.is_rosenka_area = False
+            ev.data_sources.append("国税庁 評価倍率表（Excel取込）")
+            return
+
+    # 2. 保存済みスクレイピングデータ
     saved_data = load_multipliers_json(DATA_DIR / f"{_pref_key(prefecture)}_multipliers.json")
     if saved_data and city:
         ev.multiplier = lookup_from_saved_data(saved_data, city, town)
@@ -682,11 +752,44 @@ def _apply_multiplier(ev: PropertyEvaluation, prefecture: str, city: str, multip
             ev.data_sources.append("国税庁 評価倍率表（保存済み）")
             return
 
-    # リアルタイムスクレイピングの結果
+    # 3. リアルタイムスクレイピングの結果
     if multiplier_rows:
         from .services.nta_scraper import lookup_multiplier as _lookup
         ev.multiplier = _lookup(multiplier_rows, town)
         ev.data_sources.append("国税庁 評価倍率表")
+
+
+def _apply_valuation(
+    ev: PropertyEvaluation,
+    imported_data: dict[str, list[dict[str, Any]]] | None,
+    city: str,
+):
+    """倍率方式による相続税評価額を計算して ev.valuation にセット."""
+    if ev.property_type != "土地":
+        return
+    if not imported_data or not city:
+        return
+
+    # 倍率表レコード取得
+    town = _extract_town_name(ev.location or "", ev.chiban or "")
+    if not town:
+        return
+    rec = _lookup_imported_multiplier(imported_data, city, town)
+    if not rec:
+        return
+
+    chimoku = select_valuation_chimoku(ev)
+    if not chimoku:
+        ev.notes.append("評価地目が不明のため倍率方式の計算をスキップしました")
+        return
+
+    share = ev.ownership.share_fraction if ev.ownership else None
+    ev.valuation = calculate_valuation(
+        assessed_value=ev.assessed_value,
+        chimoku=chimoku,
+        multiplier_record=rec,
+        share_fraction=share,
+    )
 
 
 # ------------------------------------------------------------------
@@ -723,7 +826,10 @@ def _tohon_building_dict(tb: TohonBuilding) -> dict:
 def _kotei_land_dict(kl: KoteiShisanLand) -> dict:
     return {
         "location": kl.location, "chiban": kl.chiban,
-        "chimoku_tax": kl.chimoku_tax, "area_tax_sqm": kl.area_tax_sqm,
+        "chimoku_registry": kl.chimoku_registry,
+        "chimoku_tax": kl.chimoku_tax,
+        "area_registry_sqm": kl.area_registry_sqm,
+        "area_tax_sqm": kl.area_tax_sqm,
         "assessed_value": kl.assessed_value, "source_file": kl.source_file,
     }
 
@@ -816,9 +922,41 @@ def _evaluation_to_dict(ev: PropertyEvaluation) -> dict[str, Any]:
             "area_name": ev.multiplier.area_name,
             "town_name": ev.multiplier.town_name,
         },
+        "valuation": None,
+        "consistency_checks": [
+            {
+                "field_name": c.field_name,
+                "tohon_value": c.tohon_value,
+                "other_value": c.other_value,
+                "other_source": c.other_source,
+                "is_match": c.is_match,
+                "message": c.message,
+            }
+            for c in ev.consistency_checks
+        ],
         "data_sources": ev.data_sources,
         "notes": ev.notes,
     }
+
+    # 倍率方式 評価結果
+    if ev.valuation:
+        v = ev.valuation
+        d["valuation"] = {
+            "method": v.method,
+            "chimoku_used": v.chimoku_used,
+            "multiplier_raw": v.multiplier_raw,
+            "multiplier_value": v.multiplier_value,
+            "multiplier_prefix": v.multiplier_prefix,
+            "assessed_value": v.assessed_value,
+            "evaluated_value": v.evaluated_value,
+            "share_fraction": v.share_fraction,
+            "final_value": v.final_value,
+            "town_name": v.town_name,
+            "area_name": v.area_name,
+            "leasehold_ratio": v.leasehold_ratio,
+            "formula": v.formula,
+            "warnings": v.warnings,
+        }
 
     # 建物情報
     if ev.tohon_building:

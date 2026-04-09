@@ -99,8 +99,14 @@ def _write_property_section(
 
     # --- 課税情報（固定資産評価証明等） ---
     row = _write_section_header(ws, row, "課税情報（固定資産評価証明等）")
+    kl = ev.kotei_land
     items = [
-        ("課税地目", ev.chimoku_tax),
+        ("登記地目（固定資産）", kl.chimoku_registry if kl else ""),
+        ("課税地目（現況）", ev.chimoku_tax),
+        (
+            "登記地積（固定資産）",
+            f"{kl.area_registry_sqm}㎡" if kl and kl.area_registry_sqm is not None else "",
+        ),
         (
             "課税地積",
             f"{ev.area_tax_sqm}㎡" if ev.area_tax_sqm is not None else "",
@@ -112,6 +118,18 @@ def _write_property_section(
     ]
     for label, value in items:
         row = _write_data_row(ws, row, label, value)
+
+    # --- 書類間整合性チェック ---
+    if ev.consistency_checks:
+        row = _write_section_header(ws, row, "書類間整合性チェック")
+        for chk in ev.consistency_checks:
+            label = f"{chk.field_name} ({chk.other_source})"
+            value = chk.message
+            r = _write_data_row(ws, row, label, value)
+            if not chk.is_match:
+                ws.cell(row=row, column=2).fill = WARN_FILL
+                ws.cell(row=row, column=3).fill = WARN_FILL
+            row = r
 
     # --- 持分情報 ---
     if ev.ownership and (ev.ownership.target_name or ev.ownership.current_share):
@@ -255,6 +273,29 @@ def _write_property_section(
     ]
     for label, value in items:
         row = _write_data_row(ws, row, label, value)
+
+    # --- 倍率方式 相続税評価額 ---
+    if ev.valuation:
+        v = ev.valuation
+        row = _write_section_header(ws, row, "相続税評価額（倍率方式）")
+        items = [
+            ("評価方式", v.method),
+            ("評価地目", v.chimoku_used),
+            ("適用倍率", v.multiplier_raw),
+            ("固定資産税評価額", f"{v.assessed_value:,}円" if v.assessed_value is not None else ""),
+            ("相続税評価額（持分前）", f"{v.evaluated_value:,}円" if v.evaluated_value is not None else ""),
+            ("持分", f"{v.share_fraction:.4f}" if v.share_fraction is not None else "単独所有"),
+            ("相続税評価額（持分後）", f"{v.final_value:,}円" if v.final_value is not None else ""),
+            ("計算式", v.formula),
+        ]
+        for label, value in items:
+            row = _write_data_row(ws, row, label, value)
+        # 注意事項
+        for w in v.warnings:
+            r = _write_data_row(ws, row, "注意", w)
+            ws.cell(row=row, column=2).fill = WARN_FILL
+            ws.cell(row=row, column=3).fill = WARN_FILL
+            row = r
 
     # --- データソース ---
     row = _write_section_header(ws, row, "データソース")
