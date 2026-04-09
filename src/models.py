@@ -152,7 +152,7 @@ class HazardInfo:
 class MultiplierInfo:
     """評価倍率情報（国税庁スクレイピング取得）."""
 
-    is_rosenka_area: bool = True
+    is_rosenka_area: Optional[bool] = None  # None=未判定, True=路線価, False=倍率
     residential_multiplier: str = ""
     paddy_multiplier: str = ""
     field_multiplier: str = ""

@@ -20,7 +20,7 @@ def test_property_evaluation_defaults():
     assert ev.property_id == 0
     assert ev.zoning.zone_type == ""
     assert ev.hazard.flood_risk == ""
-    assert ev.multiplier.is_rosenka_area is True
+    assert ev.multiplier.is_rosenka_area is None
 
 
 def test_tohon_land():

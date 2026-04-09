@@ -128,7 +128,7 @@ def _build_columns() -> list[tuple[str, int, str, callable, Alignment]]:
         # --- 倍率情報 ---
         ("倍率表町名", 14, "倍率", lambda ev: ev.multiplier.town_name, LEFT),
         ("評価方式区分", 11, "倍率",
-         lambda ev: "路線価地域" if ev.multiplier.is_rosenka_area else "倍率地域",
+         lambda ev: "路線価地域" if ev.multiplier.is_rosenka_area is True else ("倍率地域" if ev.multiplier.is_rosenka_area is False else ""),
          CENTER),
         ("借地権割合", 10, "倍率", lambda ev: ev.multiplier.leasehold_ratio, CENTER),
         ("宅地倍率", 8, "倍率", lambda ev: ev.multiplier.residential_multiplier, CENTER),

@@ -895,7 +895,7 @@
         ['高潮',               'hazard',   ev => ev.hazard?.storm_surge_risk || '該当なし',    ''],
         // --- 倍率 ---
         ['倍率表町名',         'bairitsu', ev => ev.multiplier?.town_name || '',              ''],
-        ['評価方式区分',       'bairitsu', ev => ev.multiplier ? (ev.multiplier.is_rosenka_area ? '路線価地域' : '倍率地域') : '', 'center'],
+        ['評価方式区分',       'bairitsu', ev => { const r = ev.multiplier?.is_rosenka_area; return r === true ? '路線価地域' : r === false ? '倍率地域' : ''; }, 'center'],
         ['借地権割合',         'bairitsu', ev => ev.multiplier?.leasehold_ratio || '',        'center'],
         ['宅地倍率',           'bairitsu', ev => ev.multiplier?.residential_multiplier || '', 'center'],
         ['田倍率',             'bairitsu', ev => ev.multiplier?.paddy_multiplier || '',       'center'],
