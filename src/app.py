@@ -40,6 +40,7 @@ from .services.nta_scraper import (
     scrape_prefecture_multipliers,
 )
 from .services.reinfolib_client import ReinfolibClient
+from .services.wagri_client import WagriClient
 from .services.valuation import (
     calculate_valuation,
     check_consistency,
@@ -65,6 +66,7 @@ IMPORTED_MULTIPLIER_FILE = DATA_DIR / "multipliers_imported.json"
 MUNICIPALITY_LIST_FILE = DATA_DIR / "ibaraki_municipality_list.json"
 
 reinfolib = ReinfolibClient()
+wagri = WagriClient()
 
 
 # ------------------------------------------------------------------
@@ -850,6 +852,16 @@ async def _enrich_with_apis(ev: PropertyEvaluation, prefecture: str):
                 ev.data_sources.append("不動産情報ライブラリAPI (ハザード)")
         except Exception as e:
             ev.notes.append(f"API取得エラー: {e}")
+
+        # WAGRI 農振区分
+        if wagri.is_configured:
+            try:
+                agri = await wagri.get_agri_zone_by_distance(ev.latitude, ev.longitude)
+                if agri:
+                    ev.agri_zone = agri
+                    ev.data_sources.append("WAGRI 農地データAPI")
+            except Exception as e:
+                logger.warning("WAGRI 農振取得エラー: %s", e)
     else:
         ev.notes.append("住所から座標を特定できませんでした")
 
@@ -1057,6 +1069,8 @@ def _evaluation_to_dict(ev: PropertyEvaluation) -> dict[str, Any]:
         "building": None,
         # 農地情報
         "nochi": None,
+        # 農振区分（WAGRI）
+        "agri_zone": ev.agri_zone,
         # 用途地域
         "zoning": {
             "zone_type": ev.zoning.zone_type,

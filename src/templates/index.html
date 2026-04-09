@@ -880,6 +880,7 @@
         ['建物評価額',         'tatemono', ev => yen(ev.building?.assessed_value),            'num'],
         ['建築年',             'tatemono', ev => ev.building?.construction_year || '',        'center'],
         // --- 農地 ---
+        ['農振区分',           'nochi',    ev => ev.agri_zone || '',                          ''],
         ['農地区分',           'nochi',    ev => ev.nochi?.farm_category || '',               'center'],
         ['耕作者',             'nochi',    ev => ev.nochi?.farmer_name || '',                 ''],
         ['権利種別',           'nochi',    ev => ev.nochi?.right_type || '',                  'center'],
@@ -917,7 +918,7 @@
         ['課税',     'kazei',    3],
         ['持分',     'mochi',    2],
         ['建物',     'tatemono', 5],
-        ['農地',     'nochi',    3],
+        ['農地',     'nochi',    4],
         ['用途',     'youto',    4],
         ['ハザード', 'hazard',   4],
         ['倍率',     'bairitsu', 7],

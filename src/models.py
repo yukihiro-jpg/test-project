@@ -250,6 +250,7 @@ class PropertyEvaluation:
     zoning: ZoningInfo = field(default_factory=ZoningInfo)
     road: RoadInfo = field(default_factory=RoadInfo)
     hazard: HazardInfo = field(default_factory=HazardInfo)
+    agri_zone: str = ""                # 農振区分（WAGRI API）
 
     # 国税庁スクレイピング
     multiplier: MultiplierInfo = field(default_factory=MultiplierInfo)

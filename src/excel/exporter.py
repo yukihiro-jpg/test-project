@@ -106,6 +106,9 @@ def _build_columns() -> list[tuple[str, int, str, callable, Alignment]]:
          lambda ev: ev.kotei_building.construction_year if ev.kotei_building else "",
          CENTER),
         # --- 農地情報 ---
+        ("農振区分", 18, "農地",
+         lambda ev: ev.agri_zone,
+         LEFT),
         ("農地区分", 10, "農地",
          lambda ev: ev.nochi_daicho.farm_category if ev.nochi_daicho else "",
          CENTER),
