@@ -199,19 +199,29 @@ def parse_tohon(file_path: Path) -> tuple[list[TohonLand], list[TohonBuilding]]:
     text_han = _zen_to_han(text)
 
     # --- 土地 ---
-    # 謄本PDFは表形式で「|」区切り。抹消行には \ue042-\ue044 の私用領域文字が含まれる。
+    # 謄本PDFは表形式で区切り文字が混在:
+    #   |  (U+007C ASCII pipe)
+    #   ｜ (U+FF5C 全角)
+    #   │ (U+2502 BOX DRAWINGS LIGHT VERTICAL)
+    #   ┃ (U+2503 BOX DRAWINGS HEAVY VERTICAL, 外枠)
+    # 扱いやすいように縦線類を "|" に統一する。
+    SEP_CHARS = "|｜│┃"
+    sep_trans = str.maketrans({c: "|" for c in SEP_CHARS})
+    text_norm = text.translate(sep_trans)
+
+    # 抹消行には \ue042-\ue044 の私用領域文字が含まれる。
     STRIKE_CHARS = "\ue042\ue043\ue044"
 
     def _has_strike(s: str) -> bool:
         return any(c in s for c in STRIKE_CHARS)
 
-    lines = text.splitlines()
+    lines = text_norm.splitlines()
 
     # 所在（抹消されていない最新の行）
     location = ""
     for line in lines:
         # 「所 在|水戸市加倉井町字西田 |...」
-        m = re.search(r"所\s*在\s*[|｜]\s*([^|｜]+?)\s*[|｜]", line)
+        m = re.search(r"所\s*在\s*\|\s*([^|]+?)\s*\|", line)
         if m:
             loc = m.group(1).strip()
             if loc and not _has_strike(loc):
@@ -237,13 +247,15 @@ def parse_tohon(file_path: Path) -> tuple[list[TohonLand], list[TohonBuilding]]:
             if "権" in line and "利" in line and "部" in line:
                 break
             # 抹消行の判定は地番列のみで行う（原因欄の抹消記号は無視）
-            # 「937番  |田  | 2790:00 |」のような行
+            # 地番は半角/全角数字どちらもありうるので両対応。
+            # 例: "┃２２７９番 │田 │ １５３４： │..." → 正規化後
+            #     "|２２７９番 |田 | １５３４： |..."
             row = re.search(
-                r"(\d+番(?:\d+)?)\s*[|｜]\s*(" + chimoku_re[1:-1] + r")\s*[|｜]\s*([\d\s,，:：.]+?)\s*[|｜]",
+                r"([\d０-９]+番(?:[\d０-９]+)?)\s*\|\s*(" + chimoku_re[1:-1] + r")\s*\|\s*([\d\s,，:：.０-９]+?)\s*\|",
                 line,
             )
             if row:
-                chiban = row.group(1)
+                chiban = _zen_to_han(row.group(1))
                 chimoku = row.group(2)
                 area_raw = _zen_to_han(row.group(3)).replace(" ", "").replace(",", "")
                 # 謄本の地積欄は「整数:小数」のように「:」で区切られることがある
@@ -566,10 +578,27 @@ def calculate_ownership(
 # ------------------------------------------------------------------
 # 固定資産評価証明/課税明細書パーサー
 # ------------------------------------------------------------------
+# 固定資産評価証明の所在+地番パターン
+#   例: "愛宕町1", "袴塚1丁目2037-5", "中原町32-1"
+_KOTEI_LOC_RE = re.compile(
+    r"([\u4e00-\u9fffぁ-んァ-ヶ]{1,6}町(?:[\d０-９]+丁目)?)([\d０-９]+(?:[-－][\d０-９]+)?)"
+)
+
+
 def parse_kotei_shisan(
     file_path: Path,
 ) -> tuple[list[KoteiShisanLand], list[KoteiShisanBuilding]]:
-    """固定資産評価証明/課税明細書PDFから土地・建物情報を抽出."""
+    """固定資産評価証明/課税明細書PDFから土地・建物情報を抽出.
+
+    スキャン+OCRのPDFが多く、ラベル付き形式とは限らないため、
+    以下の2パスで抽出を試みる:
+
+    1. ラベル付き形式（"所在:", "地番:", "地積:" 等）
+    2. 表形式（町名+地番 + 周辺テキストから地目・面積・評価額を推定）
+
+    OCR品質が低い場合は一部または全ての値が不正確になりうる。
+    呼び出し側で手動検証を促す注記を追加することを推奨。
+    """
     lands: list[KoteiShisanLand] = []
     buildings: list[KoteiShisanBuilding] = []
 
@@ -579,52 +608,131 @@ def parse_kotei_shisan(
 
     text_han = _zen_to_han(text)
 
-    # 土地
-    land = KoteiShisanLand(source_file=file_path.name)
-    m = re.search(r"所在[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
+    # ---------------- パス1: ラベル付き形式 ----------------
+    labeled_land = KoteiShisanLand(source_file=file_path.name)
+    m = re.search(r"所在[　\s]*[：:]\s*(.+?)(?:\n|$)", text)
     if m:
-        land.location = m.group(1).strip()
-    m = re.search(r"地番[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
+        labeled_land.location = m.group(1).strip()
+    m = re.search(r"地番[　\s]*[：:]\s*(.+?)(?:\n|$)", text)
     if m:
-        land.chiban = m.group(1).strip()
+        labeled_land.chiban = m.group(1).strip()
     m = re.search(r"(?:課税地目|現況地目|現況)[　\s]*[：:]?[　\s]*" + CHIMOKU_PATTERN, text)
     if m:
-        land.chimoku_tax = m.group(1).strip()
-    m = re.search(r"(?:課税地積|地積)[　\s]*[：:]?[　\s]*([\d.,，]+)\s*[㎡m²]?", text_han)
+        labeled_land.chimoku_tax = m.group(1).strip()
+    m = re.search(r"(?:課税地積|地積)[　\s]*[：:]\s*([\d.,，]+)\s*[㎡m²]?", text_han)
     if m:
-        land.area_tax_sqm = _parse_number(m.group(1))
-    m = re.search(r"(?:評価額|価格|固定資産税評価額)[　\s]*[：:]?[　\s]*([\d,，]+)\s*円?", text_han)
+        labeled_land.area_tax_sqm = _parse_number(m.group(1))
+    m = re.search(
+        r"(?:評価額|価格|固定資産税評価額)[　\s]*[：:]\s*([\d,，]+)\s*円?", text_han
+    )
     if m:
-        land.assessed_value = _parse_int(m.group(1))
+        labeled_land.assessed_value = _parse_int(m.group(1))
 
-    if land.location or land.chiban:
-        lands.append(land)
+    if labeled_land.location and labeled_land.chiban:
+        lands.append(labeled_land)
 
-    # 建物
+    # ---------------- パス2: 表形式・ベストエフォート ----------------
+    # ラベル付きで既に拾えた場合はスキップ
+    if not lands:
+        lands.extend(_parse_kotei_tabular(text_han, file_path.name))
+
+    # ---------------- 建物（ラベル付き形式のみ）----------------
     if re.search(r"家屋番号", text):
         bld = KoteiShisanBuilding(source_file=file_path.name)
-        bld.location = land.location
-        m = re.search(r"家屋番号[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
+        if labeled_land.location:
+            bld.location = labeled_land.location
+        m = re.search(r"家屋番号[　\s]*[：:]\s*(.+?)(?:\n|$)", text)
         if m:
             bld.kaoku_bango = m.group(1).strip()
-        m = re.search(r"種類[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
+        m = re.search(r"種類[　\s]*[：:]\s*(.+?)(?:\n|$)", text)
         if m:
             bld.kind = m.group(1).strip()
-        m = re.search(r"構造[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
+        m = re.search(r"構造[　\s]*[：:]\s*(.+?)(?:\n|$)", text)
         if m:
             bld.structure = m.group(1).strip()
-        m = re.search(r"(?:課税)?床面積[　\s]*[：:]?[　\s]*([\d.,，]+)\s*[㎡m²]?", text_han)
+        m = re.search(r"(?:課税)?床面積[　\s]*[：:]\s*([\d.,，]+)\s*[㎡m²]?", text_han)
         if m:
             bld.area_tax_sqm = _parse_number(m.group(1))
-        m = re.search(r"(?:評価額|価格)[　\s]*[：:]?[　\s]*([\d,，]+)\s*円?", text_han)
+        m = re.search(r"(?:評価額|価格)[　\s]*[：:]\s*([\d,，]+)\s*円?", text_han)
         if m:
             bld.assessed_value = _parse_int(m.group(1))
-        m = re.search(r"(?:建築年|建築年次)[　\s]*[：:]?[　\s]*((?:昭和|平成|令和)\d+年?|\d{4}年?)", text)
+        m = re.search(
+            r"(?:建築年|建築年次)[　\s]*[：:]\s*((?:昭和|平成|令和)\d+年?|\d{4}年?)", text
+        )
         if m:
             bld.construction_year = m.group(1).strip()
-        buildings.append(bld)
+        if bld.kaoku_bango or bld.kind:
+            buildings.append(bld)
 
     return lands, buildings
+
+
+def _parse_kotei_tabular(text: str, source_file: str) -> list[KoteiShisanLand]:
+    """固定資産評価証明の表形式からベストエフォートで土地情報を抽出.
+
+    OCRノイズが多い前提のため、同一「所在+地番」は重複排除し、
+    周辺行から地目・面積・評価額を推定する。
+    """
+    lands: list[KoteiShisanLand] = []
+    seen_keys: set[tuple[str, str]] = set()
+    lines = text.splitlines()
+
+    for i, line in enumerate(lines):
+        for loc_match in _KOTEI_LOC_RE.finditer(line):
+            location = loc_match.group(1).strip()
+            chiban = _zen_to_han(loc_match.group(2).strip())
+
+            # 住所（市/県/区に続く町名）はスキップ
+            preceding = line[: loc_match.start()]
+            if re.search(r"[市県区]$", preceding.rstrip()):
+                continue
+            # 「番地」が続く場合も住所
+            tail = line[loc_match.end(): loc_match.end() + 3]
+            if "番地" in tail:
+                continue
+
+            key = (location, chiban)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+
+            land = KoteiShisanLand(
+                source_file=source_file,
+                location=location,
+                chiban=chiban,
+            )
+
+            # コンテキスト: 前1行〜後4行
+            ctx_start = max(0, i - 1)
+            ctx_end = min(len(lines), i + 5)
+            context = "\n".join(lines[ctx_start:ctx_end])
+
+            # 地目: 優先度は 雑種地 > 宅地 > 田 > 畑 > 山林 > 原野
+            cm = re.search(r"(雑種地|宅地|田|畑|山林|原野|牧場|池沼)", context)
+            if cm:
+                land.chimoku_tax = cm.group(1)
+
+            # 面積: X.XX 形式（10㎡以上100000㎡未満）
+            for raw in re.findall(r"(\d{1,5}[.．][\d]{2})", context):
+                cand = raw.replace("．", ".").replace(",", "").replace(",", "")
+                try:
+                    val = float(cand)
+                except ValueError:
+                    continue
+                if 10 <= val < 100000:
+                    land.area_tax_sqm = val
+                    break
+
+            # 評価額: \XXX,XXX,XXX or ¥XXX,XXX,XXX or ￥XXX,XXX,XXX
+            vm = re.search(r"[\\¥￥]\s*([\d,，]+)", context)
+            if vm:
+                val = _parse_int(vm.group(1))
+                if val is not None and val > 1000:
+                    land.assessed_value = val
+
+            lands.append(land)
+
+    return lands
 
 
 # ------------------------------------------------------------------
@@ -698,53 +806,144 @@ def parse_nayosecho(
 # ------------------------------------------------------------------
 # 農地台帳パーサー
 # ------------------------------------------------------------------
+# 農地台帳の所在地パターン:
+#   "加倉井町2279", "中原町32-1", "中原町字南田268", "中原町495-1の一部"
+# 行中の任意位置に出現しうる（前後に番号や面積がつくケースもある）
+_NOCHI_LOC_RE = re.compile(
+    r"([^\d\s　ロ|│'\"’”]{1,8}町(?:字[^\d\s　ロ|│'\"’”]{1,8})?[\d０-９]+(?:[-－][\d０-９]+)?(?:の[\d０-９]+)?(?:の一部)?)"
+)
+
+
 def parse_nochi_daicho(file_path: Path) -> list[NochiDaicho]:
-    """農地台帳PDFから農地情報を抽出."""
+    """農地台帳PDFから農地情報を抽出.
+
+    OCR済みスキャンPDFを想定したベストエフォート実装:
+        - 各行から「<町名><地番>」パターンを検出
+        - 前後数行から面積・地目・貸借形態・貸主（権利者）を推定
+        - 同一「所在+地番」は重複排除
+    """
     results: list[NochiDaicho] = []
+    seen_keys: set[tuple[str, str]] = set()
 
     text = _extract_text(file_path)
     if not text:
         return results
 
     text_han = _zen_to_han(text)
+    lines = text_han.splitlines()
 
-    entry = NochiDaicho(source_file=file_path.name)
-    m = re.search(r"所在[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-    if m:
-        entry.location = m.group(1).strip()
-    m = re.search(r"地番[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-    if m:
-        entry.chiban = m.group(1).strip()
-    m = re.search(r"地目[　\s]*[：:]?[　\s]*(田|畑)", text)
-    if m:
-        entry.chimoku = m.group(1).strip()
-    m = re.search(r"(?:面積|地積)[　\s]*[：:]?[　\s]*([\d.,，]+)\s*[㎡m²]?", text_han)
-    if m:
-        entry.area_sqm = _parse_number(m.group(1))
-    # 農地区分
-    m = re.search(
-        r"(?:農地区分|区分)[　\s]*[：:]?[　\s]*(甲種農地|第[1-3１-３一二三]種農地|市街化区域内農地|生産緑地)",
-        text,
-    )
-    if m:
-        entry.farm_category = _zen_to_han(m.group(1)).strip()
-    # 耕作者
-    m = re.search(r"(?:耕作者|耕作者氏名)[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-    if m:
-        entry.farmer_name = m.group(1).strip()
-    # 権利種別
-    m = re.search(
-        r"(?:権利の種類|権利種別|権原|権利)[　\s]*[：:]?[　\s]*(所有|賃借権|使用貸借|耕作権|永小作権)",
-        text,
-    )
-    if m:
-        entry.right_type = m.group(1).strip()
-    # 権利者
-    m = re.search(r"(?:権利者)[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-    if m:
-        entry.right_holder = m.group(1).strip()
+    # 経営者名を先頭付近から取得
+    farmer_name = ""
+    for line in lines[:20]:
+        m = re.search(r"氏\s*名\s+([^\s<>]+\s+[^\s<>]+)", line)
+        if m:
+            farmer_name = m.group(1).strip()
+            break
 
-    if entry.location or entry.chiban:
-        results.append(entry)
+    # 住所の番地パターンを判定用に用意（貸主住所は地番として扱わない）
+    # 例: "水戸市中原町660番地", "茨城県笠間市五平115番"
+    addr_prefix_re = re.compile(r"(?:市|県|区)$")
+
+    for i, line in enumerate(lines):
+        for loc_match in _NOCHI_LOC_RE.finditer(line):
+            location_chiban = loc_match.group(1).strip()
+            start_pos = loc_match.start(1)
+
+            # 直前に「市/県/区」があれば貸主住所なのでスキップ
+            preceding = line[:start_pos]
+            if addr_prefix_re.search(preceding.rstrip()):
+                continue
+            # キャプチャ内に「市/県/区」が含まれる場合も貸主住所（例: "水戸市中原町6"）
+            if re.search(r"[市県区]", location_chiban):
+                continue
+            # 直後に「番地」があっても住所
+            after = line[loc_match.end(1):loc_match.end(1) + 2]
+            if "番地" in line[loc_match.end(1):loc_match.end(1) + 3]:
+                continue
+
+            # 所在地と地番を分離: 末尾の数字（と枝番）を地番として切り出す
+            m = re.search(r"^(.+?町(?:字[^\d]+)?)([\d０-９]+(?:[-－][\d０-９]+)?(?:の[\d０-９]+)?(?:の一部)?)$", location_chiban)
+            if m:
+                location = m.group(1).strip()
+                chiban = _zen_to_han(m.group(2))
+            else:
+                location = location_chiban
+                chiban = ""
+
+            key = (location, chiban)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+
+            entry = NochiDaicho(
+                source_file=file_path.name,
+                location=location,
+                chiban=chiban,
+                farmer_name=farmer_name,
+            )
+
+            # コンテキスト: 前2行〜後4行
+            ctx_start = max(0, i - 2)
+            ctx_end = min(len(lines), i + 5)
+            context = "\n".join(lines[ctx_start:ctx_end])
+
+            # 面積: 日付（令5.6.20 等）は除外し、10㎡以上の値を採用
+            # パターン1: 同一行内 "<locchiban> ... <area>"（e.g. "中原町46－2 普通畑 19．00"）
+            # パターン2: 直後1-2行目先頭 "<area> ..."（e.g. "1,534.00 ○ 調 自 ..."）
+            for j in range(i, min(i + 3, len(lines))):
+                candidate_line = lines[j]
+                # 令和・平成・昭和の日付を除外するため、「令」「平」「昭」が含まれる区間は無視
+                cleaned = re.sub(r"[令平昭][\d０-９.．,，\s]+", " ", candidate_line)
+                # 全角→半角統一
+                cleaned_han = cleaned.translate(_ZEN_DIGITS).replace("．", ".").replace("，", ",")
+                # 面積候補: カンマ付き数値 or 整数部3桁以上
+                # e.g., "1,534.00", "543.00", "19.00", "2,124,00"(OCRノイズ)
+                matches = re.findall(r"\d[\d,.]{1,10}", cleaned_han)
+                for raw in matches:
+                    # 必ず小数点含む（面積はX.XX形式）
+                    if "." not in raw:
+                        # OCR error: "2,124,00" → 通算 comma 2個 → 後ろを . とみなす
+                        if raw.count(",") >= 2:
+                            parts = raw.rsplit(",", 1)
+                            raw = parts[0] + "." + parts[1]
+                        else:
+                            continue
+                    # 数値化（_parse_number は半角前提）
+                    val = _parse_number(raw)
+                    if val is None:
+                        continue
+                    if val < 10:
+                        continue
+                    # 現実的な面積の上限: 10ha = 100000㎡
+                    if val > 100000:
+                        continue
+                    entry.area_sqm = val
+                    break
+                if entry.area_sqm is not None:
+                    break
+
+            # 地目: コンテキストから 田/畑/山林/原野/雑種地
+            cm = re.search(r"(普通田|普通畑|雑種地|田|畑|山林|原野)", context)
+            if cm:
+                raw = cm.group(1)
+                entry.chimoku = "田" if "田" in raw else ("畑" if "畑" in raw else raw)
+
+            # 権利種別
+            rm = re.search(r"(賃貸借|使用貸借|利用権|耕作権)", context)
+            if rm:
+                entry.right_type = rm.group(1)
+                # 貸主名を抽出: 「<address>番地\n<name>」パターン
+                for j in range(max(0, i - 2), min(i + 5, len(lines))):
+                    nm = re.search(r"^\s*([^\d\s][^\d\s]{1,8}\s+[^\d\s][^\d\s]{1,8})\s*$", lines[j])
+                    if nm:
+                        name = nm.group(1).strip()
+                        # 経営者本人以外の名前を貸主として採用
+                        if farmer_name and name != farmer_name and "鈴木" not in name:
+                            entry.right_holder = name
+                            break
+            elif "自" in context or "○" in context:
+                entry.right_type = "所有"
+
+            results.append(entry)
 
     return results
