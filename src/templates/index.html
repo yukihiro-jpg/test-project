@@ -95,7 +95,9 @@
     <!-- 倍率データ管理 (PDF + 手入力) -->
     <div class="card">
       <h2>倍率データ管理</h2>
-      <p style="font-size:13px; color:#666; margin-bottom:12px;">PDFをダウンロードし、倍率データを手入力で登録します。</p>
+      <p style="font-size:13px; color:#666; margin-bottom:12px;">Excel取込済みの市町村はそのまま検索可能です。未取込の市町村はPDFダウンロード＋手入力で登録します。</p>
+
+      <div id="importedStatus" style="margin-bottom:12px;"></div>
 
       <div class="btn-group" style="margin-bottom:16px;">
         <button class="btn btn-primary" id="downloadPdfsBtn" onclick="downloadPdfs()">PDF一括ダウンロード実行</button>
@@ -268,21 +270,61 @@
       loadMunicipalityList();
     }
 
+    let importedMunicipalitySet = new Set();
+
+    async function loadImportedStatus() {
+      try {
+        const resp = await fetch('/api/imported_municipalities');
+        const data = await resp.json();
+        const list = data.municipalities || [];
+        importedMunicipalitySet = new Set(list.map(m => m.name));
+        const el = document.getElementById('importedStatus');
+        if (!list.length) {
+          el.innerHTML = '<div class="status status-warn">Excel取込済みの倍率データはありません。</div>';
+          return;
+        }
+        const tags = list.map(m =>
+          '<span style="background:#d4edda;color:#155724;padding:4px 10px;border-radius:12px;font-size:12px;margin-right:6px;">'
+          + m.name + ' (' + m.count + '件)</span>'
+        ).join('');
+        el.innerHTML = '<div class="status status-success"><strong>Excel取込済み:</strong> ' + tags + '</div>';
+      } catch(e) { console.error(e); }
+    }
+
     async function loadMunicipalityList() {
       const sel = document.getElementById('municipalitySelect');
       const status = document.getElementById('pdfDownloadStatus');
+      await loadImportedStatus();
       try {
         const resp = await fetch('/api/municipality_list');
         const data = await resp.json();
         sel.innerHTML = '<option value="">-- 選択してください --</option>';
-        (data.municipalities || []).forEach(m => {
+
+        // Excel取込済みの市町村を優先表示（PDFキャッシュにない名前のみ単独項目として追加）
+        const mList = data.municipalities || [];
+        const existingNames = new Set(mList.map(m => m.name));
+        importedMunicipalitySet.forEach(name => {
+          if (!existingNames.has(name)) {
+            const opt = document.createElement('option');
+            opt.value = name;  // 名前をそのままコードとして使う
+            opt.dataset.name = name;
+            opt.textContent = '[Excel] ' + name;
+            sel.appendChild(opt);
+          }
+        });
+
+        mList.forEach(m => {
           const opt = document.createElement('option');
           opt.value = m.code;
           opt.dataset.name = m.name;
-          opt.textContent = (m.cached ? '[PDF] ' : '[ - ] ') + m.name + ' (' + m.code + ')';
+          let prefix = '';
+          if (importedMunicipalitySet.has(m.name)) prefix = '[Excel] ';
+          else if (m.cached) prefix = '[PDF] ';
+          else prefix = '[ - ] ';
+          opt.textContent = prefix + m.name + ' (' + m.code + ')';
           sel.appendChild(opt);
         });
-        status.innerHTML = '<div class="status status-success">市町村 '+(data.municipalities||[]).length+'件 (PDFキャッシュ '+data.cached_count+'件)</div>';
+        status.innerHTML = '<div class="status status-success">市町村 '+mList.length+'件 (Excel取込 '+importedMunicipalitySet.size+'件 / PDFキャッシュ '+data.cached_count+'件)</div>';
       } catch(e) { status.innerHTML = '<div class="status status-error">'+e.message+'</div>'; }
     }
 
@@ -312,9 +354,11 @@
         const recs = data.records || [];
         const container = document.getElementById('savedMultipliersTable');
         if (!recs.length) { container.innerHTML = '<p style="font-size:13px;color:#888;">保存済みデータはありません。</p>'; return; }
-        let h = '<table class="results-table"><tr><th>町名</th><th>地区</th><th>借地権</th><th>宅地</th><th>田</th><th>畑</th><th>山林</th><th>原野</th></tr>';
+        let h = '<p style="font-size:12px;color:#666;">計 '+recs.length+' 件</p>';
+        h += '<table class="results-table"><tr><th>元</th><th>町名</th><th>地区</th><th>借地権</th><th>宅地</th><th>田</th><th>畑</th><th>山林</th><th>原野</th></tr>';
         recs.forEach(r => {
-          h += '<tr><td>'+(r.town_name||'')+'</td><td>'+(r.area_name||'')+'</td><td>'+(r.leasehold_ratio||'')+'</td><td>'+(r.residential||'')+'</td><td>'+(r.paddy||'')+'</td><td>'+(r.field||'')+'</td><td>'+(r.forest||'')+'</td><td>'+(r.wasteland||'')+'</td></tr>';
+          const src = r.source === 'imported' ? '<span style="color:#155724;">Excel</span>' : '<span style="color:#856404;">手入力</span>';
+          h += '<tr><td>'+src+'</td><td>'+(r.town_name||'')+'</td><td>'+(r.area_name||'')+'</td><td>'+(r.leasehold_ratio||'')+'</td><td>'+(r.residential||'')+'</td><td>'+(r.paddy||'')+'</td><td>'+(r.field||'')+'</td><td>'+(r.forest||'')+'</td><td>'+(r.wasteland||'')+'</td></tr>';
         });
         h += '</table>';
         container.innerHTML = h;
@@ -603,6 +647,11 @@
     function dRow(l,v) { return '<tr><td style="width:180px;font-weight:600;">'+l+'</td><td>'+(v||'-')+'</td></tr>'; }
     function hRow(l,v) { return '<tr'+(v?' class="warn"':'')+'><td style="width:180px;font-weight:600;">'+l+'</td><td>'+(v||'該当なし')+'</td></tr>'; }
     function exportExcel() { if (sessionId) window.location.href = '/api/export/'+sessionId; }
+
+    // 起動時: Excel取込済み倍率データ・市町村一覧を自動ロード
+    window.addEventListener('DOMContentLoaded', () => {
+      loadMunicipalityList();
+    });
   </script>
 </body>
 </html>

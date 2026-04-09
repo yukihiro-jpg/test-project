@@ -57,6 +57,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 PDF_CACHE_DIR = DATA_DIR / "pdf_cache"
 PDF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 MANUAL_MULTIPLIER_FILE = DATA_DIR / "manual_multipliers.json"
+IMPORTED_MULTIPLIER_FILE = DATA_DIR / "multipliers_imported.json"
 MUNICIPALITY_LIST_FILE = DATA_DIR / "ibaraki_municipality_list.json"
 
 reinfolib = ReinfolibClient()
@@ -472,16 +473,117 @@ async def save_multiplier(request: Request):
 
 @app.get("/api/multipliers/{municipality}")
 async def get_manual_multipliers(municipality: str):
-    """保存済み手入力倍率データを返す."""
+    """保存済み倍率データを返す（Excel取込 + 手入力をマージ）."""
     import json as _json
 
-    if not MANUAL_MULTIPLIER_FILE.exists():
-        return JSONResponse({"municipality": municipality, "records": []})
+    records: list[dict[str, Any]] = []
+
+    # Excel取込データ
+    if IMPORTED_MULTIPLIER_FILE.exists():
+        try:
+            imported = _json.loads(IMPORTED_MULTIPLIER_FILE.read_text(encoding="utf-8"))
+            for r in imported.get(municipality, []):
+                records.append({**r, "source": "imported"})
+        except Exception:
+            pass
+
+    # 手入力データ
+    if MANUAL_MULTIPLIER_FILE.exists():
+        try:
+            manual = _json.loads(MANUAL_MULTIPLIER_FILE.read_text(encoding="utf-8"))
+            for r in manual.get(municipality, []):
+                records.append({**r, "source": "manual"})
+        except Exception:
+            pass
+
+    return JSONResponse({"municipality": municipality, "records": records})
+
+
+@app.get("/api/imported_municipalities")
+async def get_imported_municipalities():
+    """Excel取込済みの市町村一覧を返す."""
+    import json as _json
+
+    if not IMPORTED_MULTIPLIER_FILE.exists():
+        return JSONResponse({"municipalities": []})
     try:
-        data = _json.loads(MANUAL_MULTIPLIER_FILE.read_text(encoding="utf-8"))
+        data = _json.loads(IMPORTED_MULTIPLIER_FILE.read_text(encoding="utf-8"))
     except Exception:
-        data = {}
-    return JSONResponse({"municipality": municipality, "records": data.get(municipality, [])})
+        return JSONResponse({"municipalities": []})
+
+    items = [
+        {"name": name, "count": len(records)}
+        for name, records in sorted(data.items())
+    ]
+    return JSONResponse({"municipalities": items})
+
+
+@app.get("/api/lookup_multiplier")
+async def lookup_multiplier_endpoint(
+    municipality: str,
+    town_name: str = "",
+    chimoku: str = "",
+):
+    """市町村+町名+地目から倍率候補を返す.
+
+    Args:
+        municipality: 市町村名 (例: 水戸市)
+        town_name: 町名 (例: 加倉井町) — 部分一致
+        chimoku: 地目 (宅地/田/畑/山林/原野)
+    """
+    import json as _json
+
+    if not IMPORTED_MULTIPLIER_FILE.exists():
+        return JSONResponse({"candidates": [], "error": "倍率表データが未取込"})
+
+    try:
+        data = _json.loads(IMPORTED_MULTIPLIER_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return JSONResponse({"candidates": [], "error": "倍率表データ読込失敗"})
+
+    records = data.get(municipality, [])
+    if not records:
+        return JSONResponse({
+            "candidates": [],
+            "error": f"{municipality} の倍率データが未取込",
+        })
+
+    # 町名部分一致フィルタ
+    if town_name:
+        filtered = [r for r in records if town_name in r.get("town_name", "")]
+        if not filtered:
+            # 前方一致フォールバック
+            filtered = [r for r in records if r.get("town_name", "").startswith(town_name)]
+    else:
+        filtered = records
+
+    # 地目別倍率キー
+    chimoku_key_map = {
+        "宅地": "residential",
+        "田": "paddy",
+        "畑": "field",
+        "山林": "forest",
+        "原野": "wasteland",
+        "牧場": "pasture",
+        "池沼": "pond",
+    }
+    target_key = chimoku_key_map.get(chimoku, "")
+
+    candidates = []
+    for r in filtered:
+        c = dict(r)
+        if target_key:
+            c["selected_multiplier"] = r.get(target_key, "")
+            c["selected_chimoku"] = chimoku
+        candidates.append(c)
+
+    return JSONResponse({
+        "municipality": municipality,
+        "town_name": town_name,
+        "chimoku": chimoku,
+        "candidates": candidates[:50],  # 最大50件
+        "total": len(candidates),
+    })
 
 
 # ------------------------------------------------------------------
