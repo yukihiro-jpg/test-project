@@ -116,22 +116,34 @@ async def upload_documents(
     # 謄本
     for f in tohon_files:
         path = await _save_file(f, session_id)
-        lands, buildings = parse_tohon(path)
-        sd.tohon_lands.extend(lands)
-        sd.tohon_buildings.extend(buildings)
+        try:
+            lands, buildings = parse_tohon(path)
+            logger.info("謄本解析 %s: 土地%d筆, 建物%d棟", f.filename, len(lands), len(buildings))
+            sd.tohon_lands.extend(lands)
+            sd.tohon_buildings.extend(buildings)
+        except Exception as e:
+            logger.error("謄本解析エラー %s: %s", f.filename, e, exc_info=True)
 
     # 固定資産評価証明
     for f in kotei_files:
         path = await _save_file(f, session_id)
-        lands, buildings = parse_kotei_shisan(path)
-        sd.kotei_lands.extend(lands)
-        sd.kotei_buildings.extend(buildings)
+        try:
+            lands, buildings = parse_kotei_shisan(path)
+            logger.info("固定資産解析 %s: 土地%d筆, 建物%d棟", f.filename, len(lands), len(buildings))
+            sd.kotei_lands.extend(lands)
+            sd.kotei_buildings.extend(buildings)
+        except Exception as e:
+            logger.error("固定資産解析エラー %s: %s", f.filename, e, exc_info=True)
 
     # 農地台帳
     for f in nochi_files:
         path = await _save_file(f, session_id)
-        entries = parse_nochi_daicho(path)
-        sd.nochi_daichos.extend(entries)
+        try:
+            entries = parse_nochi_daicho(path)
+            logger.info("農地台帳解析 %s: %d件", f.filename, len(entries))
+            sd.nochi_daichos.extend(entries)
+        except Exception as e:
+            logger.error("農地台帳解析エラー %s: %s", f.filename, e, exc_info=True)
 
     _sessions[session_id] = sd
 
