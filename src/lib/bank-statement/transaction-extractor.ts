@@ -6,7 +6,6 @@ import type {
   ColumnMapping,
 } from './types'
 import { parsePdfText, renderPdfPageToImage } from './pdf-text-parser'
-import { parsePdfWithOcr } from './pdf-ocr-parser'
 import { parseExcel } from './excel-parser'
 import { updatePageBalances } from './balance-validator'
 
@@ -256,7 +255,7 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
   const { pages: rawPages, isTextPdf } = await parsePdfText(file)
 
   if (!isTextPdf) {
-    // スキャンPDF: まずページ画像を生成
+    // スキャンPDF: Gemini APIでOCR処理
     const imageDataUrls: string[] = []
     const pageCount = rawPages.length || 1
     for (let i = 0; i < pageCount; i++) {
@@ -264,83 +263,76 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
       imageDataUrls.push(imageDataUrl)
     }
 
-    // OCR処理を試みる
-    let ocrResults
     try {
-      ocrResults = await parsePdfWithOcr(imageDataUrls)
-    } catch {
-      // OCR失敗: 画像のみ表示して手動入力モード
-      const emptyPages: StatementPage[] = imageDataUrls.map((url, i) => ({
-        pageIndex: i,
-        transactions: [],
-        openingBalance: 0,
-        closingBalance: 0,
-        isBalanceValid: true,
-        balanceDifference: 0,
-        imageDataUrl: url,
-      }))
-      return {
-        pages: emptyPages,
-        pageImageUrls: imageDataUrls,
-        sourceType: 'pdf-ocr',
-        needsColumnMapping: false,
-        ocrFailed: true,
-      }
-    }
-
-    const allRawPages = ocrResults.map((r) => r.rows)
-    const hasAnyData = allRawPages.some((rows) => rows.length > 0)
-
-    if (!hasAnyData) {
-      // OCRがテキストを抽出できなかった: 画像のみ表示して手動入力モード
-      const emptyPages: StatementPage[] = imageDataUrls.map((url, i) => ({
-        pageIndex: i,
-        transactions: [],
-        openingBalance: 0,
-        closingBalance: 0,
-        isBalanceValid: true,
-        balanceDifference: 0,
-        imageDataUrl: url,
-      }))
-      return {
-        pages: emptyPages,
-        pageImageUrls: imageDataUrls,
-        sourceType: 'pdf-ocr',
-        needsColumnMapping: false,
-        ocrFailed: true,
-      }
-    }
-
-    const mapping = detectColumnMappingFromAllPages(allRawPages)
-
-    if (!mapping) {
-      return {
-        pages: [],
-        rawPages: allRawPages,
-        pageImageUrls: imageDataUrls,
-        sourceType: 'pdf-ocr',
-        needsColumnMapping: true,
-      }
-    }
-
-    const statementPages: StatementPage[] = []
-    for (let i = 0; i < ocrResults.length; i++) {
-      const transactions = extractTransactions(ocrResults[i].rows, mapping, i)
-      statementPages.push({
-        pageIndex: i,
-        transactions,
-        openingBalance: 0,
-        closingBalance: 0,
-        isBalanceValid: true,
-        balanceDifference: 0,
-        imageDataUrl: imageDataUrls[i],
+      const response = await fetch('/api/bank-statement/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: imageDataUrls }),
       })
-    }
 
-    return {
-      pages: updatePageBalances(statementPages),
-      sourceType: 'pdf-ocr',
-      needsColumnMapping: false,
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Gemini OCR APIエラー')
+      }
+
+      const data = await response.json()
+      const geminiPages = data.pages as {
+        pageIndex: number
+        transactions: {
+          date: string
+          description: string
+          deposit: number | null
+          withdrawal: number | null
+          balance: number
+        }[]
+      }[]
+
+      const statementPages: StatementPage[] = geminiPages.map((gp, i) => {
+        const transactions: BankTransaction[] = gp.transactions.map((t, rowIdx) => ({
+          id: generateId(),
+          pageIndex: i,
+          rowIndex: rowIdx,
+          date: t.date,
+          description: t.description || '',
+          deposit: t.deposit ?? null,
+          withdrawal: t.withdrawal ?? null,
+          balance: t.balance ?? 0,
+        }))
+
+        return {
+          pageIndex: i,
+          transactions,
+          openingBalance: 0,
+          closingBalance: 0,
+          isBalanceValid: true,
+          balanceDifference: 0,
+          imageDataUrl: imageDataUrls[i],
+        }
+      })
+
+      return {
+        pages: updatePageBalances(statementPages),
+        sourceType: 'pdf-ocr',
+        needsColumnMapping: false,
+      }
+    } catch (err) {
+      // Gemini API失敗: 画像のみ表示して手動入力モード
+      const emptyPages: StatementPage[] = imageDataUrls.map((url, i) => ({
+        pageIndex: i,
+        transactions: [],
+        openingBalance: 0,
+        closingBalance: 0,
+        isBalanceValid: true,
+        balanceDifference: 0,
+        imageDataUrl: url,
+      }))
+      return {
+        pages: emptyPages,
+        pageImageUrls: imageDataUrls,
+        sourceType: 'pdf-ocr',
+        needsColumnMapping: false,
+        ocrFailed: true,
+      }
     }
   }
 
