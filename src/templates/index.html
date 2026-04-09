@@ -57,8 +57,6 @@
     .results-table tr:hover td { background: #f5f9ff; }
     .section-row td { background: #D6E4F0; font-weight: 600; color: #1F4E79; padding: 6px 10px; }
     .warn { background: #fff8e1; }
-    .property-block { margin-bottom: 24px; }
-    .property-block h3 { font-size: 15px; color: #1F4E79; padding: 8px 12px; background: #eef3f9; border-radius: 4px; margin-bottom: 8px; }
     .parsed-section { margin-bottom: 16px; }
     .parsed-section h3 { font-size: 14px; color: #1F4E79; border-left: 3px solid #1F4E79; padding-left: 8px; margin-bottom: 8px; }
     .manual-entry { border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-bottom: 12px; }
@@ -71,6 +69,25 @@
     .btn-sm { padding: 6px 14px; font-size: 12px; }
     .row-toolbar { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
     .empty-section { padding: 10px; background: #fff8e1; color: #f57f17; border-radius: 4px; font-size: 13px; margin-bottom: 8px; }
+    /* Step3 横並びカード */
+    .result-columns { display: flex; flex-wrap: wrap; gap: 12px; }
+    .result-col { flex: 1 1 280px; min-width: 260px; max-width: 360px; background: #fff; border: 1px solid #dde3ed; border-radius: 6px; overflow: hidden; }
+    .result-col .col-header { background: #1F4E79; color: #fff; padding: 8px 12px; font-size: 13px; font-weight: 600; }
+    .result-col .col-body { padding: 10px 12px; font-size: 12px; }
+    .result-col .col-body .kv { display: flex; margin-bottom: 6px; border-bottom: 1px dashed #eaeef5; padding-bottom: 5px; }
+    .result-col .col-body .kv:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .result-col .col-body .kv .k { flex: 0 0 110px; font-weight: 600; color: #555; }
+    .result-col .col-body .kv .v { flex: 1; color: #222; word-break: break-all; }
+    .result-col.highlight { border-color: #2e7d32; }
+    .result-col.highlight .col-header { background: #2e7d32; }
+    .result-col .big-value { font-size: 16px; font-weight: 700; color: #1b5e20; margin: 6px 0; text-align: right; }
+    .result-col.warn-col { border-color: #f57f17; }
+    .result-col.warn-col .col-header { background: #f57f17; }
+    .property-block { margin-bottom: 28px; border-top: 3px solid #1F4E79; padding-top: 12px; }
+    .property-block h3 { font-size: 15px; color: #1F4E79; background: #eef3f9; padding: 8px 12px; border-radius: 4px; margin-bottom: 10px; }
+    @media (max-width: 900px) {
+      .result-col { max-width: none; flex-basis: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -821,112 +838,156 @@
       btn.disabled = false; btn.textContent = '基礎情報を取得';
     }
 
-    // --- 結果表示 ---
+    // --- 結果表示 (横並びカードレイアウト) ---
     function renderResults(evaluations) {
       const area = document.getElementById('resultArea');
       let html = '';
       evaluations.forEach(ev => {
-        html += '<div class="property-block"><h3>物件 '+ev.property_id+' ['+ev.property_type+']: '+ev.address+'</h3><table class="results-table">';
+        html += '<div class="property-block">';
+        html += '<h3>物件 '+ev.property_id+' ['+ev.property_type+']: '+(ev.address||'')+'</h3>';
+        html += '<div class="result-columns">';
+
         // 登記情報
-        html += secRow('登記情報（謄本）');
-        html += dRow('登記地目', ev.chimoku_registry);
-        html += dRow('登記地積', ev.area_registry_sqm ? ev.area_registry_sqm+' ㎡' : '');
+        html += col('登記情報（謄本）', [
+          kv('登記地目', ev.chimoku_registry),
+          kv('登記地積', ev.area_registry_sqm ? ev.area_registry_sqm+' ㎡' : ''),
+        ]);
+
         // 課税情報
-        html += secRow('課税情報（固定資産評価証明等）');
-        html += dRow('課税地目（現況）', ev.chimoku_tax);
-        html += dRow('課税地積', ev.area_tax_sqm ? ev.area_tax_sqm+' ㎡' : '');
-        html += dRow('固定資産税評価額', ev.assessed_value ? Number(ev.assessed_value).toLocaleString()+' 円' : '');
-        // 書類間整合性チェック
-        if (ev.consistency_checks?.length) {
-          html += secRow('書類間整合性チェック');
-          ev.consistency_checks.forEach(c => {
-            const cls = c.is_match ? '' : ' class="warn"';
-            html += '<tr'+cls+'><td style="width:180px;font-weight:600;">'+c.field_name+' ('+c.other_source+')</td><td>'+c.message+'</td></tr>';
-          });
-        }
+        html += col('課税情報（固定資産）', [
+          kv('課税地目（現況）', ev.chimoku_tax),
+          kv('課税地積', ev.area_tax_sqm ? ev.area_tax_sqm+' ㎡' : ''),
+          kv('固定資産税評価額', ev.assessed_value ? Number(ev.assessed_value).toLocaleString()+' 円' : ''),
+        ]);
+
         // 持分
         if (ev.ownership?.current_share) {
-          html += secRow('持分情報');
-          html += dRow('対象者', ev.ownership.target_name);
-          html += dRow('基準日時点の持分', ev.ownership.current_share);
+          const items = [
+            kv('対象者', ev.ownership.target_name),
+            kv('持分', ev.ownership.current_share),
+          ];
           if (ev.ownership.history_summary?.length) {
-            html += '<tr><td style="width:180px;font-weight:600;">持分変遷</td><td style="font-size:11px;">'+ev.ownership.history_summary.join('<br>')+'</td></tr>';
+            items.push(kv('変遷', ev.ownership.history_summary.join('<br>')));
           }
+          html += col('持分情報', items);
         }
+
         // 建物
         if (ev.building) {
-          html += secRow('建物情報');
-          html += dRow('家屋番号', ev.building.kaoku_bango);
-          html += dRow('種類', ev.building.kind);
-          html += dRow('構造', ev.building.structure);
-          if (ev.building.floor_areas?.length) { ev.building.floor_areas.forEach(f => { html += dRow(f.floor+'（登記）', f.area_sqm+' ㎡'); }); }
-          html += dRow('課税床面積', ev.building.area_tax_sqm ? ev.building.area_tax_sqm+' ㎡' : '');
-          html += dRow('建物評価額', ev.building.assessed_value ? Number(ev.building.assessed_value).toLocaleString()+' 円' : '');
-          html += dRow('建築年', ev.building.construction_year);
+          const items = [
+            kv('家屋番号', ev.building.kaoku_bango),
+            kv('種類', ev.building.kind),
+            kv('構造', ev.building.structure),
+          ];
+          if (ev.building.floor_areas?.length) {
+            ev.building.floor_areas.forEach(f => items.push(kv(f.floor+'(登記)', (f.area_sqm||'-')+' ㎡')));
+          }
+          items.push(kv('課税床面積', ev.building.area_tax_sqm ? ev.building.area_tax_sqm+' ㎡' : ''));
+          items.push(kv('建物評価額', ev.building.assessed_value ? Number(ev.building.assessed_value).toLocaleString()+' 円' : ''));
+          items.push(kv('建築年', ev.building.construction_year));
+          html += col('建物情報', items);
         }
+
         // 農地
         if (ev.nochi) {
-          html += secRow('農地情報');
-          html += dRow('農地区分', ev.nochi.farm_category);
-          html += dRow('耕作者', ev.nochi.farmer_name);
-          html += dRow('権利種別', ev.nochi.right_type);
+          html += col('農地情報', [
+            kv('農地区分', ev.nochi.farm_category),
+            kv('耕作者', ev.nochi.farmer_name),
+            kv('権利種別', ev.nochi.right_type),
+          ]);
         }
+
         // 用途地域
-        html += secRow('用途地域・都市計画情報');
-        html += dRow('用途地域', ev.zoning.zone_type);
-        html += dRow('建ぺい率', ev.zoning.building_coverage_ratio ? ev.zoning.building_coverage_ratio+'%' : '');
-        html += dRow('容積率', ev.zoning.floor_area_ratio ? ev.zoning.floor_area_ratio+'%' : '');
-        html += dRow('都市計画区域', ev.zoning.urban_planning_area);
+        html += col('用途地域・都市計画', [
+          kv('用途地域', ev.zoning.zone_type),
+          kv('建ぺい率', ev.zoning.building_coverage_ratio ? ev.zoning.building_coverage_ratio+'%' : ''),
+          kv('容積率', ev.zoning.floor_area_ratio ? ev.zoning.floor_area_ratio+'%' : ''),
+          kv('都市計画区域', ev.zoning.urban_planning_area),
+        ]);
+
         // ハザード
-        html += secRow('ハザード情報');
-        html += hRow('洪水浸水想定', ev.hazard.flood_risk);
-        html += hRow('土砂災害警戒', ev.hazard.landslide_risk);
-        html += hRow('津波浸水想定', ev.hazard.tsunami_risk);
-        html += hRow('高潮浸水想定', ev.hazard.storm_surge_risk);
-        // 倍率
-        html += secRow('路線価/倍率情報（国税庁）');
-        html += dRow('評価方式', ev.multiplier.is_rosenka_area ? '路線価地域' : '倍率地域');
-        html += dRow('町名', ev.multiplier.town_name);
-        html += dRow('借地権割合', ev.multiplier.leasehold_ratio);
-        html += dRow('宅地倍率', ev.multiplier.residential_multiplier);
-        html += dRow('田倍率', ev.multiplier.paddy_multiplier);
-        html += dRow('畑倍率', ev.multiplier.field_multiplier);
-        html += dRow('山林倍率', ev.multiplier.forest_multiplier);
-        // 倍率方式 評価結果
+        const hazardItems = [
+          hkv('洪水浸水想定', ev.hazard.flood_risk),
+          hkv('土砂災害警戒', ev.hazard.landslide_risk),
+          hkv('津波浸水想定', ev.hazard.tsunami_risk),
+          hkv('高潮浸水想定', ev.hazard.storm_surge_risk),
+        ];
+        const hasHazard = ev.hazard.flood_risk || ev.hazard.landslide_risk || ev.hazard.tsunami_risk || ev.hazard.storm_surge_risk;
+        html += col('ハザード情報', hazardItems, hasHazard ? 'warn-col' : '');
+
+        // 倍率情報
+        html += col('路線価/倍率情報', [
+          kv('評価方式', ev.multiplier.is_rosenka_area ? '路線価地域' : '倍率地域'),
+          kv('町名', ev.multiplier.town_name),
+          kv('借地権割合', ev.multiplier.leasehold_ratio),
+          kv('宅地倍率', ev.multiplier.residential_multiplier),
+          kv('田倍率', ev.multiplier.paddy_multiplier),
+          kv('畑倍率', ev.multiplier.field_multiplier),
+          kv('山林倍率', ev.multiplier.forest_multiplier),
+        ]);
+
+        // 倍率方式 評価結果（ハイライト）
         if (ev.valuation) {
           const v = ev.valuation;
-          html += secRow('相続税評価額（倍率方式）');
-          html += dRow('評価方式', v.method);
-          html += dRow('評価地目', v.chimoku_used);
-          html += dRow('適用倍率', v.multiplier_raw);
-          html += dRow('固定資産税評価額', v.assessed_value ? Number(v.assessed_value).toLocaleString()+' 円' : '');
+          const items = [
+            kv('評価方式', v.method),
+            kv('評価地目', v.chimoku_used),
+            kv('適用倍率', v.multiplier_raw),
+            kv('固定資産税評価額', v.assessed_value ? Number(v.assessed_value).toLocaleString()+' 円' : ''),
+          ];
           if (v.evaluated_value !== null && v.evaluated_value !== undefined) {
-            html += dRow('相続税評価額（持分前）', Number(v.evaluated_value).toLocaleString()+' 円');
+            items.push(kv('評価額(持分前)', Number(v.evaluated_value).toLocaleString()+' 円'));
           }
           if (v.share_fraction !== null && v.share_fraction !== undefined) {
-            html += dRow('持分', v.share_fraction.toFixed(4));
+            items.push(kv('持分', v.share_fraction.toFixed(4)));
           }
+          let body = items.map(i => i).join('');
           if (v.final_value !== null && v.final_value !== undefined) {
-            html += '<tr><td style="width:180px;font-weight:600;background:#e8f5e9;">相続税評価額（持分後）</td><td style="background:#e8f5e9;font-weight:600;font-size:14px;">'+Number(v.final_value).toLocaleString()+' 円</td></tr>';
+            body += '<div class="big-value">'+Number(v.final_value).toLocaleString()+' 円</div>';
           }
-          if (v.formula) {
-            html += '<tr><td colspan="2" style="padding-left:20px;font-size:11px;color:#555;">'+v.formula+'</td></tr>';
-          }
+          if (v.formula) body += '<div style="font-size:11px;color:#555;margin-top:4px;">'+v.formula+'</div>';
           if (v.warnings?.length) {
-            v.warnings.forEach(w => { html += '<tr class="warn"><td colspan="2" style="padding-left:20px;font-size:11px;">⚠ '+w+'</td></tr>'; });
+            v.warnings.forEach(w => { body += '<div style="font-size:11px;color:#c62828;margin-top:3px;">⚠ '+w+'</div>'; });
           }
+          html += '<div class="result-col highlight"><div class="col-header">相続税評価額（倍率方式）</div><div class="col-body">'+body+'</div></div>';
         }
-        // ソース
-        html += secRow('データソース');
-        ev.data_sources.forEach(s => { html += '<tr><td colspan="2" style="padding-left:20px;font-size:12px;color:#666;">'+s+'</td></tr>'; });
-        if (ev.notes?.length) { html += secRow('注記'); ev.notes.forEach(n => { html += '<tr><td colspan="2" style="padding-left:20px;font-size:12px;color:#c62828;">'+n+'</td></tr>'; }); }
-        html += '</table></div>';
+
+        // 書類間整合性チェック
+        if (ev.consistency_checks?.length) {
+          const items = ev.consistency_checks.map(c =>
+            '<div class="kv"><div class="k">'+c.field_name+'</div><div class="v" style="color:'+(c.is_match?'#2e7d32':'#c62828')+';">'+(c.is_match?'✓ ':'✗ ')+(c.message||'')+'</div></div>'
+          );
+          html += '<div class="result-col"><div class="col-header">整合性チェック</div><div class="col-body">'+items.join('')+'</div></div>';
+        }
+
+        // データソース
+        if (ev.data_sources?.length) {
+          const items = ev.data_sources.map(s => '<div style="font-size:11px;color:#666;margin-bottom:3px;">・'+s+'</div>').join('');
+          html += '<div class="result-col"><div class="col-header">データソース</div><div class="col-body">'+items+'</div></div>';
+        }
+
+        // 注記
+        if (ev.notes?.length) {
+          const items = ev.notes.map(n => '<div style="font-size:11px;color:#c62828;margin-bottom:3px;">・'+n+'</div>').join('');
+          html += '<div class="result-col warn-col"><div class="col-header">注記</div><div class="col-body">'+items+'</div></div>';
+        }
+
+        html += '</div></div>'; // /result-columns /property-block
       });
       area.innerHTML = html;
     }
-    function secRow(t) { return '<tr class="section-row"><td colspan="2">'+t+'</td></tr>'; }
-    function dRow(l,v) { return '<tr><td style="width:180px;font-weight:600;">'+l+'</td><td>'+(v||'-')+'</td></tr>'; }
-    function hRow(l,v) { return '<tr'+(v?' class="warn"':'')+'><td style="width:180px;font-weight:600;">'+l+'</td><td>'+(v||'該当なし')+'</td></tr>'; }
+
+    function col(title, items, cls) {
+      const klass = cls ? 'result-col '+cls : 'result-col';
+      return '<div class="'+klass+'"><div class="col-header">'+title+'</div><div class="col-body">'+items.join('')+'</div></div>';
+    }
+    function kv(k, v) {
+      return '<div class="kv"><div class="k">'+k+'</div><div class="v">'+(v||'-')+'</div></div>';
+    }
+    function hkv(k, v) {
+      const val = v ? '<span style="color:#c62828;font-weight:600;">'+v+'</span>' : '該当なし';
+      return '<div class="kv"><div class="k">'+k+'</div><div class="v">'+val+'</div></div>';
+    }
     function exportExcel() { if (sessionId) window.location.href = '/api/export/'+sessionId; }
 
     // 起動時: Excel取込済み倍率データ・市町村一覧を自動ロード
