@@ -11,6 +11,9 @@ export default function Home() {
         <p className="text-sm text-gray-400">
           管理者の方は <a href="/admin" className="text-blue-600 underline">/admin</a> へ
         </p>
+        <p className="text-sm text-gray-400 mt-2">
+          <a href="/bank-statement" className="text-blue-600 underline">通帳CSV変換</a>
+        </p>
       </div>
     </main>
   )

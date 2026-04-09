@@ -1,0 +1,229 @@
+'use client'
+
+import { useState, useCallback } from 'react'
+import UploadDialog from '@/components/bank-statement/UploadDialog'
+import AccountMasterUploader from '@/components/bank-statement/AccountMasterUploader'
+import StatementViewer from '@/components/bank-statement/StatementViewer'
+import JournalEntryTable from '@/components/bank-statement/JournalEntryTable'
+import ColumnMappingDialog from '@/components/bank-statement/ColumnMappingDialog'
+import CsvExportButton from '@/components/bank-statement/CsvExportButton'
+import type {
+  StatementPage,
+  JournalEntry,
+  AccountItem,
+  UploadConfig,
+  ParseResult,
+  RawTableRow,
+  ColumnMapping,
+} from '@/lib/bank-statement/types'
+import { parseFile, applyColumnMapping } from '@/lib/bank-statement/transaction-extractor'
+import { mapTransactionsToJournalEntries } from '@/lib/bank-statement/journal-mapper'
+import { getPatterns } from '@/lib/bank-statement/pattern-store'
+import { loadAccountMaster } from '@/lib/bank-statement/account-master'
+
+export default function BankStatementContent() {
+  const [pages, setPages] = useState<StatementPage[]>([])
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([])
+  const [accountMaster, setAccountMaster] = useState<AccountItem[]>(() => loadAccountMaster())
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
+  const [currentPageIndex, setCurrentPageIndex] = useState(0)
+  const [uploadConfig, setUploadConfig] = useState<UploadConfig | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // 列マッピング用state
+  const [showColumnMapping, setShowColumnMapping] = useState(false)
+  const [rawPages, setRawPages] = useState<RawTableRow[][] | null>(null)
+  const [pendingSourceType, setPendingSourceType] = useState<ParseResult['sourceType'] | null>(null)
+
+  const applyParseResultFn = useCallback(
+    (result: ParseResult, config: UploadConfig) => {
+      setPages(result.pages)
+      setCurrentPageIndex(0)
+
+      const patterns = getPatterns()
+      const entries = mapTransactionsToJournalEntries(
+        result.pages,
+        config.accountCode,
+        config.accountName,
+        patterns,
+        accountMaster,
+      )
+      setJournalEntries(entries)
+    },
+    [accountMaster],
+  )
+
+  const handleUpload = useCallback(
+    async (config: UploadConfig) => {
+      setIsLoading(true)
+      setError(null)
+      setUploadConfig(config)
+
+      try {
+        const result = await parseFile(config.file)
+
+        if (result.needsColumnMapping && result.rawPages) {
+          setRawPages(result.rawPages)
+          setPendingSourceType(result.sourceType)
+          setShowColumnMapping(true)
+          setIsLoading(false)
+          return
+        }
+
+        applyParseResultFn(result, config)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'ファイルの解析に失敗しました')
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [applyParseResultFn],
+  )
+
+  const handleColumnMappingConfirm = useCallback(
+    (mapping: ColumnMapping) => {
+      if (!rawPages || !pendingSourceType || !uploadConfig) return
+
+      setShowColumnMapping(false)
+      setIsLoading(true)
+
+      try {
+        const result: ParseResult = applyColumnMapping(rawPages, mapping, pendingSourceType)
+        applyParseResultFn(result, uploadConfig)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '列マッピングの適用に失敗しました')
+      } finally {
+        setIsLoading(false)
+        setRawPages(null)
+        setPendingSourceType(null)
+      }
+    },
+    [rawPages, pendingSourceType, uploadConfig, applyParseResultFn],
+  )
+
+  const handleEntrySelect = useCallback(
+    (entryId: string | null) => {
+      setSelectedEntryId(entryId)
+      if (entryId) {
+        const entry = journalEntries.find((e) => e.id === entryId)
+        if (entry && entry.transactionId) {
+          const page = pages.find((p) =>
+            p.transactions.some((t) => t.id === entry.transactionId),
+          )
+          if (page && page.pageIndex !== currentPageIndex) {
+            setCurrentPageIndex(page.pageIndex)
+          }
+        }
+      }
+    },
+    [journalEntries, pages, currentPageIndex],
+  )
+
+  const handleAccountMasterUpdate = useCallback((items: AccountItem[]) => {
+    setAccountMaster(items)
+  }, [])
+
+  const selectedTransactionId = (() => {
+    if (!selectedEntryId) return null
+    const entry = journalEntries.find((e) => e.id === selectedEntryId)
+    return entry?.transactionId ?? null
+  })()
+
+  return (
+    <div className="h-screen flex flex-col bg-gray-50">
+      {/* ヘッダー */}
+      <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-bold text-gray-800">通帳CSV変換</h1>
+          <a href="/" className="text-sm text-blue-600 hover:underline">
+            トップに戻る
+          </a>
+        </div>
+        <div className="flex items-center gap-2">
+          <AccountMasterUploader
+            accountMaster={accountMaster}
+            onUpdate={handleAccountMasterUpdate}
+          />
+          <UploadDialog
+            accountMaster={accountMaster}
+            onUpload={handleUpload}
+            isLoading={isLoading}
+          />
+          {journalEntries.length > 0 && (
+            <CsvExportButton entries={journalEntries} />
+          )}
+        </div>
+      </header>
+
+      {/* エラー表示 */}
+      {error && (
+        <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-sm text-red-700">
+          {error}
+          <button
+            onClick={() => setError(null)}
+            className="ml-2 text-red-500 hover:text-red-700"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      {/* ローディング */}
+      {isLoading && (
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 text-sm text-blue-700">
+          ファイルを解析中...
+        </div>
+      )}
+
+      {/* メインコンテンツ */}
+      {pages.length > 0 ? (
+        <div className="flex flex-1 overflow-hidden">
+          {/* 左パネル: 通帳ビューア */}
+          <div className="w-1/2 border-r border-gray-200 flex flex-col overflow-hidden">
+            <StatementViewer
+              pages={pages}
+              currentPageIndex={currentPageIndex}
+              onPageChange={setCurrentPageIndex}
+              selectedTransactionId={selectedTransactionId}
+            />
+          </div>
+
+          {/* 右パネル: 仕訳編集テーブル */}
+          <div className="w-1/2 flex flex-col overflow-hidden">
+            <JournalEntryTable
+              entries={journalEntries}
+              accountMaster={accountMaster}
+              selectedEntryId={selectedEntryId}
+              onSelect={handleEntrySelect}
+              onEntriesChange={setJournalEntries}
+              pages={pages}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center text-gray-500">
+            <p className="text-lg mb-2">通帳PDFまたはExcelファイルをアップロードしてください</p>
+            <p className="text-sm">
+              ヘッダーの「アップロード」ボタンからファイルを選択できます
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 列マッピングダイアログ */}
+      {showColumnMapping && rawPages && (
+        <ColumnMappingDialog
+          rawPages={rawPages}
+          onConfirm={handleColumnMappingConfirm}
+          onCancel={() => {
+            setShowColumnMapping(false)
+            setRawPages(null)
+            setPendingSourceType(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
