@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 # 不動産情報ライブラリAPIのエンドポイント
 ENDPOINTS = {
     "zoning": "XKT002",           # 都市計画決定GISデータ（用途地域）
-    "urban_area": "XKT003",       # 都市計画決定GISデータ（都市計画区域/区域区分）
-    "flood": "XKT027",            # 洪水浸水想定区域（想定最大規模）
+    "urban_area": "XKT001",       # 都市計画決定GISデータ（都市計画区域/区域区分）
+    "flood": "XKT026",            # 洪水浸水想定区域（想定最大規模）
     "landslide": "XKT029",        # 土砂災害警戒区域
     "tsunami": "XKT028",          # 津波浸水想定
-    "storm_surge": "XKT030",      # 高潮浸水想定区域
+    "storm_surge": "XKT027",      # 高潮浸水想定区域
     "transaction": "XIT001",      # 不動産取引価格情報
 }
 
@@ -60,7 +60,16 @@ class ReinfolibClient:
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()
-            return data.get("features", [])
+            features = data.get("features", [])
+            if features:
+                logger.info(
+                    "API %s (z=%d,x=%d,y=%d): %d features, props=%s",
+                    endpoint_code, z, x, y, len(features),
+                    list(features[0].get("properties", {}).keys()),
+                )
+            else:
+                logger.info("API %s (z=%d,x=%d,y=%d): 0 features", endpoint_code, z, x, y)
+            return features
         except httpx.HTTPStatusError as e:
             logger.warning("API %s エラー (HTTP %d): %s", endpoint_code, e.response.status_code, e)
             return []
