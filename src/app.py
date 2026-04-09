@@ -1019,6 +1019,12 @@ def _evaluation_to_dict(ev: PropertyEvaluation) -> dict[str, Any]:
         "property_id": ev.property_id,
         "property_type": ev.property_type,
         "address": ev.address,
+        "location": (
+            ev.tohon_land.location if ev.tohon_land
+            else (ev.tohon_building.location if ev.tohon_building else "")
+        ),
+        "chiban": (ev.tohon_land.chiban if ev.tohon_land else ""),
+        "kaoku_bango": (ev.tohon_building.kaoku_bango if ev.tohon_building else ""),
         "latitude": ev.latitude,
         "longitude": ev.longitude,
         # 登記情報

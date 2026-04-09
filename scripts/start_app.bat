@@ -34,7 +34,7 @@ echo.
 rem 3秒後にブラウザを開く（別プロセスで遅延実行）
 start "" cmd /c "timeout /t 3 /nobreak >nul && start http://127.0.0.1:8000"
 
-rem uvicorn 起動（フォアグラウンド）
-uvicorn src.app:app --host 127.0.0.1 --port 8000
+rem uvicorn 起動（フォアグラウンド、ソース変更を自動リロード）
+uvicorn src.app:app --host 127.0.0.1 --port 8000 --reload
 
 pause
