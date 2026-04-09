@@ -63,6 +63,14 @@
     .parsed-section h3 { font-size: 14px; color: #1F4E79; border-left: 3px solid #1F4E79; padding-left: 8px; margin-bottom: 8px; }
     .manual-entry { border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-bottom: 12px; }
     .hidden { display: none; }
+    .add-row-form { background: #f9f9f9; border: 1px dashed #bbb; border-radius: 6px; padding: 12px; margin-top: 8px; margin-bottom: 12px; }
+    .add-row-form h4 { font-size: 13px; color: #1F4E79; margin-bottom: 8px; }
+    .add-row-form .form-row { margin-bottom: 8px; }
+    .add-row-form .form-group label { font-size: 12px; }
+    .add-row-form input { padding: 6px 10px; font-size: 13px; }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+    .row-toolbar { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+    .empty-section { padding: 10px; background: #fff8e1; color: #f57f17; border-radius: 4px; font-size: 13px; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -507,17 +515,29 @@
       if (data.detected_prefecture) info = '<div class="detected-info"><strong>自動検出:</strong> '+data.detected_prefecture+' '+(data.detected_city||'')+'</div>';
       else info = '<div class="status status-warn">都道府県を自動検出できませんでした。手入力してください。</div>';
       document.getElementById('detectedInfo').innerHTML = info;
+      renderParsedResults(data);
+      document.getElementById('editCard').classList.remove('hidden');
+    }
 
-      // 抽出結果表示
+    function renderParsedResults(data) {
       let h = '';
+      // 謄本（土地）
+      h += '<div class="parsed-section"><h3>謄本抽出結果（土地 '+(data.tohon_lands?.length||0)+'筆）</h3>';
       if (data.tohon_lands?.length) {
-        h += '<div class="parsed-section"><h3>謄本抽出結果（土地 '+data.tohon_lands.length+'筆）</h3><table class="results-table"><tr><th>所在</th><th>地番</th><th>登記地目</th><th>登記地積</th><th>甲区</th></tr>';
+        h += '<table class="results-table"><tr><th>所在</th><th>地番</th><th>登記地目</th><th>登記地積</th><th>甲区</th></tr>';
         data.tohon_lands.forEach(t => {
           const kou = (t.ownership_history||[]).map(e => (e.entry_type||'')+' '+e.owner_name+(e.share?' ('+e.share+')':'')).join('; ');
           h += '<tr><td>'+t.location+'</td><td>'+t.chiban+'</td><td>'+t.chimoku_registry+'</td><td>'+(t.area_registry_sqm||'-')+'</td><td style="font-size:11px;">'+kou+'</td></tr>';
         });
-        h += '</table></div>';
+        h += '</table>';
+      } else {
+        h += '<div class="empty-section">謄本（土地）の抽出データがありません。下のフォームから手入力できます。</div>';
       }
+      h += '<div class="row-toolbar"><button class="btn btn-outline btn-sm" onclick="toggleAddForm(\'tohon\')">＋ 謄本（土地）を手入力で追加</button></div>';
+      h += renderTohonAddForm();
+      h += '</div>';
+
+      // 謄本（建物）
       if (data.tohon_buildings?.length) {
         h += '<div class="parsed-section"><h3>謄本抽出結果（建物 '+data.tohon_buildings.length+'棟）</h3><table class="results-table"><tr><th>家屋番号</th><th>種類</th><th>構造</th><th>階別床面積</th></tr>';
         data.tohon_buildings.forEach(b => {
@@ -526,23 +546,260 @@
         });
         h += '</table></div>';
       }
+
+      // 固定資産情報
+      h += '<div class="parsed-section"><h3>固定資産情報（土地 '+(data.kotei_lands?.length||0)+'筆 / 建物 '+(data.kotei_buildings?.length||0)+'棟）</h3>';
       if (data.kotei_lands?.length) {
-        h += '<div class="parsed-section"><h3>固定資産評価証明（土地 '+data.kotei_lands.length+'筆）</h3><table class="results-table"><tr><th>所在</th><th>地番</th><th>課税地目</th><th>課税地積</th><th>評価額</th></tr>';
+        h += '<table class="results-table"><tr><th>所在</th><th>地番</th><th>課税地目</th><th>課税地積</th><th>評価額</th></tr>';
         data.kotei_lands.forEach(k => { h += '<tr><td>'+k.location+'</td><td>'+k.chiban+'</td><td>'+k.chimoku_tax+'</td><td>'+(k.area_tax_sqm||'-')+'</td><td>'+(k.assessed_value?Number(k.assessed_value).toLocaleString()+'円':'-')+'</td></tr>'; });
-        h += '</table></div>';
+        h += '</table>';
+      } else {
+        h += '<div class="empty-section">固定資産情報（土地）の抽出データがありません。OCR精度が悪い・PDFが複雑な場合は下のフォームから手入力してください。</div>';
       }
+      if (data.kotei_buildings?.length) {
+        h += '<table class="results-table" style="margin-top:6px;"><tr><th>所在</th><th>家屋番号</th><th>種類</th><th>構造</th><th>課税床面積</th><th>評価額</th><th>建築年</th></tr>';
+        data.kotei_buildings.forEach(k => { h += '<tr><td>'+k.location+'</td><td>'+k.kaoku_bango+'</td><td>'+k.kind+'</td><td>'+k.structure+'</td><td>'+(k.area_tax_sqm||'-')+'</td><td>'+(k.assessed_value?Number(k.assessed_value).toLocaleString()+'円':'-')+'</td><td>'+k.construction_year+'</td></tr>'; });
+        h += '</table>';
+      }
+      h += '<div class="row-toolbar"><button class="btn btn-outline btn-sm" onclick="toggleAddForm(\'kotei\')">＋ 固定資産情報を手入力で追加</button></div>';
+      h += renderKoteiAddForm();
+      h += '</div>';
+
+      // 農地台帳
+      h += '<div class="parsed-section"><h3>農地台帳（'+(data.nochi_daichos?.length||0)+'筆）</h3>';
       if (data.nochi_daichos?.length) {
-        h += '<div class="parsed-section"><h3>農地台帳（'+data.nochi_daichos.length+'筆）</h3><table class="results-table"><tr><th>所在</th><th>地番</th><th>農地区分</th><th>耕作者</th><th>権利種別</th></tr>';
-        data.nochi_daichos.forEach(n => { h += '<tr><td>'+n.location+'</td><td>'+n.chiban+'</td><td>'+n.farm_category+'</td><td>'+n.farmer_name+'</td><td>'+n.right_type+'</td></tr>'; });
-        h += '</table></div>';
+        h += '<table class="results-table"><tr><th>所在</th><th>地番</th><th>地目</th><th>面積</th><th>農地区分</th><th>耕作者</th><th>権利種別</th></tr>';
+        data.nochi_daichos.forEach(n => { h += '<tr><td>'+n.location+'</td><td>'+n.chiban+'</td><td>'+(n.chimoku||'')+'</td><td>'+(n.area_sqm||'-')+'</td><td>'+n.farm_category+'</td><td>'+n.farmer_name+'</td><td>'+n.right_type+'</td></tr>'; });
+        h += '</table>';
+      } else {
+        h += '<div class="empty-section">農地台帳の抽出データがありません。下のフォームから手入力できます。</div>';
       }
+      h += '<div class="row-toolbar"><button class="btn btn-outline btn-sm" onclick="toggleAddForm(\'nochi\')">＋ 農地台帳を手入力で追加</button></div>';
+      h += renderNochiAddForm();
+      h += '</div>';
+
+      // 持分結果
       if (data.ownership_results?.length) {
         h += '<div class="parsed-section"><h3>持分算出結果</h3><table class="results-table"><tr><th>所在</th><th>地番</th><th>持分</th><th>変遷</th></tr>';
         data.ownership_results.forEach(o => { h += '<tr><td>'+o.location+'</td><td>'+o.chiban+'</td><td><strong>'+o.current_share+'</strong></td><td style="font-size:11px;">'+(o.history_summary||[]).join('<br>')+'</td></tr>'; });
         h += '</table></div>';
       }
       document.getElementById('parsedResults').innerHTML = h;
-      document.getElementById('editCard').classList.remove('hidden');
+    }
+
+    // --- 手入力追加フォーム ---
+    function toggleAddForm(kind) {
+      const f = document.getElementById('addForm-'+kind);
+      if (f) f.classList.toggle('hidden');
+    }
+
+    function renderTohonAddForm() {
+      return '<div id="addForm-tohon" class="add-row-form hidden">'
+        + '<h4>謄本（土地）手入力</h4>'
+        + '<div id="addRows-tohon"></div>'
+        + '<div class="row-toolbar">'
+        +   '<button class="btn btn-outline btn-sm" onclick="addEmptyRow(\'tohon\')">+ 行を追加</button>'
+        +   '<button class="btn btn-success btn-sm" onclick="submitAddRows(\'tohon\')">この内容で登録</button>'
+        + '</div>'
+        + '<div id="addStatus-tohon" style="margin-top:6px;"></div>'
+        + '</div>';
+    }
+
+    function renderKoteiAddForm() {
+      return '<div id="addForm-kotei" class="add-row-form hidden">'
+        + '<h4>固定資産情報 手入力</h4>'
+        + '<p style="font-size:12px;color:#666;margin-bottom:6px;">課税明細書の内容を1筆ずつ入力してください。地目は「宅地/田/畑/山林/原野」など。</p>'
+        + '<div id="addRows-kotei"></div>'
+        + '<div class="row-toolbar">'
+        +   '<button class="btn btn-outline btn-sm" onclick="addEmptyRow(\'kotei\')">+ 土地を追加</button>'
+        +   '<button class="btn btn-outline btn-sm" onclick="addEmptyRow(\'kotei-bldg\')">+ 建物を追加</button>'
+        +   '<button class="btn btn-success btn-sm" onclick="submitAddRows(\'kotei\')">この内容で登録</button>'
+        + '</div>'
+        + '<div id="addStatus-kotei" style="margin-top:6px;"></div>'
+        + '</div>';
+    }
+
+    function renderNochiAddForm() {
+      return '<div id="addForm-nochi" class="add-row-form hidden">'
+        + '<h4>農地台帳 手入力</h4>'
+        + '<div id="addRows-nochi"></div>'
+        + '<div class="row-toolbar">'
+        +   '<button class="btn btn-outline btn-sm" onclick="addEmptyRow(\'nochi\')">+ 行を追加</button>'
+        +   '<button class="btn btn-success btn-sm" onclick="submitAddRows(\'nochi\')">この内容で登録</button>'
+        + '</div>'
+        + '<div id="addStatus-nochi" style="margin-top:6px;"></div>'
+        + '</div>';
+    }
+
+    function addEmptyRow(kind) {
+      const containerId = kind === 'kotei-bldg' ? 'addRows-kotei' : 'addRows-' + kind;
+      const c = document.getElementById(containerId);
+      if (!c) return;
+      const row = document.createElement('div');
+      row.className = 'manual-entry';
+      if (kind === 'tohon') {
+        row.dataset.kind = 'tohon';
+        row.innerHTML =
+          '<div class="form-row">'
+          + '<div class="form-group"><label>所在</label><input type="text" class="f-location" placeholder="例: 水戸市大字○○"></div>'
+          + '<div class="form-group"><label>地番</label><input type="text" class="f-chiban" placeholder="例: 100-1"></div>'
+          + '<div class="form-group"><label>登記地目</label><input type="text" class="f-chimoku-reg" placeholder="例: 宅地"></div>'
+          + '<div class="form-group"><label>登記地積(㎡)</label><input type="text" class="f-area-reg"></div>'
+          + '</div>'
+          + '<div style="text-align:right;"><button class="btn btn-outline btn-sm" onclick="this.closest(\'.manual-entry\').remove()">削除</button></div>';
+      } else if (kind === 'kotei') {
+        row.dataset.kind = 'kotei-land';
+        row.innerHTML =
+          '<div class="form-row">'
+          + '<div class="form-group"><label>所在</label><input type="text" class="f-location" placeholder="例: 水戸市大字○○"></div>'
+          + '<div class="form-group"><label>地番</label><input type="text" class="f-chiban" placeholder="例: 100-1"></div>'
+          + '<div class="form-group"><label>登記地目</label><input type="text" class="f-chimoku-reg" placeholder="例: 宅地"></div>'
+          + '<div class="form-group"><label>課税地目</label><input type="text" class="f-chimoku-tax" placeholder="例: 宅地"></div>'
+          + '</div>'
+          + '<div class="form-row">'
+          + '<div class="form-group"><label>登記地積(㎡)</label><input type="text" class="f-area-reg"></div>'
+          + '<div class="form-group"><label>課税地積(㎡)</label><input type="text" class="f-area-tax"></div>'
+          + '<div class="form-group"><label>固定資産税評価額(円)</label><input type="text" class="f-assessed"></div>'
+          + '</div>'
+          + '<div style="text-align:right;"><span style="font-size:11px;color:#888;margin-right:8px;">[土地]</span><button class="btn btn-outline btn-sm" onclick="this.closest(\'.manual-entry\').remove()">削除</button></div>';
+      } else if (kind === 'kotei-bldg') {
+        row.dataset.kind = 'kotei-building';
+        row.innerHTML =
+          '<div class="form-row">'
+          + '<div class="form-group"><label>所在</label><input type="text" class="f-location"></div>'
+          + '<div class="form-group"><label>家屋番号</label><input type="text" class="f-kaoku"></div>'
+          + '<div class="form-group"><label>種類</label><input type="text" class="f-kind" placeholder="例: 居宅"></div>'
+          + '<div class="form-group"><label>構造</label><input type="text" class="f-structure" placeholder="例: 木造瓦葺2階建"></div>'
+          + '</div>'
+          + '<div class="form-row">'
+          + '<div class="form-group"><label>課税床面積(㎡)</label><input type="text" class="f-area-tax"></div>'
+          + '<div class="form-group"><label>固定資産税評価額(円)</label><input type="text" class="f-assessed"></div>'
+          + '<div class="form-group"><label>建築年</label><input type="text" class="f-year" placeholder="例: 平成5年"></div>'
+          + '</div>'
+          + '<div style="text-align:right;"><span style="font-size:11px;color:#888;margin-right:8px;">[建物]</span><button class="btn btn-outline btn-sm" onclick="this.closest(\'.manual-entry\').remove()">削除</button></div>';
+      } else if (kind === 'nochi') {
+        row.dataset.kind = 'nochi';
+        row.innerHTML =
+          '<div class="form-row">'
+          + '<div class="form-group"><label>所在</label><input type="text" class="f-location"></div>'
+          + '<div class="form-group"><label>地番</label><input type="text" class="f-chiban"></div>'
+          + '<div class="form-group"><label>地目</label><input type="text" class="f-chimoku" placeholder="例: 田/畑"></div>'
+          + '<div class="form-group"><label>面積(㎡)</label><input type="text" class="f-area"></div>'
+          + '</div>'
+          + '<div class="form-row">'
+          + '<div class="form-group"><label>農地区分</label><input type="text" class="f-farm-category" placeholder="例: 第1種"></div>'
+          + '<div class="form-group"><label>耕作者氏名</label><input type="text" class="f-farmer"></div>'
+          + '<div class="form-group"><label>権利種別</label><input type="text" class="f-right-type" placeholder="例: 所有/賃借権"></div>'
+          + '<div class="form-group"><label>権利者</label><input type="text" class="f-right-holder"></div>'
+          + '</div>'
+          + '<div style="text-align:right;"><button class="btn btn-outline btn-sm" onclick="this.closest(\'.manual-entry\').remove()">削除</button></div>';
+      }
+      c.appendChild(row);
+    }
+
+    async function submitAddRows(kind) {
+      if (!sessionId) {
+        document.getElementById('addStatus-'+kind).innerHTML = '<div class="status status-error">セッションがありません。先に上のアップロードか手入力で開始してください。</div>';
+        return;
+      }
+      const status = document.getElementById('addStatus-'+kind);
+      status.innerHTML = '<div class="status status-info">登録中...</div>';
+
+      try {
+        if (kind === 'tohon') {
+          const rows = document.querySelectorAll('#addRows-tohon .manual-entry');
+          const entries = [];
+          rows.forEach(r => {
+            const loc = r.querySelector('.f-location')?.value?.trim() || '';
+            const ch = r.querySelector('.f-chiban')?.value?.trim() || '';
+            if (!loc && !ch) return;
+            entries.push({
+              location: loc,
+              chiban: ch,
+              chimoku_registry: r.querySelector('.f-chimoku-reg')?.value || '',
+              area_registry_sqm: r.querySelector('.f-area-reg')?.value || null,
+            });
+          });
+          if (!entries.length) { status.innerHTML = '<div class="status status-error">入力行がありません</div>'; return; }
+          const resp = await fetch('/api/manual_tohon_add', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ session_id: sessionId, entries }) });
+          const data = await resp.json();
+          if (data.error) { status.innerHTML = '<div class="status status-error">'+data.error+'</div>'; return; }
+          status.innerHTML = '<div class="status status-success">'+data.added+'件を登録しました</div>';
+          uploadData.tohon_lands = data.tohon_lands;
+          if (data.detected_prefecture && !document.getElementById('detectedPrefecture').value) {
+            document.getElementById('detectedPrefecture').value = data.detected_prefecture;
+          }
+          if (data.detected_city && !document.getElementById('detectedCity').value) {
+            document.getElementById('detectedCity').value = data.detected_city;
+          }
+          renderParsedResults(uploadData);
+        } else if (kind === 'kotei') {
+          const lands = [];
+          const buildings = [];
+          document.querySelectorAll('#addRows-kotei .manual-entry').forEach(r => {
+            const loc = r.querySelector('.f-location')?.value?.trim() || '';
+            if (r.dataset.kind === 'kotei-land') {
+              const ch = r.querySelector('.f-chiban')?.value?.trim() || '';
+              if (!loc && !ch) return;
+              lands.push({
+                location: loc,
+                chiban: ch,
+                chimoku_registry: r.querySelector('.f-chimoku-reg')?.value || '',
+                chimoku_tax: r.querySelector('.f-chimoku-tax')?.value || '',
+                area_registry_sqm: r.querySelector('.f-area-reg')?.value || null,
+                area_tax_sqm: r.querySelector('.f-area-tax')?.value || null,
+                assessed_value: r.querySelector('.f-assessed')?.value || null,
+              });
+            } else if (r.dataset.kind === 'kotei-building') {
+              const kb = r.querySelector('.f-kaoku')?.value?.trim() || '';
+              if (!loc && !kb) return;
+              buildings.push({
+                location: loc,
+                kaoku_bango: kb,
+                kind: r.querySelector('.f-kind')?.value || '',
+                structure: r.querySelector('.f-structure')?.value || '',
+                area_tax_sqm: r.querySelector('.f-area-tax')?.value || null,
+                assessed_value: r.querySelector('.f-assessed')?.value || null,
+                construction_year: r.querySelector('.f-year')?.value || '',
+              });
+            }
+          });
+          if (!lands.length && !buildings.length) { status.innerHTML = '<div class="status status-error">入力行がありません</div>'; return; }
+          const resp = await fetch('/api/manual_kotei_add', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ session_id: sessionId, lands, buildings }) });
+          const data = await resp.json();
+          if (data.error) { status.innerHTML = '<div class="status status-error">'+data.error+'</div>'; return; }
+          status.innerHTML = '<div class="status status-success">土地'+data.added_lands+'件・建物'+data.added_buildings+'件を登録しました</div>';
+          uploadData.kotei_lands = data.kotei_lands;
+          uploadData.kotei_buildings = data.kotei_buildings;
+          renderParsedResults(uploadData);
+        } else if (kind === 'nochi') {
+          const entries = [];
+          document.querySelectorAll('#addRows-nochi .manual-entry').forEach(r => {
+            const loc = r.querySelector('.f-location')?.value?.trim() || '';
+            const ch = r.querySelector('.f-chiban')?.value?.trim() || '';
+            if (!loc && !ch) return;
+            entries.push({
+              location: loc,
+              chiban: ch,
+              chimoku: r.querySelector('.f-chimoku')?.value || '',
+              area_sqm: r.querySelector('.f-area')?.value || null,
+              farm_category: r.querySelector('.f-farm-category')?.value || '',
+              farmer_name: r.querySelector('.f-farmer')?.value || '',
+              right_type: r.querySelector('.f-right-type')?.value || '',
+              right_holder: r.querySelector('.f-right-holder')?.value || '',
+            });
+          });
+          if (!entries.length) { status.innerHTML = '<div class="status status-error">入力行がありません</div>'; return; }
+          const resp = await fetch('/api/manual_nochi_add', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ session_id: sessionId, entries }) });
+          const data = await resp.json();
+          if (data.error) { status.innerHTML = '<div class="status status-error">'+data.error+'</div>'; return; }
+          status.innerHTML = '<div class="status status-success">'+data.added+'件を登録しました</div>';
+          uploadData.nochi_daichos = data.nochi_daichos;
+          renderParsedResults(uploadData);
+        }
+      } catch(e) {
+        status.innerHTML = '<div class="status status-error">'+e.message+'</div>';
+      }
     }
 
     // --- 評価 ---

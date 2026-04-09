@@ -195,7 +195,7 @@ async def manual_input(request: Request):
             location=address,
             chiban=entry.get("chiban", ""),
             chimoku_registry=entry.get("chimoku", ""),
-            area_registry_sqm=entry.get("land_area_sqm"),
+            area_registry_sqm=_to_float(entry.get("land_area_sqm")),
             source_file="手入力",
         )
         sd.tohon_lands.append(tl)
@@ -208,6 +208,163 @@ async def manual_input(request: Request):
 
     return JSONResponse({
         "session_id": session_id,
+        "detected_prefecture": detected_pref,
+        "detected_city": detected_city,
+        "tohon_lands": [_tohon_land_dict(tl) for tl in sd.tohon_lands],
+        "counts": {"tohon_land": len(sd.tohon_lands)},
+    })
+
+
+# ------------------------------------------------------------------
+# 手入力: 固定資産情報・農地台帳の追加
+# ------------------------------------------------------------------
+@app.post("/api/manual_kotei_add")
+async def manual_kotei_add(request: Request):
+    """既存セッションに固定資産情報（土地・建物）を手入力で追加・上書き."""
+    body = await request.json()
+    session_id = body.get("session_id", "")
+    sd = _sessions.get(session_id)
+    if not sd:
+        return JSONResponse({"error": "セッションが見つかりません"}, status_code=404)
+
+    replace = bool(body.get("replace", False))
+    if replace:
+        sd.kotei_lands = []
+        sd.kotei_buildings = []
+
+    land_entries = body.get("lands", []) or []
+    building_entries = body.get("buildings", []) or []
+
+    added_lands = 0
+    for entry in land_entries:
+        location = (entry.get("location") or "").strip()
+        chiban = (entry.get("chiban") or "").strip()
+        if not location and not chiban:
+            continue
+        kl = KoteiShisanLand(
+            location=location,
+            chiban=chiban,
+            chimoku_registry=(entry.get("chimoku_registry") or "").strip(),
+            chimoku_tax=(entry.get("chimoku_tax") or "").strip(),
+            area_registry_sqm=_to_float(entry.get("area_registry_sqm")),
+            area_tax_sqm=_to_float(entry.get("area_tax_sqm")),
+            assessed_value=_to_int(entry.get("assessed_value")),
+            source_file="手入力",
+        )
+        sd.kotei_lands.append(kl)
+        added_lands += 1
+
+    added_buildings = 0
+    for entry in building_entries:
+        location = (entry.get("location") or "").strip()
+        kaoku_bango = (entry.get("kaoku_bango") or "").strip()
+        if not location and not kaoku_bango:
+            continue
+        kb = KoteiShisanBuilding(
+            location=location,
+            kaoku_bango=kaoku_bango,
+            kind=(entry.get("kind") or "").strip(),
+            structure=(entry.get("structure") or "").strip(),
+            area_tax_sqm=_to_float(entry.get("area_tax_sqm")),
+            assessed_value=_to_int(entry.get("assessed_value")),
+            construction_year=(entry.get("construction_year") or "").strip(),
+            source_file="手入力",
+        )
+        sd.kotei_buildings.append(kb)
+        added_buildings += 1
+
+    return JSONResponse({
+        "session_id": session_id,
+        "added_lands": added_lands,
+        "added_buildings": added_buildings,
+        "kotei_lands": [_kotei_land_dict(kl) for kl in sd.kotei_lands],
+        "kotei_buildings": [_kotei_building_dict(kb) for kb in sd.kotei_buildings],
+        "counts": {
+            "kotei_land": len(sd.kotei_lands),
+            "kotei_building": len(sd.kotei_buildings),
+        },
+    })
+
+
+@app.post("/api/manual_nochi_add")
+async def manual_nochi_add(request: Request):
+    """既存セッションに農地台帳情報を手入力で追加・上書き."""
+    body = await request.json()
+    session_id = body.get("session_id", "")
+    sd = _sessions.get(session_id)
+    if not sd:
+        return JSONResponse({"error": "セッションが見つかりません"}, status_code=404)
+
+    replace = bool(body.get("replace", False))
+    if replace:
+        sd.nochi_daichos = []
+
+    entries = body.get("entries", []) or []
+    added = 0
+    for entry in entries:
+        location = (entry.get("location") or "").strip()
+        chiban = (entry.get("chiban") or "").strip()
+        if not location and not chiban:
+            continue
+        nd = NochiDaicho(
+            location=location,
+            chiban=chiban,
+            chimoku=(entry.get("chimoku") or "").strip(),
+            area_sqm=_to_float(entry.get("area_sqm")),
+            farm_category=(entry.get("farm_category") or "").strip(),
+            farmer_name=(entry.get("farmer_name") or "").strip(),
+            right_type=(entry.get("right_type") or "").strip(),
+            right_holder=(entry.get("right_holder") or "").strip(),
+            source_file="手入力",
+        )
+        sd.nochi_daichos.append(nd)
+        added += 1
+
+    return JSONResponse({
+        "session_id": session_id,
+        "added": added,
+        "nochi_daichos": [_nochi_dict(nd) for nd in sd.nochi_daichos],
+        "counts": {"nochi": len(sd.nochi_daichos)},
+    })
+
+
+@app.post("/api/manual_tohon_add")
+async def manual_tohon_add(request: Request):
+    """既存セッションに謄本情報（土地）を手入力で追加."""
+    body = await request.json()
+    session_id = body.get("session_id", "")
+    sd = _sessions.get(session_id)
+    if not sd:
+        return JSONResponse({"error": "セッションが見つかりません"}, status_code=404)
+
+    replace = bool(body.get("replace", False))
+    if replace:
+        sd.tohon_lands = []
+
+    entries = body.get("entries", []) or []
+    added = 0
+    for entry in entries:
+        location = (entry.get("location") or "").strip()
+        chiban = (entry.get("chiban") or "").strip()
+        if not location and not chiban:
+            continue
+        tl = TohonLand(
+            location=location,
+            chiban=chiban,
+            chimoku_registry=(entry.get("chimoku_registry") or "").strip(),
+            area_registry_sqm=_to_float(entry.get("area_registry_sqm")),
+            source_file="手入力",
+        )
+        sd.tohon_lands.append(tl)
+        added += 1
+
+    all_props = sd.tohon_lands + sd.kotei_lands + sd.nochi_daichos
+    detected_pref = detect_prefecture_from_properties(all_props)
+    detected_city = detect_city_from_properties(all_props)
+
+    return JSONResponse({
+        "session_id": session_id,
+        "added": added,
         "detected_prefecture": detected_pref,
         "detected_city": detected_city,
         "tohon_lands": [_tohon_land_dict(tl) for tl in sd.tohon_lands],
@@ -597,6 +754,38 @@ async def _save_file(f: UploadFile, session_id: str) -> Path:
     content = await f.read()
     path.write_bytes(content)
     return path
+
+
+def _to_float(value: Any) -> float | None:
+    """文字列・数値を float に変換（カンマ・空白を許容）."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        s = str(value).strip().replace(",", "").replace(" ", "")
+        if not s:
+            return None
+        return float(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def _to_int(value: Any) -> int | None:
+    """文字列・数値を int に変換（カンマ・空白・小数点を許容）."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    try:
+        s = str(value).strip().replace(",", "").replace(" ", "").replace("円", "")
+        if not s:
+            return None
+        return int(float(s))
+    except (ValueError, TypeError):
+        return None
 
 
 def _pref_key(prefecture: str) -> str:
