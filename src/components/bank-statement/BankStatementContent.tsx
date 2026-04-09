@@ -35,6 +35,7 @@ export default function BankStatementContent() {
   const [showColumnMapping, setShowColumnMapping] = useState(false)
   const [rawPages, setRawPages] = useState<RawTableRow[][] | null>(null)
   const [pendingSourceType, setPendingSourceType] = useState<ParseResult['sourceType'] | null>(null)
+  const [pendingImageUrls, setPendingImageUrls] = useState<string[] | null>(null)
 
   const applyParseResultFn = useCallback(
     (result: ParseResult, config: UploadConfig) => {
@@ -66,7 +67,18 @@ export default function BankStatementContent() {
         if (result.needsColumnMapping && result.rawPages) {
           setRawPages(result.rawPages)
           setPendingSourceType(result.sourceType)
+          setPendingImageUrls(result.pageImageUrls || null)
           setShowColumnMapping(true)
+          setIsLoading(false)
+          return
+        }
+
+        if (result.ocrFailed) {
+          // OCR失敗: 画像のみ表示して手動入力モード
+          setPages(result.pages)
+          setCurrentPageIndex(0)
+          setJournalEntries([])
+          setError('スキャン画像PDFからテキストを抽出できませんでした。左側のPDF画像を参照しながら、右側の「+ 空白行追加」ボタンから手動で仕訳を入力してください。')
           setIsLoading(false)
           return
         }
@@ -90,6 +102,13 @@ export default function BankStatementContent() {
 
       try {
         const result: ParseResult = applyColumnMapping(rawPages, mapping, pendingSourceType)
+        // 列マッピング結果のページに画像URLを付与
+        if (pendingImageUrls) {
+          result.pages = result.pages.map((page, i) => ({
+            ...page,
+            imageDataUrl: pendingImageUrls[i] || page.imageDataUrl,
+          }))
+        }
         applyParseResultFn(result, uploadConfig)
       } catch (err) {
         setError(err instanceof Error ? err.message : '列マッピングの適用に失敗しました')
@@ -97,9 +116,10 @@ export default function BankStatementContent() {
         setIsLoading(false)
         setRawPages(null)
         setPendingSourceType(null)
+        setPendingImageUrls(null)
       }
     },
-    [rawPages, pendingSourceType, uploadConfig, applyParseResultFn],
+    [rawPages, pendingSourceType, uploadConfig, applyParseResultFn, pendingImageUrls],
   )
 
   const handleEntrySelect = useCallback(

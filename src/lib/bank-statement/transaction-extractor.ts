@@ -256,22 +256,68 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
   const { pages: rawPages, isTextPdf } = await parsePdfText(file)
 
   if (!isTextPdf) {
-    // スキャンPDF: OCR処理
+    // スキャンPDF: まずページ画像を生成
     const imageDataUrls: string[] = []
-    for (let i = 0; i < rawPages.length; i++) {
+    const pageCount = rawPages.length || 1
+    for (let i = 0; i < pageCount; i++) {
       const imageDataUrl = await renderPdfPageToImage(file, i + 1, 2)
       imageDataUrls.push(imageDataUrl)
     }
 
-    const ocrResults = await parsePdfWithOcr(imageDataUrls)
+    // OCR処理を試みる
+    let ocrResults
+    try {
+      ocrResults = await parsePdfWithOcr(imageDataUrls)
+    } catch {
+      // OCR失敗: 画像のみ表示して手動入力モード
+      const emptyPages: StatementPage[] = imageDataUrls.map((url, i) => ({
+        pageIndex: i,
+        transactions: [],
+        openingBalance: 0,
+        closingBalance: 0,
+        isBalanceValid: true,
+        balanceDifference: 0,
+        imageDataUrl: url,
+      }))
+      return {
+        pages: emptyPages,
+        pageImageUrls: imageDataUrls,
+        sourceType: 'pdf-ocr',
+        needsColumnMapping: false,
+        ocrFailed: true,
+      }
+    }
 
     const allRawPages = ocrResults.map((r) => r.rows)
+    const hasAnyData = allRawPages.some((rows) => rows.length > 0)
+
+    if (!hasAnyData) {
+      // OCRがテキストを抽出できなかった: 画像のみ表示して手動入力モード
+      const emptyPages: StatementPage[] = imageDataUrls.map((url, i) => ({
+        pageIndex: i,
+        transactions: [],
+        openingBalance: 0,
+        closingBalance: 0,
+        isBalanceValid: true,
+        balanceDifference: 0,
+        imageDataUrl: url,
+      }))
+      return {
+        pages: emptyPages,
+        pageImageUrls: imageDataUrls,
+        sourceType: 'pdf-ocr',
+        needsColumnMapping: false,
+        ocrFailed: true,
+      }
+    }
+
     const mapping = detectColumnMappingFromAllPages(allRawPages)
 
     if (!mapping) {
       return {
         pages: [],
         rawPages: allRawPages,
+        pageImageUrls: imageDataUrls,
         sourceType: 'pdf-ocr',
         needsColumnMapping: true,
       }

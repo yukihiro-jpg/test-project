@@ -99,8 +99,10 @@ export interface ColumnMapping {
 export interface ParseResult {
   pages: StatementPage[]
   rawPages?: RawTableRow[][] // 列マッピング用
+  pageImageUrls?: string[] // OCR失敗時でもPDF画像を保持
   sourceType: 'pdf-text' | 'pdf-ocr' | 'excel'
   needsColumnMapping: boolean
+  ocrFailed?: boolean // OCRでテキスト抽出できなかった場合
 }
 
 // アップロード設定
