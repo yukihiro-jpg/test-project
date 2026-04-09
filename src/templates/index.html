@@ -180,14 +180,6 @@
             <div class="file-list" id="fileList-kotei"></div>
           </div>
           <div class="upload-section">
-            <h3>名寄帳</h3>
-            <div class="upload-area-small" data-type="nayosecho" onclick="this.querySelector('input').click()">
-              <p>クリックまたはD&Dでアップロード</p>
-              <input type="file" multiple accept=".pdf,.txt,.csv" onchange="updateFileList(this, 'nayosecho')">
-            </div>
-            <div class="file-list" id="fileList-nayosecho"></div>
-          </div>
-          <div class="upload-section">
             <h3>農地台帳（農家基本台帳）</h3>
             <div class="upload-area-small" data-type="nochi" onclick="this.querySelector('input').click()">
               <p>クリックまたはD&Dでアップロード</p>
@@ -461,7 +453,7 @@
       status.innerHTML = '<div class="status status-info">書類を解析しています...</div>';
 
       const fd = new FormData();
-      const types = ['tohon','kotei','nayosecho','nochi'];
+      const types = ['tohon','kotei','nochi'];
       types.forEach(t => {
         const input = document.querySelector(`.upload-area-small[data-type="${t}"] input`);
         if (input && input.files) { for (const f of input.files) fd.append(t+'_files', f); }
@@ -475,7 +467,7 @@
         sessionId = data.session_id;
         uploadData = data;
         const c = data.counts;
-        const total = (c.tohon_land||0)+(c.tohon_building||0)+(c.kotei_land||0)+(c.kotei_building||0)+(c.nayosecho_land||0)+(c.nayosecho_building||0)+(c.nochi||0);
+        const total = (c.tohon_land||0)+(c.tohon_building||0)+(c.kotei_land||0)+(c.kotei_building||0)+(c.nochi||0);
         status.innerHTML = '<div class="status status-success">'+total+'件の不動産情報を抽出しました</div>';
         showEditCard(data);
       } catch(e) { status.innerHTML = '<div class="status status-error">'+e.message+'</div>'; }

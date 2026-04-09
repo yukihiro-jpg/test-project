@@ -20,11 +20,10 @@ from .models import (
     PropertyEvaluation,
     TohonLand, TohonBuilding,
     KoteiShisanLand, KoteiShisanBuilding,
-    NayosechoLand, NayosechoBuilding,
     NochiDaicho,
 )
 from .services.document_parser import (
-    parse_tohon, parse_kotei_shisan, parse_nayosecho, parse_nochi_daicho,
+    parse_tohon, parse_kotei_shisan, parse_nochi_daicho,
     calculate_ownership,
     detect_prefecture_from_properties, detect_city_from_properties,
     extract_address_parts,
@@ -77,8 +76,6 @@ class SessionData:
     tohon_buildings: list[TohonBuilding] = field(default_factory=list)
     kotei_lands: list[KoteiShisanLand] = field(default_factory=list)
     kotei_buildings: list[KoteiShisanBuilding] = field(default_factory=list)
-    nayosecho_lands: list[NayosechoLand] = field(default_factory=list)
-    nayosecho_buildings: list[NayosechoBuilding] = field(default_factory=list)
     nochi_daichos: list[NochiDaicho] = field(default_factory=list)
     evaluations: list[PropertyEvaluation] = field(default_factory=list)
     target_name: str = ""
@@ -108,7 +105,6 @@ async def index(request: Request):
 async def upload_documents(
     tohon_files: list[UploadFile] = File(default=[]),
     kotei_files: list[UploadFile] = File(default=[]),
-    nayosecho_files: list[UploadFile] = File(default=[]),
     nochi_files: list[UploadFile] = File(default=[]),
     target_name: str = Form(default=""),
     reference_date: str = Form(default=""),
@@ -130,13 +126,6 @@ async def upload_documents(
         lands, buildings = parse_kotei_shisan(path)
         sd.kotei_lands.extend(lands)
         sd.kotei_buildings.extend(buildings)
-
-    # 名寄帳
-    for f in nayosecho_files:
-        path = await _save_file(f, session_id)
-        lands, buildings = parse_nayosecho(path)
-        sd.nayosecho_lands.extend(lands)
-        sd.nayosecho_buildings.extend(buildings)
 
     # 農地台帳
     for f in nochi_files:
@@ -161,7 +150,7 @@ async def upload_documents(
                 })
 
     # 都道府県・市区町村を自動検出
-    all_props = sd.tohon_lands + sd.kotei_lands + sd.nayosecho_lands + sd.nochi_daichos
+    all_props = sd.tohon_lands + sd.kotei_lands + sd.nochi_daichos
     detected_pref = detect_prefecture_from_properties(all_props)
     detected_city = detect_city_from_properties(all_props)
 
@@ -173,8 +162,6 @@ async def upload_documents(
         "tohon_buildings": [_tohon_building_dict(tb) for tb in sd.tohon_buildings],
         "kotei_lands": [_kotei_land_dict(kl) for kl in sd.kotei_lands],
         "kotei_buildings": [_kotei_building_dict(kb) for kb in sd.kotei_buildings],
-        "nayosecho_lands": [_nayosecho_land_dict(nl) for nl in sd.nayosecho_lands],
-        "nayosecho_buildings": [_nayosecho_building_dict(nb) for nb in sd.nayosecho_buildings],
         "nochi_daichos": [_nochi_dict(nd) for nd in sd.nochi_daichos],
         "ownership_results": ownership_results,
         "counts": {
@@ -182,8 +169,6 @@ async def upload_documents(
             "tohon_building": len(sd.tohon_buildings),
             "kotei_land": len(sd.kotei_lands),
             "kotei_building": len(sd.kotei_buildings),
-            "nayosecho_land": len(sd.nayosecho_lands),
-            "nayosecho_building": len(sd.nayosecho_buildings),
             "nochi": len(sd.nochi_daichos),
         },
     })
@@ -275,12 +260,6 @@ async def evaluate_properties(request: Request):
                 ev.kotei_land = kl
                 break
 
-        # 名寄帳とのマッチング
-        for nl in sd.nayosecho_lands:
-            if _match_property(tl.location, tl.chiban, nl.location, nl.chiban):
-                ev.nayosecho_land = nl
-                break
-
         # 農地台帳とのマッチング
         for nd in sd.nochi_daichos:
             if _match_property(tl.location, tl.chiban, nd.location, nd.chiban):
@@ -318,12 +297,6 @@ async def evaluate_properties(request: Request):
         for kb in sd.kotei_buildings:
             if tb.kaoku_bango and tb.kaoku_bango in (kb.kaoku_bango or ""):
                 ev.kotei_building = kb
-                break
-
-        # 名寄帳の建物マッチング
-        for nb in sd.nayosecho_buildings:
-            if tb.kaoku_bango and tb.kaoku_bango in (nb.kaoku_bango or ""):
-                ev.nayosecho_building = nb
                 break
 
         if sd.target_name and tb.ownership_history:
@@ -840,22 +813,6 @@ def _kotei_building_dict(kb: KoteiShisanBuilding) -> dict:
         "kind": kb.kind, "structure": kb.structure,
         "area_tax_sqm": kb.area_tax_sqm, "assessed_value": kb.assessed_value,
         "construction_year": kb.construction_year, "source_file": kb.source_file,
-    }
-
-
-def _nayosecho_land_dict(nl: NayosechoLand) -> dict:
-    return {
-        "location": nl.location, "chiban": nl.chiban,
-        "chimoku_tax": nl.chimoku_tax, "area_tax_sqm": nl.area_tax_sqm,
-        "assessed_value": nl.assessed_value, "owner": nl.owner, "share": nl.share,
-    }
-
-
-def _nayosecho_building_dict(nb: NayosechoBuilding) -> dict:
-    return {
-        "location": nb.location, "kaoku_bango": nb.kaoku_bango,
-        "kind": nb.kind, "structure": nb.structure,
-        "area_tax_sqm": nb.area_tax_sqm, "assessed_value": nb.assessed_value,
     }
 
 

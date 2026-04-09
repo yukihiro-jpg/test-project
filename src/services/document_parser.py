@@ -1,6 +1,6 @@
 """書類パーサー.
 
-謄本（全部事項証明書）、固定資産評価証明書（課税明細書）、名寄帳、農地台帳の
+謄本（全部事項証明書）、固定資産評価証明書（課税明細書）、農地台帳の
 PDFからテキストを抽出し、不動産情報を構造化する。
 
 Claude API消費を最小化するため、すべてルールベース（正規表現+pdfplumber）で抽出。
@@ -20,8 +20,6 @@ from ..models import (
     FloorArea,
     KoteiShisanBuilding,
     KoteiShisanLand,
-    NayosechoBuilding,
-    NayosechoLand,
     NochiDaicho,
     OtherRightEntry,
     OwnershipEntry,
@@ -733,74 +731,6 @@ def _parse_kotei_tabular(text: str, source_file: str) -> list[KoteiShisanLand]:
             lands.append(land)
 
     return lands
-
-
-# ------------------------------------------------------------------
-# 名寄帳パーサー
-# ------------------------------------------------------------------
-def parse_nayosecho(
-    file_path: Path,
-) -> tuple[list[NayosechoLand], list[NayosechoBuilding]]:
-    """名寄帳PDFから土地・建物情報を抽出."""
-    lands: list[NayosechoLand] = []
-    buildings: list[NayosechoBuilding] = []
-
-    text = _extract_text(file_path)
-    if not text:
-        return lands, buildings
-
-    text_han = _zen_to_han(text)
-
-    land = NayosechoLand(source_file=file_path.name)
-    m = re.search(r"所在[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-    if m:
-        land.location = m.group(1).strip()
-    m = re.search(r"地番[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-    if m:
-        land.chiban = m.group(1).strip()
-    m = re.search(r"(?:課税)?地目[　\s]*[：:]?[　\s]*" + CHIMOKU_PATTERN, text)
-    if m:
-        land.chimoku_tax = m.group(1).strip()
-    m = re.search(r"(?:課税)?地積[　\s]*[：:]?[　\s]*([\d.,，]+)\s*[㎡m²]?", text_han)
-    if m:
-        land.area_tax_sqm = _parse_number(m.group(1))
-    m = re.search(r"(?:評価額|価格)[　\s]*[：:]?[　\s]*([\d,，]+)\s*円?", text_han)
-    if m:
-        land.assessed_value = _parse_int(m.group(1))
-    m = re.search(r"(?:所有者|納税義務者)[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-    if m:
-        land.owner = m.group(1).strip()
-    m = re.search(r"持分[　\s]*[：:]?[　\s]*([\d０-９]+分の[\d０-９]+|\d+/\d+)", text)
-    if m:
-        land.share = _zen_to_han(m.group(1))
-
-    if land.location or land.chiban:
-        lands.append(land)
-
-    # 建物部分
-    if re.search(r"家屋番号", text):
-        bld = NayosechoBuilding(source_file=file_path.name)
-        bld.location = land.location
-        bld.owner = land.owner
-        bld.share = land.share
-        m = re.search(r"家屋番号[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-        if m:
-            bld.kaoku_bango = m.group(1).strip()
-        m = re.search(r"種類[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-        if m:
-            bld.kind = m.group(1).strip()
-        m = re.search(r"構造[　\s]*[：:]?[　\s]*(.+?)(?:\n|$)", text)
-        if m:
-            bld.structure = m.group(1).strip()
-        m = re.search(r"(?:課税)?床面積[　\s]*[：:]?[　\s]*([\d.,，]+)\s*[㎡m²]?", text_han)
-        if m:
-            bld.area_tax_sqm = _parse_number(m.group(1))
-        m = re.search(r"(?:評価額|価格)[　\s]*[：:]?[　\s]*([\d,，]+)\s*円?", text_han)
-        if m:
-            bld.assessed_value = _parse_int(m.group(1))
-        buildings.append(bld)
-
-    return lands, buildings
 
 
 # ------------------------------------------------------------------

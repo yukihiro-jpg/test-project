@@ -99,39 +99,6 @@ class KoteiShisanBuilding:
 
 
 # =====================================================================
-# 書類抽出: 名寄帳
-# =====================================================================
-@dataclass
-class NayosechoLand:
-    """名寄帳から抽出した土地情報."""
-
-    location: str = ""
-    chiban: str = ""
-    chimoku_tax: str = ""              # 課税地目
-    area_tax_sqm: Optional[float] = None
-    assessed_value: Optional[int] = None
-    owner: str = ""                    # 所有者（納税義務者）
-    share: str = ""                    # 持分
-    source_file: str = ""
-
-
-@dataclass
-class NayosechoBuilding:
-    """名寄帳から抽出した建物情報."""
-
-    location: str = ""
-    kaoku_bango: str = ""
-    kind: str = ""
-    structure: str = ""
-    area_tax_sqm: Optional[float] = None
-    assessed_value: Optional[int] = None
-    owner: str = ""
-    share: str = ""
-    construction_year: str = ""
-    source_file: str = ""
-
-
-# =====================================================================
 # 書類抽出: 農地台帳（農家基本台帳）
 # =====================================================================
 @dataclass
@@ -269,10 +236,6 @@ class PropertyEvaluation:
     kotei_land: Optional[KoteiShisanLand] = None
     kotei_building: Optional[KoteiShisanBuilding] = None
 
-    # 名寄帳 抽出
-    nayosecho_land: Optional[NayosechoLand] = None
-    nayosecho_building: Optional[NayosechoBuilding] = None
-
     # 農地台帳 抽出
     nochi_daicho: Optional[NochiDaicho] = None
 
@@ -313,8 +276,6 @@ class PropertyEvaluation:
             return self.kotei_land.location
         if self.kotei_building:
             return self.kotei_building.location
-        if self.nayosecho_land:
-            return self.nayosecho_land.location
         if self.nochi_daicho:
             return self.nochi_daicho.location
         return ""
@@ -326,8 +287,6 @@ class PropertyEvaluation:
             return self.tohon_land.chiban
         if self.kotei_land:
             return self.kotei_land.chiban
-        if self.nayosecho_land:
-            return self.nayosecho_land.chiban
         if self.nochi_daicho:
             return self.nochi_daicho.chiban
         return ""
@@ -341,11 +300,9 @@ class PropertyEvaluation:
 
     @property
     def chimoku_tax(self) -> str:
-        """課税地目（固定資産評価証明/名寄帳から）."""
+        """課税地目（固定資産評価証明から）."""
         if self.kotei_land:
             return self.kotei_land.chimoku_tax
-        if self.nayosecho_land:
-            return self.nayosecho_land.chimoku_tax
         return ""
 
     @property
@@ -360,8 +317,6 @@ class PropertyEvaluation:
         """課税地積."""
         if self.kotei_land:
             return self.kotei_land.area_tax_sqm
-        if self.nayosecho_land:
-            return self.nayosecho_land.area_tax_sqm
         return None
 
     @property
@@ -369,10 +324,6 @@ class PropertyEvaluation:
         """固定資産税評価額."""
         if self.kotei_land:
             return self.kotei_land.assessed_value
-        if self.nayosecho_land:
-            return self.nayosecho_land.assessed_value
         if self.kotei_building:
             return self.kotei_building.assessed_value
-        if self.nayosecho_building:
-            return self.nayosecho_building.assessed_value
         return None
