@@ -17,6 +17,11 @@ interface Props {
   onDelete: () => void
 }
 
+// 未入力チェック対象フィールド
+const REQUIRED_FIELDS: (keyof JournalEntry)[] = [
+  'debitCode', 'creditCode', 'debitTaxCode', 'debitTaxType', 'debitBusinessType',
+]
+
 export default function JournalEntryRow({
   entry,
   isSelected,
@@ -53,11 +58,47 @@ export default function JournalEntryRow({
     ? 'border-t-[3px] border-t-blue-400 border-b border-b-gray-100'
     : 'border-b border-gray-100'
 
+  // 金額は借方金額と貸方金額のうち0でない方を表示
+  const amount = entry.debitAmount || entry.creditAmount || 0
+
+  const handleAmountChange = (v: string) => {
+    const num = parseInt(v) || 0
+    onChange(entry.id, 'debitAmount', num)
+    onChange(entry.id, 'creditAmount', num)
+  }
+
+  // CDが変更されたら科目名を自動設定
+  const handleDebitCodeChange = (code: string) => {
+    onChange(entry.id, 'debitCode', code)
+    const account = accountMaster.find((a) => a.code === code)
+    if (account) {
+      onChange(entry.id, 'debitName', account.name)
+    }
+  }
+
+  const handleCreditCodeChange = (code: string) => {
+    onChange(entry.id, 'creditCode', code)
+    const account = accountMaster.find((a) => a.code === code)
+    if (account) {
+      onChange(entry.id, 'creditName', account.name)
+    }
+  }
+
+  const isEmpty = (field: keyof JournalEntry) => {
+    const v = entry[field]
+    return !v || (typeof v === 'string' && !v.trim())
+  }
+
+  const emptyBg = (field: keyof JournalEntry) =>
+    REQUIRED_FIELDS.includes(field) && isEmpty(field)
+      ? 'bg-amber-50'
+      : ''
+
   return (
     <>
       {isPageBoundary && (
         <tr className="bg-blue-50">
-          <td colSpan={12} className="px-2 py-0.5 text-xs font-bold text-blue-600">
+          <td colSpan={11} className="px-2 py-0.5 text-xs font-bold text-blue-600">
             {pageLabel} ページ
           </td>
         </tr>
@@ -67,130 +108,138 @@ export default function JournalEntryRow({
         onClick={onSelect}
         onFocus={onSelect}
       >
-      <td className="px-2 py-1">
-        <EditableCell
-          value={entry.date}
-          onChange={(v) => onChange(entry.id, 'date', v)}
-          placeholder="YYYYMMDD"
-          className="w-20"
-        />
-      </td>
-      <td className="px-2 py-1">
-        <AccountCodeCell
-          value={entry.debitCode}
-          accountMaster={accountMaster}
-          onChange={(code) => onChange(entry.id, 'debitCode', code)}
-        />
-      </td>
-      <td className="px-2 py-1">
-        <EditableCell
-          value={entry.debitName}
-          onChange={(v) => onChange(entry.id, 'debitName', v)}
-          placeholder="借方科目"
-        />
-      </td>
-      <td className="px-2 py-1">
-        <EditableCell
-          value={entry.debitAmount ? String(entry.debitAmount) : ''}
-          onChange={(v) => onChange(entry.id, 'debitAmount', parseInt(v) || 0)}
-          placeholder="0"
-          className="text-right"
-          type="number"
-        />
-      </td>
-      <td className="px-2 py-1">
-        <AccountCodeCell
-          value={entry.creditCode}
-          accountMaster={accountMaster}
-          onChange={(code) => onChange(entry.id, 'creditCode', code)}
-        />
-      </td>
-      <td className="px-2 py-1">
-        <EditableCell
-          value={entry.creditName}
-          onChange={(v) => onChange(entry.id, 'creditName', v)}
-          placeholder="貸方科目"
-        />
-      </td>
-      <td className="px-2 py-1">
-        <EditableCell
-          value={entry.creditAmount ? String(entry.creditAmount) : ''}
-          onChange={(v) => onChange(entry.id, 'creditAmount', parseInt(v) || 0)}
-          placeholder="0"
-          className="text-right"
-          type="number"
-        />
-      </td>
-      <td className="px-2 py-1">
-        <EditableCell
-          value={entry.debitTaxCode}
-          onChange={(v) => onChange(entry.id, 'debitTaxCode', v)}
-          placeholder=""
-          className="w-14"
-        />
-      </td>
-      <td className="px-2 py-1">
-        <EditableCell
-          value={entry.debitTaxType}
-          onChange={(v) => onChange(entry.id, 'debitTaxType', v)}
-          placeholder=""
-        />
-      </td>
-      <td className="px-2 py-1">
-        <EditableCell
-          value={entry.debitBusinessType}
-          onChange={(v) => onChange(entry.id, 'debitBusinessType', v)}
-          placeholder=""
-        />
-      </td>
-      <td className="px-2 py-1">
-        <EditableCell
-          value={entry.description}
-          onChange={(v) => onChange(entry.id, 'description', v)}
-          placeholder="摘要"
-        />
-      </td>
-      <td className="px-2 py-1 relative" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={() => setShowMenu(!showMenu)}
-          className="px-2 py-0.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded"
-        >
-          ...
-        </button>
-        {showMenu && (
-          <div
-            ref={menuRef}
-            className="absolute right-0 top-full mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-20"
+        {/* 日付 */}
+        <td className="px-1 py-0.5">
+          <EditableCell
+            value={entry.date}
+            onChange={(v) => onChange(entry.id, 'date', v)}
+            placeholder="YYYYMMDD"
+            className="w-24"
+          />
+        </td>
+
+        {/* 借方CD */}
+        <td className={`px-1 py-0.5 ${emptyBg('debitCode')}`}>
+          <AccountCodeCell
+            value={entry.debitCode}
+            accountMaster={accountMaster}
+            onChange={handleDebitCodeChange}
+          />
+        </td>
+
+        {/* 借方科目（自動表示・編集不可） */}
+        <td className="px-1 py-0.5">
+          <span className="block px-1.5 py-1 text-sm text-gray-700 truncate">
+            {entry.debitName || <span className="text-gray-300">-</span>}
+          </span>
+        </td>
+
+        {/* 貸方CD */}
+        <td className={`px-1 py-0.5 ${emptyBg('creditCode')}`}>
+          <AccountCodeCell
+            value={entry.creditCode}
+            accountMaster={accountMaster}
+            onChange={handleCreditCodeChange}
+          />
+        </td>
+
+        {/* 貸方科目（自動表示・編集不可） */}
+        <td className="px-1 py-0.5">
+          <span className="block px-1.5 py-1 text-sm text-gray-700 truncate">
+            {entry.creditName || <span className="text-gray-300">-</span>}
+          </span>
+        </td>
+
+        {/* 金額 */}
+        <td className="px-1 py-0.5">
+          <EditableCell
+            value={amount ? String(amount) : ''}
+            onChange={handleAmountChange}
+            placeholder="0"
+            className="text-right w-24 font-medium"
+            type="number"
+          />
+        </td>
+
+        {/* 消費税CD */}
+        <td className={`px-1 py-0.5 ${emptyBg('debitTaxCode')}`}>
+          <EditableCell
+            value={entry.debitTaxCode}
+            onChange={(v) => onChange(entry.id, 'debitTaxCode', v)}
+            placeholder=""
+            className="w-14"
+          />
+        </td>
+
+        {/* 税区分 */}
+        <td className={`px-1 py-0.5 ${emptyBg('debitTaxType')}`}>
+          <EditableCell
+            value={entry.debitTaxType}
+            onChange={(v) => onChange(entry.id, 'debitTaxType', v)}
+            placeholder=""
+          />
+        </td>
+
+        {/* 事業者区分 */}
+        <td className={`px-1 py-0.5 ${emptyBg('debitBusinessType')}`}>
+          <EditableCell
+            value={entry.debitBusinessType}
+            onChange={(v) => onChange(entry.id, 'debitBusinessType', v)}
+            placeholder=""
+          />
+        </td>
+
+        {/* 摘要 */}
+        <td className="px-1 py-0.5">
+          <EditableCell
+            value={entry.description}
+            onChange={(v) => onChange(entry.id, 'description', v)}
+            placeholder="摘要"
+          />
+        </td>
+
+        {/* 操作 */}
+        <td className="px-1 py-0.5 relative" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className="px-2 py-0.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded"
           >
-            <button
-              onClick={() => { onLearn(); setShowMenu(false) }}
-              className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
+            ...
+          </button>
+          {showMenu && (
+            <div
+              ref={menuRef}
+              className="absolute right-0 top-full mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-20"
             >
-              パターン学習
-            </button>
-            <button
-              onClick={() => { onAddBlank(); setShowMenu(false) }}
-              className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
-            >
-              空白行を追加
-            </button>
-            <button
-              onClick={() => { onAddCompound(); setShowMenu(false) }}
-              className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
-            >
-              複合仕訳行を追加
-            </button>
-            <hr className="border-gray-100" />
-            <button
-              onClick={() => { onDelete(); setShowMenu(false) }}
-              className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"
-            >
-              削除
-            </button>
-          </div>
-        )}
-      </td>
-    </tr>
+              <button
+                onClick={() => { onLearn(); setShowMenu(false) }}
+                className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
+              >
+                パターン学習
+              </button>
+              <button
+                onClick={() => { onAddBlank(); setShowMenu(false) }}
+                className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
+              >
+                空白行を追加
+              </button>
+              <button
+                onClick={() => { onAddCompound(); setShowMenu(false) }}
+                className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
+              >
+                複合仕訳行を追加
+              </button>
+              <hr className="border-gray-100" />
+              <button
+                onClick={() => { onDelete(); setShowMenu(false) }}
+                className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"
+              >
+                削除
+              </button>
+            </div>
+          )}
+        </td>
+      </tr>
     </>
   )
 }
@@ -267,7 +316,6 @@ function AccountCodeCell({
         }}
         onFocus={() => setShowSuggest(true)}
         onBlur={() => {
-          // 少し遅延させてクリックイベントを先に処理
           setTimeout(() => {
             onChange(inputValue)
             setShowSuggest(false)
@@ -277,7 +325,7 @@ function AccountCodeCell({
         className="w-full px-1.5 py-1 text-sm border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:bg-blue-50 rounded bg-transparent text-gray-800"
       />
       {showSuggest && filteredItems.length > 0 && (
-        <div className="absolute left-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded shadow-lg z-30 max-h-40 overflow-auto">
+        <div className="absolute left-0 top-full mt-1 w-52 bg-white border border-gray-200 rounded shadow-lg z-30 max-h-40 overflow-auto">
           {filteredItems.map((item) => (
             <button
               key={item.code}
@@ -287,10 +335,10 @@ function AccountCodeCell({
                 onChange(item.code)
                 setShowSuggest(false)
               }}
-              className="w-full px-2 py-1 text-left text-xs hover:bg-blue-50 flex gap-1"
+              className="w-full px-2 py-1.5 text-left text-sm hover:bg-blue-50 flex gap-2"
             >
-              <span className="text-gray-500 w-10 shrink-0">{item.code}</span>
-              <span>{item.name}</span>
+              <span className="text-gray-500 w-12 shrink-0">{item.code}</span>
+              <span className="text-gray-800">{item.name}</span>
             </button>
           ))}
         </div>

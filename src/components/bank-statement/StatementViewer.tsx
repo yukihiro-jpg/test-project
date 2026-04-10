@@ -51,19 +51,42 @@ export default function StatementViewer({
 
         // ハイライト描画
         if (selectedTransactionId) {
-          const tx = currentPage.transactions.find(
+          const txIndex = currentPage.transactions.findIndex(
             (t) => t.id === selectedTransactionId,
           )
-          if (tx?.boundingBox) {
-            const { x, y, width, height } = tx.boundingBox
-            // boundingBoxはPDF座標系（scale=1基準）なのでfinalScaleで変換
-            const pdfToImg = finalScale
+          const tx = txIndex >= 0 ? currentPage.transactions[txIndex] : null
+
+          if (tx) {
+            let hx: number, hy: number, hw: number, hh: number
+
+            if (tx.boundingBox) {
+              // テキストPDF: 正確な座標あり
+              const pdfToImg = finalScale
+              hx = tx.boundingBox.x * pdfToImg
+              hy = tx.boundingBox.y * pdfToImg
+              hw = tx.boundingBox.width * pdfToImg
+              hh = tx.boundingBox.height * pdfToImg
+            } else {
+              // OCR: 行番号から推定（ページを均等分割）
+              const totalRows = currentPage.transactions.length
+              const headerRatio = 0.12 // 上部ヘッダー領域の割合
+              const footerRatio = 0.05 // 下部余白の割合
+              const dataHeight = canvas.height * (1 - headerRatio - footerRatio)
+              const rowHeight = totalRows > 0 ? dataHeight / totalRows : 30
+              const startY = canvas.height * headerRatio
+
+              hx = 10
+              hy = startY + txIndex * rowHeight
+              hw = canvas.width - 20
+              hh = rowHeight
+            }
+
             ctx.save()
             ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'
             ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)'
             ctx.lineWidth = 2
-            ctx.fillRect(x * pdfToImg, y * pdfToImg, width * pdfToImg, height * pdfToImg)
-            ctx.strokeRect(x * pdfToImg, y * pdfToImg, width * pdfToImg, height * pdfToImg)
+            ctx.fillRect(hx, hy, hw, hh)
+            ctx.strokeRect(hx, hy, hw, hh)
             ctx.restore()
           }
         }
