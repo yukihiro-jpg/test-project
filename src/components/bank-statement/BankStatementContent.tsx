@@ -228,7 +228,6 @@ export default function BankStatementContent() {
               pages={pages}
               currentPageIndex={currentPageIndex}
               onPageChange={setCurrentPageIndex}
-              selectedTransactionId={selectedTransactionId}
               entries={journalEntries}
               bankAccountCode={uploadConfig?.accountCode || ''}
             />

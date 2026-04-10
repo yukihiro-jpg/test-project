@@ -8,7 +8,6 @@ interface Props {
   pages: StatementPage[]
   currentPageIndex: number
   onPageChange: (index: number) => void
-  selectedTransactionId: string | null
   entries?: JournalEntry[]
   bankAccountCode?: string
 }
@@ -22,7 +21,6 @@ export default function StatementViewer({
   pages,
   currentPageIndex,
   onPageChange,
-  selectedTransactionId,
   entries,
   bankAccountCode,
 }: Props) {
@@ -62,31 +60,6 @@ export default function StatementViewer({
   const handleMouseUp = useCallback(() => {
     setIsDragging(false)
   }, [])
-
-  // ハイライト対象の行インデックスと位置計算
-  const highlightStyle = (() => {
-    if (!selectedTransactionId || !currentPage) return null
-    const txIndex = currentPage.transactions.findIndex(
-      (t) => t.id === selectedTransactionId,
-    )
-    if (txIndex < 0) return null
-
-    const totalRows = currentPage.transactions.length
-    if (totalRows === 0) return null
-
-    // ページを均等分割して行の位置を推定
-    const headerPct = 12
-    const footerPct = 5
-    const dataPct = 100 - headerPct - footerPct
-    const rowPct = dataPct / totalRows
-
-    return {
-      top: `${headerPct + txIndex * rowPct}%`,
-      height: `${rowPct}%`,
-      left: '2%',
-      width: '96%',
-    }
-  })()
 
   const handleZoomIn = () => setZoom((z) => Math.min(z + ZOOM_STEP, ZOOM_MAX))
   const handleZoomOut = () => setZoom((z) => Math.max(z - ZOOM_STEP, ZOOM_MIN))
@@ -157,21 +130,13 @@ export default function StatementViewer({
         onMouseLeave={handleMouseUp}
       >
         {currentPage.imageDataUrl ? (
-          <div className="relative inline-block" style={{ width: `${zoom}%`, minWidth: '100%' }}>
-            {/* 通帳画像 */}
+          <div className="inline-block" style={{ width: `${zoom}%`, minWidth: '100%' }}>
             <img
               src={currentPage.imageDataUrl}
               alt={`通帳ページ ${currentPageIndex + 1}`}
               className="w-full select-none pointer-events-none"
               draggable={false}
             />
-            {/* ハイライトオーバーレイ */}
-            {highlightStyle && (
-              <div
-                className="absolute pointer-events-none border-2 border-blue-500 bg-blue-400/20 transition-all duration-200"
-                style={highlightStyle}
-              />
-            )}
           </div>
         ) : (
           <div className="bg-white border border-gray-200 rounded overflow-auto">
@@ -180,11 +145,7 @@ export default function StatementViewer({
                 {currentPage.transactions.map((tx) => (
                   <tr
                     key={tx.id}
-                    className={`border-b border-gray-100 ${
-                      tx.id === selectedTransactionId
-                        ? 'bg-blue-100 border-blue-300'
-                        : 'hover:bg-gray-50'
-                    }`}
+                    className="border-b border-gray-100 hover:bg-gray-50"
                   >
                     <td className="px-2 py-1.5 whitespace-nowrap">{tx.date}</td>
                     <td className="px-2 py-1.5">{tx.description}</td>
