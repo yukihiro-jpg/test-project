@@ -104,6 +104,7 @@ export interface ParseResult {
   needsColumnMapping: boolean
   ocrFailed?: boolean // OCRでテキスト抽出できなかった場合
   ocrErrorMessage?: string // OCRエラーの詳細メッセージ
+  corrections?: string[] // 入出金自動補正のログ
 }
 
 // アップロード設定

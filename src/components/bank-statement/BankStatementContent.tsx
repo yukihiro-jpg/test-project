@@ -31,6 +31,7 @@ export default function BankStatementContent() {
   const [uploadConfig, setUploadConfig] = useState<UploadConfig | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
 
   // 列マッピング用state
   const [showColumnMapping, setShowColumnMapping] = useState(false)
@@ -86,6 +87,11 @@ export default function BankStatementContent() {
         }
 
         applyParseResultFn(result, config)
+
+        // 入出金自動補正があった場合に通知
+        if (result.corrections && result.corrections.length > 0) {
+          setInfo(`入出金の自動補正を行いました（残高検算により修正）:\n${result.corrections.join('\n')}`)
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'ファイルの解析に失敗しました')
       } finally {
@@ -185,6 +191,19 @@ export default function BankStatementContent() {
           <button
             onClick={() => setError(null)}
             className="text-red-400 hover:text-red-700 shrink-0 text-lg leading-none"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      {/* 自動補正通知 */}
+      {info && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
+          <span className="whitespace-pre-wrap flex-1">{info}</span>
+          <button
+            onClick={() => setInfo(null)}
+            className="text-amber-400 hover:text-amber-700 shrink-0 text-lg leading-none"
           >
             &times;
           </button>

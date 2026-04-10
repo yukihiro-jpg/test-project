@@ -277,7 +277,10 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
       }
 
       const data = await response.json()
-      console.log('Gemini OCR response:', JSON.stringify(data, null, 2))
+      const apiCorrections: string[] = data.corrections || []
+      if (apiCorrections.length > 0) {
+        console.log('入出金自動補正:', apiCorrections)
+      }
 
       const geminiPages = data.pages as {
         pageIndex: number
@@ -352,6 +355,7 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
         pages: updatePageBalances(statementPages),
         sourceType: 'pdf-ocr',
         needsColumnMapping: false,
+        corrections: apiCorrections.length > 0 ? apiCorrections : undefined,
       }
     } catch (err) {
       // Gemini API失敗: 画像のみ表示して手動入力モード
