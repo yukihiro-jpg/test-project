@@ -317,6 +317,8 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
       }
     } catch (err) {
       // Gemini API失敗: 画像のみ表示して手動入力モード
+      const errorMessage = err instanceof Error ? err.message : 'OCR処理に失敗しました'
+      console.error('Gemini OCR error:', errorMessage)
       const emptyPages: StatementPage[] = imageDataUrls.map((url, i) => ({
         pageIndex: i,
         transactions: [],
@@ -332,6 +334,7 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
         sourceType: 'pdf-ocr',
         needsColumnMapping: false,
         ocrFailed: true,
+        ocrErrorMessage: errorMessage,
       }
     }
   }

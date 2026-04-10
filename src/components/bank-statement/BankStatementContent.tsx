@@ -78,7 +78,8 @@ export default function BankStatementContent() {
           setPages(result.pages)
           setCurrentPageIndex(0)
           setJournalEntries([])
-          setError('スキャン画像PDFからテキストを抽出できませんでした。左側のPDF画像を参照しながら、右側の「+ 空白行追加」ボタンから手動で仕訳を入力してください。')
+          const detail = result.ocrErrorMessage ? `\n原因: ${result.ocrErrorMessage}` : ''
+          setError(`Gemini OCRによるテキスト抽出に失敗しました。${detail}\n左側のPDF画像を参照しながら、右側の「+ 空白行追加」ボタンから手動で仕訳を入力してください。`)
           setIsLoading(false)
           return
         }
@@ -178,11 +179,11 @@ export default function BankStatementContent() {
 
       {/* エラー表示 */}
       {error && (
-        <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-sm text-red-700">
-          {error}
+        <div className="bg-red-50 border-b border-red-200 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+          <span className="whitespace-pre-wrap flex-1">{error}</span>
           <button
             onClick={() => setError(null)}
-            className="ml-2 text-red-500 hover:text-red-700"
+            className="text-red-400 hover:text-red-700 shrink-0 text-lg leading-none"
           >
             &times;
           </button>

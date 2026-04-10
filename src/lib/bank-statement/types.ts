@@ -103,6 +103,7 @@ export interface ParseResult {
   sourceType: 'pdf-text' | 'pdf-ocr' | 'excel'
   needsColumnMapping: boolean
   ocrFailed?: boolean // OCRでテキスト抽出できなかった場合
+  ocrErrorMessage?: string // OCRエラーの詳細メッセージ
 }
 
 // アップロード設定
