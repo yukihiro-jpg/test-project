@@ -42,7 +42,9 @@ export async function POST(request: NextRequest) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+    const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+    console.log(`Using Gemini model: ${modelName}`)
+    const model = genAI.getGenerativeModel({ model: modelName })
 
     // 全ページを1回のリクエストで送信（レート制限対策）
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
