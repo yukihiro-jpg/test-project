@@ -139,9 +139,10 @@ export default function JournalEntryTable({
   const runningBalances = computeRunningBalances()
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between shrink-0">
-        <span className="text-sm font-medium text-gray-700">
+    <div className="flex flex-col h-full bg-white">
+      {/* ツールバー */}
+      <div className="px-4 py-2 bg-blue-700 flex items-center justify-between shrink-0">
+        <span className="text-sm font-medium text-white">
           仕訳データ ({entries.length}件)
         </span>
         <button
@@ -149,28 +150,25 @@ export default function JournalEntryTable({
             const newEntry = createBlankEntry()
             onEntriesChange([...entries, newEntry])
           }}
-          className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
+          className="px-3 py-1 text-xs bg-white text-blue-700 font-medium rounded hover:bg-blue-50"
         >
-          + 空白行追加
+          + 行追加
         </button>
       </div>
 
       <div className="flex-1 overflow-auto">
         <table className="w-full text-sm border-collapse min-w-[900px]">
-          <thead className="sticky top-0 bg-gray-700 text-white z-10">
+          <thead className="sticky top-0 bg-blue-800 text-white z-10">
             <tr>
-              <th className="border-b border-gray-600 px-2 py-2 text-left w-24 font-medium">日付</th>
-              <th className="border-b border-gray-600 px-2 py-2 text-left w-16 font-medium">借方CD</th>
-              <th className="border-b border-gray-600 px-2 py-2 text-left w-28 font-medium">借方科目</th>
-              <th className="border-b border-gray-600 px-2 py-2 text-left w-16 font-medium">貸方CD</th>
-              <th className="border-b border-gray-600 px-2 py-2 text-left w-28 font-medium">貸方科目</th>
-              <th className="border-b border-gray-600 px-2 py-2 text-right w-24 font-medium">金額</th>
-              <th className="border-b border-gray-600 px-2 py-2 text-right w-28 font-medium">残高</th>
-              <th className="border-b border-gray-600 px-2 py-2 text-left w-16 font-medium">消費税CD</th>
-              <th className="border-b border-gray-600 px-2 py-2 text-left w-24 font-medium">税区分</th>
-              <th className="border-b border-gray-600 px-2 py-2 text-left w-20 font-medium">事業者</th>
-              <th className="border-b border-gray-600 px-2 py-2 text-left font-medium">摘要</th>
-              <th className="border-b border-gray-600 px-2 py-2 w-12 font-medium">操作</th>
+              <th className="px-2 py-2 text-left w-24 font-medium border-r border-blue-700">日付</th>
+              <th className="px-2 py-2 text-left w-40 font-medium border-r border-blue-700">借方科目</th>
+              <th className="px-2 py-2 text-left w-40 font-medium border-r border-blue-700">貸方科目</th>
+              <th className="px-2 py-2 text-right w-24 font-medium border-r border-blue-700">金額</th>
+              <th className="px-2 py-2 text-right w-28 font-medium border-r border-blue-700">残高</th>
+              <th className="px-2 py-2 text-left w-14 font-medium border-r border-blue-700">税CD</th>
+              <th className="px-2 py-2 text-left w-20 font-medium border-r border-blue-700">税区分</th>
+              <th className="px-2 py-2 text-left font-medium border-r border-blue-700">摘要</th>
+              <th className="px-1 py-2 w-8 font-medium"></th>
             </tr>
           </thead>
           <tbody>
@@ -190,6 +188,7 @@ export default function JournalEntryTable({
                   isPageBoundary={isPageBoundary}
                   pageLabel={isPageBoundary ? `P${currentTxPage + 1}` : undefined}
                   runningBalance={runningBalances[idx]}
+                  rowNumber={idx}
                   onSelect={() => onSelect(entry.id === selectedEntryId ? null : entry.id)}
                   onChange={handleEntryChange}
                   onLearn={() => handleLearnPattern(entry)}

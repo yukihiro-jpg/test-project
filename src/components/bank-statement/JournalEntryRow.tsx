@@ -10,6 +10,7 @@ interface Props {
   isPageBoundary?: boolean
   pageLabel?: string
   runningBalance?: number
+  rowNumber: number
   onSelect: () => void
   onChange: (id: string, field: keyof JournalEntry, value: string | number) => void
   onLearn: () => void
@@ -18,7 +19,6 @@ interface Props {
   onDelete: () => void
 }
 
-// 未入力チェック対象フィールド
 const REQUIRED_FIELDS: (keyof JournalEntry)[] = [
   'debitCode', 'creditCode', 'debitTaxCode', 'debitTaxType', 'debitBusinessType',
 ]
@@ -30,6 +30,7 @@ export default function JournalEntryRow({
   isPageBoundary,
   pageLabel,
   runningBalance,
+  rowNumber,
   onSelect,
   onChange,
   onLearn,
@@ -50,40 +51,24 @@ export default function JournalEntryRow({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const bgClass = isSelected
-    ? 'bg-blue-50'
-    : entry.isCompound
-      ? 'bg-gray-50'
-      : 'hover:bg-gray-50'
-
-  const borderClass = isPageBoundary
-    ? 'border-t-[3px] border-t-blue-400 border-b border-b-gray-100'
-    : 'border-b border-gray-100'
-
-  // 金額は借方金額と貸方金額のうち0でない方を表示
   const amount = entry.debitAmount || entry.creditAmount || 0
 
   const handleAmountChange = (v: string) => {
-    const num = parseInt(v) || 0
+    const num = parseInt(v.replace(/[^0-9]/g, '')) || 0
     onChange(entry.id, 'debitAmount', num)
     onChange(entry.id, 'creditAmount', num)
   }
 
-  // CDが変更されたら科目名を自動設定
   const handleDebitCodeChange = (code: string) => {
     onChange(entry.id, 'debitCode', code)
     const account = accountMaster.find((a) => a.code === code)
-    if (account) {
-      onChange(entry.id, 'debitName', account.name)
-    }
+    if (account) onChange(entry.id, 'debitName', account.name)
   }
 
   const handleCreditCodeChange = (code: string) => {
     onChange(entry.id, 'creditCode', code)
     const account = accountMaster.find((a) => a.code === code)
-    if (account) {
-      onChange(entry.id, 'creditName', account.name)
-    }
+    if (account) onChange(entry.id, 'creditName', account.name)
   }
 
   const isEmpty = (field: keyof JournalEntry) => {
@@ -93,155 +78,140 @@ export default function JournalEntryRow({
 
   const emptyBg = (field: keyof JournalEntry) =>
     REQUIRED_FIELDS.includes(field) && isEmpty(field)
-      ? 'bg-amber-50'
+      ? 'bg-rose-50'
       : ''
+
+  const bgClass = isSelected
+    ? 'bg-blue-100'
+    : rowNumber % 2 === 0
+      ? 'bg-white'
+      : 'bg-slate-50'
 
   return (
     <>
       {isPageBoundary && (
-        <tr className="bg-blue-50">
-          <td colSpan={12} className="px-2 py-0.5 text-xs font-bold text-blue-600">
+        <tr className="bg-blue-600">
+          <td colSpan={9} className="px-3 py-1 text-xs font-bold text-white">
             {pageLabel} ページ
           </td>
         </tr>
       )}
       <tr
-        className={`${borderClass} ${bgClass} cursor-pointer`}
+        className={`${bgClass} hover:bg-blue-50 cursor-pointer border-b border-slate-200 transition-colors`}
         onClick={onSelect}
         onFocus={onSelect}
       >
         {/* 日付 */}
-        <td className="px-1 py-0.5">
-          <EditableCell
+        <td className="px-2 py-1 border-r border-slate-200">
+          <input
+            type="text"
             value={entry.date}
-            onChange={(v) => onChange(entry.id, 'date', v)}
+            onChange={(e) => onChange(entry.id, 'date', e.target.value)}
+            onKeyDown={(e) => handleCellNav(e)}
             placeholder="YYYYMMDD"
-            className="w-24"
+            className="w-full px-1 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-slate-800"
           />
         </td>
 
-        {/* 借方CD */}
-        <td className={`px-1 py-0.5 ${emptyBg('debitCode')}`}>
-          <AccountCodeCell
-            value={entry.debitCode}
+        {/* 借方科目（CD+科目名セット） */}
+        <td className={`px-1 py-1 border-r border-slate-200 ${emptyBg('debitCode')}`}>
+          <AccountField
+            code={entry.debitCode}
+            name={entry.debitName}
             accountMaster={accountMaster}
-            onChange={handleDebitCodeChange}
+            onCodeChange={handleDebitCodeChange}
+            placeholder="借方"
           />
         </td>
 
-        {/* 借方科目（自動表示・編集不可） */}
-        <td className="px-1 py-0.5">
-          <span className="block px-1.5 py-1 text-sm text-gray-700 truncate">
-            {entry.debitName || <span className="text-gray-300">-</span>}
-          </span>
-        </td>
-
-        {/* 貸方CD */}
-        <td className={`px-1 py-0.5 ${emptyBg('creditCode')}`}>
-          <AccountCodeCell
-            value={entry.creditCode}
+        {/* 貸方科目（CD+科目名セット） */}
+        <td className={`px-1 py-1 border-r border-slate-200 ${emptyBg('creditCode')}`}>
+          <AccountField
+            code={entry.creditCode}
+            name={entry.creditName}
             accountMaster={accountMaster}
-            onChange={handleCreditCodeChange}
+            onCodeChange={handleCreditCodeChange}
+            placeholder="貸方"
           />
-        </td>
-
-        {/* 貸方科目（自動表示・編集不可） */}
-        <td className="px-1 py-0.5">
-          <span className="block px-1.5 py-1 text-sm text-gray-700 truncate">
-            {entry.creditName || <span className="text-gray-300">-</span>}
-          </span>
         </td>
 
         {/* 金額 */}
-        <td className="px-1 py-0.5">
-          <AmountCell
-            value={amount}
-            onChange={handleAmountChange}
+        <td className="px-2 py-1 border-r border-slate-200">
+          <input
+            type="text"
+            inputMode="numeric"
+            value={amount ? amount.toLocaleString() : ''}
+            onChange={(e) => handleAmountChange(e.target.value)}
+            onFocus={(e) => { e.target.value = amount ? String(amount) : '' }}
+            onBlur={(e) => { handleAmountChange(e.target.value) }}
+            onKeyDown={(e) => handleCellNav(e)}
+            placeholder="0"
+            className="w-full px-1 py-0.5 text-sm text-right bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded font-medium text-slate-800 tabular-nums"
           />
         </td>
 
-        {/* 残高（自動計算） */}
-        <td className="px-1 py-0.5">
-          <span className="block px-1.5 py-1 text-sm text-right font-medium text-gray-800 tabular-nums">
-            {runningBalance != null ? runningBalance.toLocaleString() : ''}
-          </span>
+        {/* 残高 */}
+        <td className="px-2 py-1 border-r border-slate-200 text-right text-sm font-medium text-slate-700 tabular-nums">
+          {runningBalance != null ? runningBalance.toLocaleString() : ''}
         </td>
 
         {/* 消費税CD */}
-        <td className={`px-1 py-0.5 ${emptyBg('debitTaxCode')}`}>
-          <EditableCell
+        <td className={`px-1 py-1 border-r border-slate-200 ${emptyBg('debitTaxCode')}`}>
+          <input
+            type="text"
             value={entry.debitTaxCode}
-            onChange={(v) => onChange(entry.id, 'debitTaxCode', v)}
+            onChange={(e) => onChange(entry.id, 'debitTaxCode', e.target.value)}
+            onKeyDown={(e) => handleCellNav(e)}
             placeholder=""
-            className="w-14"
+            className="w-full px-1 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-slate-800"
           />
         </td>
 
         {/* 税区分 */}
-        <td className={`px-1 py-0.5 ${emptyBg('debitTaxType')}`}>
-          <EditableCell
+        <td className={`px-1 py-1 border-r border-slate-200 ${emptyBg('debitTaxType')}`}>
+          <input
+            type="text"
             value={entry.debitTaxType}
-            onChange={(v) => onChange(entry.id, 'debitTaxType', v)}
+            onChange={(e) => onChange(entry.id, 'debitTaxType', e.target.value)}
+            onKeyDown={(e) => handleCellNav(e)}
             placeholder=""
-          />
-        </td>
-
-        {/* 事業者区分 */}
-        <td className={`px-1 py-0.5 ${emptyBg('debitBusinessType')}`}>
-          <EditableCell
-            value={entry.debitBusinessType}
-            onChange={(v) => onChange(entry.id, 'debitBusinessType', v)}
-            placeholder=""
+            className="w-full px-1 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-slate-800"
           />
         </td>
 
         {/* 摘要 */}
-        <td className="px-1 py-0.5">
-          <EditableCell
+        <td className="px-2 py-1 border-r border-slate-200">
+          <input
+            type="text"
             value={entry.description}
-            onChange={(v) => onChange(entry.id, 'description', v)}
+            onChange={(e) => onChange(entry.id, 'description', e.target.value)}
+            onKeyDown={(e) => handleCellNav(e)}
             placeholder="摘要"
+            className="w-full px-1 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-slate-800"
           />
         </td>
 
         {/* 操作 */}
-        <td className="px-1 py-0.5 relative" onClick={(e) => e.stopPropagation()}>
+        <td className="px-1 py-1 relative" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => setShowMenu(!showMenu)}
-            className="px-2 py-0.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded"
+            className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
           >
-            ...
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+            </svg>
           </button>
           {showMenu && (
-            <div
-              ref={menuRef}
-              className="absolute right-0 top-full mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-20"
-            >
-              <button
-                onClick={() => { onLearn(); setShowMenu(false) }}
-                className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
-              >
-                パターン学習
-              </button>
-              <button
-                onClick={() => { onAddBlank(); setShowMenu(false) }}
-                className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
-              >
-                空白行を追加
-              </button>
-              <button
-                onClick={() => { onAddCompound(); setShowMenu(false) }}
-                className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
-              >
-                複合仕訳行を追加
-              </button>
-              <hr className="border-gray-100" />
-              <button
-                onClick={() => { onDelete(); setShowMenu(false) }}
-                className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"
-              >
-                削除
-              </button>
+            <div ref={menuRef} className="absolute right-0 top-full mt-1 w-40 bg-white border border-slate-200 rounded-lg shadow-xl z-20">
+              <button onClick={() => { onLearn(); setShowMenu(false) }}
+                className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-blue-50">パターン学習</button>
+              <button onClick={() => { onAddBlank(); setShowMenu(false) }}
+                className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-blue-50">空白行を追加</button>
+              <button onClick={() => { onAddCompound(); setShowMenu(false) }}
+                className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-blue-50">複合仕訳行を追加</button>
+              <hr className="border-slate-100" />
+              <button onClick={() => { onDelete(); setShowMenu(false) }}
+                className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50">削除</button>
             </div>
           )}
         </td>
@@ -250,121 +220,68 @@ export default function JournalEntryRow({
   )
 }
 
-// インライン編集セル
-function EditableCell({
-  value,
-  onChange,
-  placeholder,
-  className = '',
-  type = 'text',
-}: {
-  value: string
-  onChange: (value: string) => void
-  placeholder?: string
-  className?: string
-  type?: string
-}) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-          e.preventDefault()
-          navigateCell(e.currentTarget, e.key === 'ArrowUp' ? 'up' : 'down')
-        } else if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0) {
-          navigateCell(e.currentTarget, 'left')
-        } else if (e.key === 'ArrowRight' && e.currentTarget.selectionStart === e.currentTarget.value.length) {
-          navigateCell(e.currentTarget, 'right')
-        }
-      }}
-      placeholder={placeholder}
-      className={`w-full px-1.5 py-1 text-sm border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:bg-blue-50 rounded bg-transparent text-gray-800 ${className}`}
-    />
-  )
-}
-
-// 科目コード入力セル（サジェスト付き）
-function AccountCodeCell({
-  value,
+// 科目フィールド（CD入力→科目名自動表示、セット表示）
+function AccountField({
+  code,
+  name,
   accountMaster,
-  onChange,
+  onCodeChange,
+  placeholder,
 }: {
-  value: string
+  code: string
+  name: string
   accountMaster: AccountItem[]
-  onChange: (code: string) => void
+  onCodeChange: (code: string) => void
+  placeholder: string
 }) {
   const [showSuggest, setShowSuggest] = useState(false)
-  const [inputValue, setInputValue] = useState(value)
+  const [inputValue, setInputValue] = useState(code)
   const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    setInputValue(value)
-  }, [value])
+  useEffect(() => { setInputValue(code) }, [code])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setShowSuggest(false)
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) setShowSuggest(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   const filteredItems = accountMaster
-    .filter(
-      (a) =>
-        a.code.includes(inputValue) ||
-        a.name.includes(inputValue),
-    )
+    .filter((a) => a.code.includes(inputValue) || a.name.includes(inputValue))
     .slice(0, 10)
 
   return (
     <div ref={ref} className="relative">
-      <input
-        type="text"
-        value={inputValue}
-        onChange={(e) => {
-          setInputValue(e.target.value)
-          setShowSuggest(true)
-        }}
-        onFocus={() => setShowSuggest(true)}
-        onBlur={() => {
-          setTimeout(() => {
-            onChange(inputValue)
-            setShowSuggest(false)
-          }, 200)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-            e.preventDefault()
-            navigateCell(e.currentTarget, e.key === 'ArrowUp' ? 'up' : 'down')
-          } else if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0) {
-            navigateCell(e.currentTarget, 'left')
-          } else if (e.key === 'ArrowRight' && e.currentTarget.selectionStart === e.currentTarget.value.length) {
-            navigateCell(e.currentTarget, 'right')
-          }
-        }}
-        placeholder="CD"
-        className="w-full px-1.5 py-1 text-sm border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:bg-blue-50 rounded bg-transparent text-gray-800"
-      />
+      <div className="flex items-center gap-1">
+        <input
+          type="text"
+          value={inputValue}
+          onChange={(e) => { setInputValue(e.target.value); setShowSuggest(true) }}
+          onFocus={() => setShowSuggest(true)}
+          onBlur={() => { setTimeout(() => { onCodeChange(inputValue); setShowSuggest(false) }, 200) }}
+          onKeyDown={(e) => handleCellNav(e)}
+          placeholder={placeholder}
+          className="w-12 shrink-0 px-1 py-0.5 text-sm text-blue-700 font-medium bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded"
+        />
+        <span className="text-sm text-slate-600 truncate">{name}</span>
+      </div>
       {showSuggest && filteredItems.length > 0 && (
-        <div className="absolute left-0 top-full mt-1 w-52 bg-white border border-gray-200 rounded shadow-lg z-30 max-h-40 overflow-auto">
+        <div className="absolute left-0 top-full mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-xl z-30 max-h-48 overflow-auto">
           {filteredItems.map((item) => (
             <button
               key={item.code}
               onMouseDown={(e) => {
                 e.preventDefault()
                 setInputValue(item.code)
-                onChange(item.code)
+                onCodeChange(item.code)
                 setShowSuggest(false)
               }}
-              className="w-full px-2 py-1.5 text-left text-sm hover:bg-blue-50 flex gap-2"
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-blue-50 flex gap-2 items-center"
             >
-              <span className="text-gray-500 w-12 shrink-0">{item.code}</span>
-              <span className="text-gray-800">{item.name}</span>
+              <span className="text-blue-700 font-medium w-12 shrink-0">{item.code}</span>
+              <span className="text-slate-700">{item.name}</span>
             </button>
           ))}
         </div>
@@ -373,94 +290,38 @@ function AccountCodeCell({
   )
 }
 
-// 金額入力セル（#,###形式表示、フォーカス時に数値編集）
-function AmountCell({
-  value,
-  onChange,
-}: {
-  value: number
-  onChange: (v: string) => void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [editValue, setEditValue] = useState('')
-
-  const handleFocus = () => {
-    setEditing(true)
-    setEditValue(value ? String(value) : '')
+// 矢印キーナビゲーション
+function handleCellNav(e: React.KeyboardEvent<HTMLInputElement>) {
+  const el = e.currentTarget
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault()
+    navigateCell(el, e.key === 'ArrowUp' ? 'up' : 'down')
+  } else if (e.key === 'ArrowLeft' && el.selectionStart === 0) {
+    navigateCell(el, 'left')
+  } else if (e.key === 'ArrowRight' && el.selectionStart === el.value.length) {
+    navigateCell(el, 'right')
   }
-
-  const handleBlur = () => {
-    setEditing(false)
-    onChange(editValue)
-  }
-
-  if (editing) {
-    return (
-      <input
-        type="text"
-        inputMode="numeric"
-        value={editValue}
-        onChange={(e) => {
-          const v = e.target.value.replace(/[^0-9]/g, '')
-          setEditValue(v)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-            e.preventDefault()
-            navigateCell(e.currentTarget, e.key === 'ArrowUp' ? 'up' : 'down')
-          } else if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0) {
-            navigateCell(e.currentTarget, 'left')
-          } else if (e.key === 'ArrowRight' && e.currentTarget.selectionStart === e.currentTarget.value.length) {
-            navigateCell(e.currentTarget, 'right')
-          } else if (e.key === 'Enter') {
-            e.currentTarget.blur()
-          }
-        }}
-        onBlur={handleBlur}
-        autoFocus
-        className="w-full px-1.5 py-1 text-sm text-right border border-blue-400 outline-none bg-blue-50 rounded font-medium"
-      />
-    )
-  }
-
-  return (
-    <div
-      onClick={(e) => { e.stopPropagation(); handleFocus() }}
-      onFocus={handleFocus}
-      tabIndex={0}
-      className="w-full px-1.5 py-1 text-sm text-right cursor-text border border-transparent hover:border-gray-300 rounded font-medium text-gray-800 tabular-nums"
-    >
-      {value ? value.toLocaleString() : ''}
-    </div>
-  )
 }
 
-// 矢印キーでセル間移動するヘルパー
 function navigateCell(current: HTMLElement, direction: 'up' | 'down' | 'left' | 'right') {
   const td = current.closest('td')
   if (!td) return
-
   const tr = td.closest('tr')
   if (!tr) return
-
   const cells = Array.from(tr.querySelectorAll('td'))
   const cellIndex = cells.indexOf(td)
 
   let targetTd: Element | null = null
 
   if (direction === 'left') {
-    // 同じ行の前のセル
     for (let i = cellIndex - 1; i >= 0; i--) {
-      const input = cells[i].querySelector('input, [tabindex]')
-      if (input) { targetTd = cells[i]; break }
+      if (cells[i].querySelector('input')) { targetTd = cells[i]; break }
     }
   } else if (direction === 'right') {
-    // 同じ行の次のセル
     for (let i = cellIndex + 1; i < cells.length; i++) {
-      const input = cells[i].querySelector('input, [tabindex]')
-      if (input) { targetTd = cells[i]; break }
+      if (cells[i].querySelector('input')) { targetTd = cells[i]; break }
     }
-  } else if (direction === 'up' || direction === 'down') {
+  } else {
     const tbody = tr.closest('tbody')
     if (!tbody) return
     const rows = Array.from(tbody.querySelectorAll('tr'))
@@ -474,11 +335,6 @@ function navigateCell(current: HTMLElement, direction: 'up' | 'down' | 'left' | 
 
   if (targetTd) {
     const input = targetTd.querySelector('input') as HTMLInputElement | null
-    const focusable = targetTd.querySelector('[tabindex]') as HTMLElement | null
-    if (input) {
-      input.focus()
-    } else if (focusable) {
-      focusable.focus()
-    }
+    if (input) input.focus()
   }
 }

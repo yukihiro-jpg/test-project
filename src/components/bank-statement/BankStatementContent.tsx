@@ -159,13 +159,13 @@ export default function BankStatementContent() {
   })()
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-slate-100">
       {/* ヘッダー */}
-      <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shrink-0">
+      <header className="bg-blue-800 px-4 py-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
-          <h1 className="text-lg font-bold text-gray-800">通帳CSV変換</h1>
-          <a href="/" className="text-sm text-blue-600 hover:underline">
-            トップに戻る
+          <h1 className="text-base font-bold text-white">通帳CSV変換</h1>
+          <a href="/" className="text-xs text-blue-200 hover:text-white hover:underline">
+            トップ
           </a>
         </div>
         <div className="flex items-center gap-2">

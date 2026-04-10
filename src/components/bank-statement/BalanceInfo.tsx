@@ -39,7 +39,7 @@ export default function BalanceInfo({ page, entries, bankAccountCode }: Props) {
   const isValid = Math.abs(difference) < 1
 
   return (
-    <div className="px-4 py-3 bg-white border-t border-gray-200 shrink-0">
+    <div className="px-4 py-3 bg-slate-50 border-t border-slate-300 shrink-0">
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         <div className="space-y-0.5">
           <div className="flex justify-between">
