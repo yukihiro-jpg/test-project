@@ -9,6 +9,7 @@ interface Props {
   accountMaster: AccountItem[]
   isPageBoundary?: boolean
   pageLabel?: string
+  runningBalance?: number
   onSelect: () => void
   onChange: (id: string, field: keyof JournalEntry, value: string | number) => void
   onLearn: () => void
@@ -28,6 +29,7 @@ export default function JournalEntryRow({
   accountMaster,
   isPageBoundary,
   pageLabel,
+  runningBalance,
   onSelect,
   onChange,
   onLearn,
@@ -98,7 +100,7 @@ export default function JournalEntryRow({
     <>
       {isPageBoundary && (
         <tr className="bg-blue-50">
-          <td colSpan={11} className="px-2 py-0.5 text-xs font-bold text-blue-600">
+          <td colSpan={12} className="px-2 py-0.5 text-xs font-bold text-blue-600">
             {pageLabel} ページ
           </td>
         </tr>
@@ -152,13 +154,17 @@ export default function JournalEntryRow({
 
         {/* 金額 */}
         <td className="px-1 py-0.5">
-          <EditableCell
-            value={amount ? String(amount) : ''}
+          <AmountCell
+            value={amount}
             onChange={handleAmountChange}
-            placeholder="0"
-            className="text-right w-24 font-medium"
-            type="number"
           />
+        </td>
+
+        {/* 残高（自動計算） */}
+        <td className="px-1 py-0.5">
+          <span className="block px-1.5 py-1 text-sm text-right font-medium text-gray-800 tabular-nums">
+            {runningBalance != null ? runningBalance.toLocaleString() : ''}
+          </span>
         </td>
 
         {/* 消費税CD */}
@@ -343,6 +349,52 @@ function AccountCodeCell({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// 金額入力セル（#,###形式表示、フォーカス時に数値編集）
+function AmountCell({
+  value,
+  onChange,
+}: {
+  value: number
+  onChange: (v: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [editValue, setEditValue] = useState('')
+
+  const handleFocus = () => {
+    setEditing(true)
+    setEditValue(value ? String(value) : '')
+  }
+
+  const handleBlur = () => {
+    setEditing(false)
+    onChange(editValue)
+  }
+
+  if (editing) {
+    return (
+      <input
+        type="number"
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={handleBlur}
+        autoFocus
+        className="w-full px-1.5 py-1 text-sm text-right border border-blue-400 outline-none bg-blue-50 rounded font-medium"
+      />
+    )
+  }
+
+  return (
+    <div
+      onClick={(e) => { e.stopPropagation(); handleFocus() }}
+      onFocus={handleFocus}
+      tabIndex={0}
+      className="w-full px-1.5 py-1 text-sm text-right cursor-text border border-transparent hover:border-gray-300 rounded font-medium text-gray-800 tabular-nums"
+    >
+      {value ? value.toLocaleString() : ''}
     </div>
   )
 }

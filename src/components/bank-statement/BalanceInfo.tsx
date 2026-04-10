@@ -1,17 +1,39 @@
 'use client'
 
-import type { StatementPage } from '@/lib/bank-statement/types'
+import type { StatementPage, JournalEntry } from '@/lib/bank-statement/types'
 
 interface Props {
   page: StatementPage
+  entries?: JournalEntry[]
+  bankAccountCode?: string
 }
 
-export default function BalanceInfo({ page }: Props) {
-  const { transactions, openingBalance, closingBalance } = page
+export default function BalanceInfo({ page, entries, bankAccountCode }: Props) {
+  const { openingBalance, closingBalance } = page
 
-  // 入金合計・出金合計を計算
-  const totalDeposit = transactions.reduce((sum, t) => sum + (t.deposit ?? 0), 0)
-  const totalWithdrawal = transactions.reduce((sum, t) => sum + (t.withdrawal ?? 0), 0)
+  // 仕訳データがあれば仕訳から入出金を計算（動的再検証）
+  let totalDeposit = 0
+  let totalWithdrawal = 0
+
+  if (entries && bankAccountCode) {
+    // 現在のページに属する仕訳から計算
+    const pageEntries = entries.filter((e) =>
+      page.transactions.some((t) => t.id === e.transactionId),
+    )
+    for (const entry of pageEntries) {
+      const amount = entry.debitAmount || entry.creditAmount || 0
+      if (entry.debitCode === bankAccountCode) {
+        totalDeposit += amount
+      } else if (entry.creditCode === bankAccountCode) {
+        totalWithdrawal += amount
+      }
+    }
+  } else {
+    // 仕訳がなければ取引データから計算
+    totalDeposit = page.transactions.reduce((sum, t) => sum + (t.deposit ?? 0), 0)
+    totalWithdrawal = page.transactions.reduce((sum, t) => sum + (t.withdrawal ?? 0), 0)
+  }
+
   const calculatedClosing = openingBalance + totalDeposit - totalWithdrawal
   const difference = calculatedClosing - closingBalance
   const isValid = Math.abs(difference) < 1
@@ -19,7 +41,6 @@ export default function BalanceInfo({ page }: Props) {
   return (
     <div className="px-4 py-3 bg-white border-t border-gray-200 shrink-0">
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-        {/* 左列: 残高情報 */}
         <div className="space-y-0.5">
           <div className="flex justify-between">
             <span className="text-gray-500">開始残高:</span>
@@ -35,11 +56,12 @@ export default function BalanceInfo({ page }: Props) {
           </div>
         </div>
 
-        {/* 右列: 検証結果 */}
         <div className="space-y-0.5">
           <div className="flex justify-between">
             <span className="text-gray-500">計算残高:</span>
-            <span className="font-medium text-gray-800">&yen;{calculatedClosing.toLocaleString()}</span>
+            <span className={`font-medium ${isValid ? 'text-gray-800' : 'text-red-600'}`}>
+              &yen;{calculatedClosing.toLocaleString()}
+            </span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500">通帳残高:</span>
@@ -53,7 +75,7 @@ export default function BalanceInfo({ page }: Props) {
               </span>
             ) : (
               <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-bold">
-                不一致 差額&yen;{Math.abs(difference).toLocaleString()}
+                不一致 &yen;{Math.abs(difference).toLocaleString()}
               </span>
             )}
           </div>

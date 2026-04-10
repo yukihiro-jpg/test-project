@@ -210,6 +210,8 @@ export default function BankStatementContent() {
               currentPageIndex={currentPageIndex}
               onPageChange={setCurrentPageIndex}
               selectedTransactionId={selectedTransactionId}
+              entries={journalEntries}
+              bankAccountCode={uploadConfig?.accountCode || ''}
             />
           }
           right={
@@ -220,6 +222,7 @@ export default function BankStatementContent() {
               onSelect={handleEntrySelect}
               onEntriesChange={setJournalEntries}
               pages={pages}
+              bankAccountCode={uploadConfig?.accountCode || ''}
             />
           }
         />

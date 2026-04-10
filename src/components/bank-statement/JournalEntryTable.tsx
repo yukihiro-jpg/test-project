@@ -20,6 +20,7 @@ interface Props {
   onSelect: (entryId: string | null) => void
   onEntriesChange: (entries: JournalEntry[]) => void
   pages: StatementPage[]
+  bankAccountCode: string // 通帳の科目コード
 }
 
 export default function JournalEntryTable({
@@ -29,6 +30,7 @@ export default function JournalEntryTable({
   onSelect,
   onEntriesChange,
   pages,
+  bankAccountCode,
 }: Props) {
   const handleEntryChange = useCallback(
     (id: string, field: keyof JournalEntry, value: string | number) => {
@@ -112,6 +114,30 @@ export default function JournalEntryTable({
     return -1
   }
 
+  // 仕訳データから残高を動的に計算
+  // 通帳科目が借方にある=入金、貸方にある=出金
+  const computeRunningBalances = (): number[] => {
+    const balances: number[] = []
+    // 最初のページの開始残高を取得
+    const openingBalance = pages.length > 0 ? pages[0].openingBalance : 0
+    let running = openingBalance
+
+    for (const entry of entries) {
+      const amount = entry.debitAmount || entry.creditAmount || 0
+      if (entry.debitCode === bankAccountCode) {
+        // 借方が通帳 = 入金
+        running += amount
+      } else if (entry.creditCode === bankAccountCode) {
+        // 貸方が通帳 = 出金
+        running -= amount
+      }
+      balances.push(running)
+    }
+    return balances
+  }
+
+  const runningBalances = computeRunningBalances()
+
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between shrink-0">
@@ -139,6 +165,7 @@ export default function JournalEntryTable({
               <th className="border-b border-gray-600 px-2 py-2 text-left w-16 font-medium">貸方CD</th>
               <th className="border-b border-gray-600 px-2 py-2 text-left w-28 font-medium">貸方科目</th>
               <th className="border-b border-gray-600 px-2 py-2 text-right w-24 font-medium">金額</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-right w-28 font-medium">残高</th>
               <th className="border-b border-gray-600 px-2 py-2 text-left w-16 font-medium">消費税CD</th>
               <th className="border-b border-gray-600 px-2 py-2 text-left w-24 font-medium">税区分</th>
               <th className="border-b border-gray-600 px-2 py-2 text-left w-20 font-medium">事業者</th>
@@ -162,6 +189,7 @@ export default function JournalEntryTable({
                   accountMaster={accountMaster}
                   isPageBoundary={isPageBoundary}
                   pageLabel={isPageBoundary ? `P${currentTxPage + 1}` : undefined}
+                  runningBalance={runningBalances[idx]}
                   onSelect={() => onSelect(entry.id === selectedEntryId ? null : entry.id)}
                   onChange={handleEntryChange}
                   onLearn={() => handleLearnPattern(entry)}

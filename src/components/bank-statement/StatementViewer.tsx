@@ -1,7 +1,7 @@
 'use client'
 
-import { useRef, useEffect, useCallback, useState } from 'react'
-import type { StatementPage } from '@/lib/bank-statement/types'
+import { useRef, useState, useCallback } from 'react'
+import type { StatementPage, JournalEntry } from '@/lib/bank-statement/types'
 import BalanceInfo from './BalanceInfo'
 
 interface Props {
@@ -9,6 +9,8 @@ interface Props {
   currentPageIndex: number
   onPageChange: (index: number) => void
   selectedTransactionId: string | null
+  entries?: JournalEntry[]
+  bankAccountCode?: string
 }
 
 const ZOOM_STEP = 10
@@ -21,92 +23,70 @@ export default function StatementViewer({
   currentPageIndex,
   onPageChange,
   selectedTransactionId,
+  entries,
+  bankAccountCode,
 }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [zoom, setZoom] = useState(100)
+
+  // ドラッグによるパン移動
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 })
+
   const currentPage = pages[currentPageIndex]
 
-  const drawPage = useCallback(() => {
-    const canvas = canvasRef.current
-    const container = containerRef.current
-    if (!canvas || !container || !currentPage) return
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // 画像エリアでのドラッグ開始
+    if (!containerRef.current) return
+    setIsDragging(true)
+    setDragStart({ x: e.clientX, y: e.clientY })
+    setScrollStart({
+      x: containerRef.current.scrollLeft,
+      y: containerRef.current.scrollTop,
+    })
+    e.preventDefault()
+  }, [])
 
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isDragging || !containerRef.current) return
+      const dx = e.clientX - dragStart.x
+      const dy = e.clientY - dragStart.y
+      containerRef.current.scrollLeft = scrollStart.x - dx
+      containerRef.current.scrollTop = scrollStart.y - dy
+    },
+    [isDragging, dragStart, scrollStart],
+  )
 
-    if (currentPage.imageDataUrl) {
-      const img = new Image()
-      img.onload = () => {
-        // ベースサイズ: コンテナ幅にフィット
-        const containerWidth = container.clientWidth - 16 // padding分
-        const baseScale = containerWidth / img.width
-        const zoomFactor = zoom / 100
-        const finalScale = baseScale * zoomFactor
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false)
+  }, [])
 
-        canvas.width = img.width * finalScale
-        canvas.height = img.height * finalScale
+  // ハイライト対象の行インデックスと位置計算
+  const highlightStyle = (() => {
+    if (!selectedTransactionId || !currentPage) return null
+    const txIndex = currentPage.transactions.findIndex(
+      (t) => t.id === selectedTransactionId,
+    )
+    if (txIndex < 0) return null
 
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    const totalRows = currentPage.transactions.length
+    if (totalRows === 0) return null
 
-        // ハイライト描画
-        if (selectedTransactionId) {
-          const txIndex = currentPage.transactions.findIndex(
-            (t) => t.id === selectedTransactionId,
-          )
-          const tx = txIndex >= 0 ? currentPage.transactions[txIndex] : null
+    // ページを均等分割して行の位置を推定
+    const headerPct = 12
+    const footerPct = 5
+    const dataPct = 100 - headerPct - footerPct
+    const rowPct = dataPct / totalRows
 
-          if (tx) {
-            let hx: number, hy: number, hw: number, hh: number
-
-            if (tx.boundingBox) {
-              // テキストPDF: 正確な座標あり
-              const pdfToImg = finalScale
-              hx = tx.boundingBox.x * pdfToImg
-              hy = tx.boundingBox.y * pdfToImg
-              hw = tx.boundingBox.width * pdfToImg
-              hh = tx.boundingBox.height * pdfToImg
-            } else {
-              // OCR: 行番号から推定（ページを均等分割）
-              const totalRows = currentPage.transactions.length
-              const headerRatio = 0.12 // 上部ヘッダー領域の割合
-              const footerRatio = 0.05 // 下部余白の割合
-              const dataHeight = canvas.height * (1 - headerRatio - footerRatio)
-              const rowHeight = totalRows > 0 ? dataHeight / totalRows : 30
-              const startY = canvas.height * headerRatio
-
-              hx = 10
-              hy = startY + txIndex * rowHeight
-              hw = canvas.width - 20
-              hh = rowHeight
-            }
-
-            ctx.save()
-            ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'
-            ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)'
-            ctx.lineWidth = 2
-            ctx.fillRect(hx, hy, hw, hh)
-            ctx.strokeRect(hx, hy, hw, hh)
-            ctx.restore()
-          }
-        }
-      }
-      img.src = currentPage.imageDataUrl
-    } else {
-      canvas.width = 0
-      canvas.height = 0
+    return {
+      top: `${headerPct + txIndex * rowPct}%`,
+      height: `${rowPct}%`,
+      left: '2%',
+      width: '96%',
     }
-  }, [currentPage, selectedTransactionId, zoom])
-
-  useEffect(() => {
-    drawPage()
-  }, [drawPage])
-
-  useEffect(() => {
-    const handleResize = () => drawPage()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [drawPage])
+  })()
 
   const handleZoomIn = () => setZoom((z) => Math.min(z + ZOOM_STEP, ZOOM_MAX))
   const handleZoomOut = () => setZoom((z) => Math.max(z - ZOOM_STEP, ZOOM_MIN))
@@ -115,7 +95,7 @@ export default function StatementViewer({
 
   return (
     <div className="flex flex-col h-full">
-      {/* ページ送り + ズームコントロール */}
+      {/* ページ送り + ズーム */}
       <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200 shrink-0">
         <div className="flex items-center gap-1">
           <button
@@ -137,7 +117,6 @@ export default function StatementViewer({
           </button>
         </div>
 
-        {/* ズームコントロール */}
         <div className="flex items-center gap-1">
           <button
             onClick={handleZoomOut}
@@ -152,9 +131,7 @@ export default function StatementViewer({
             className="px-1 py-1 text-xs border border-gray-300 rounded bg-white text-center w-16"
           >
             {ZOOM_PRESETS.map((p) => (
-              <option key={p} value={p}>
-                {p}%
-              </option>
+              <option key={p} value={p}>{p}%</option>
             ))}
             {!ZOOM_PRESETS.includes(zoom) && (
               <option value={zoom}>{zoom}%</option>
@@ -170,10 +147,32 @@ export default function StatementViewer({
         </div>
       </div>
 
-      {/* 画像表示エリア */}
-      <div ref={containerRef} className="flex-1 overflow-auto p-2">
+      {/* 画像表示エリア（ドラッグ移動対応） */}
+      <div
+        ref={containerRef}
+        className={`flex-1 overflow-auto p-2 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
         {currentPage.imageDataUrl ? (
-          <canvas ref={canvasRef} />
+          <div className="relative inline-block" style={{ width: `${zoom}%`, minWidth: '100%' }}>
+            {/* 通帳画像 */}
+            <img
+              src={currentPage.imageDataUrl}
+              alt={`通帳ページ ${currentPageIndex + 1}`}
+              className="w-full select-none pointer-events-none"
+              draggable={false}
+            />
+            {/* ハイライトオーバーレイ */}
+            {highlightStyle && (
+              <div
+                className="absolute pointer-events-none border-2 border-blue-500 bg-blue-400/20 transition-all duration-200"
+                style={highlightStyle}
+              />
+            )}
+          </div>
         ) : (
           <div className="bg-white border border-gray-200 rounded overflow-auto">
             <table className="w-full text-xs border-collapse">
@@ -207,7 +206,7 @@ export default function StatementViewer({
       </div>
 
       {/* 残高情報 */}
-      <BalanceInfo page={currentPage} />
+      <BalanceInfo page={currentPage} entries={entries} bankAccountCode={bankAccountCode} />
     </div>
   )
 }
