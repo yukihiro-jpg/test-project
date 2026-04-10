@@ -72,9 +72,6 @@ export default function JournalEntryRow({
   else if (isCompoundGroup) bgClass = 'bg-violet-50'
   else bgClass = rowNumber % 2 === 0 ? 'bg-white' : 'bg-gray-50'
 
-  // 行クリック時は常に選択（inputクリックでも選択される）
-  const handleRowMouseDown = () => { onSelect(entry.id) }
-
   return (
     <>
       {isPageBoundary && (
@@ -94,7 +91,7 @@ export default function JournalEntryRow({
           borderLeft: isCompoundGroup ? '2px solid #f87171' : undefined,
           borderRight: isCompoundGroup ? '2px solid #f87171' : undefined,
         }}
-        onMouseDown={handleRowMouseDown}
+        onClick={() => onSelect(entry.id)}
       >
         {/* 日付 */}
         <td style={CB}>
@@ -141,8 +138,7 @@ export default function JournalEntryRow({
               className="w-full px-1.5 py-1 text-sm text-right bg-blue-50 border-0 outline-none ring-2 ring-blue-400 rounded font-medium tabular-nums" />
           ) : (
             <div tabIndex={0}
-              onMouseDown={(e) => { e.stopPropagation(); setAmountStr(amount ? String(amount) : ''); setEditingAmount(true); onSelect(entry.id) }}
-              onFocus={() => { setAmountStr(amount ? String(amount) : ''); setEditingAmount(true) }}
+              onClick={(e) => { e.stopPropagation(); setAmountStr(amount ? String(amount) : ''); setEditingAmount(true); onSelect(entry.id) }}
               className="w-full px-1.5 py-1 text-sm text-right cursor-text rounded font-medium text-gray-800 tabular-nums hover:bg-gray-100 min-h-[28px]">
               {amount ? amount.toLocaleString() : ''}
             </div>
@@ -232,7 +228,7 @@ function AccountField({
   const confirm = (c: string) => { onCodeChange(c); setShow(false); if (subAccountMaster.filter((s) => s.parentCode === c).length > 0) setShowSub(true) }
 
   return (
-    <div ref={ref} className="relative cursor-text" onMouseDown={() => inputRef.current?.focus()}>
+    <div ref={ref} className="relative cursor-text" onClick={() => inputRef.current?.focus()}>
       <div className="flex items-center gap-1 min-h-[28px]">
         <input ref={inputRef} type="text" inputMode="numeric" value={val}
           onChange={(e) => { const v = toHalfWidth(e.target.value); setVal(v); setShow(true) }}
