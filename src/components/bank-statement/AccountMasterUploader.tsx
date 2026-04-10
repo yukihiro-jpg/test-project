@@ -9,6 +9,20 @@ import {
   saveSubAccountMaster,
 } from '@/lib/bank-statement/account-master'
 
+// Shift-JIS / UTF-8 自動判定で読み込む
+async function readFileWithEncoding(file: File): Promise<string> {
+  // まずShift-JISで読む（JDLファイルは通常Shift-JIS）
+  try {
+    const buffer = await file.arrayBuffer()
+    const sjisText = new TextDecoder('shift-jis').decode(buffer)
+    // 文字化け判定: 置換文字(U+FFFD)が多ければUTF-8で再読み込み
+    const replacementCount = (sjisText.match(/\ufffd/g) || []).length
+    if (replacementCount < 3) return sjisText
+  } catch { /* fallback */ }
+  // UTF-8で読む
+  return file.text()
+}
+
 interface Props {
   accountMaster: AccountItem[]
   subAccountMaster: SubAccountItem[]
@@ -29,7 +43,7 @@ export default function AccountMasterUploader({
   const handleAccountFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const text = await file.text()
+    const text = await readFileWithEncoding(file)
     const items = parseAccountMasterFile(text)
     if (items.length === 0) {
       alert('科目データを読み取れませんでした。\nタブ区切りまたはCSV形式のファイルを選択してください。')
@@ -44,7 +58,7 @@ export default function AccountMasterUploader({
   const handleSubAccountFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const text = await file.text()
+    const text = await readFileWithEncoding(file)
     const items = parseSubAccountMasterFile(text)
     if (items.length === 0) {
       alert('補助科目データを読み取れませんでした。\nタブ区切りまたはCSV形式のファイルを選択してください。')
@@ -107,8 +121,25 @@ export default function AccountMasterUploader({
             </div>
 
             <p className="text-xs text-gray-400">
-              TSV（タブ区切り）/ CSV対応
+              TSV（タブ区切り）/ CSV / Shift-JIS対応
             </p>
+
+            {/* リセットボタン */}
+            {(accountMaster.length > 0 || totalSub > 0) && (
+              <button
+                onClick={() => {
+                  if (confirm('登録済みの科目マスタ・補助科目マスタをすべて削除しますか？')) {
+                    saveAccountMaster([])
+                    saveSubAccountMaster([])
+                    onAccountUpdate([])
+                    onSubAccountUpdate([])
+                  }
+                }}
+                className="w-full py-2 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50"
+              >
+                マスタをリセット
+              </button>
+            )}
           </div>
 
           {/* 登録済み科目プレビュー */}

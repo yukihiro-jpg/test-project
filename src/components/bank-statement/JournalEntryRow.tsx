@@ -11,7 +11,7 @@ interface Props {
   pageLabel?: string
   runningBalance?: number
   rowNumber: number
-  onSelect: () => void
+  onSelect: (e?: React.MouseEvent) => void
   onChange: (id: string, field: keyof JournalEntry, value: string | number) => void
   onLearn: () => void
   onAddBlank: () => void
@@ -98,8 +98,8 @@ export default function JournalEntryRow({
       )}
       <tr
         className={`${bgClass} hover:bg-blue-50 cursor-pointer border-b border-slate-200 transition-colors`}
-        onClick={onSelect}
-        onFocus={onSelect}
+        onClick={(e) => onSelect(e)}
+        onFocus={() => onSelect()}
       >
         {/* 日付 */}
         <td className="px-2 py-1 border-r border-slate-200">
@@ -293,7 +293,13 @@ function AccountField({
 // 矢印キーナビゲーション
 function handleCellNav(e: React.KeyboardEvent<HTMLInputElement>) {
   const el = e.currentTarget
-  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    // Enter: 右の次のセルへ。右端なら次の行の最初のセルへ
+    if (!navigateCell(el, 'right')) {
+      navigateCell(el, 'next-row')
+    }
+  } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
     e.preventDefault()
     navigateCell(el, e.key === 'ArrowUp' ? 'up' : 'down')
   } else if (e.key === 'ArrowLeft' && el.selectionStart === 0) {
@@ -303,11 +309,11 @@ function handleCellNav(e: React.KeyboardEvent<HTMLInputElement>) {
   }
 }
 
-function navigateCell(current: HTMLElement, direction: 'up' | 'down' | 'left' | 'right') {
+function navigateCell(current: HTMLElement, direction: 'up' | 'down' | 'left' | 'right' | 'next-row'): boolean {
   const td = current.closest('td')
-  if (!td) return
+  if (!td) return false
   const tr = td.closest('tr')
-  if (!tr) return
+  if (!tr) return false
   const cells = Array.from(tr.querySelectorAll('td'))
   const cellIndex = cells.indexOf(td)
 
@@ -321,9 +327,22 @@ function navigateCell(current: HTMLElement, direction: 'up' | 'down' | 'left' | 
     for (let i = cellIndex + 1; i < cells.length; i++) {
       if (cells[i].querySelector('input')) { targetTd = cells[i]; break }
     }
+  } else if (direction === 'next-row') {
+    // 次の行の最初の入力セルへ
+    const tbody = tr.closest('tbody')
+    if (!tbody) return false
+    const rows = Array.from(tbody.querySelectorAll('tr'))
+    const rowIndex = rows.indexOf(tr)
+    const nextRow = rows[rowIndex + 1]
+    if (nextRow) {
+      const nextCells = Array.from(nextRow.querySelectorAll('td'))
+      for (const cell of nextCells) {
+        if (cell.querySelector('input')) { targetTd = cell; break }
+      }
+    }
   } else {
     const tbody = tr.closest('tbody')
-    if (!tbody) return
+    if (!tbody) return false
     const rows = Array.from(tbody.querySelectorAll('tr'))
     const rowIndex = rows.indexOf(tr)
     const targetRow = direction === 'up' ? rows[rowIndex - 1] : rows[rowIndex + 1]
@@ -335,6 +354,7 @@ function navigateCell(current: HTMLElement, direction: 'up' | 'down' | 'left' | 
 
   if (targetTd) {
     const input = targetTd.querySelector('input') as HTMLInputElement | null
-    if (input) input.focus()
+    if (input) { input.focus(); return true }
   }
+  return false
 }

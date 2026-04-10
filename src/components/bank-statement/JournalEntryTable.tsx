@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import type {
   JournalEntry,
   AccountItem,
@@ -32,6 +32,52 @@ export default function JournalEntryTable({
   pages,
   bankAccountCode,
 }: Props) {
+  // 範囲選択state
+  const [selectedRange, setSelectedRange] = useState<Set<string>>(new Set())
+  const [lastClickedId, setLastClickedId] = useState<string | null>(null)
+  const [showBulkEdit, setShowBulkEdit] = useState(false)
+  const [bulkField, setBulkField] = useState<string>('')
+  const [bulkValue, setBulkValue] = useState<string>('')
+
+  const handleRowClick = useCallback(
+    (entryId: string, e: React.MouseEvent) => {
+      if (e.shiftKey && lastClickedId) {
+        // Shift+クリック: 範囲選択
+        const startIdx = entries.findIndex((en) => en.id === lastClickedId)
+        const endIdx = entries.findIndex((en) => en.id === entryId)
+        const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx]
+        const newRange = new Set<string>()
+        for (let i = from; i <= to; i++) newRange.add(entries[i].id)
+        setSelectedRange(newRange)
+        setShowBulkEdit(true)
+      } else {
+        setSelectedRange(new Set())
+        setShowBulkEdit(false)
+        onSelect(entryId === selectedEntryId ? null : entryId)
+      }
+      setLastClickedId(entryId)
+    },
+    [entries, lastClickedId, selectedEntryId, onSelect],
+  )
+
+  const applyBulkEdit = useCallback(() => {
+    if (!bulkField || selectedRange.size === 0) return
+    const accountItem = accountMaster.find((a) => a.code === bulkValue)
+    onEntriesChange(
+      entries.map((entry) => {
+        if (!selectedRange.has(entry.id)) return entry
+        const updated = { ...entry, [bulkField]: bulkValue }
+        // CD変更時は科目名も自動設定
+        if (bulkField === 'debitCode' && accountItem) updated.debitName = accountItem.name
+        if (bulkField === 'creditCode' && accountItem) updated.creditName = accountItem.name
+        return updated
+      }),
+    )
+    setShowBulkEdit(false)
+    setSelectedRange(new Set())
+    setBulkValue('')
+  }, [bulkField, bulkValue, selectedRange, entries, onEntriesChange, accountMaster])
+
   const handleEntryChange = useCallback(
     (id: string, field: keyof JournalEntry, value: string | number) => {
       onEntriesChange(
@@ -156,6 +202,48 @@ export default function JournalEntryTable({
         </button>
       </div>
 
+      {/* 一括変更バー */}
+      {showBulkEdit && selectedRange.size > 0 && (
+        <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2 shrink-0">
+          <span className="text-xs font-medium text-amber-800">
+            {selectedRange.size}件選択中
+          </span>
+          <select
+            value={bulkField}
+            onChange={(e) => setBulkField(e.target.value)}
+            className="px-2 py-1 text-xs border border-gray-300 rounded bg-white"
+          >
+            <option value="">変更項目を選択</option>
+            <option value="debitCode">借方CD</option>
+            <option value="creditCode">貸方CD</option>
+            <option value="debitTaxCode">消費税CD</option>
+            <option value="debitTaxType">税区分</option>
+            <option value="debitBusinessType">事業者区分</option>
+            <option value="description">摘要</option>
+          </select>
+          <input
+            type="text"
+            value={bulkValue}
+            onChange={(e) => setBulkValue(e.target.value)}
+            placeholder="値を入力"
+            className="px-2 py-1 text-xs border border-gray-300 rounded w-32"
+          />
+          <button
+            onClick={applyBulkEdit}
+            disabled={!bulkField}
+            className="px-3 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-40"
+          >
+            適用
+          </button>
+          <button
+            onClick={() => { setShowBulkEdit(false); setSelectedRange(new Set()) }}
+            className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
+          >
+            解除
+          </button>
+        </div>
+      )}
+
       <div className="flex-1 overflow-auto">
         <table className="w-full text-sm border-collapse min-w-[900px]">
           <thead className="sticky top-0 bg-gray-600 text-white z-10">
@@ -183,13 +271,13 @@ export default function JournalEntryTable({
                 <JournalEntryRow
                   key={entry.id}
                   entry={entry}
-                  isSelected={entry.id === selectedEntryId}
+                  isSelected={entry.id === selectedEntryId || selectedRange.has(entry.id)}
                   accountMaster={accountMaster}
                   isPageBoundary={isPageBoundary}
                   pageLabel={isPageBoundary ? `P${currentTxPage + 1}` : undefined}
                   runningBalance={runningBalances[idx]}
                   rowNumber={idx}
-                  onSelect={() => onSelect(entry.id === selectedEntryId ? null : entry.id)}
+                  onSelect={(e?: React.MouseEvent) => e ? handleRowClick(entry.id, e) : onSelect(entry.id)}
                   onChange={handleEntryChange}
                   onLearn={() => handleLearnPattern(entry)}
                   onAddBlank={() => handleAddBlankRow(entry.id)}
