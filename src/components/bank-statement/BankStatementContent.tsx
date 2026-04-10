@@ -35,6 +35,8 @@ export default function BankStatementContent() {
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   // 列マッピング用state
   const [showColumnMapping, setShowColumnMapping] = useState(false)
@@ -211,7 +213,9 @@ export default function BankStatementContent() {
             isLoading={isLoading}
           />
           {journalEntries.length > 0 && (
-            <CsvExportButton entries={journalEntries} />
+            <CsvExportButton entries={journalEntries}
+              dateFrom={dateFrom} dateTo={dateTo}
+              onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
           )}
         </div>
       </header>

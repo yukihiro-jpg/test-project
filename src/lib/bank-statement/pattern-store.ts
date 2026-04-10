@@ -7,9 +7,7 @@ export function getPatterns(): PatternEntry[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) return JSON.parse(stored)
-  } catch {
-    // ignore
-  }
+  } catch { /* ignore */ }
   return []
 }
 
@@ -20,7 +18,6 @@ export function savePatterns(patterns: PatternEntry[]): void {
 
 /**
  * 摘要キーワードからパターンを検索する
- * 完全一致 > 部分一致 の優先度で、使用回数が多いものを優先
  */
 export function findPattern(
   patterns: PatternEntry[],
@@ -35,12 +32,11 @@ export function findPattern(
     .sort((a, b) => b.useCount - a.useCount)
   if (exact.length > 0) return exact[0]
 
-  // 部分一致（摘要にキーワードが含まれる）
+  // 部分一致
   const partial = patterns
-    .filter(
-      (p) =>
-        desc.includes(p.keyword.toLowerCase()) ||
-        p.keyword.toLowerCase().includes(desc),
+    .filter((p) =>
+      desc.includes(p.keyword.toLowerCase()) ||
+      p.keyword.toLowerCase().includes(desc),
     )
     .sort((a, b) => b.useCount - a.useCount)
   if (partial.length > 0) return partial[0]
@@ -49,10 +45,13 @@ export function findPattern(
 }
 
 /**
- * 新しいパターンを保存する（既存パターンがあればuse countを更新）
+ * パターン学習
+ * originalDescription: 通帳から読み取った元の摘要
+ * convertedDescription: ユーザーが修正した後の摘要
  */
 export function learnPattern(
-  keyword: string,
+  originalDescription: string,
+  convertedDescription: string,
   debitCode: string,
   debitName: string,
   creditCode: string,
@@ -63,22 +62,23 @@ export function learnPattern(
 ): void {
   const patterns = getPatterns()
   const existing = patterns.find(
-    (p) =>
-      p.keyword.toLowerCase() === keyword.toLowerCase() &&
-      p.debitCode === debitCode &&
-      p.creditCode === creditCode,
+    (p) => p.keyword.toLowerCase() === originalDescription.toLowerCase(),
   )
 
   if (existing) {
     existing.useCount++
+    existing.convertedDescription = convertedDescription
+    existing.debitCode = debitCode
     existing.debitName = debitName
+    existing.creditCode = creditCode
     existing.creditName = creditName
     existing.taxCode = taxCode
     existing.taxCategory = taxCategory
     existing.businessType = businessType
   } else {
     patterns.push({
-      keyword,
+      keyword: originalDescription,
+      convertedDescription,
       debitCode,
       debitName,
       creditCode,
@@ -93,10 +93,24 @@ export function learnPattern(
   savePatterns(patterns)
 }
 
-/**
- * パターンを全削除
- */
 export function clearPatterns(): void {
   if (typeof window === 'undefined') return
   localStorage.removeItem(STORAGE_KEY)
+}
+
+/**
+ * パターンをJSON文字列としてエクスポート
+ */
+export function exportPatterns(): string {
+  return JSON.stringify(getPatterns(), null, 2)
+}
+
+/**
+ * パターンをJSONからインポート
+ */
+export function importPatterns(json: string): number {
+  const imported: PatternEntry[] = JSON.parse(json)
+  if (!Array.isArray(imported)) return 0
+  savePatterns(imported)
+  return imported.length
 }

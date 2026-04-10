@@ -52,6 +52,7 @@ export interface JournalEntry {
   creditTaxRate: string
   creditBusinessType: string
   description: string
+  originalDescription: string  // 通帳から読み取った元の摘要（パターン学習用）
   isCompound: boolean
   parentId: string | null
 }
@@ -78,7 +79,8 @@ export interface SubAccountItem {
 
 // 学習パターン
 export interface PatternEntry {
-  keyword: string
+  keyword: string               // 通帳の元の摘要（マッチング用）
+  convertedDescription: string  // 変換後の摘要（表示用）
   debitCode: string
   debitName: string
   creditCode: string

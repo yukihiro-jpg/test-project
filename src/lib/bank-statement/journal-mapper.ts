@@ -81,6 +81,11 @@ export function mapTransactionsToJournalEntries(
       }
 
       entries.push(entry)
+
+      // パターンの変換後摘要があれば適用
+      if (pattern?.convertedDescription) {
+        entry.description = pattern.convertedDescription
+      }
     }
   }
 
@@ -129,6 +134,7 @@ function createEntry(tx: BankTransaction, params: EntryParams): JournalEntry {
     creditTaxRate: '',
     creditBusinessType: params.businessType,
     description: tx.description,
+    originalDescription: tx.description,
     isCompound: false,
     parentId: null,
   }
@@ -167,6 +173,7 @@ export function createBlankEntry(afterEntryId?: string): JournalEntry {
     creditTaxRate: '',
     creditBusinessType: '',
     description: '',
+    originalDescription: '',
     isCompound: false,
     parentId: null,
   }

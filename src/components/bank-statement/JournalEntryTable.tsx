@@ -272,8 +272,11 @@ export default function JournalEntryTable({
                   onSelect={(id: string) => handleRowSelect(id)}
                   onChange={handleEntryChange}
                   onLearn={() => {
-                    if (!entry.description) return
-                    learnPattern(entry.description, entry.debitCode, entry.debitName,
+                    if (!entry.originalDescription && !entry.description) return
+                    learnPattern(
+                      entry.originalDescription || entry.description,
+                      entry.description,
+                      entry.debitCode, entry.debitName,
                       entry.creditCode, entry.creditName,
                       entry.debitTaxCode, entry.debitTaxType, entry.debitBusinessType)
                   }}

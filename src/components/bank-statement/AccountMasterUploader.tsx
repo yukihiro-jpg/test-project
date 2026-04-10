@@ -38,6 +38,7 @@ export default function AccountMasterUploader({
 }: Props) {
   const accountInputRef = useRef<HTMLInputElement>(null)
   const subAccountInputRef = useRef<HTMLInputElement>(null)
+  const restoreInputRef = useRef<HTMLInputElement>(null)
   const [showPanel, setShowPanel] = useState(false)
 
   const handleAccountFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,6 +87,17 @@ export default function AccountMasterUploader({
 
       <input ref={accountInputRef} type="file" accept=".csv,.tsv,.txt" onChange={handleAccountFile} className="hidden" />
       <input ref={subAccountInputRef} type="file" accept=".csv,.tsv,.txt" onChange={handleSubAccountFile} className="hidden" />
+      <input ref={restoreInputRef} type="file" accept=".json" onChange={async (e) => {
+        const file = e.target.files?.[0]; if (!file) return
+        try {
+          const text = await file.text()
+          const data = JSON.parse(text)
+          if (data.accounts) { saveAccountMaster(data.accounts); onAccountUpdate(data.accounts) }
+          if (data.subAccounts) { saveSubAccountMaster(data.subAccounts); onSubAccountUpdate(data.subAccounts) }
+          alert(`復元しました: 科目${(data.accounts || []).length}件, 補助${(data.subAccounts || []).length}件`)
+        } catch { alert('JSONファイルの読み込みに失敗しました') }
+        e.target.value = ''
+      }} className="hidden" />
 
       {showPanel && (
         <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
@@ -124,22 +136,36 @@ export default function AccountMasterUploader({
               TSV（タブ区切り）/ CSV / Shift-JIS対応
             </p>
 
-            {/* リセットボタン */}
+            {/* 保存・復元 */}
             {(accountMaster.length > 0 || totalSub > 0) && (
-              <button
-                onClick={() => {
+              <div className="space-y-1">
+                <button onClick={() => {
+                  const data = JSON.stringify({ accounts: accountMaster, subAccounts: subAccountMaster }, null, 2)
+                  const blob = new Blob([data], { type: 'application/json' })
+                  const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+                  a.download = `科目マスタ_${new Date().toISOString().slice(0,10)}.json`
+                  a.click()
+                }}
+                  className="w-full py-2 text-xs text-blue-600 border border-blue-200 rounded hover:bg-blue-50">
+                  マスタを保存（JSON）
+                </button>
+                <button onClick={() => {
                   if (confirm('登録済みの科目マスタ・補助科目マスタをすべて削除しますか？')) {
-                    saveAccountMaster([])
-                    saveSubAccountMaster([])
-                    onAccountUpdate([])
-                    onSubAccountUpdate([])
+                    saveAccountMaster([]); saveSubAccountMaster([])
+                    onAccountUpdate([]); onSubAccountUpdate([])
                   }
                 }}
-                className="w-full py-2 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50"
-              >
-                マスタをリセット
-              </button>
+                  className="w-full py-2 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50">
+                  マスタをリセット
+                </button>
+              </div>
             )}
+
+            {/* マスタ復元 */}
+            <button onClick={() => restoreInputRef.current?.click()}
+              className="w-full py-2 text-xs text-gray-600 border border-gray-200 rounded hover:bg-gray-50">
+              保存済みマスタを復元（JSON）
+            </button>
           </div>
 
           {/* 登録済み科目プレビュー */}
