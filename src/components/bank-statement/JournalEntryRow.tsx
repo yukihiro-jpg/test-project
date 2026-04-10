@@ -269,6 +269,16 @@ function EditableCell({
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault()
+          navigateCell(e.currentTarget, e.key === 'ArrowUp' ? 'up' : 'down')
+        } else if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0) {
+          navigateCell(e.currentTarget, 'left')
+        } else if (e.key === 'ArrowRight' && e.currentTarget.selectionStart === e.currentTarget.value.length) {
+          navigateCell(e.currentTarget, 'right')
+        }
+      }}
       placeholder={placeholder}
       className={`w-full px-1.5 py-1 text-sm border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:bg-blue-50 rounded bg-transparent text-gray-800 ${className}`}
     />
@@ -327,6 +337,16 @@ function AccountCodeCell({
             setShowSuggest(false)
           }, 200)
         }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault()
+            navigateCell(e.currentTarget, e.key === 'ArrowUp' ? 'up' : 'down')
+          } else if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0) {
+            navigateCell(e.currentTarget, 'left')
+          } else if (e.key === 'ArrowRight' && e.currentTarget.selectionStart === e.currentTarget.value.length) {
+            navigateCell(e.currentTarget, 'right')
+          }
+        }}
         placeholder="CD"
         className="w-full px-1.5 py-1 text-sm border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:bg-blue-50 rounded bg-transparent text-gray-800"
       />
@@ -377,9 +397,25 @@ function AmountCell({
   if (editing) {
     return (
       <input
-        type="number"
+        type="text"
+        inputMode="numeric"
         value={editValue}
-        onChange={(e) => setEditValue(e.target.value)}
+        onChange={(e) => {
+          const v = e.target.value.replace(/[^0-9]/g, '')
+          setEditValue(v)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault()
+            navigateCell(e.currentTarget, e.key === 'ArrowUp' ? 'up' : 'down')
+          } else if (e.key === 'ArrowLeft' && e.currentTarget.selectionStart === 0) {
+            navigateCell(e.currentTarget, 'left')
+          } else if (e.key === 'ArrowRight' && e.currentTarget.selectionStart === e.currentTarget.value.length) {
+            navigateCell(e.currentTarget, 'right')
+          } else if (e.key === 'Enter') {
+            e.currentTarget.blur()
+          }
+        }}
         onBlur={handleBlur}
         autoFocus
         className="w-full px-1.5 py-1 text-sm text-right border border-blue-400 outline-none bg-blue-50 rounded font-medium"
@@ -397,4 +433,52 @@ function AmountCell({
       {value ? value.toLocaleString() : ''}
     </div>
   )
+}
+
+// 矢印キーでセル間移動するヘルパー
+function navigateCell(current: HTMLElement, direction: 'up' | 'down' | 'left' | 'right') {
+  const td = current.closest('td')
+  if (!td) return
+
+  const tr = td.closest('tr')
+  if (!tr) return
+
+  const cells = Array.from(tr.querySelectorAll('td'))
+  const cellIndex = cells.indexOf(td)
+
+  let targetTd: Element | null = null
+
+  if (direction === 'left') {
+    // 同じ行の前のセル
+    for (let i = cellIndex - 1; i >= 0; i--) {
+      const input = cells[i].querySelector('input, [tabindex]')
+      if (input) { targetTd = cells[i]; break }
+    }
+  } else if (direction === 'right') {
+    // 同じ行の次のセル
+    for (let i = cellIndex + 1; i < cells.length; i++) {
+      const input = cells[i].querySelector('input, [tabindex]')
+      if (input) { targetTd = cells[i]; break }
+    }
+  } else if (direction === 'up' || direction === 'down') {
+    const tbody = tr.closest('tbody')
+    if (!tbody) return
+    const rows = Array.from(tbody.querySelectorAll('tr'))
+    const rowIndex = rows.indexOf(tr)
+    const targetRow = direction === 'up' ? rows[rowIndex - 1] : rows[rowIndex + 1]
+    if (targetRow) {
+      const targetCells = Array.from(targetRow.querySelectorAll('td'))
+      if (targetCells[cellIndex]) targetTd = targetCells[cellIndex]
+    }
+  }
+
+  if (targetTd) {
+    const input = targetTd.querySelector('input') as HTMLInputElement | null
+    const focusable = targetTd.querySelector('[tabindex]') as HTMLElement | null
+    if (input) {
+      input.focus()
+    } else if (focusable) {
+      focusable.focus()
+    }
+  }
 }

@@ -40,23 +40,36 @@ export function mapTransactionsToJournalEntries(
       let entry: JournalEntry
 
       if (isDeposit) {
-        // 入金: 借方=預金口座、貸方=推定or空白
+        // 入金: 借方=預金口座、貸方=相手科目（パターンから推定）
+        // 貸方にはパターンの「通帳でない側」のコードを設定
+        const counterCode = pattern
+          ? (pattern.creditCode !== accountCode ? pattern.creditCode : pattern.debitCode !== accountCode ? pattern.debitCode : '')
+          : ''
+        const counterName = pattern
+          ? (pattern.creditCode !== accountCode ? pattern.creditName : pattern.debitCode !== accountCode ? pattern.debitName : '')
+          : ''
         entry = createEntry(tx, {
           debitCode: accountCode,
           debitName: accountName,
           debitAmount: amount,
-          creditCode: pattern?.creditCode || '',
-          creditName: pattern?.creditName || '',
+          creditCode: counterCode,
+          creditName: counterName,
           creditAmount: amount,
           taxCode: pattern?.taxCode || '',
           taxCategory: pattern?.taxCategory || '',
           businessType: pattern?.businessType || '',
         })
       } else {
-        // 出金: 借方=推定or空白、貸方=預金口座
+        // 出金: 借方=相手科目（パターンから推定）、貸方=預金口座
+        const counterCode = pattern
+          ? (pattern.debitCode !== accountCode ? pattern.debitCode : pattern.creditCode !== accountCode ? pattern.creditCode : '')
+          : ''
+        const counterName = pattern
+          ? (pattern.debitCode !== accountCode ? pattern.debitName : pattern.creditCode !== accountCode ? pattern.creditName : '')
+          : ''
         entry = createEntry(tx, {
-          debitCode: pattern?.debitCode || '',
-          debitName: pattern?.debitName || '',
+          debitCode: counterCode,
+          debitName: counterName,
           debitAmount: amount,
           creditCode: accountCode,
           creditName: accountName,
