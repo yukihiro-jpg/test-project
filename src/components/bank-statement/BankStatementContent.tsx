@@ -244,9 +244,11 @@ export default function BankStatementContent() {
             <JournalEntryTable
               entries={journalEntries}
               accountMaster={accountMaster}
+              subAccountMaster={subAccountMaster}
               selectedEntryId={selectedEntryId}
               onSelect={handleEntrySelect}
               onEntriesChange={setJournalEntries}
+              onSubAccountUpdate={handleSubAccountMasterUpdate}
               pages={pages}
               bankAccountCode={uploadConfig?.accountCode || ''}
             />
