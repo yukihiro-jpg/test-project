@@ -59,11 +59,21 @@ export interface JournalEntry {
 // 科目マスタ
 export interface AccountItem {
   code: string
-  name: string
-  subCode?: string
-  subName?: string
-  taxCode?: string
-  taxCategory?: string
+  name: string         // 正式科目名
+  shortName: string    // 簡略科目名
+  association?: string  // 連想（カタカナ検索用）
+  normalBalance?: string // 正残区分（借方/貸方）
+  bsPl?: string         // BS/PL区分
+}
+
+// 補助科目マスタ
+export interface SubAccountItem {
+  parentCode: string    // 科目コード
+  parentName: string    // 科目簡略名称
+  subCode: string       // 科目別補助コード
+  name: string          // 正式科目名
+  shortName: string     // 簡略科目名
+  association?: string  // 連想
 }
 
 // 学習パターン

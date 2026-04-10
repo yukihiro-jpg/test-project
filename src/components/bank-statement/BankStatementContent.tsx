@@ -12,6 +12,7 @@ import type {
   StatementPage,
   JournalEntry,
   AccountItem,
+  SubAccountItem,
   UploadConfig,
   ParseResult,
   RawTableRow,
@@ -20,12 +21,13 @@ import type {
 import { parseFile, applyColumnMapping } from '@/lib/bank-statement/transaction-extractor'
 import { mapTransactionsToJournalEntries } from '@/lib/bank-statement/journal-mapper'
 import { getPatterns } from '@/lib/bank-statement/pattern-store'
-import { loadAccountMaster } from '@/lib/bank-statement/account-master'
+import { loadAccountMaster, loadSubAccountMaster } from '@/lib/bank-statement/account-master'
 
 export default function BankStatementContent() {
   const [pages, setPages] = useState<StatementPage[]>([])
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([])
   const [accountMaster, setAccountMaster] = useState<AccountItem[]>(() => loadAccountMaster())
+  const [subAccountMaster, setSubAccountMaster] = useState<SubAccountItem[]>(() => loadSubAccountMaster())
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [uploadConfig, setUploadConfig] = useState<UploadConfig | null>(null)
@@ -152,6 +154,10 @@ export default function BankStatementContent() {
     setAccountMaster(items)
   }, [])
 
+  const handleSubAccountMasterUpdate = useCallback((items: SubAccountItem[]) => {
+    setSubAccountMaster(items)
+  }, [])
+
   const selectedTransactionId = (() => {
     if (!selectedEntryId) return null
     const entry = journalEntries.find((e) => e.id === selectedEntryId)
@@ -159,19 +165,21 @@ export default function BankStatementContent() {
   })()
 
   return (
-    <div className="h-screen flex flex-col bg-slate-100">
+    <div className="h-screen flex flex-col bg-gray-100">
       {/* ヘッダー */}
-      <header className="bg-blue-800 px-4 py-2 flex items-center justify-between shrink-0">
+      <header className="bg-gray-800 px-4 py-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
           <h1 className="text-base font-bold text-white">通帳CSV変換</h1>
-          <a href="/" className="text-xs text-blue-200 hover:text-white hover:underline">
+          <a href="/" className="text-xs text-gray-400 hover:text-white hover:underline">
             トップ
           </a>
         </div>
         <div className="flex items-center gap-2">
           <AccountMasterUploader
             accountMaster={accountMaster}
-            onUpdate={handleAccountMasterUpdate}
+            subAccountMaster={subAccountMaster}
+            onAccountUpdate={handleAccountMasterUpdate}
+            onSubAccountUpdate={handleSubAccountMasterUpdate}
           />
           <UploadDialog
             accountMaster={accountMaster}

@@ -141,7 +141,7 @@ export default function JournalEntryTable({
   return (
     <div className="flex flex-col h-full bg-white">
       {/* ツールバー */}
-      <div className="px-4 py-2 bg-blue-700 flex items-center justify-between shrink-0">
+      <div className="px-4 py-2 bg-gray-700 flex items-center justify-between shrink-0">
         <span className="text-sm font-medium text-white">
           仕訳データ ({entries.length}件)
         </span>
@@ -150,7 +150,7 @@ export default function JournalEntryTable({
             const newEntry = createBlankEntry()
             onEntriesChange([...entries, newEntry])
           }}
-          className="px-3 py-1 text-xs bg-white text-blue-700 font-medium rounded hover:bg-blue-50"
+          className="px-3 py-1 text-xs bg-white text-gray-700 font-medium rounded hover:bg-gray-100"
         >
           + 行追加
         </button>
@@ -158,16 +158,16 @@ export default function JournalEntryTable({
 
       <div className="flex-1 overflow-auto">
         <table className="w-full text-sm border-collapse min-w-[900px]">
-          <thead className="sticky top-0 bg-blue-800 text-white z-10">
+          <thead className="sticky top-0 bg-gray-600 text-white z-10">
             <tr>
-              <th className="px-2 py-2 text-left w-24 font-medium border-r border-blue-700">日付</th>
-              <th className="px-2 py-2 text-left w-40 font-medium border-r border-blue-700">借方科目</th>
-              <th className="px-2 py-2 text-left w-40 font-medium border-r border-blue-700">貸方科目</th>
-              <th className="px-2 py-2 text-right w-24 font-medium border-r border-blue-700">金額</th>
-              <th className="px-2 py-2 text-right w-28 font-medium border-r border-blue-700">残高</th>
-              <th className="px-2 py-2 text-left w-14 font-medium border-r border-blue-700">税CD</th>
-              <th className="px-2 py-2 text-left w-20 font-medium border-r border-blue-700">税区分</th>
-              <th className="px-2 py-2 text-left font-medium border-r border-blue-700">摘要</th>
+              <th className="px-2 py-2 text-left w-24 font-medium border-r border-gray-500">日付</th>
+              <th className="px-2 py-2 text-left w-40 font-medium border-r border-gray-500">借方科目</th>
+              <th className="px-2 py-2 text-left w-40 font-medium border-r border-gray-500">貸方科目</th>
+              <th className="px-2 py-2 text-right w-24 font-medium border-r border-gray-500">金額</th>
+              <th className="px-2 py-2 text-right w-28 font-medium border-r border-gray-500">残高</th>
+              <th className="px-2 py-2 text-left w-14 font-medium border-r border-gray-500">税CD</th>
+              <th className="px-2 py-2 text-left w-20 font-medium border-r border-gray-500">税区分</th>
+              <th className="px-2 py-2 text-left font-medium border-r border-gray-500">摘要</th>
               <th className="px-1 py-2 w-8 font-medium"></th>
             </tr>
           </thead>

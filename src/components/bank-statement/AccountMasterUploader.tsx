@@ -1,90 +1,136 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import type { AccountItem } from '@/lib/bank-statement/types'
+import type { AccountItem, SubAccountItem } from '@/lib/bank-statement/types'
 import {
-  parseAccountMasterCsv,
+  parseAccountMasterFile,
+  parseSubAccountMasterFile,
   saveAccountMaster,
+  saveSubAccountMaster,
 } from '@/lib/bank-statement/account-master'
 
 interface Props {
   accountMaster: AccountItem[]
-  onUpdate: (items: AccountItem[]) => void
+  subAccountMaster: SubAccountItem[]
+  onAccountUpdate: (items: AccountItem[]) => void
+  onSubAccountUpdate: (items: SubAccountItem[]) => void
 }
 
-export default function AccountMasterUploader({ accountMaster, onUpdate }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [showList, setShowList] = useState(false)
+export default function AccountMasterUploader({
+  accountMaster,
+  subAccountMaster,
+  onAccountUpdate,
+  onSubAccountUpdate,
+}: Props) {
+  const accountInputRef = useRef<HTMLInputElement>(null)
+  const subAccountInputRef = useRef<HTMLInputElement>(null)
+  const [showPanel, setShowPanel] = useState(false)
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAccountFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
-    try {
-      const text = await file.text()
-      const items = parseAccountMasterCsv(text)
-      if (items.length === 0) {
-        alert('科目マスタCSVに有効なデータがありません。\n形式: 科目コード,科目名[,補助コード,補助名,税コード,税区分]')
-        return
-      }
-      saveAccountMaster(items)
-      onUpdate(items)
-      alert(`${items.length}件の科目を読み込みました`)
-    } catch {
-      alert('CSVファイルの読み込みに失敗しました')
+    const text = await file.text()
+    const items = parseAccountMasterFile(text)
+    if (items.length === 0) {
+      alert('科目データを読み取れませんでした。\nタブ区切りまたはCSV形式のファイルを選択してください。')
+      return
     }
-
+    saveAccountMaster(items)
+    onAccountUpdate(items)
+    alert(`勘定科目 ${items.length}件を登録しました`)
     e.target.value = ''
   }
+
+  const handleSubAccountFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const text = await file.text()
+    const items = parseSubAccountMasterFile(text)
+    if (items.length === 0) {
+      alert('補助科目データを読み取れませんでした。\nタブ区切りまたはCSV形式のファイルを選択してください。')
+      return
+    }
+    saveSubAccountMaster(items)
+    onSubAccountUpdate(items)
+    alert(`補助科目 ${items.length}件を登録しました`)
+    e.target.value = ''
+  }
+
+  const totalSub = subAccountMaster.length
 
   return (
     <div className="relative">
       <button
-        onClick={() =>
-          accountMaster.length > 0 ? setShowList(!showList) : inputRef.current?.click()
-        }
-        className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded border border-gray-300"
+        onClick={() => setShowPanel(!showPanel)}
+        className="px-3 py-1.5 text-xs font-medium bg-white/10 hover:bg-white/20 text-white rounded border border-white/20"
       >
-        科目マスタ {accountMaster.length > 0 && `(${accountMaster.length}件)`}
+        科目マスタ
+        {accountMaster.length > 0 && (
+          <span className="ml-1 text-white/70">({accountMaster.length})</span>
+        )}
       </button>
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".csv,text/csv"
-        onChange={handleFileChange}
-        className="hidden"
-      />
+      <input ref={accountInputRef} type="file" accept=".csv,.tsv,.txt" onChange={handleAccountFile} className="hidden" />
+      <input ref={subAccountInputRef} type="file" accept=".csv,.tsv,.txt" onChange={handleSubAccountFile} className="hidden" />
 
-      {showList && (
-        <div className="absolute right-0 top-full mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-auto">
-          <div className="p-3 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-sm font-bold text-gray-700">
-              登録済み科目 ({accountMaster.length}件)
-            </span>
-            <button
-              onClick={() => inputRef.current?.click()}
-              className="text-xs text-blue-600 hover:underline"
-            >
-              CSVを再読込
-            </button>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {accountMaster.slice(0, 100).map((item, i) => (
-              <div key={i} className="px-3 py-1.5 text-xs flex gap-2">
-                <span className="text-gray-500 w-12 shrink-0">{item.code}</span>
-                <span className="text-gray-800">{item.name}</span>
+      {showPanel && (
+        <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+          <div className="p-4 space-y-3">
+            <h3 className="text-sm font-bold text-gray-800">マスタ登録</h3>
+
+            {/* 勘定科目 */}
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-700">勘定科目</span>
+                <span className="text-xs text-gray-500">{accountMaster.length}件</span>
               </div>
-            ))}
-            {accountMaster.length > 100 && (
-              <div className="px-3 py-2 text-xs text-gray-400 text-center">
-                他 {accountMaster.length - 100}件
+              <button
+                onClick={() => accountInputRef.current?.click()}
+                className="w-full py-2 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 text-gray-700"
+              >
+                科目チェックリストを読込
+              </button>
+            </div>
+
+            {/* 補助科目 */}
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-700">補助科目</span>
+                <span className="text-xs text-gray-500">{totalSub}件</span>
               </div>
-            )}
+              <button
+                onClick={() => subAccountInputRef.current?.click()}
+                className="w-full py-2 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 text-gray-700"
+              >
+                補助科目チェックリストを読込
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400">
+              TSV（タブ区切り）/ CSV対応
+            </p>
           </div>
+
+          {/* 登録済み科目プレビュー */}
+          {accountMaster.length > 0 && (
+            <div className="border-t border-gray-100 max-h-48 overflow-auto">
+              {accountMaster.slice(0, 30).map((item, i) => (
+                <div key={i} className="px-4 py-1 text-xs flex gap-2 hover:bg-gray-50">
+                  <span className="text-gray-400 w-10 shrink-0">{item.code}</span>
+                  <span className="text-gray-700 truncate">{item.shortName || item.name}</span>
+                </div>
+              ))}
+              {accountMaster.length > 30 && (
+                <div className="px-4 py-1 text-xs text-gray-400 text-center">
+                  他 {accountMaster.length - 30}件
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="p-2 border-t border-gray-100">
             <button
-              onClick={() => setShowList(false)}
+              onClick={() => setShowPanel(false)}
               className="w-full text-xs text-gray-500 hover:text-gray-700 py-1"
             >
               閉じる

@@ -82,15 +82,15 @@ export default function JournalEntryRow({
       : ''
 
   const bgClass = isSelected
-    ? 'bg-blue-100'
+    ? 'bg-amber-50'
     : rowNumber % 2 === 0
       ? 'bg-white'
-      : 'bg-slate-50'
+      : 'bg-gray-50/50'
 
   return (
     <>
       {isPageBoundary && (
-        <tr className="bg-blue-600">
+        <tr className="bg-teal-600">
           <td colSpan={9} className="px-3 py-1 text-xs font-bold text-white">
             {pageLabel} ページ
           </td>
