@@ -79,11 +79,14 @@ export function mapTransactionsToJournalEntries(
         })
       }
 
-      // パターンの変換後摘要があれば適用
-      if (pattern?.lines?.[0]?.description) {
-        entry.description = pattern.lines[0].description
-      } else if (pattern?.convertedDescription) {
-        entry.description = pattern.convertedDescription
+      // パターンの変換後摘要とpatternIdを適用
+      if (pattern) {
+        entry.patternId = pattern.id
+        if (pattern.lines?.[0]?.description) {
+          entry.description = pattern.lines[0].description
+        } else if (pattern.convertedDescription) {
+          entry.description = pattern.convertedDescription
+        }
       }
 
       entries.push(entry)
@@ -93,6 +96,7 @@ export function mapTransactionsToJournalEntries(
         for (let li = 1; li < pattern.lines.length; li++) {
           const line = pattern.lines[li]
           const compoundEntry = createCompoundEntry(entry)
+          compoundEntry.patternId = pattern.id
           compoundEntry.debitCode = line.debitCode
           compoundEntry.debitName = line.debitName
           compoundEntry.creditCode = line.creditCode

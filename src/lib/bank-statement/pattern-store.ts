@@ -83,6 +83,55 @@ export function findPattern(
 }
 
 /**
+ * 仕訳行からパターンを学習（金額範囲指定版）
+ */
+export function learnFromEntriesWithRange(
+  originalDescription: string,
+  entries: JournalEntry[],
+  amountMin: number | null,
+  amountMax: number | null,
+): string {
+  if (!originalDescription || entries.length === 0) return ''
+
+  const patterns = getPatterns()
+  const lines: PatternLine[] = entries.map((e) => ({
+    debitCode: e.debitCode,
+    debitName: e.debitName,
+    creditCode: e.creditCode,
+    creditName: e.creditName,
+    taxCode: e.debitTaxCode,
+    taxCategory: e.debitTaxType,
+    businessType: e.debitBusinessType,
+    description: e.description,
+  }))
+
+  // 同じキーワード+金額範囲のパターンがあれば更新、なければ新規
+  const existing = patterns.find(
+    (p) => p.keyword.toLowerCase() === originalDescription.toLowerCase() &&
+      p.amountMin === amountMin && p.amountMax === amountMax,
+  )
+
+  if (existing) {
+    existing.useCount++
+    existing.lines = lines
+    savePatterns(patterns)
+    return existing.id
+  } else {
+    const id = generatePatternId()
+    patterns.push({
+      id,
+      keyword: originalDescription,
+      amountMin,
+      amountMax,
+      lines,
+      useCount: 1,
+    })
+    savePatterns(patterns)
+    return id
+  }
+}
+
+/**
  * 仕訳行からパターンを学習（1行 or 複合仕訳の複数行）
  */
 export function learnFromEntries(

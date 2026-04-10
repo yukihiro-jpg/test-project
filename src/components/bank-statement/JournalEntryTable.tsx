@@ -6,14 +6,18 @@ import type {
   AccountItem,
   SubAccountItem,
   StatementPage,
+  PatternLine,
 } from '@/lib/bank-statement/types'
 import {
   createBlankEntry,
   createCompoundEntry,
 } from '@/lib/bank-statement/journal-mapper'
-import { learnPattern } from '@/lib/bank-statement/pattern-store'
+import { learnFromEntriesWithRange, getPatterns } from '@/lib/bank-statement/pattern-store'
 import { saveSubAccountMaster } from '@/lib/bank-statement/account-master'
 import JournalEntryRow from './JournalEntryRow'
+import LearnPatternDialog from './LearnPatternDialog'
+import ApplyPatternDialog from './ApplyPatternDialog'
+import PatternDetailDialog from './PatternDetailDialog'
 
 interface Props {
   entries: JournalEntry[]
@@ -36,6 +40,117 @@ export default function JournalEntryTable({
   const [showBulkEdit, setShowBulkEdit] = useState(false)
   const [bulkField, setBulkField] = useState<string>('')
   const [bulkValue, setBulkValue] = useState<string>('')
+
+  // パターン学習ダイアログ
+  const [learnDialogEntry, setLearnDialogEntry] = useState<JournalEntry | null>(null)
+  const [learnRelatedEntries, setLearnRelatedEntries] = useState<JournalEntry[]>([])
+  // 反映確認ダイアログ
+  const [applyTargetEntries, setApplyTargetEntries] = useState<JournalEntry[]>([])
+  const [applyPatternLines, setApplyPatternLines] = useState<PatternLine[]>([])
+  const [applyAmountRange, setApplyAmountRange] = useState<{ min: number | null; max: number | null } | null>(null)
+  const [showApplyDialog, setShowApplyDialog] = useState(false)
+  // パターン詳細ダイアログ
+  const [patternDetailId, setPatternDetailId] = useState<string | null>(null)
+
+  // パターン学習ダイアログ確定
+  const handleLearnConfirm = useCallback(
+    (amountMin: number | null, amountMax: number | null, applyToAll: boolean) => {
+      if (!learnDialogEntry || learnRelatedEntries.length === 0) return
+      const originalDesc = learnDialogEntry.originalDescription || learnDialogEntry.description
+      if (!originalDesc) { setLearnDialogEntry(null); return }
+
+      const patternId = learnFromEntriesWithRange(originalDesc, learnRelatedEntries, amountMin, amountMax)
+      const learnedIds = new Set(learnRelatedEntries.map((e) => e.id))
+      const updatedEntries = entries.map((e) =>
+        learnedIds.has(e.id) ? { ...e, patternId } : e,
+      )
+
+      if (applyToAll) {
+        const targets = updatedEntries.filter((e) => {
+          if (learnedIds.has(e.id)) return false
+          if (e.parentId) return false
+          if ((e.originalDescription || '').toLowerCase() !== originalDesc.toLowerCase()) return false
+          const amt = e.debitAmount || e.creditAmount || 0
+          if (amountMin != null && amt < amountMin) return false
+          if (amountMax != null && amt > amountMax) return false
+          return true
+        })
+
+        const patterns = getPatterns()
+        const pat = patterns.find((p) => p.id === patternId)
+        if (!pat) { onEntriesChange(updatedEntries); setLearnDialogEntry(null); return }
+
+        setApplyTargetEntries(targets)
+        setApplyPatternLines(pat.lines)
+        setApplyAmountRange({ min: amountMin, max: amountMax })
+        setShowApplyDialog(true)
+        onEntriesChange(updatedEntries)
+      } else {
+        onEntriesChange(updatedEntries)
+      }
+
+      setLearnDialogEntry(null)
+      setLearnRelatedEntries([])
+    },
+    [learnDialogEntry, learnRelatedEntries, entries, onEntriesChange],
+  )
+
+  // 反映確定
+  const handleApplyConfirm = useCallback(() => {
+    if (applyTargetEntries.length === 0 || applyPatternLines.length === 0) {
+      setShowApplyDialog(false); return
+    }
+
+    const targetIds = new Set(applyTargetEntries.map((e) => e.id))
+    const firstLine = applyPatternLines[0]
+
+    const newEntries: JournalEntry[] = []
+    for (const e of entries) {
+      if (!targetIds.has(e.id)) {
+        newEntries.push(e)
+        continue
+      }
+      const updatedEntry = { ...e }
+      updatedEntry.debitCode = firstLine.debitCode
+      updatedEntry.debitName = firstLine.debitName
+      updatedEntry.creditCode = firstLine.creditCode
+      updatedEntry.creditName = firstLine.creditName
+      updatedEntry.debitTaxCode = firstLine.taxCode
+      updatedEntry.debitTaxType = firstLine.taxCategory
+      updatedEntry.debitBusinessType = firstLine.businessType
+      updatedEntry.description = firstLine.description || e.description
+      const patterns = getPatterns()
+      const matchedPat = patterns.find((p) =>
+        p.keyword.toLowerCase() === (e.originalDescription || '').toLowerCase(),
+      )
+      if (matchedPat) updatedEntry.patternId = matchedPat.id
+      newEntries.push(updatedEntry)
+
+      if (applyPatternLines.length > 1) {
+        for (let i = 1; i < applyPatternLines.length; i++) {
+          const line = applyPatternLines[i]
+          const compoundEntry = createCompoundEntry(updatedEntry)
+          compoundEntry.patternId = updatedEntry.patternId
+          compoundEntry.debitCode = line.debitCode
+          compoundEntry.debitName = line.debitName
+          compoundEntry.creditCode = line.creditCode
+          compoundEntry.creditName = line.creditName
+          compoundEntry.debitTaxCode = line.taxCode
+          compoundEntry.debitTaxType = line.taxCategory
+          compoundEntry.debitBusinessType = line.businessType
+          compoundEntry.description = line.description
+          compoundEntry.originalDescription = e.originalDescription
+          newEntries.push(compoundEntry)
+        }
+      }
+    }
+
+    onEntriesChange(newEntries)
+    setShowApplyDialog(false)
+    setApplyTargetEntries([])
+    setApplyPatternLines([])
+    setApplyAmountRange(null)
+  }, [applyTargetEntries, applyPatternLines, entries, onEntriesChange])
 
   const handleRowSelect = useCallback(
     (entryId: string) => {
@@ -232,9 +347,10 @@ export default function JournalEntryTable({
       )}
 
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-sm border-collapse min-w-[900px]">
+        <table className="w-full text-sm border-collapse min-w-[950px]">
           <thead className="sticky top-0 bg-gray-600 text-white z-10">
             <tr>
+              <th className="px-2 py-2 text-center w-12 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>学習</th>
               <th className="px-2 py-2 text-center w-24 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>日付</th>
               <th className="px-2 py-2 text-center w-44 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>借方科目</th>
               <th className="px-2 py-2 text-center w-44 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>貸方科目</th>
@@ -273,12 +389,11 @@ export default function JournalEntryTable({
                   onChange={handleEntryChange}
                   onLearn={() => {
                     if (!entry.originalDescription && !entry.description) return
-                    learnPattern(
-                      entry.originalDescription || entry.description,
-                      entry.description,
-                      entry.debitCode, entry.debitName,
-                      entry.creditCode, entry.creditName,
-                      entry.debitTaxCode, entry.debitTaxType, entry.debitBusinessType)
+                    // 複合仕訳グループ全体を学習対象にする
+                    const groupId = entry.parentId || entry.id
+                    const groupEntries = entries.filter((e) => e.id === groupId || e.parentId === groupId)
+                    setLearnDialogEntry(entry)
+                    setLearnRelatedEntries(groupEntries.length > 0 ? groupEntries : [entry])
                   }}
                   onAddBlank={() => {
                     const i = entries.findIndex((e) => e.id === entry.id)
@@ -287,12 +402,43 @@ export default function JournalEntryTable({
                   onAddCompound={() => handleAddCompoundRow(entry.id)}
                   onDelete={() => onEntriesChange(entries.filter((e) => e.id !== entry.id))}
                   onSubAccountRegister={handleSubAccountRegister}
+                  onPatternClick={(pid) => setPatternDetailId(pid)}
                 />
               )
             })}
           </tbody>
         </table>
       </div>
+
+      {/* パターン学習ダイアログ */}
+      <LearnPatternDialog
+        open={learnDialogEntry !== null}
+        entry={learnDialogEntry}
+        relatedEntries={learnRelatedEntries}
+        onConfirm={handleLearnConfirm}
+        onCancel={() => { setLearnDialogEntry(null); setLearnRelatedEntries([]) }}
+      />
+
+      {/* 反映確認ダイアログ */}
+      <ApplyPatternDialog
+        open={showApplyDialog}
+        targetEntries={applyTargetEntries}
+        patternLines={applyPatternLines}
+        onConfirm={handleApplyConfirm}
+        onCancel={() => {
+          setShowApplyDialog(false)
+          setApplyTargetEntries([])
+          setApplyPatternLines([])
+          setApplyAmountRange(null)
+        }}
+      />
+
+      {/* パターン詳細ダイアログ */}
+      <PatternDetailDialog
+        open={patternDetailId !== null}
+        patternId={patternDetailId}
+        onClose={() => setPatternDetailId(null)}
+      />
     </div>
   )
 }

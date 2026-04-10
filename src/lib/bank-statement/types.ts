@@ -53,6 +53,7 @@ export interface JournalEntry {
   creditBusinessType: string
   description: string
   originalDescription: string  // 通帳から読み取った元の摘要（パターン学習用）
+  patternId?: string | null    // パターン学習から生成された場合のパターンID
   isCompound: boolean
   parentId: string | null
 }

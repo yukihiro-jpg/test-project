@@ -23,6 +23,7 @@ interface Props {
   onLearn: () => void
   onAddBlank: () => void
   onSubAccountRegister: (parentCode: string, subCode: string, name: string) => void
+  onPatternClick?: (patternId: string) => void
 }
 
 const REQUIRED_FIELDS: (keyof JournalEntry)[] = ['debitCode', 'creditCode', 'debitTaxCode', 'debitTaxType']
@@ -36,7 +37,7 @@ export default function JournalEntryRow({
   entry, isSelected, accountMaster, subAccountMaster,
   isPageBoundary, pageLabel, runningBalance, rowNumber,
   isCompoundGroup, isCompoundFirst, isCompoundLast, compoundAutoAmount,
-  onSelect, onChange, onAddCompound, onDelete, onLearn, onAddBlank, onSubAccountRegister,
+  onSelect, onChange, onAddCompound, onDelete, onLearn, onAddBlank, onSubAccountRegister, onPatternClick,
 }: Props) {
   const amount = entry.debitAmount || entry.creditAmount || 0
   const hasAutoCalc = compoundAutoAmount != null && compoundAutoAmount !== 0
@@ -76,12 +77,12 @@ export default function JournalEntryRow({
     <>
       {isPageBoundary && (
         <tr className="bg-teal-600">
-          <td colSpan={10} className="px-3 py-1 text-xs font-bold text-white">{pageLabel} ページ</td>
+          <td colSpan={11} className="px-3 py-1 text-xs font-bold text-white">{pageLabel} ページ</td>
         </tr>
       )}
       {isCompoundFirst && (
         <tr>
-          <td colSpan={10} className="px-3 py-0.5 text-xs font-bold text-red-600 bg-red-50 border-t-2 border-l-2 border-r-2 border-red-400">複合仕訳</td>
+          <td colSpan={11} className="px-3 py-0.5 text-xs font-bold text-red-600 bg-red-50 border-t-2 border-l-2 border-r-2 border-red-400">複合仕訳</td>
         </tr>
       )}
       <tr
@@ -93,6 +94,21 @@ export default function JournalEntryRow({
         }}
         onClick={() => onSelect(entry.id)}
       >
+        {/* 学習 */}
+        <td style={CB} className="text-center">
+          {entry.patternId ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onPatternClick?.(entry.patternId!) }}
+              className="text-amber-500 hover:text-amber-600 text-base font-bold"
+              title="パターン学習から生成（クリックで詳細）"
+            >
+              ★
+            </button>
+          ) : (
+            <span className="text-gray-300 text-sm">—</span>
+          )}
+        </td>
+
         {/* 日付 */}
         <td style={CB}>
           <CellInput value={entry.date} onChange={(v) => onChange(entry.id, 'date', v)} placeholder="YYYYMMDD" halfWidth />
