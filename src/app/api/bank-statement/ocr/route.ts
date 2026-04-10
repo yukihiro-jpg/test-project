@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey)
-    const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+    const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
     console.log(`Using Gemini model: ${modelName}`)
     const model = genAI.getGenerativeModel({ model: modelName })
 
