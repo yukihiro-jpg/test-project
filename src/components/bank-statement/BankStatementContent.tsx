@@ -68,14 +68,19 @@ export default function BankStatementContent() {
       setUploadConfig(config)
 
       try {
-        setLoadingProgress(30)
+        setLoadingProgress(15)
+        // 自然な進捗: 最初は速く、後半はゆっくり（99%まで到達して待つ感じにしない）
+        const startTime = Date.now()
         const progressTimer = setInterval(() => {
-          setLoadingProgress((p) => Math.min(p + 5, 90))
-        }, 500)
+          const elapsed = (Date.now() - startTime) / 1000
+          // 指数関数で徐々に遅くなる: 0→60%は速い、60→95%はゆっくり
+          const progress = Math.min(15 + 80 * (1 - Math.exp(-elapsed / 8)), 95)
+          setLoadingProgress(Math.round(progress))
+        }, 200)
 
         const result = await parseFile(config.file)
         clearInterval(progressTimer)
-        setLoadingProgress(95)
+        setLoadingProgress(100)
 
         if (result.needsColumnMapping && result.rawPages) {
           setRawPages(result.rawPages)

@@ -34,7 +34,7 @@ export default function JournalEntryRow({
   onSelect, onChange, onAddCompound, onDelete, onLearn, onAddBlank, onSubAccountRegister,
 }: Props) {
   const amount = entry.debitAmount || entry.creditAmount || 0
-  const displayAmount = isCompoundLast && compoundAutoAmount != null ? compoundAutoAmount : amount
+  const displayAmount = compoundAutoAmount != null && compoundAutoAmount !== 0 ? compoundAutoAmount : amount
 
   const handleAmountChange = (v: string) => {
     const num = parseInt(v.replace(/[^0-9]/g, '')) || 0
@@ -119,7 +119,7 @@ export default function JournalEntryRow({
 
         {/* 金額 */}
         <td style={cellBorder}>
-          {isCompoundLast && compoundAutoAmount != null ? (
+          {compoundAutoAmount != null && compoundAutoAmount !== 0 ? (
             <span className="block px-2 py-1 text-sm text-right font-bold text-violet-700 tabular-nums">
               {displayAmount.toLocaleString()}
             </span>
@@ -140,7 +140,7 @@ export default function JournalEntryRow({
 
         {/* 税CD */}
         <td style={cellBorder} className={emptyBg('debitTaxCode')}>
-          <CellInput value={entry.debitTaxCode} onChange={(v) => onChange(entry.id, 'debitTaxCode', v)} />
+          <CellInput value={entry.debitTaxCode} onChange={(v) => onChange(entry.id, 'debitTaxCode', v)} halfWidth />
         </td>
 
         {/* 税区分 */}
@@ -168,17 +168,26 @@ export default function JournalEntryRow({
 
 const cellBorder: React.CSSProperties = { borderRight: '1px solid #94a3b8', padding: '2px 4px' }
 
+// 全角→半角変換
+function toHalfWidth(str: string): string {
+  return str.replace(/[０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+    .replace(/[Ａ-Ｚａ-ｚ]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+}
+
 // 汎用セル入力
-function CellInput({ value, onChange, placeholder, align, onFocus, onBlur }: {
+function CellInput({ value, onChange, placeholder, align, onFocus, onBlur, halfWidth }: {
   value: string; onChange: (v: string) => void; placeholder?: string; align?: string
   onFocus?: (e: React.FocusEvent<HTMLInputElement>) => void
   onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void
+  halfWidth?: boolean
 }) {
   return (
     <input type="text" value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => onChange(halfWidth ? toHalfWidth(e.target.value) : e.target.value)}
       onFocus={onFocus} onBlur={onBlur}
       onKeyDown={handleCellNav} placeholder={placeholder}
+      inputMode={halfWidth ? 'numeric' : undefined}
+      style={halfWidth ? { imeMode: 'disabled' } as React.CSSProperties : undefined}
       className={`w-full px-1.5 py-1 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800 ${align === 'right' ? 'text-right font-medium tabular-nums' : ''}`} />
   )
 }
@@ -228,11 +237,12 @@ function AccountField({
   return (
     <div ref={ref} className="relative cursor-text" onClick={handleCellClick}>
       <div className="flex items-center gap-1 min-h-[28px]">
-        <input ref={inputRef} type="text" value={inputValue}
-          onChange={(e) => { setInputValue(e.target.value); setShowSuggest(true) }}
+        <input ref={inputRef} type="text" inputMode="numeric" value={inputValue}
+          onChange={(e) => { const v = toHalfWidth(e.target.value); setInputValue(v); setShowSuggest(true) }}
           onFocus={() => setShowSuggest(true)}
           onBlur={() => setTimeout(() => { if (!showSuggest) onCodeChange(inputValue) }, 300)}
           onKeyDown={handleCellNav}
+          style={{ imeMode: 'disabled' } as React.CSSProperties}
           className="w-12 shrink-0 px-1 py-0.5 text-sm text-blue-700 font-bold bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded" />
         <span className="text-sm text-gray-800 font-semibold truncate flex-1">{name}</span>
         {subName && <span className="text-xs text-gray-500 truncate">[{subName}]</span>}
