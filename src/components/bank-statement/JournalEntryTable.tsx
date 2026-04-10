@@ -200,14 +200,14 @@ export default function JournalEntryTable({
         <table className="w-full text-sm border-collapse min-w-[900px]">
           <thead className="sticky top-0 bg-gray-600 text-white z-10">
             <tr>
-              <th className="px-2 py-2 text-left w-24 font-medium border-r border-gray-500">日付</th>
-              <th className="px-2 py-2 text-left w-40 font-medium border-r border-gray-500">借方科目</th>
-              <th className="px-2 py-2 text-left w-40 font-medium border-r border-gray-500">貸方科目</th>
-              <th className="px-2 py-2 text-right w-24 font-medium border-r border-gray-500">金額</th>
-              <th className="px-2 py-2 text-right w-28 font-medium border-r border-gray-500">残高</th>
-              <th className="px-2 py-2 text-left w-14 font-medium border-r border-gray-500">税CD</th>
-              <th className="px-2 py-2 text-left w-20 font-medium border-r border-gray-500">税区分</th>
-              <th className="px-2 py-2 text-left font-medium border-r border-gray-500">摘要</th>
+              <th className="px-2 py-2 text-center w-24 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>日付</th>
+              <th className="px-2 py-2 text-center w-44 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>借方科目</th>
+              <th className="px-2 py-2 text-center w-44 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>貸方科目</th>
+              <th className="px-2 py-2 text-center w-24 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>金額</th>
+              <th className="px-2 py-2 text-center w-28 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>残高</th>
+              <th className="px-2 py-2 text-center w-14 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>税CD</th>
+              <th className="px-2 py-2 text-center w-20 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>税区分</th>
+              <th className="px-2 py-2 text-center font-medium" style={{ borderRight: '1px solid #94a3b8' }}>摘要</th>
               <th className="px-1 py-2 w-14 font-medium"></th>
             </tr>
           </thead>

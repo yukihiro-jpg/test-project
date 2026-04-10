@@ -32,6 +32,7 @@ export default function BankStatementContent() {
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [uploadConfig, setUploadConfig] = useState<UploadConfig | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
 
@@ -62,11 +63,19 @@ export default function BankStatementContent() {
   const handleUpload = useCallback(
     async (config: UploadConfig) => {
       setIsLoading(true)
+      setLoadingProgress(10)
       setError(null)
       setUploadConfig(config)
 
       try {
+        setLoadingProgress(30)
+        const progressTimer = setInterval(() => {
+          setLoadingProgress((p) => Math.min(p + 5, 90))
+        }, 500)
+
         const result = await parseFile(config.file)
+        clearInterval(progressTimer)
+        setLoadingProgress(95)
 
         if (result.needsColumnMapping && result.rawPages) {
           setRawPages(result.rawPages)
@@ -98,6 +107,7 @@ export default function BankStatementContent() {
         setError(err instanceof Error ? err.message : 'ファイルの解析に失敗しました')
       } finally {
         setIsLoading(false)
+        setLoadingProgress(0)
       }
     },
     [applyParseResultFn],
@@ -165,7 +175,7 @@ export default function BankStatementContent() {
   })()
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100">
+    <div className="h-screen flex flex-col bg-gray-100 bank-statement-app">
       {/* ヘッダー */}
       <header className="bg-gray-800 px-4 py-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
@@ -220,8 +230,17 @@ export default function BankStatementContent() {
 
       {/* ローディング */}
       {isLoading && (
-        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 text-sm text-blue-700">
-          ファイルを解析中...
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-blue-700 shrink-0">ファイルを解析中...</span>
+            <div className="flex-1 h-2 bg-blue-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-600 rounded-full transition-all duration-300"
+                style={{ width: `${loadingProgress}%` }}
+              />
+            </div>
+            <span className="text-xs text-blue-500 w-8 text-right">{loadingProgress}%</span>
+          </div>
         </div>
       )}
 

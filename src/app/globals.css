@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 通帳CSV変換用フォント - Apple SF Pro / San Francisco */
+.bank-statement-app {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Shift範囲選択時にテキスト選択を防止 */
+.bank-statement-app ::selection {
+  background: transparent;
+}
+
 html, body {
   /* プルツーリフレッシュ無効化（iOS含む全モバイル対応） */
   overscroll-behavior-y: contain;
