@@ -77,10 +77,8 @@ export interface SubAccountItem {
   association?: string  // 連想
 }
 
-// 学習パターン
-export interface PatternEntry {
-  keyword: string               // 通帳の元の摘要（マッチング用）
-  convertedDescription: string  // 変換後の摘要（表示用）
+// 学習パターン（1行分の仕訳）
+export interface PatternLine {
   debitCode: string
   debitName: string
   creditCode: string
@@ -88,7 +86,26 @@ export interface PatternEntry {
   taxCode: string
   taxCategory: string
   businessType: string
+  description: string        // 変換後の摘要
+}
+
+// 学習パターン
+export interface PatternEntry {
+  id: string                   // 一意ID
+  keyword: string              // 通帳の元の摘要（マッチング用）
+  amountMin: number | null     // 金額下限（null=制限なし）
+  amountMax: number | null     // 金額上限（null=制限なし）
+  lines: PatternLine[]         // 仕訳行（1行 or 複合仕訳で複数行）
   useCount: number
+  // 旧互換フィールド
+  convertedDescription?: string
+  debitCode?: string
+  debitName?: string
+  creditCode?: string
+  creditName?: string
+  taxCode?: string
+  taxCategory?: string
+  businessType?: string
 }
 
 // パース結果のraw行データ（列マッピング用）

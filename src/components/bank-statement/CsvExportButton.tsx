@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { JournalEntry } from '@/lib/bank-statement/types'
 import { downloadCsv } from '@/lib/bank-statement/csv-generator'
+import { learnAllFromEntries } from '@/lib/bank-statement/pattern-store'
 
 interface Props {
   entries: JournalEntry[]
@@ -31,6 +32,9 @@ export default function CsvExportButton({ entries, dateFrom, dateTo, onDateFromC
       return
     }
     downloadCsv(filteredEntries)
+    // 一括パターン学習
+    const learned = learnAllFromEntries(filteredEntries)
+    console.log(`${learned}件のパターンを学習しました`)
     setShowPanel(false)
   }
 

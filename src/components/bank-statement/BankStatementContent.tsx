@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import UploadDialog from '@/components/bank-statement/UploadDialog'
 import AccountMasterUploader from '@/components/bank-statement/AccountMasterUploader'
+import PatternListDialog from '@/components/bank-statement/PatternListDialog'
 import StatementViewer from '@/components/bank-statement/StatementViewer'
 import JournalEntryTable from '@/components/bank-statement/JournalEntryTable'
 import ColumnMappingDialog from '@/components/bank-statement/ColumnMappingDialog'
@@ -37,6 +38,7 @@ export default function BankStatementContent() {
   const [info, setInfo] = useState<string | null>(null)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [showPatternList, setShowPatternList] = useState(false)
 
   // 列マッピング用state
   const [showColumnMapping, setShowColumnMapping] = useState(false)
@@ -207,6 +209,10 @@ export default function BankStatementContent() {
             onAccountUpdate={handleAccountMasterUpdate}
             onSubAccountUpdate={handleSubAccountMasterUpdate}
           />
+          <button onClick={() => setShowPatternList(true)}
+            className="px-3 py-1.5 text-xs font-medium bg-white/10 hover:bg-white/20 text-white rounded border border-white/20">
+            パターン一覧
+          </button>
           <UploadDialog
             accountMaster={accountMaster}
             onUpload={handleUpload}
@@ -315,6 +321,9 @@ export default function BankStatementContent() {
           }}
         />
       )}
+
+      {/* パターン一覧ダイアログ */}
+      <PatternListDialog open={showPatternList} onClose={() => setShowPatternList(false)} />
     </div>
   )
 }

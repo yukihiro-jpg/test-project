@@ -34,20 +34,24 @@ export function mapTransactionsToJournalEntries(
       const isDeposit = (tx.deposit ?? 0) > 0
       const amount = isDeposit ? tx.deposit! : tx.withdrawal!
 
-      // 学習パターンから科目を推定
-      const pattern = findPattern(patterns, tx.description)
+      // 学習パターンから科目を推定（金額も考慮）
+      const pattern = findPattern(patterns, tx.description, amount)
 
       let entry: JournalEntry
 
+      // パターンの最初の行から科目情報を取得
+      const pLine = pattern?.lines?.[0]
+      const pDebitCode = pLine?.debitCode || pattern?.debitCode || ''
+      const pDebitName = pLine?.debitName || pattern?.debitName || ''
+      const pCreditCode = pLine?.creditCode || pattern?.creditCode || ''
+      const pCreditName = pLine?.creditName || pattern?.creditName || ''
+      const pTaxCode = pLine?.taxCode || pattern?.taxCode || ''
+      const pTaxCategory = pLine?.taxCategory || pattern?.taxCategory || ''
+      const pBusinessType = pLine?.businessType || pattern?.businessType || ''
+
       if (isDeposit) {
-        // 入金: 借方=預金口座、貸方=相手科目（パターンから推定）
-        // 貸方にはパターンの「通帳でない側」のコードを設定
-        const counterCode = pattern
-          ? (pattern.creditCode !== accountCode ? pattern.creditCode : pattern.debitCode !== accountCode ? pattern.debitCode : '')
-          : ''
-        const counterName = pattern
-          ? (pattern.creditCode !== accountCode ? pattern.creditName : pattern.debitCode !== accountCode ? pattern.debitName : '')
-          : ''
+        const counterCode = pattern ? (pCreditCode !== accountCode ? pCreditCode : pDebitCode !== accountCode ? pDebitCode : '') : ''
+        const counterName = pattern ? (pCreditCode !== accountCode ? pCreditName : pDebitCode !== accountCode ? pDebitName : '') : ''
         entry = createEntry(tx, {
           debitCode: accountCode,
           debitName: accountName,
@@ -55,18 +59,13 @@ export function mapTransactionsToJournalEntries(
           creditCode: counterCode,
           creditName: counterName,
           creditAmount: amount,
-          taxCode: pattern?.taxCode || '',
-          taxCategory: pattern?.taxCategory || '',
-          businessType: pattern?.businessType || '',
+          taxCode: pTaxCode,
+          taxCategory: pTaxCategory,
+          businessType: pBusinessType,
         })
       } else {
-        // 出金: 借方=相手科目（パターンから推定）、貸方=預金口座
-        const counterCode = pattern
-          ? (pattern.debitCode !== accountCode ? pattern.debitCode : pattern.creditCode !== accountCode ? pattern.creditCode : '')
-          : ''
-        const counterName = pattern
-          ? (pattern.debitCode !== accountCode ? pattern.debitName : pattern.creditCode !== accountCode ? pattern.creditName : '')
-          : ''
+        const counterCode = pattern ? (pDebitCode !== accountCode ? pDebitCode : pCreditCode !== accountCode ? pCreditCode : '') : ''
+        const counterName = pattern ? (pDebitCode !== accountCode ? pDebitName : pCreditCode !== accountCode ? pCreditName : '') : ''
         entry = createEntry(tx, {
           debitCode: counterCode,
           debitName: counterName,
@@ -75,16 +74,36 @@ export function mapTransactionsToJournalEntries(
           creditName: accountName,
           creditAmount: amount,
           taxCode: pattern?.taxCode || '',
-          taxCategory: pattern?.taxCategory || '',
-          businessType: pattern?.businessType || '',
+          taxCategory: pTaxCategory,
+          businessType: pBusinessType,
         })
+      }
+
+      // パターンの変換後摘要があれば適用
+      if (pattern?.lines?.[0]?.description) {
+        entry.description = pattern.lines[0].description
+      } else if (pattern?.convertedDescription) {
+        entry.description = pattern.convertedDescription
       }
 
       entries.push(entry)
 
-      // パターンの変換後摘要があれば適用
-      if (pattern?.convertedDescription) {
-        entry.description = pattern.convertedDescription
+      // パターンが複合仕訳（複数行）の場合、追加行を生成
+      if (pattern?.lines && pattern.lines.length > 1) {
+        for (let li = 1; li < pattern.lines.length; li++) {
+          const line = pattern.lines[li]
+          const compoundEntry = createCompoundEntry(entry)
+          compoundEntry.debitCode = line.debitCode
+          compoundEntry.debitName = line.debitName
+          compoundEntry.creditCode = line.creditCode
+          compoundEntry.creditName = line.creditName
+          compoundEntry.debitTaxCode = line.taxCode
+          compoundEntry.debitTaxType = line.taxCategory
+          compoundEntry.debitBusinessType = line.businessType
+          compoundEntry.description = line.description
+          compoundEntry.originalDescription = tx.description
+          entries.push(compoundEntry)
+        }
       }
     }
   }

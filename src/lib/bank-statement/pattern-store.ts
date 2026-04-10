@@ -1,12 +1,38 @@
-import type { PatternEntry } from './types'
+import type { PatternEntry, PatternLine, JournalEntry } from './types'
 
 const STORAGE_KEY = 'bank-statement-patterns'
+
+let idCounter = 0
+function generatePatternId(): string {
+  return `pat-${Date.now()}-${++idCounter}`
+}
 
 export function getPatterns(): PatternEntry[] {
   if (typeof window === 'undefined') return []
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) return JSON.parse(stored)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      // 旧形式からの変換
+      return parsed.map((p: PatternEntry) => {
+        if (!p.id) p.id = generatePatternId()
+        if (!p.lines) {
+          p.lines = [{
+            debitCode: p.debitCode || '',
+            debitName: p.debitName || '',
+            creditCode: p.creditCode || '',
+            creditName: p.creditName || '',
+            taxCode: p.taxCode || '',
+            taxCategory: p.taxCategory || '',
+            businessType: p.businessType || '',
+            description: p.convertedDescription || '',
+          }]
+        }
+        if (p.amountMin === undefined) p.amountMin = null
+        if (p.amountMax === undefined) p.amountMax = null
+        return p
+      })
+    }
   } catch { /* ignore */ }
   return []
 }
@@ -17,38 +43,119 @@ export function savePatterns(patterns: PatternEntry[]): void {
 }
 
 /**
- * 摘要キーワードからパターンを検索する
+ * 摘要と金額からパターンを検索
  */
 export function findPattern(
   patterns: PatternEntry[],
   description: string,
+  amount?: number,
 ): PatternEntry | null {
   if (!description) return null
   const desc = description.toLowerCase()
 
-  // 完全一致
-  const exact = patterns
-    .filter((p) => p.keyword.toLowerCase() === desc)
-    .sort((a, b) => b.useCount - a.useCount)
-  if (exact.length > 0) return exact[0]
+  // 完全一致 + 金額範囲チェック
+  const matches = patterns
+    .filter((p) => {
+      const keyMatch = p.keyword.toLowerCase() === desc ||
+        desc.includes(p.keyword.toLowerCase()) ||
+        p.keyword.toLowerCase().includes(desc)
+      if (!keyMatch) return false
+      // 金額範囲チェック
+      if (amount != null) {
+        if (p.amountMin != null && amount < p.amountMin) return false
+        if (p.amountMax != null && amount > p.amountMax) return false
+      }
+      return true
+    })
+    .sort((a, b) => {
+      // 完全一致を優先
+      const aExact = a.keyword.toLowerCase() === desc ? 1 : 0
+      const bExact = b.keyword.toLowerCase() === desc ? 1 : 0
+      if (aExact !== bExact) return bExact - aExact
+      // 金額範囲が狭い方を優先（より具体的）
+      const aRange = (a.amountMax ?? Infinity) - (a.amountMin ?? 0)
+      const bRange = (b.amountMax ?? Infinity) - (b.amountMin ?? 0)
+      if (aRange !== bRange) return aRange - bRange
+      return b.useCount - a.useCount
+    })
 
-  // 部分一致
-  const partial = patterns
-    .filter((p) =>
-      desc.includes(p.keyword.toLowerCase()) ||
-      p.keyword.toLowerCase().includes(desc),
-    )
-    .sort((a, b) => b.useCount - a.useCount)
-  if (partial.length > 0) return partial[0]
-
-  return null
+  return matches.length > 0 ? matches[0] : null
 }
 
 /**
- * パターン学習
- * originalDescription: 通帳から読み取った元の摘要
- * convertedDescription: ユーザーが修正した後の摘要
+ * 仕訳行からパターンを学習（1行 or 複合仕訳の複数行）
  */
+export function learnFromEntries(
+  originalDescription: string,
+  entries: JournalEntry[],
+  amount: number,
+): void {
+  if (!originalDescription || entries.length === 0) return
+
+  const patterns = getPatterns()
+
+  const lines: PatternLine[] = entries.map((e) => ({
+    debitCode: e.debitCode,
+    debitName: e.debitName,
+    creditCode: e.creditCode,
+    creditName: e.creditName,
+    taxCode: e.debitTaxCode,
+    taxCategory: e.debitTaxType,
+    businessType: e.debitBusinessType,
+    description: e.description,
+  }))
+
+  // 同じキーワードで金額範囲が重なるパターンがあれば更新
+  const existing = patterns.find(
+    (p) => p.keyword.toLowerCase() === originalDescription.toLowerCase() &&
+      isAmountInRange(amount, p.amountMin, p.amountMax),
+  )
+
+  if (existing) {
+    existing.useCount++
+    existing.lines = lines
+  } else {
+    patterns.push({
+      id: generatePatternId(),
+      keyword: originalDescription,
+      amountMin: null,
+      amountMax: null,
+      lines,
+      useCount: 1,
+    })
+  }
+
+  savePatterns(patterns)
+}
+
+/**
+ * CSV出力時に全仕訳を一括パターン学習
+ */
+export function learnAllFromEntries(entries: JournalEntry[]): number {
+  let learnedCount = 0
+
+  // transactionIdでグループ化（複合仕訳対応）
+  const groups: Record<string, JournalEntry[]> = {}
+  for (const e of entries) {
+    const groupId = e.parentId || e.id
+    if (!groups[groupId]) groups[groupId] = []
+    groups[groupId].push(e)
+  }
+
+  for (const [, group] of Object.entries(groups)) {
+    const primary = group[0]
+    const originalDesc = primary.originalDescription
+    if (!originalDesc) continue
+    const amount = primary.debitAmount || primary.creditAmount || 0
+
+    learnFromEntries(originalDesc, group, amount)
+    learnedCount++
+  }
+
+  return learnedCount
+}
+
+// 旧互換: learnPattern関数
 export function learnPattern(
   originalDescription: string,
   convertedDescription: string,
@@ -65,27 +172,22 @@ export function learnPattern(
     (p) => p.keyword.toLowerCase() === originalDescription.toLowerCase(),
   )
 
+  const line: PatternLine = {
+    debitCode, debitName, creditCode, creditName,
+    taxCode, taxCategory, businessType,
+    description: convertedDescription,
+  }
+
   if (existing) {
     existing.useCount++
-    existing.convertedDescription = convertedDescription
-    existing.debitCode = debitCode
-    existing.debitName = debitName
-    existing.creditCode = creditCode
-    existing.creditName = creditName
-    existing.taxCode = taxCode
-    existing.taxCategory = taxCategory
-    existing.businessType = businessType
+    existing.lines = [line]
   } else {
     patterns.push({
+      id: generatePatternId(),
       keyword: originalDescription,
-      convertedDescription,
-      debitCode,
-      debitName,
-      creditCode,
-      creditName,
-      taxCode,
-      taxCategory,
-      businessType,
+      amountMin: null,
+      amountMax: null,
+      lines: [line],
       useCount: 1,
     })
   }
@@ -93,24 +195,43 @@ export function learnPattern(
   savePatterns(patterns)
 }
 
+export function deletePattern(id: string): void {
+  const patterns = getPatterns().filter((p) => p.id !== id)
+  savePatterns(patterns)
+}
+
+export function updatePatternAmountRange(
+  id: string,
+  amountMin: number | null,
+  amountMax: number | null,
+): void {
+  const patterns = getPatterns()
+  const p = patterns.find((p) => p.id === id)
+  if (p) {
+    p.amountMin = amountMin
+    p.amountMax = amountMax
+    savePatterns(patterns)
+  }
+}
+
 export function clearPatterns(): void {
   if (typeof window === 'undefined') return
   localStorage.removeItem(STORAGE_KEY)
 }
 
-/**
- * パターンをJSON文字列としてエクスポート
- */
 export function exportPatterns(): string {
   return JSON.stringify(getPatterns(), null, 2)
 }
 
-/**
- * パターンをJSONからインポート
- */
 export function importPatterns(json: string): number {
   const imported: PatternEntry[] = JSON.parse(json)
   if (!Array.isArray(imported)) return 0
   savePatterns(imported)
   return imported.length
+}
+
+function isAmountInRange(amount: number, min: number | null, max: number | null): boolean {
+  if (min != null && amount < min) return false
+  if (max != null && amount > max) return false
+  return true
 }
