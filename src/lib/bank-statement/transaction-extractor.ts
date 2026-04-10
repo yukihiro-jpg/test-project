@@ -5,7 +5,7 @@ import type {
   RawTableRow,
   ColumnMapping,
 } from './types'
-import { parsePdfText, renderPdfPageToImage } from './pdf-text-parser'
+import { parsePdfText, renderPdfPageToImage, getPdfPageCount } from './pdf-text-parser'
 import { parseExcel } from './excel-parser'
 import { updatePageBalances } from './balance-validator'
 
@@ -257,7 +257,8 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
   if (!isTextPdf) {
     // スキャンPDF: Gemini APIでOCR処理
     const imageDataUrls: string[] = []
-    const pageCount = rawPages.length || 1
+    const pageCount = rawPages.length > 0 ? rawPages.length : await getPdfPageCount(file)
+    console.log(`Scanned PDF detected: ${pageCount} pages`)
     for (let i = 0; i < pageCount; i++) {
       const imageDataUrl = await renderPdfPageToImage(file, i + 1, 2)
       imageDataUrls.push(imageDataUrl)
@@ -276,6 +277,8 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
       }
 
       const data = await response.json()
+      console.log('Gemini OCR response:', JSON.stringify(data, null, 2))
+
       const geminiPages = data.pages as {
         pageIndex: number
         transactions: {
@@ -285,10 +288,45 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
           withdrawal: number | null
           balance: number
         }[]
+        error?: string
       }[]
 
+      // 全ページの取引数を集計
+      const totalTransactions = geminiPages.reduce(
+        (sum, gp) => sum + (gp.transactions?.length || 0), 0
+      )
+      console.log(`Gemini OCR: ${geminiPages.length}ページ, ${totalTransactions}件の取引を検出`)
+
+      // Geminiが取引データを返さなかった場合
+      if (totalTransactions === 0) {
+        const pageErrors = geminiPages
+          .filter((gp) => gp.error)
+          .map((gp) => gp.error)
+        const errorDetail = pageErrors.length > 0
+          ? pageErrors.join(', ')
+          : 'Gemini APIは応答しましたが、取引データを検出できませんでした'
+
+        const emptyPages: StatementPage[] = imageDataUrls.map((url, i) => ({
+          pageIndex: i,
+          transactions: [],
+          openingBalance: 0,
+          closingBalance: 0,
+          isBalanceValid: true,
+          balanceDifference: 0,
+          imageDataUrl: url,
+        }))
+        return {
+          pages: emptyPages,
+          pageImageUrls: imageDataUrls,
+          sourceType: 'pdf-ocr',
+          needsColumnMapping: false,
+          ocrFailed: true,
+          ocrErrorMessage: errorDetail,
+        }
+      }
+
       const statementPages: StatementPage[] = geminiPages.map((gp, i) => {
-        const transactions: BankTransaction[] = gp.transactions.map((t, rowIdx) => ({
+        const transactions: BankTransaction[] = (gp.transactions || []).map((t, rowIdx) => ({
           id: generateId(),
           pageIndex: i,
           rowIndex: rowIdx,

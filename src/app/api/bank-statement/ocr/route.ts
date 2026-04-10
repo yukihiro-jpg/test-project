@@ -65,16 +65,24 @@ export async function POST(request: NextRequest) {
         ])
 
         const responseText = result.response.text()
+        console.log(`Gemini page ${i} raw response:`, responseText.substring(0, 500))
+
         // JSONを抽出（マークダウンのコードブロック内にある場合も対応）
         const jsonMatch = responseText.match(/\{[\s\S]*"transactions"[\s\S]*\}/)
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0])
+          console.log(`Gemini page ${i}: ${(parsed.transactions || []).length} transactions found`)
           results.push({
             pageIndex: i,
             transactions: parsed.transactions || [],
           })
         } else {
-          results.push({ pageIndex: i, transactions: [] })
+          console.log(`Gemini page ${i}: No JSON found in response`)
+          results.push({
+            pageIndex: i,
+            transactions: [],
+            error: 'Geminiの応答からJSONを抽出できませんでした',
+          })
         }
       } catch (err) {
         console.error(`Gemini OCR error for page ${i}:`, err)
