@@ -37,9 +37,19 @@ export default function JournalEntryTable({
   const [bulkField, setBulkField] = useState<string>('')
   const [bulkValue, setBulkValue] = useState<string>('')
 
-  const handleRowClick = useCallback(
+  const handleRowSelect = useCallback(
+    (entryId: string) => {
+      // 常に選択状態を更新（どのセルクリックでも）
+      setLastClickedId(entryId)
+      onSelect(entryId)
+    },
+    [onSelect],
+  )
+
+  const handleRowShiftClick = useCallback(
     (entryId: string, e: React.MouseEvent) => {
       if (e.shiftKey && lastClickedId) {
+        e.preventDefault()
         const s = entries.findIndex((en) => en.id === lastClickedId)
         const ed = entries.findIndex((en) => en.id === entryId)
         const [from, to] = s < ed ? [s, ed] : [ed, s]
@@ -259,7 +269,7 @@ export default function JournalEntryTable({
                   isCompoundFirst={ci?.isFirst}
                   isCompoundLast={ci?.isLast}
                   compoundAutoAmount={ci?.isLast && ci.autoAmount !== 0 ? ci.autoAmount : undefined}
-                  onSelect={(e) => e ? handleRowClick(entry.id, e) : onSelect(entry.id)}
+                  onSelect={(id: string) => handleRowSelect(id)}
                   onChange={handleEntryChange}
                   onLearn={() => {
                     if (!entry.description) return
