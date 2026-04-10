@@ -111,6 +111,17 @@ export default function JournalEntryTable({
     [entries, onEntriesChange],
   )
 
+  // 仕訳からページインデックスを取得
+  const getPageIndex = (entry: JournalEntry, pgs: StatementPage[]): number => {
+    if (!entry.transactionId) return -1
+    for (const page of pgs) {
+      if (page.transactions.some((t) => t.id === entry.transactionId)) {
+        return page.pageIndex
+      }
+    }
+    return -1
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between shrink-0">
@@ -147,20 +158,30 @@ export default function JournalEntryTable({
             </tr>
           </thead>
           <tbody>
-            {entries.map((entry) => (
-              <JournalEntryRow
-                key={entry.id}
-                entry={entry}
-                isSelected={entry.id === selectedEntryId}
-                accountMaster={accountMaster}
-                onSelect={() => onSelect(entry.id === selectedEntryId ? null : entry.id)}
-                onChange={handleEntryChange}
-                onLearn={() => handleLearnPattern(entry)}
-                onAddBlank={() => handleAddBlankRow(entry.id)}
-                onAddCompound={() => handleAddCompoundRow(entry.id)}
-                onDelete={() => handleDeleteRow(entry.id)}
-              />
-            ))}
+            {entries.map((entry, idx) => {
+              // ページ区切り判定: 前の行と異なるページの場合に太線を表示
+              const prevEntry = idx > 0 ? entries[idx - 1] : null
+              const currentTxPage = getPageIndex(entry, pages)
+              const prevTxPage = prevEntry ? getPageIndex(prevEntry, pages) : currentTxPage
+              const isPageBoundary = idx > 0 && currentTxPage !== prevTxPage && currentTxPage >= 0 && prevTxPage >= 0
+
+              return (
+                <JournalEntryRow
+                  key={entry.id}
+                  entry={entry}
+                  isSelected={entry.id === selectedEntryId}
+                  accountMaster={accountMaster}
+                  isPageBoundary={isPageBoundary}
+                  pageLabel={isPageBoundary ? `P${currentTxPage + 1}` : undefined}
+                  onSelect={() => onSelect(entry.id === selectedEntryId ? null : entry.id)}
+                  onChange={handleEntryChange}
+                  onLearn={() => handleLearnPattern(entry)}
+                  onAddBlank={() => handleAddBlankRow(entry.id)}
+                  onAddCompound={() => handleAddCompoundRow(entry.id)}
+                  onDelete={() => handleDeleteRow(entry.id)}
+                />
+              )
+            })}
           </tbody>
         </table>
       </div>

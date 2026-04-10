@@ -7,6 +7,8 @@ interface Props {
   entry: JournalEntry
   isSelected: boolean
   accountMaster: AccountItem[]
+  isPageBoundary?: boolean
+  pageLabel?: string
   onSelect: () => void
   onChange: (id: string, field: keyof JournalEntry, value: string | number) => void
   onLearn: () => void
@@ -19,6 +21,8 @@ export default function JournalEntryRow({
   entry,
   isSelected,
   accountMaster,
+  isPageBoundary,
+  pageLabel,
   onSelect,
   onChange,
   onLearn,
@@ -45,11 +49,24 @@ export default function JournalEntryRow({
       ? 'bg-gray-50'
       : 'hover:bg-gray-50'
 
+  const borderClass = isPageBoundary
+    ? 'border-t-[3px] border-t-blue-400 border-b border-b-gray-100'
+    : 'border-b border-gray-100'
+
   return (
-    <tr
-      className={`border-b border-gray-100 ${bgClass} cursor-pointer`}
-      onClick={onSelect}
-    >
+    <>
+      {isPageBoundary && (
+        <tr className="bg-blue-50">
+          <td colSpan={12} className="px-2 py-0.5 text-xs font-bold text-blue-600">
+            {pageLabel} ページ
+          </td>
+        </tr>
+      )}
+      <tr
+        className={`${borderClass} ${bgClass} cursor-pointer`}
+        onClick={onSelect}
+        onFocus={onSelect}
+      >
       <td className="px-2 py-1">
         <EditableCell
           value={entry.date}
@@ -174,6 +191,7 @@ export default function JournalEntryRow({
         )}
       </td>
     </tr>
+    </>
   )
 }
 
