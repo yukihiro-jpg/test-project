@@ -214,9 +214,8 @@ function EditableCell({
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      onClick={(e) => e.stopPropagation()}
       placeholder={placeholder}
-      className={`w-full px-1 py-0.5 text-xs border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none rounded bg-transparent ${className}`}
+      className={`w-full px-1.5 py-1 text-sm border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:bg-blue-50 rounded bg-transparent text-gray-800 ${className}`}
     />
   )
 }
@@ -274,9 +273,8 @@ function AccountCodeCell({
             setShowSuggest(false)
           }, 200)
         }}
-        onClick={(e) => e.stopPropagation()}
         placeholder="CD"
-        className="w-full px-1 py-0.5 text-xs border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none rounded bg-transparent"
+        className="w-full px-1.5 py-1 text-sm border border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none focus:bg-blue-50 rounded bg-transparent text-gray-800"
       />
       {showSuggest && filteredItems.length > 0 && (
         <div className="absolute left-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded shadow-lg z-30 max-h-40 overflow-auto">

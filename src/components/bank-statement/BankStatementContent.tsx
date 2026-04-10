@@ -7,6 +7,7 @@ import StatementViewer from '@/components/bank-statement/StatementViewer'
 import JournalEntryTable from '@/components/bank-statement/JournalEntryTable'
 import ColumnMappingDialog from '@/components/bank-statement/ColumnMappingDialog'
 import CsvExportButton from '@/components/bank-statement/CsvExportButton'
+import ResizableSplitPanel from '@/components/bank-statement/ResizableSplitPanel'
 import type {
   StatementPage,
   JournalEntry,
@@ -199,19 +200,19 @@ export default function BankStatementContent() {
 
       {/* メインコンテンツ */}
       {pages.length > 0 ? (
-        <div className="flex flex-1 overflow-hidden">
-          {/* 左パネル: 通帳ビューア */}
-          <div className="w-1/2 border-r border-gray-200 flex flex-col overflow-hidden">
+        <ResizableSplitPanel
+          defaultLeftPercent={35}
+          minLeftPercent={20}
+          maxLeftPercent={60}
+          left={
             <StatementViewer
               pages={pages}
               currentPageIndex={currentPageIndex}
               onPageChange={setCurrentPageIndex}
               selectedTransactionId={selectedTransactionId}
             />
-          </div>
-
-          {/* 右パネル: 仕訳編集テーブル */}
-          <div className="w-1/2 flex flex-col overflow-hidden">
+          }
+          right={
             <JournalEntryTable
               entries={journalEntries}
               accountMaster={accountMaster}
@@ -220,8 +221,8 @@ export default function BankStatementContent() {
               onEntriesChange={setJournalEntries}
               pages={pages}
             />
-          </div>
-        </div>
+          }
+        />
       ) : (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center text-gray-500">

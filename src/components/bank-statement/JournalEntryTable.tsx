@@ -140,21 +140,21 @@ export default function JournalEntryTable({
       </div>
 
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-xs border-collapse min-w-[1200px]">
-          <thead className="sticky top-0 bg-gray-100 z-10">
+        <table className="w-full text-sm border-collapse min-w-[1200px]">
+          <thead className="sticky top-0 bg-gray-700 text-white z-10">
             <tr>
-              <th className="border-b border-gray-300 px-2 py-2 text-left w-20">日付</th>
-              <th className="border-b border-gray-300 px-2 py-2 text-left w-16">借方CD</th>
-              <th className="border-b border-gray-300 px-2 py-2 text-left w-24">借方科目</th>
-              <th className="border-b border-gray-300 px-2 py-2 text-right w-20">借方金額</th>
-              <th className="border-b border-gray-300 px-2 py-2 text-left w-16">貸方CD</th>
-              <th className="border-b border-gray-300 px-2 py-2 text-left w-24">貸方科目</th>
-              <th className="border-b border-gray-300 px-2 py-2 text-right w-20">貸方金額</th>
-              <th className="border-b border-gray-300 px-2 py-2 text-left w-16">税CD</th>
-              <th className="border-b border-gray-300 px-2 py-2 text-left w-20">税区分</th>
-              <th className="border-b border-gray-300 px-2 py-2 text-left w-20">事業者区分</th>
-              <th className="border-b border-gray-300 px-2 py-2 text-left">摘要</th>
-              <th className="border-b border-gray-300 px-2 py-2 w-20">操作</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-left w-24 font-medium">日付</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-left w-16 font-medium">借方CD</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-left w-28 font-medium">借方科目</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-right w-24 font-medium">借方金額</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-left w-16 font-medium">貸方CD</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-left w-28 font-medium">貸方科目</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-right w-24 font-medium">貸方金額</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-left w-16 font-medium">税CD</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-left w-24 font-medium">税区分</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-left w-20 font-medium">事業者</th>
+              <th className="border-b border-gray-600 px-2 py-2 text-left font-medium">摘要</th>
+              <th className="border-b border-gray-600 px-2 py-2 w-16 font-medium">操作</th>
             </tr>
           </thead>
           <tbody>
