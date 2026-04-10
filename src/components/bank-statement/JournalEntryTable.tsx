@@ -116,7 +116,7 @@ export default function JournalEntryTable({
 
   // 複合仕訳グループと997自動計算
   const compoundInfo = useMemo(() => {
-    const info: Record<string, { isGroup: boolean; isLast: boolean; autoAmount: number }> = {}
+    const info: Record<string, { isGroup: boolean; isFirst: boolean; isLast: boolean; autoAmount: number }> = {}
     // 親IDごとにグループ化
     const groups: Record<string, string[]> = {}
     for (const e of entries) {
@@ -125,23 +125,43 @@ export default function JournalEntryTable({
         groups[e.parentId].push(e.id)
       }
     }
-    // 各グループの最終行に997の差額を計算
+    // 997の貸借一致で自動計算
+    // 997が借方にある行の金額合計 = 997が貸方にある行の金額合計
     for (const [parentId, memberIds] of Object.entries(groups)) {
-      const parent = entries.find((e) => e.id === parentId)
-      if (!parent) continue
-      const parentAmount = parent.debitAmount || parent.creditAmount || 0
-      let childTotal = 0
-      for (const mid of memberIds) {
-        if (mid === parentId) continue
-        const child = entries.find((e) => e.id === mid)
-        if (child) childTotal += child.debitAmount || child.creditAmount || 0
-      }
       const lastId = memberIds[memberIds.length - 1]
+      const lastEntry = entries.find((e) => e.id === lastId)
+
+      let debit997Total = 0 // 997が借方にある行の金額合計（最終行以外）
+      let credit997Total = 0 // 997が貸方にある行の金額合計（最終行以外）
+
+      for (const mid of memberIds) {
+        if (mid === lastId) continue // 最終行は計算対象外
+        const entry = entries.find((e) => e.id === mid)
+        if (!entry) continue
+        const amt = entry.debitAmount || entry.creditAmount || 0
+        if (entry.debitCode === '997') debit997Total += amt
+        if (entry.creditCode === '997') credit997Total += amt
+      }
+
+      // 最終行の自動計算: 997の貸借差額
+      let autoAmount = 0
+      if (lastEntry) {
+        if (lastEntry.debitCode === '997') {
+          // 最終行が借方997 → 貸方997合計 - 借方997合計(最終行以外)
+          autoAmount = credit997Total - debit997Total
+        } else if (lastEntry.creditCode === '997') {
+          // 最終行が貸方997 → 借方997合計 - 貸方997合計(最終行以外)
+          autoAmount = debit997Total - credit997Total
+        }
+      }
+
+      const firstId = memberIds[0]
       for (const mid of memberIds) {
         info[mid] = {
           isGroup: true,
+          isFirst: mid === firstId,
           isLast: mid === lastId,
-          autoAmount: mid === lastId ? parentAmount - childTotal : 0,
+          autoAmount: mid === lastId ? autoAmount : 0,
         }
       }
     }
@@ -171,8 +191,13 @@ export default function JournalEntryTable({
     <div className="flex flex-col h-full bg-white">
       <div className="px-4 py-2 bg-gray-700 flex items-center justify-between shrink-0">
         <span className="text-sm font-medium text-white">仕訳データ ({entries.length}件)</span>
-        <button onClick={() => onEntriesChange([...entries, createBlankEntry()])}
-          className="px-3 py-1 text-xs bg-white text-gray-700 font-medium rounded hover:bg-gray-100">+ 行追加</button>
+        <button onClick={() => {
+          const idx = selectedEntryId ? entries.findIndex((e) => e.id === selectedEntryId) : 0
+          const ne = [...entries]
+          ne.splice(Math.max(idx, 0), 0, createBlankEntry())
+          onEntriesChange(ne)
+        }}
+          className="px-3 py-1 text-xs bg-white text-gray-700 font-medium rounded hover:bg-gray-100">+ 選択行の上に1行追加</button>
       </div>
 
       {showBulkEdit && selectedRange.size > 0 && (
@@ -231,6 +256,7 @@ export default function JournalEntryTable({
                   runningBalance={runningBalances[idx]}
                   rowNumber={idx}
                   isCompoundGroup={ci?.isGroup}
+                  isCompoundFirst={ci?.isFirst}
                   isCompoundLast={ci?.isLast}
                   compoundAutoAmount={ci?.isLast ? ci.autoAmount : undefined}
                   onSelect={(e) => e ? handleRowClick(entry.id, e) : onSelect(entry.id)}

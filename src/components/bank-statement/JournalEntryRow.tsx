@@ -13,6 +13,7 @@ interface Props {
   runningBalance?: number
   rowNumber: number
   isCompoundGroup?: boolean
+  isCompoundFirst?: boolean // 複合仕訳グループの最初の行
   isCompoundLast?: boolean
   compoundAutoAmount?: number
   onSelect: (e?: React.MouseEvent) => void
@@ -29,7 +30,7 @@ const REQUIRED_FIELDS: (keyof JournalEntry)[] = ['debitCode', 'creditCode', 'deb
 export default function JournalEntryRow({
   entry, isSelected, accountMaster, subAccountMaster,
   isPageBoundary, pageLabel, runningBalance, rowNumber,
-  isCompoundGroup, isCompoundLast, compoundAutoAmount,
+  isCompoundGroup, isCompoundFirst, isCompoundLast, compoundAutoAmount,
   onSelect, onChange, onAddCompound, onDelete, onLearn, onAddBlank, onSubAccountRegister,
 }: Props) {
   const amount = entry.debitAmount || entry.creditAmount || 0
@@ -74,16 +75,20 @@ export default function JournalEntryRow({
         </tr>
       )}
       {/* 複合仕訳の開始ヘッダー */}
-      {isCompoundGroup && entry.parentId === null && (
-        <tr className="bg-violet-100">
-          <td colSpan={10} className="px-3 py-0.5 text-xs font-bold text-violet-700 border-t-2 border-violet-400">
+      {isCompoundFirst && (
+        <tr>
+          <td colSpan={10} className="px-3 py-0.5 text-xs font-bold text-red-600 bg-red-50 border-t-2 border-l-2 border-r-2 border-red-400">
             複合仕訳
           </td>
         </tr>
       )}
       <tr
         className={`${bgClass} hover:bg-sky-50 cursor-pointer transition-colors`}
-        style={{ borderBottom: '1px solid #cbd5e1' }}
+        style={{
+          borderBottom: isCompoundLast ? '2px solid #f87171' : '1px solid #cbd5e1',
+          borderLeft: isCompoundGroup ? '2px solid #f87171' : undefined,
+          borderRight: isCompoundGroup ? '2px solid #f87171' : undefined,
+        }}
         onClick={(e) => onSelect(e)}
         onFocus={() => onSelect()}
       >
