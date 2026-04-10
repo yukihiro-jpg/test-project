@@ -126,54 +126,42 @@ export default function JournalEntryTable({
       }
     }
     // 997の貸借一致で自動計算
+    // ルール: 複合仕訳グループの最終行の金額を自動計算する
+    // 997借方合計 = 997貸方合計 となるように差額を計算
     for (const [parentId, memberIds] of Object.entries(groups)) {
-      // 997を持つ行のうち、金額が0または未入力の最後の行を自動計算対象にする
-      // なければグループ最終行
       const members = memberIds.map((id) => entries.find((e) => e.id === id)!).filter(Boolean)
+      const lastId = memberIds[memberIds.length - 1]
+      const lastEntry = members[members.length - 1]
 
-      // 自動計算対象: 997を持つ行で金額未入力の最後の行、なければグループ最終行
-      let autoTargetId = memberIds[memberIds.length - 1]
-      for (let i = members.length - 1; i >= 0; i--) {
-        const m = members[i]
-        if ((m.debitCode === '997' || m.creditCode === '997') && !(m.debitAmount || m.creditAmount)) {
-          autoTargetId = m.id
-          break
-        }
-      }
-      // 金額入力済みの行だけなら最終行を自動計算対象にする
-      const autoTarget = entries.find((e) => e.id === autoTargetId)
-
-      // 997の借方合計・貸方合計を計算（自動計算対象行以外）
+      // 最終行以外の997借方合計・貸方合計
       let debit997Total = 0
       let credit997Total = 0
       for (const m of members) {
-        if (m.id === autoTargetId) continue
+        if (m.id === lastId) continue // 最終行は除外
         const amt = m.debitAmount || m.creditAmount || 0
         if (m.debitCode === '997') debit997Total += amt
         if (m.creditCode === '997') credit997Total += amt
       }
 
-      // 自動計算: 997の貸借が一致する金額
+      // 最終行の自動計算
       let autoAmount = 0
-      if (autoTarget) {
-        if (autoTarget.debitCode === '997') {
+      if (lastEntry) {
+        if (lastEntry.debitCode === '997') {
+          // 最終行が借方997: 貸方997合計 - 借方997合計(最終行以外) = 差額
           autoAmount = credit997Total - debit997Total
-        } else if (autoTarget.creditCode === '997') {
+        } else if (lastEntry.creditCode === '997') {
+          // 最終行が貸方997: 借方997合計 - 貸方997合計(最終行以外) = 差額
           autoAmount = debit997Total - credit997Total
-        } else {
-          // 997でない最終行なら計算しない
-          autoAmount = 0
         }
       }
 
       const firstId = memberIds[0]
-      const lastId = memberIds[memberIds.length - 1]
       for (const mid of memberIds) {
         info[mid] = {
           isGroup: true,
           isFirst: mid === firstId,
           isLast: mid === lastId,
-          autoAmount: mid === autoTargetId ? autoAmount : 0,
+          autoAmount: mid === lastId ? autoAmount : 0,
         }
       }
     }
@@ -270,7 +258,7 @@ export default function JournalEntryTable({
                   isCompoundGroup={ci?.isGroup}
                   isCompoundFirst={ci?.isFirst}
                   isCompoundLast={ci?.isLast}
-                  compoundAutoAmount={ci?.autoAmount !== 0 ? ci?.autoAmount : undefined}
+                  compoundAutoAmount={ci?.isLast && ci.autoAmount !== 0 ? ci.autoAmount : undefined}
                   onSelect={(e) => e ? handleRowClick(entry.id, e) : onSelect(entry.id)}
                   onChange={handleEntryChange}
                   onLearn={() => {

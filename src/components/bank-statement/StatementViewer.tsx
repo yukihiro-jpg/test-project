@@ -10,6 +10,7 @@ interface Props {
   onPageChange: (index: number) => void
   entries?: JournalEntry[]
   bankAccountCode?: string
+  onBalanceOverride?: (pageIndex: number, field: 'openingBalance' | 'closingBalance', value: number) => void
 }
 
 const ZOOM_STEP = 10
@@ -23,6 +24,7 @@ export default function StatementViewer({
   onPageChange,
   entries,
   bankAccountCode,
+  onBalanceOverride,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [zoom, setZoom] = useState(100)
@@ -167,7 +169,7 @@ export default function StatementViewer({
       </div>
 
       {/* 残高情報 */}
-      <BalanceInfo page={currentPage} entries={entries} bankAccountCode={bankAccountCode} />
+      <BalanceInfo page={currentPage} entries={entries} bankAccountCode={bankAccountCode} onBalanceOverride={onBalanceOverride} />
     </div>
   )
 }

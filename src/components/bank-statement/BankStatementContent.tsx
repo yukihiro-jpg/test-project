@@ -173,6 +173,15 @@ export default function BankStatementContent() {
     setSubAccountMaster(items)
   }, [])
 
+  const handleBalanceOverride = useCallback(
+    (pageIndex: number, field: 'openingBalance' | 'closingBalance', value: number) => {
+      setPages((prev) =>
+        prev.map((p) => p.pageIndex === pageIndex ? { ...p, [field]: value } : p),
+      )
+    },
+    [],
+  )
+
   const selectedTransactionId = (() => {
     if (!selectedEntryId) return null
     const entry = journalEntries.find((e) => e.id === selectedEntryId)
@@ -262,6 +271,7 @@ export default function BankStatementContent() {
               onPageChange={setCurrentPageIndex}
               entries={journalEntries}
               bankAccountCode={uploadConfig?.accountCode || ''}
+              onBalanceOverride={handleBalanceOverride}
             />
           }
           right={

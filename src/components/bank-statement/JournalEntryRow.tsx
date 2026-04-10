@@ -124,10 +124,7 @@ export default function JournalEntryRow({
               {displayAmount.toLocaleString()}
             </span>
           ) : (
-            <CellInput value={amount ? amount.toLocaleString() : ''} placeholder="0" align="right"
-              onChange={(v) => handleAmountChange(v)}
-              onFocus={(e) => { e.target.value = amount ? String(amount) : '' }}
-              onBlur={(e) => handleAmountChange(e.target.value)} />
+            <AmountInput value={amount} onChange={handleAmountChange} />
           )}
         </td>
 
@@ -319,6 +316,33 @@ function RowMenu({ onLearn, onAddBlank, onDelete }: { onLearn: () => void; onAdd
           <button onClick={() => { onDelete(); setOpen(false) }} className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50">削除</button>
         </div>
       )}
+    </div>
+  )
+}
+
+// 金額入力コンポーネント（フォーカス時は数値編集、非フォーカス時はカンマ表示）
+function AmountInput({ value, onChange }: { value: number; onChange: (v: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [editStr, setEditStr] = useState('')
+
+  return editing ? (
+    <input type="text" inputMode="numeric" autoFocus
+      value={editStr}
+      onChange={(e) => setEditStr(e.target.value.replace(/[^0-9]/g, ''))}
+      onFocus={(e) => e.target.select()}
+      onBlur={() => { onChange(editStr); setEditing(false) }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { onChange(editStr); setEditing(false); handleCellNav(e) }
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { onChange(editStr); setEditing(false); handleCellNav(e) }
+        else if (e.key === 'Escape') setEditing(false)
+      }}
+      className="w-full px-1.5 py-1 text-sm text-right bg-blue-50 border-0 outline-none ring-1 ring-blue-400 rounded font-medium tabular-nums" />
+  ) : (
+    <div tabIndex={0}
+      onClick={() => { setEditStr(value ? String(value) : ''); setEditing(true) }}
+      onFocus={() => { setEditStr(value ? String(value) : ''); setEditing(true) }}
+      className="w-full px-1.5 py-1 text-sm text-right cursor-text rounded font-medium text-gray-800 tabular-nums hover:bg-gray-100 min-h-[28px]">
+      {value ? value.toLocaleString() : ''}
     </div>
   )
 }
