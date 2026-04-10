@@ -4,6 +4,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 export async function POST(request: NextRequest) {
   try {
     const apiKey = process.env.GEMINI_API_KEY
+    console.log('GEMINI_API_KEY loaded:', apiKey ? `${apiKey.substring(0, 8)}...（${apiKey.length}文字）` : '未設定')
+
     if (!apiKey) {
       return NextResponse.json(
         { error: 'GEMINI_API_KEY が設定されていません。.env ファイルに GEMINI_API_KEY を追加してください。' },
@@ -12,6 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { images } = await request.json()
+    console.log(`OCR request: ${images?.length || 0} pages`)
     if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json(
         { error: '画像データがありません' },
@@ -85,11 +88,12 @@ export async function POST(request: NextRequest) {
           })
         }
       } catch (err) {
-        console.error(`Gemini OCR error for page ${i}:`, err)
+        const errMsg = err instanceof Error ? err.message : String(err)
+        console.error(`Gemini OCR error for page ${i}:`, errMsg)
         results.push({
           pageIndex: i,
           transactions: [],
-          error: `ページ${i + 1}の解析に失敗しました`,
+          error: `ページ${i + 1}: ${errMsg}`,
         })
       }
     }
