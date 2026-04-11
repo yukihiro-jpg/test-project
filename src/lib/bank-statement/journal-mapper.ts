@@ -48,8 +48,22 @@ export function mapTransactionsToJournalEntries(
       const pTaxCode = pLine?.taxCode || pattern?.taxCode || ''
       const pTaxCategory = pLine?.taxCategory || pattern?.taxCategory || ''
       const pBusinessType = pLine?.businessType || pattern?.businessType || ''
+      const isCompoundPattern = pattern?.lines && pattern.lines.length > 1
 
-      if (isDeposit) {
+      if (isCompoundPattern && pLine) {
+        // 複合仕訳パターン: パターン全体の科目コードをそのまま使う
+        entry = createEntry(tx, {
+          debitCode: pLine.debitCode,
+          debitName: pLine.debitName,
+          debitAmount: amount,
+          creditCode: pLine.creditCode,
+          creditName: pLine.creditName,
+          creditAmount: amount,
+          taxCode: pTaxCode,
+          taxCategory: pTaxCategory,
+          businessType: pBusinessType,
+        })
+      } else if (isDeposit) {
         const counterCode = pattern ? (pCreditCode !== accountCode ? pCreditCode : pDebitCode !== accountCode ? pDebitCode : '') : ''
         const counterName = pattern ? (pCreditCode !== accountCode ? pCreditName : pDebitCode !== accountCode ? pDebitName : '') : ''
         entry = createEntry(tx, {

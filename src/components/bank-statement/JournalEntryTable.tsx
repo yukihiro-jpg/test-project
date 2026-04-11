@@ -103,13 +103,14 @@ export default function JournalEntryTable({
 
     const targetIds = new Set(applyTargetEntries.map((e) => e.id))
     const firstLine = applyPatternLines[0]
+    const isCompoundPattern = applyPatternLines.length > 1
 
     // パターンから相手勘定コード・名称を取得（通帳科目と違う側）
     const getCounterpart = (line: typeof firstLine) => {
       if (line.debitCode !== bankAccountCode) {
-        return { code: line.debitCode, name: line.debitName, side: 'debit' as const }
+        return { code: line.debitCode, name: line.debitName }
       }
-      return { code: line.creditCode, name: line.creditName, side: 'credit' as const }
+      return { code: line.creditCode, name: line.creditName }
     }
 
     const newEntries: JournalEntry[] = []
@@ -119,23 +120,30 @@ export default function JournalEntryTable({
         continue
       }
       const updatedEntry = { ...e }
-      // 相手勘定コードのみ反映（通帳側は変更しない）
-      const counter = getCounterpart(firstLine)
-      if (e.debitCode === bankAccountCode) {
-        // 対象が入金の場合、貸方を相手勘定にする
-        updatedEntry.creditCode = counter.code
-        updatedEntry.creditName = counter.name
-      } else if (e.creditCode === bankAccountCode) {
-        // 対象が出金の場合、借方を相手勘定にする
-        updatedEntry.debitCode = counter.code
-        updatedEntry.debitName = counter.name
-      } else {
-        // 通帳科目が特定できない場合はパターンの配置そのまま
+
+      if (isCompoundPattern) {
+        // 複合仕訳パターン: パターン全体の科目コードをそのまま反映
         updatedEntry.debitCode = firstLine.debitCode
         updatedEntry.debitName = firstLine.debitName
         updatedEntry.creditCode = firstLine.creditCode
         updatedEntry.creditName = firstLine.creditName
+      } else {
+        // 単一仕訳パターン: 相手勘定コードのみ反映（通帳側は維持）
+        const counter = getCounterpart(firstLine)
+        if (e.debitCode === bankAccountCode) {
+          updatedEntry.creditCode = counter.code
+          updatedEntry.creditName = counter.name
+        } else if (e.creditCode === bankAccountCode) {
+          updatedEntry.debitCode = counter.code
+          updatedEntry.debitName = counter.name
+        } else {
+          updatedEntry.debitCode = firstLine.debitCode
+          updatedEntry.debitName = firstLine.debitName
+          updatedEntry.creditCode = firstLine.creditCode
+          updatedEntry.creditName = firstLine.creditName
+        }
       }
+
       // 摘要・消費税コード・事業者区分を反映
       updatedEntry.description = firstLine.description || e.description
       updatedEntry.debitTaxCode = firstLine.taxCode
@@ -149,8 +157,8 @@ export default function JournalEntryTable({
       if (matchedPat) updatedEntry.patternId = matchedPat.id
       newEntries.push(updatedEntry)
 
-      // 複合仕訳の追加行
-      if (applyPatternLines.length > 1) {
+      // 複合仕訳パターンの追加行をそのまま展開
+      if (isCompoundPattern) {
         for (let i = 1; i < applyPatternLines.length; i++) {
           const line = applyPatternLines[i]
           const compoundEntry = createCompoundEntry(updatedEntry)
