@@ -26,8 +26,11 @@ export function getPatterns(): PatternEntry[] {
             taxCategory: p.taxCategory || '',
             businessType: p.businessType || '',
             description: p.convertedDescription || '',
+            amount: 0,
           }]
         }
+        // 旧データでamountが無い行に0を設定
+        p.lines = p.lines.map((l) => ({ ...l, amount: l.amount ?? 0 }))
         if (p.amountMin === undefined) p.amountMin = null
         if (p.amountMax === undefined) p.amountMax = null
         return p
@@ -103,6 +106,7 @@ export function learnFromEntriesWithRange(
     taxCategory: e.debitTaxType,
     businessType: e.debitBusinessType,
     description: e.description,
+    amount: e.debitAmount || e.creditAmount || 0,
   }))
 
   // 同じキーワード+金額範囲のパターンがあれば更新、なければ新規
@@ -152,6 +156,7 @@ export function learnFromEntries(
     taxCategory: e.debitTaxType,
     businessType: e.debitBusinessType,
     description: e.description,
+    amount: e.debitAmount || e.creditAmount || 0,
   }))
 
   // 同じキーワードで金額範囲が重なるパターンがあれば更新
@@ -225,6 +230,7 @@ export function learnPattern(
     debitCode, debitName, creditCode, creditName,
     taxCode, taxCategory, businessType,
     description: convertedDescription,
+    amount: 0,
   }
 
   if (existing) {

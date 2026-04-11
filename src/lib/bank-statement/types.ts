@@ -88,6 +88,7 @@ export interface PatternLine {
   taxCategory: string
   businessType: string
   description: string        // 変換後の摘要
+  amount: number             // 金額（複合仕訳の各行の金額を保持）
 }
 
 // 学習パターン

@@ -172,6 +172,9 @@ export default function JournalEntryTable({
           compoundEntry.debitBusinessType = line.businessType
           compoundEntry.description = line.description
           compoundEntry.originalDescription = e.originalDescription
+          // パターンの学習時金額を復元（997自動計算対象の最終行以外）
+          compoundEntry.debitAmount = line.amount || 0
+          compoundEntry.creditAmount = line.amount || 0
           newEntries.push(compoundEntry)
         }
       }

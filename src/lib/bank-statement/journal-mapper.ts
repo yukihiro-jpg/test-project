@@ -120,6 +120,9 @@ export function mapTransactionsToJournalEntries(
           compoundEntry.debitBusinessType = line.businessType
           compoundEntry.description = line.description
           compoundEntry.originalDescription = tx.description
+          // パターンの学習時金額を復元
+          compoundEntry.debitAmount = line.amount || 0
+          compoundEntry.creditAmount = line.amount || 0
           entries.push(compoundEntry)
         }
       }
