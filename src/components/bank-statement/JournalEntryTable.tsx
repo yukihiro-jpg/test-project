@@ -284,51 +284,56 @@ export default function JournalEntryTable({
   // 複合仕訳グループと997自動計算
   const compoundInfo = useMemo(() => {
     const info: Record<string, { isGroup: boolean; isFirst: boolean; isLast: boolean; autoAmount: number }> = {}
-    // 親IDごとにグループ化
-    const groups: Record<string, string[]> = {}
+
+    // 複合仕訳グループを構築
+    // entries配列を順番に走査し、entriesの順序でグループメンバーを記録
+    const groupMembers: Record<string, JournalEntry[]> = {}
     for (const e of entries) {
-      if (e.parentId) {
-        if (!groups[e.parentId]) groups[e.parentId] = [e.parentId]
-        groups[e.parentId].push(e.id)
+      // この行は「親」か「子」か判定
+      const hasChildren = entries.some((c) => c.parentId === e.id)
+      const groupKey = e.parentId || (hasChildren ? e.id : null)
+      if (groupKey) {
+        if (!groupMembers[groupKey]) groupMembers[groupKey] = []
+        groupMembers[groupKey].push(e)
       }
     }
+
+    // デバッグ用
+    if (typeof window !== 'undefined') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__compoundDebug = groupMembers
+    }
+
     // 997の貸借一致で自動計算
-    // ルール: 複合仕訳グループの最終行の金額を自動計算する
-    // 997借方合計 = 997貸方合計 となるように差額を計算
-    for (const [parentId, memberIds] of Object.entries(groups)) {
-      const members = memberIds.map((id) => entries.find((e) => e.id === id)!).filter(Boolean)
-      const lastId = memberIds[memberIds.length - 1]
+    for (const [, members] of Object.entries(groupMembers)) {
+      if (members.length === 0) continue
+      const firstEntry = members[0]
       const lastEntry = members[members.length - 1]
 
       // 最終行以外の997借方合計・貸方合計
       let debit997Total = 0
       let credit997Total = 0
       for (const m of members) {
-        if (m.id === lastId) continue // 最終行は除外
+        if (m.id === lastEntry.id) continue // 最終行は除外
         const amt = m.debitAmount || m.creditAmount || 0
         if (m.debitCode === '997') debit997Total += amt
         if (m.creditCode === '997') credit997Total += amt
       }
 
-      // 最終行の自動計算
+      // 最終行の自動計算: 997の貸借が一致する金額
       let autoAmount = 0
-      if (lastEntry) {
-        if (lastEntry.debitCode === '997') {
-          // 最終行が借方997: 貸方997合計 - 借方997合計(最終行以外) = 差額
-          autoAmount = credit997Total - debit997Total
-        } else if (lastEntry.creditCode === '997') {
-          // 最終行が貸方997: 借方997合計 - 貸方997合計(最終行以外) = 差額
-          autoAmount = debit997Total - credit997Total
-        }
+      if (lastEntry.debitCode === '997') {
+        autoAmount = credit997Total - debit997Total
+      } else if (lastEntry.creditCode === '997') {
+        autoAmount = debit997Total - credit997Total
       }
 
-      const firstId = memberIds[0]
-      for (const mid of memberIds) {
-        info[mid] = {
+      for (const m of members) {
+        info[m.id] = {
           isGroup: true,
-          isFirst: mid === firstId,
-          isLast: mid === lastId,
-          autoAmount: mid === lastId ? autoAmount : 0,
+          isFirst: m.id === firstEntry.id,
+          isLast: m.id === lastEntry.id,
+          autoAmount: m.id === lastEntry.id ? autoAmount : 0,
         }
       }
     }
@@ -426,7 +431,7 @@ export default function JournalEntryTable({
                   isCompoundGroup={ci?.isGroup}
                   isCompoundFirst={ci?.isFirst}
                   isCompoundLast={ci?.isLast}
-                  compoundAutoAmount={ci?.isLast && ci.autoAmount !== 0 ? ci.autoAmount : undefined}
+                  compoundAutoAmount={ci?.isLast ? ci.autoAmount : undefined}
                   onSelect={(id: string) => handleRowSelect(id)}
                   onChange={handleEntryChange}
                   onLearn={() => {

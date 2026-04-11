@@ -40,7 +40,7 @@ export default function JournalEntryRow({
   onSelect, onChange, onAddCompound, onDelete, onLearn, onAddBlank, onSubAccountRegister, onPatternClick,
 }: Props) {
   const amount = entry.debitAmount || entry.creditAmount || 0
-  const hasAutoCalc = compoundAutoAmount != null && compoundAutoAmount !== 0
+  const hasAutoCalc = compoundAutoAmount != null
   const displayAmount = hasAutoCalc ? compoundAutoAmount : amount
 
   // 金額編集state
