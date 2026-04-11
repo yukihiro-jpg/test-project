@@ -67,6 +67,59 @@ function escapeCsvField(field: string): string {
   return field
 }
 
+/**
+ * 複合仕訳の最終行の金額を997貸借一致で自動計算して適用する
+ * CSV出力前、学習前に呼び出して金額を確定する
+ */
+export function applyCompoundAutoAmounts(entries: JournalEntry[]): JournalEntry[] {
+  // グループ化
+  const groupMembers: Record<string, JournalEntry[]> = {}
+  for (const e of entries) {
+    const hasChildren = entries.some((c) => c.parentId === e.id)
+    const groupKey = e.parentId || (hasChildren ? e.id : null)
+    if (groupKey) {
+      if (!groupMembers[groupKey]) groupMembers[groupKey] = []
+      groupMembers[groupKey].push(e)
+    }
+  }
+
+  // 最終行の金額を自動計算して反映
+  const updatedIds = new Map<string, number>()
+  for (const [, members] of Object.entries(groupMembers)) {
+    if (members.length === 0) continue
+    const lastEntry = members[members.length - 1]
+
+    let debit997Total = 0
+    let credit997Total = 0
+    for (const m of members) {
+      if (m.id === lastEntry.id) continue
+      const amt = m.debitAmount || m.creditAmount || 0
+      if (m.debitCode === '997') debit997Total += amt
+      if (m.creditCode === '997') credit997Total += amt
+    }
+
+    let autoAmount = 0
+    if (lastEntry.debitCode === '997') {
+      autoAmount = credit997Total - debit997Total
+    } else if (lastEntry.creditCode === '997') {
+      autoAmount = debit997Total - credit997Total
+    }
+
+    if (autoAmount !== 0) {
+      updatedIds.set(lastEntry.id, autoAmount)
+    }
+  }
+
+  // 新しいentries配列を返す
+  return entries.map((e) => {
+    const autoAmount = updatedIds.get(e.id)
+    if (autoAmount != null) {
+      return { ...e, debitAmount: autoAmount, creditAmount: autoAmount }
+    }
+    return e
+  })
+}
+
 export function generateCsv(entries: JournalEntry[]): string {
   const lines: string[] = []
 
@@ -83,7 +136,9 @@ export function generateCsv(entries: JournalEntry[]): string {
 }
 
 export function downloadCsv(entries: JournalEntry[], fileName?: string): void {
-  const csvContent = generateCsv(entries)
+  // 複合仕訳の997自動計算金額を反映してからCSV化
+  const appliedEntries = applyCompoundAutoAmounts(entries)
+  const csvContent = generateCsv(appliedEntries)
 
   // UTF-8 BOM付き（Excel互換）
   const bom = '\uFEFF'
