@@ -49,8 +49,8 @@ export default function JournalEntryRow({
 
   const handleAmountSave = useCallback((v: string) => {
     const num = parseInt(v.replace(/[^0-9]/g, '')) || 0
-    onChange(entry.id, 'debitAmount', num)
-    onChange(entry.id, 'creditAmount', num)
+    // 借方と貸方の両方を同時更新するため、専用のフィールド名を使用
+    onChange(entry.id, '_amount' as keyof JournalEntry, num)
     setEditingAmount(false)
   }, [entry.id, onChange])
 

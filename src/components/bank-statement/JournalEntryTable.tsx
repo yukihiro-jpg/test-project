@@ -104,6 +104,14 @@ export default function JournalEntryTable({
     const targetIds = new Set(applyTargetEntries.map((e) => e.id))
     const firstLine = applyPatternLines[0]
 
+    // パターンから相手勘定コード・名称を取得（通帳科目と違う側）
+    const getCounterpart = (line: typeof firstLine) => {
+      if (line.debitCode !== bankAccountCode) {
+        return { code: line.debitCode, name: line.debitName, side: 'debit' as const }
+      }
+      return { code: line.creditCode, name: line.creditName, side: 'credit' as const }
+    }
+
     const newEntries: JournalEntry[] = []
     for (const e of entries) {
       if (!targetIds.has(e.id)) {
@@ -111,14 +119,29 @@ export default function JournalEntryTable({
         continue
       }
       const updatedEntry = { ...e }
-      updatedEntry.debitCode = firstLine.debitCode
-      updatedEntry.debitName = firstLine.debitName
-      updatedEntry.creditCode = firstLine.creditCode
-      updatedEntry.creditName = firstLine.creditName
+      // 相手勘定コードのみ反映（通帳側は変更しない）
+      const counter = getCounterpart(firstLine)
+      if (e.debitCode === bankAccountCode) {
+        // 対象が入金の場合、貸方を相手勘定にする
+        updatedEntry.creditCode = counter.code
+        updatedEntry.creditName = counter.name
+      } else if (e.creditCode === bankAccountCode) {
+        // 対象が出金の場合、借方を相手勘定にする
+        updatedEntry.debitCode = counter.code
+        updatedEntry.debitName = counter.name
+      } else {
+        // 通帳科目が特定できない場合はパターンの配置そのまま
+        updatedEntry.debitCode = firstLine.debitCode
+        updatedEntry.debitName = firstLine.debitName
+        updatedEntry.creditCode = firstLine.creditCode
+        updatedEntry.creditName = firstLine.creditName
+      }
+      // 摘要・消費税コード・事業者区分を反映
+      updatedEntry.description = firstLine.description || e.description
       updatedEntry.debitTaxCode = firstLine.taxCode
       updatedEntry.debitTaxType = firstLine.taxCategory
       updatedEntry.debitBusinessType = firstLine.businessType
-      updatedEntry.description = firstLine.description || e.description
+
       const patterns = getPatterns()
       const matchedPat = patterns.find((p) =>
         p.keyword.toLowerCase() === (e.originalDescription || '').toLowerCase(),
@@ -126,6 +149,7 @@ export default function JournalEntryTable({
       if (matchedPat) updatedEntry.patternId = matchedPat.id
       newEntries.push(updatedEntry)
 
+      // 複合仕訳の追加行
       if (applyPatternLines.length > 1) {
         for (let i = 1; i < applyPatternLines.length; i++) {
           const line = applyPatternLines[i]
@@ -150,7 +174,7 @@ export default function JournalEntryTable({
     setApplyTargetEntries([])
     setApplyPatternLines([])
     setApplyAmountRange(null)
-  }, [applyTargetEntries, applyPatternLines, entries, onEntriesChange])
+  }, [applyTargetEntries, applyPatternLines, entries, onEntriesChange, bankAccountCode])
 
   const handleRowSelect = useCallback(
     (entryId: string) => {
@@ -199,7 +223,14 @@ export default function JournalEntryTable({
 
   const handleEntryChange = useCallback(
     (id: string, field: keyof JournalEntry, value: string | number) => {
-      onEntriesChange(entries.map((e) => e.id !== id ? e : { ...e, [field]: value }))
+      onEntriesChange(entries.map((e) => {
+        if (e.id !== id) return e
+        // _amount は debitAmount と creditAmount の両方を同時更新する特殊フィールド
+        if (field === '_amount' as keyof JournalEntry) {
+          return { ...e, debitAmount: value as number, creditAmount: value as number }
+        }
+        return { ...e, [field]: value }
+      }))
     },
     [entries, onEntriesChange],
   )
