@@ -106,15 +106,62 @@ export default function BankStatementContent() {
 
       try {
         setLoadingProgress(15)
-        // 自然な進捗: 最初は速く、後半はゆっくり（99%まで到達して待つ感じにしない）
         const startTime = Date.now()
         const progressTimer = setInterval(() => {
           const elapsed = (Date.now() - startTime) / 1000
-          // 指数関数で徐々に遅くなる: 0→60%は速い、60→95%はゆっくり
           const progress = Math.min(15 + 80 * (1 - Math.exp(-elapsed / 8)), 95)
           setLoadingProgress(Math.round(progress))
         }, 200)
 
+        if (config.documentType === 'sales-invoice' || config.documentType === 'purchase-invoice') {
+          // 請求書処理
+          const { renderPdfPageToImage, getPdfPageCount } = await import('@/lib/bank-statement/pdf-text-parser')
+          const pageCount = await getPdfPageCount(config.file)
+          const imageDataUrls: string[] = []
+          for (let i = 0; i < pageCount; i++) {
+            imageDataUrls.push(await renderPdfPageToImage(config.file, i + 1, 2))
+          }
+
+          const invoiceType = config.documentType === 'purchase-invoice' ? 'purchase' : 'sales'
+          const response = await fetch('/api/bank-statement/invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images: imageDataUrls, type: invoiceType }),
+          })
+          clearInterval(progressTimer)
+          setLoadingProgress(100)
+
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}))
+            throw new Error(data.error || '請求書解析に失敗しました')
+          }
+
+          const data = await response.json()
+          const invoices = data.invoices || []
+          if (invoices.length === 0) throw new Error('請求書データを抽出できませんでした')
+
+          // ページ画像を表示用に設定
+          const statementPages = imageDataUrls.map((url, i) => ({
+            pageIndex: i, transactions: [],
+            openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
+            imageDataUrl: url,
+          }))
+          setPages(statementPages)
+          setCurrentPageIndex(0)
+
+          // 仕訳生成
+          const { salesInvoiceToEntries, purchaseInvoiceToEntries } = await import('@/lib/bank-statement/invoice-mapper')
+          const entries = config.documentType === 'sales-invoice'
+            ? salesInvoiceToEntries(invoices, config.debitCode!, config.debitName!, config.creditCode!, config.creditName!)
+            : purchaseInvoiceToEntries(invoices, config.debitCode!, config.debitName!, config.creditCode!, config.creditName!)
+          setJournalEntries(entries)
+          setInfo(`${invoices.length}件の請求書から${entries.length}件の仕訳を生成しました`)
+          setIsLoading(false)
+          setLoadingProgress(0)
+          return
+        }
+
+        // 通帳処理（従来通り）
         const result = await parseFile(config.file)
         clearInterval(progressTimer)
         setLoadingProgress(100)

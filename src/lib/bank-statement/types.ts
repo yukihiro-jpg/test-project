@@ -138,9 +138,35 @@ export interface ParseResult {
   corrections?: string[] // 入出金自動補正のログ
 }
 
+// 書類種別
+export type DocumentType = 'bank-statement' | 'sales-invoice' | 'purchase-invoice'
+
 // アップロード設定
 export interface UploadConfig {
+  documentType: DocumentType
   accountCode: string
   accountName: string
+  // 請求書用: 借方・貸方の科目コード
+  debitCode?: string
+  debitName?: string
+  creditCode?: string
+  creditName?: string
   file: File
+}
+
+// 請求書の解析結果
+export interface InvoiceData {
+  invoiceIndex: number      // PDF内の請求書番号（0始まり）
+  counterpartName: string   // 相手先名称（売上）/ 請求元名称（仕入）
+  invoiceNumber?: string    // インボイス番号（仕入のみ）
+  invoiceDate: string       // 請求日 YYYY-MM-DD
+  mainContent: string       // 主な請求内容
+  taxLines: {
+    taxRate: string         // "10%" | "8%" | "非課税" 等
+    netAmount: number       // 本体価格
+    taxAmount: number       // 消費税額
+    totalAmount: number     // 税込金額
+  }[]
+  pageStart: number         // 開始ページ
+  pageEnd: number           // 終了ページ
 }
