@@ -67,16 +67,13 @@ export default function BankStatementContent() {
     setJournalEntries([])
   }, [])
 
-  // 顧問先選択画面
-  if (showClientSelector) {
-    return <ClientSelector onSelect={handleClientSelect} />
-  }
-
-  // 列マッピング用state
+  // 列マッピング用state（hooksは条件分岐の前に定義する必要がある）
   const [showColumnMapping, setShowColumnMapping] = useState(false)
   const [rawPages, setRawPages] = useState<RawTableRow[][] | null>(null)
   const [pendingSourceType, setPendingSourceType] = useState<ParseResult['sourceType'] | null>(null)
   const [pendingImageUrls, setPendingImageUrls] = useState<string[] | null>(null)
+
+  // 以下は顧問先選択後の処理
 
   const applyParseResultFn = useCallback(
     (result: ParseResult, config: UploadConfig) => {
@@ -225,6 +222,9 @@ export default function BankStatementContent() {
   })()
 
   return (
+    showClientSelector ? (
+      <ClientSelector onSelect={handleClientSelect} />
+    ) : (
     <div className="h-screen flex flex-col bg-gray-100 bank-statement-app">
       {/* ヘッダー */}
       <header className="bg-gray-800 px-4 py-2 flex items-center justify-between shrink-0">
@@ -361,5 +361,6 @@ export default function BankStatementContent() {
       {/* パターン一覧ダイアログ */}
       <PatternListDialog open={showPatternList} onClose={() => setShowPatternList(false)} />
     </div>
+    )
   )
 }
