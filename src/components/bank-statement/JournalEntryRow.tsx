@@ -49,7 +49,7 @@ export default function JournalEntryRow({
 
   const handleAmountSave = useCallback((v: string) => {
     const num = parseInt(v.replace(/[^0-9]/g, '')) || 0
-    // 借方と貸方の両方を同時更新するため、専用のフィールド名を使用
+    console.log(`[AmountSave] id=${entry.id}, value="${v}", num=${num}`)
     onChange(entry.id, '_amount' as keyof JournalEntry, num)
     setEditingAmount(false)
   }, [entry.id, onChange])
@@ -168,19 +168,31 @@ export default function JournalEntryRow({
           </span>
         </td>
 
-        {/* 税CD */}
+        {/* 消費税（CD+区分まとめ） */}
         <td style={CB} className={emptyBg('debitTaxCode')}>
-          <CellInput value={entry.debitTaxCode} onChange={(v) => onChange(entry.id, 'debitTaxCode', v)} halfWidth />
+          <div className="flex items-center gap-0.5">
+            <input type="text" value={entry.debitTaxCode}
+              onChange={(e) => onChange(entry.id, 'debitTaxCode', toHalfWidth(e.target.value))}
+              onKeyDown={handleNav} placeholder="CD" inputMode="numeric"
+              style={{ imeMode: 'disabled' } as React.CSSProperties}
+              className="w-10 shrink-0 px-1 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800" />
+            <input type="text" value={entry.debitTaxType}
+              onChange={(e) => onChange(entry.id, 'debitTaxType', e.target.value)}
+              onKeyDown={handleNav} placeholder="区分"
+              className="flex-1 px-1 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800" />
+          </div>
         </td>
 
-        {/* 税区分 */}
-        <td style={CB} className={emptyBg('debitTaxType')}>
-          <CellInput value={entry.debitTaxType} onChange={(v) => onChange(entry.id, 'debitTaxType', v)} />
-        </td>
-
-        {/* 摘要 */}
+        {/* 摘要（25文字制限） */}
         <td style={CB}>
-          <CellInput value={entry.description} onChange={(v) => onChange(entry.id, 'description', v)} placeholder="摘要" />
+          <input type="text" value={entry.description}
+            onChange={(e) => {
+              const v = e.target.value
+              if (v.length > 25) { alert('摘要は25文字以内で入力してください'); return }
+              onChange(entry.id, 'description', v)
+            }}
+            onKeyDown={handleNav} placeholder="摘要" maxLength={25}
+            className="w-full px-1.5 py-1 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800" />
         </td>
 
         {/* 操作 */}
@@ -245,7 +257,7 @@ function AccountField({
 
   return (
     <div ref={ref} className="relative cursor-text" onClick={() => inputRef.current?.focus()}>
-      <div className="flex items-center gap-1 min-h-[28px]">
+      <div className="flex items-center gap-0 min-h-[28px]">
         <input ref={inputRef} type="text" inputMode="numeric" value={val}
           onChange={(e) => { const v = toHalfWidth(e.target.value); setVal(v); setShow(true) }}
           onFocus={() => setShow(true)}
