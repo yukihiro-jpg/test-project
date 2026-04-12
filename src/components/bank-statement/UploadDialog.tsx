@@ -11,8 +11,10 @@ interface Props {
 
 const DOC_TYPES: { value: DocumentType; label: string }[] = [
   { value: 'bank-statement', label: '通帳' },
+  { value: 'cash-book', label: '現金出納帳' },
   { value: 'sales-invoice', label: '売上請求書' },
   { value: 'purchase-invoice', label: '仕入請求書' },
+  { value: 'receipt', label: 'レシート・領収書' },
 ]
 
 export default function UploadDialog({ accountMaster, onUpload, isLoading }: Props) {
@@ -35,9 +37,18 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading }: Pro
 
   const handleSubmit = () => {
     if (!selectedFile) return
-    if (docType === 'bank-statement') {
+    if (docType === 'bank-statement' || docType === 'cash-book') {
       if (!accountCode || !accountName) return
       onUpload({ documentType: docType, accountCode, accountName, file: selectedFile })
+    } else if (docType === 'receipt') {
+      // レシート: 貸方（支払原資）のみ
+      if (!creditCode || !creditName) return
+      onUpload({
+        documentType: docType,
+        accountCode: creditCode, accountName: creditName,
+        creditCode, creditName,
+        file: selectedFile,
+      })
     } else {
       if (!debitCode || !creditCode) return
       onUpload({
@@ -51,12 +62,16 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading }: Pro
     setSelectedFile(null)
   }
 
-  const isInvoice = docType !== 'bank-statement'
+  const isBankLike = docType === 'bank-statement' || docType === 'cash-book'
+  const isInvoice = docType === 'sales-invoice' || docType === 'purchase-invoice'
+  const isReceipt = docType === 'receipt'
   const canSubmit = selectedFile && !isLoading && (
-    isInvoice ? (debitCode && creditCode) : (accountCode && accountName)
+    isBankLike ? (accountCode && accountName)
+      : isReceipt ? (creditCode && creditName)
+        : (debitCode && creditCode)
   )
 
-  const acceptFiles = isInvoice ? '.pdf,.xlsx,.xls,.csv' : '.pdf,.xlsx,.xls'
+  const acceptFiles = isReceipt ? '.pdf,.xlsx,.xls' : isInvoice ? '.pdf,.xlsx,.xls,.csv' : '.pdf,.xlsx,.xls'
 
   const renderAccountSelector = (label: string, code: string, onCodeChange: (c: string) => void, name: string, onNameChange: (n: string) => void, filterKeywords?: string[]) => (
     <div>
@@ -146,9 +161,23 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading }: Pro
               </div>
 
               {/* 科目選択 */}
-              {docType === 'bank-statement' ? (
-                renderAccountSelector('通帳の勘定科目', accountCode, setAccountCode, accountName, setAccountName,
-                  ['預金', '当座', '普通', '定期'])
+              {isBankLike ? (
+                renderAccountSelector(
+                  docType === 'cash-book' ? '現金の勘定科目' : '通帳の勘定科目',
+                  accountCode, setAccountCode, accountName, setAccountName,
+                  docType === 'cash-book' ? ['現金'] : ['預金', '当座', '普通', '定期']
+                )
+              ) : isReceipt ? (
+                <>
+                  {renderAccountSelector(
+                    '支払原資の勘定科目（貸方に設定されます）',
+                    creditCode, setCreditCode, creditName, setCreditName,
+                    ['現金', '預金', '普通']
+                  )}
+                  <p className="text-xs text-gray-500">
+                    貸方コード {creditCode || '—'}、貸方科目 {creditName || '—'} で処理します。よろしいですか？
+                  </p>
+                </>
               ) : (
                 <>
                   {renderAccountSelector(

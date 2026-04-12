@@ -139,7 +139,7 @@ export interface ParseResult {
 }
 
 // 書類種別
-export type DocumentType = 'bank-statement' | 'sales-invoice' | 'purchase-invoice'
+export type DocumentType = 'bank-statement' | 'sales-invoice' | 'purchase-invoice' | 'cash-book' | 'receipt'
 
 // アップロード設定
 export interface UploadConfig {

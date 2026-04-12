@@ -113,6 +113,75 @@ export default function BankStatementContent() {
           setLoadingProgress(Math.round(progress))
         }, 200)
 
+        if (config.documentType === 'receipt') {
+          // レシート・領収書処理
+          const { renderPdfPageToImage, getPdfPageCount } = await import('@/lib/bank-statement/pdf-text-parser')
+          const pageCount = await getPdfPageCount(config.file)
+          const imageDataUrls: string[] = []
+          for (let i = 0; i < pageCount; i++) {
+            imageDataUrls.push(await renderPdfPageToImage(config.file, i + 1, 2))
+          }
+
+          const response = await fetch('/api/bank-statement/receipt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images: imageDataUrls }),
+          })
+          clearInterval(progressTimer)
+          setLoadingProgress(100)
+
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}))
+            throw new Error(data.error || 'レシート解析に失敗しました')
+          }
+
+          const data = await response.json()
+          const receipts = data.receipts || []
+          if (receipts.length === 0) throw new Error('レシートデータを抽出できませんでした')
+
+          const statementPages = imageDataUrls.map((url, i) => ({
+            pageIndex: i, transactions: [],
+            openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
+            imageDataUrl: url,
+          }))
+          setPages(statementPages)
+          setCurrentPageIndex(0)
+
+          const { receiptToEntries } = await import('@/lib/bank-statement/receipt-mapper')
+          const entries = receiptToEntries(receipts, config.creditCode!, config.creditName!)
+          setJournalEntries(entries)
+          setInfo(`${receipts.length}件のレシートから${entries.length}件の仕訳を生成しました`)
+          setIsLoading(false)
+          setLoadingProgress(0)
+          return
+        }
+
+        if (config.documentType === 'cash-book') {
+          // 現金出納帳処理（通帳と同じロジック）
+          const result = await parseFile(config.file)
+          clearInterval(progressTimer)
+          setLoadingProgress(100)
+
+          if (result.ocrFailed) {
+            setPages(result.pages)
+            setCurrentPageIndex(0)
+            setJournalEntries([])
+            const detail = result.ocrErrorMessage ? `\n原因: ${result.ocrErrorMessage}` : ''
+            setError(`現金出納帳のテキスト抽出に失敗しました。${detail}`)
+            setIsLoading(false)
+            setLoadingProgress(0)
+            return
+          }
+
+          applyParseResultFn(result, config)
+          if (result.corrections && result.corrections.length > 0) {
+            setInfo(`入出金の自動補正を行いました:\n${result.corrections.join('\n')}`)
+          }
+          setIsLoading(false)
+          setLoadingProgress(0)
+          return
+        }
+
         if (config.documentType === 'sales-invoice' || config.documentType === 'purchase-invoice') {
           // 請求書処理
           const { renderPdfPageToImage, getPdfPageCount } = await import('@/lib/bank-statement/pdf-text-parser')
