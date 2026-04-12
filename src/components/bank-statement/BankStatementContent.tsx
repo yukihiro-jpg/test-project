@@ -8,6 +8,9 @@ import StatementViewer from '@/components/bank-statement/StatementViewer'
 import JournalEntryTable from '@/components/bank-statement/JournalEntryTable'
 import ColumnMappingDialog from '@/components/bank-statement/ColumnMappingDialog'
 import CsvExportButton from '@/components/bank-statement/CsvExportButton'
+import { appendTempEntries, getTempEntryCount, clearTempEntries, getTempEntries } from '@/lib/bank-statement/temp-store'
+import { applyCompoundAutoAmounts, downloadCsv } from '@/lib/bank-statement/csv-generator'
+import { learnAllFromEntries } from '@/lib/bank-statement/pattern-store'
 import ResizableSplitPanel from '@/components/bank-statement/ResizableSplitPanel'
 import type {
   StatementPage,
@@ -46,6 +49,7 @@ export default function BankStatementContent() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [showPatternList, setShowPatternList] = useState(false)
+  const [tempCount, setTempCount] = useState(() => getTempEntryCount())
 
   // 顧問先選択ハンドラ
   const handleClientSelect = useCallback((client: Client) => {
@@ -215,6 +219,45 @@ export default function BankStatementContent() {
     [],
   )
 
+  // CSV一時保存
+  const handleTempSave = useCallback(() => {
+    if (journalEntries.length === 0) {
+      alert('保存する仕訳データがありません')
+      return
+    }
+    // パターン学習
+    const applied = applyCompoundAutoAmounts(journalEntries)
+    learnAllFromEntries(applied)
+    // 一時保存に追記
+    const totalCount = appendTempEntries(journalEntries)
+    setTempCount(totalCount)
+    // 仕訳データをクリアして次の通帳を処理可能に
+    setPages([])
+    setJournalEntries([])
+    setUploadConfig(null)
+    setError(null)
+    setInfo(`${journalEntries.length}件を一時保存しました（合計${totalCount}件）`)
+  }, [journalEntries])
+
+  // 一時保存データをまとめてCSV出力
+  const handleTempExport = useCallback(() => {
+    const tempEntries = getTempEntries()
+    if (tempEntries.length === 0) {
+      alert('一時保存されたデータがありません')
+      return
+    }
+    downloadCsv(tempEntries)
+    clearTempEntries()
+    setTempCount(0)
+    setInfo('一時保存データをCSV出力しました。一時保存はクリアされました。')
+  }, [])
+
+  const handleTempClear = useCallback(() => {
+    if (!confirm('一時保存データをすべて削除しますか？')) return
+    clearTempEntries()
+    setTempCount(0)
+  }, [])
+
   const selectedTransactionId = (() => {
     if (!selectedEntryId) return null
     const entry = journalEntries.find((e) => e.id === selectedEntryId)
@@ -255,9 +298,27 @@ export default function BankStatementContent() {
             isLoading={isLoading}
           />
           {journalEntries.length > 0 && (
-            <CsvExportButton entries={journalEntries}
-              dateFrom={dateFrom} dateTo={dateTo}
-              onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+            <>
+              <button onClick={handleTempSave}
+                className="px-3 py-1.5 text-xs font-medium bg-amber-500 hover:bg-amber-600 text-white rounded">
+                一時保存
+              </button>
+              <CsvExportButton entries={journalEntries}
+                dateFrom={dateFrom} dateTo={dateTo}
+                onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+            </>
+          )}
+          {tempCount > 0 && (
+            <div className="flex items-center gap-1">
+              <button onClick={handleTempExport}
+                className="px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded">
+                一括CSV出力 ({tempCount}件)
+              </button>
+              <button onClick={handleTempClear}
+                className="px-2 py-1.5 text-xs text-gray-400 hover:text-red-400" title="一時保存をクリア">
+                &times;
+              </button>
+            </div>
           )}
         </div>
       </header>
