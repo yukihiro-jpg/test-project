@@ -46,7 +46,7 @@ export default function ClientSelector({ onSelect }: Props) {
   return (
     <div className="h-screen flex flex-col bg-gray-100 bank-statement-app">
       <header className="bg-gray-800 px-6 py-3 shrink-0">
-        <h1 className="text-lg font-bold text-white">通帳CSV変換</h1>
+        <h1 className="text-lg font-bold text-white">会計大将インポートデータ変換</h1>
         <p className="text-sm text-gray-400">顧問先を選択してください</p>
       </header>
 

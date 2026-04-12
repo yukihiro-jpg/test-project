@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import UploadDialog from '@/components/bank-statement/UploadDialog'
 import AccountMasterUploader from '@/components/bank-statement/AccountMasterUploader'
 import PatternListDialog from '@/components/bank-statement/PatternListDialog'
+import FixedJournalDialog from '@/components/bank-statement/FixedJournalDialog'
 import StatementViewer from '@/components/bank-statement/StatementViewer'
 import JournalEntryTable from '@/components/bank-statement/JournalEntryTable'
 import ColumnMappingDialog from '@/components/bank-statement/ColumnMappingDialog'
@@ -49,6 +50,7 @@ export default function BankStatementContent() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [showPatternList, setShowPatternList] = useState(false)
+  const [showFixedJournal, setShowFixedJournal] = useState(false)
   const [tempCount, setTempCount] = useState(() => getTempEntryCount())
 
   // 顧問先選択ハンドラ
@@ -388,7 +390,7 @@ export default function BankStatementContent() {
       {/* ヘッダー */}
       <header className="bg-gray-800 px-4 py-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
-          <h1 className="text-base font-bold text-white">通帳CSV変換</h1>
+          <h1 className="text-base font-bold text-white">会計大将インポートデータ変換</h1>
           {selectedClient && (
             <span className="text-sm text-blue-300 font-medium">{selectedClient.name}</span>
           )}
@@ -407,6 +409,10 @@ export default function BankStatementContent() {
           <button onClick={() => setShowPatternList(true)}
             className="px-3 py-1.5 text-xs font-medium bg-white/10 hover:bg-white/20 text-white rounded border border-white/20">
             パターン一覧
+          </button>
+          <button onClick={() => setShowFixedJournal(true)}
+            className="px-3 py-1.5 text-xs font-medium bg-white/10 hover:bg-white/20 text-white rounded border border-white/20">
+            定型仕訳
           </button>
           <UploadDialog
             accountMaster={accountMaster}
@@ -537,6 +543,14 @@ export default function BankStatementContent() {
 
       {/* パターン一覧ダイアログ */}
       <PatternListDialog open={showPatternList} onClose={() => setShowPatternList(false)} />
+
+      {/* 定型仕訳ダイアログ */}
+      <FixedJournalDialog
+        open={showFixedJournal}
+        onClose={() => setShowFixedJournal(false)}
+        accountMaster={accountMaster}
+        onTempCountChange={setTempCount}
+      />
     </div>
     )
   )

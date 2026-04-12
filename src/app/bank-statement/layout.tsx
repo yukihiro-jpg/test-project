@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: '通帳CSV変換 - 会計大将インポート',
+  title: '会計大将インポートデータ変換 - 会計大将インポート',
   description: '通帳PDF/Excelデータから会計大将へインポート可能なCSVファイルを作成します',
 }
 
