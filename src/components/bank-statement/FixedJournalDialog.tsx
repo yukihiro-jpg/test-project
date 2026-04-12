@@ -212,15 +212,36 @@ export default function FixedJournalDialog({ open, onClose, accountMaster, onTem
         {/* プレビュー確認 */}
         {showPreview && (
           <div className="px-6 py-4 bg-green-50 border-t border-green-200">
-            <h3 className="text-sm font-bold text-green-800 mb-2">
+            <h3 className="text-sm font-bold text-green-800 mb-3">
               作成される仕訳（{previewEntries.length}件）
             </h3>
-            <div className="max-h-32 overflow-auto mb-3">
-              {previewEntries.map((e, i) => (
-                <div key={i} className="text-xs text-gray-700">
-                  {e.date} | {e.debitCode} {e.debitName} → {e.creditCode} {e.creditName} | {e.debitAmount.toLocaleString()} | {e.description}
-                </div>
-              ))}
+            <div className="max-h-48 overflow-auto mb-3 border border-green-200 rounded">
+              <table className="w-full text-sm border-collapse">
+                <thead className="bg-green-100 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">日付</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">借方コード</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">借方科目名</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">貸方コード</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">貸方科目名</th>
+                    <th className="px-3 py-1.5 text-right text-xs font-medium text-green-800 border-b border-green-200">金額</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">摘要</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewEntries.map((e, i) => (
+                    <tr key={i} className="border-b border-green-100 hover:bg-green-50">
+                      <td className="px-3 py-1.5 text-xs">{e.date}</td>
+                      <td className="px-3 py-1.5 text-xs text-blue-700 font-bold">{e.debitCode}</td>
+                      <td className="px-3 py-1.5 text-xs">{e.debitName}</td>
+                      <td className="px-3 py-1.5 text-xs text-blue-700 font-bold">{e.creditCode}</td>
+                      <td className="px-3 py-1.5 text-xs">{e.creditName}</td>
+                      <td className="px-3 py-1.5 text-xs text-right tabular-nums font-medium">{e.debitAmount.toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-xs text-gray-600">{e.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
             <p className="text-sm text-green-800 font-medium mb-2">
               この仕訳をCSVデータとして一時保存しますか？
