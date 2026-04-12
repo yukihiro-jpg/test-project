@@ -1,14 +1,22 @@
 import type { AccountItem, SubAccountItem } from './types'
+import { clientStorageKey, getSelectedClientId } from './client-store'
 
-const ACCOUNT_STORAGE_KEY = 'bank-statement-account-master'
-const SUB_ACCOUNT_STORAGE_KEY = 'bank-statement-sub-account-master'
+function getAccountKey(): string {
+  const cid = getSelectedClientId()
+  return cid ? clientStorageKey(cid, 'accounts') : 'bank-statement-account-master'
+}
+
+function getSubAccountKey(): string {
+  const cid = getSelectedClientId()
+  return cid ? clientStorageKey(cid, 'sub-accounts') : 'bank-statement-sub-account-master'
+}
 
 // --- 科目マスタ ---
 
 export function loadAccountMaster(): AccountItem[] {
   if (typeof window === 'undefined') return []
   try {
-    const stored = localStorage.getItem(ACCOUNT_STORAGE_KEY)
+    const stored = localStorage.getItem(getAccountKey())
     if (stored) return JSON.parse(stored)
   } catch { /* ignore */ }
   return []
@@ -16,7 +24,7 @@ export function loadAccountMaster(): AccountItem[] {
 
 export function saveAccountMaster(items: AccountItem[]): void {
   if (typeof window === 'undefined') return
-  localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(items))
+  localStorage.setItem(getAccountKey(), JSON.stringify(items))
 }
 
 /**
@@ -54,7 +62,7 @@ export function parseAccountMasterFile(text: string): AccountItem[] {
 export function loadSubAccountMaster(): SubAccountItem[] {
   if (typeof window === 'undefined') return []
   try {
-    const stored = localStorage.getItem(SUB_ACCOUNT_STORAGE_KEY)
+    const stored = localStorage.getItem(getSubAccountKey())
     if (stored) return JSON.parse(stored)
   } catch { /* ignore */ }
   return []
@@ -62,7 +70,7 @@ export function loadSubAccountMaster(): SubAccountItem[] {
 
 export function saveSubAccountMaster(items: SubAccountItem[]): void {
   if (typeof window === 'undefined') return
-  localStorage.setItem(SUB_ACCOUNT_STORAGE_KEY, JSON.stringify(items))
+  localStorage.setItem(getSubAccountKey(), JSON.stringify(items))
 }
 
 /**

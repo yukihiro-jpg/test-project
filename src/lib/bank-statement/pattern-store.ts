@@ -1,6 +1,10 @@
 import type { PatternEntry, PatternLine, JournalEntry } from './types'
+import { clientStorageKey, getSelectedClientId } from './client-store'
 
-const STORAGE_KEY = 'bank-statement-patterns'
+function getPatternKey(): string {
+  const cid = getSelectedClientId()
+  return cid ? clientStorageKey(cid, 'patterns') : 'bank-statement-patterns'
+}
 
 let idCounter = 0
 function generatePatternId(): string {
@@ -10,7 +14,7 @@ function generatePatternId(): string {
 export function getPatterns(): PatternEntry[] {
   if (typeof window === 'undefined') return []
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = localStorage.getItem(getPatternKey())
     if (stored) {
       const parsed = JSON.parse(stored)
       // 旧形式からの変換
@@ -42,7 +46,7 @@ export function getPatterns(): PatternEntry[] {
 
 export function savePatterns(patterns: PatternEntry[]): void {
   if (typeof window === 'undefined') return
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(patterns))
+  localStorage.setItem(getPatternKey(), JSON.stringify(patterns))
 }
 
 /**
@@ -271,7 +275,7 @@ export function updatePatternAmountRange(
 
 export function clearPatterns(): void {
   if (typeof window === 'undefined') return
-  localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(getPatternKey())
 }
 
 export function exportPatterns(): string {

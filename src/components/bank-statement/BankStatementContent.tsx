@@ -23,12 +23,19 @@ import { parseFile, applyColumnMapping } from '@/lib/bank-statement/transaction-
 import { mapTransactionsToJournalEntries } from '@/lib/bank-statement/journal-mapper'
 import { getPatterns } from '@/lib/bank-statement/pattern-store'
 import { loadAccountMaster, loadSubAccountMaster } from '@/lib/bank-statement/account-master'
+import ClientSelector from '@/components/bank-statement/ClientSelector'
+import type { Client } from '@/lib/bank-statement/client-store'
+import { getSelectedClientId, setSelectedClientId } from '@/lib/bank-statement/client-store'
 
 export default function BankStatementContent() {
+  // 顧問先選択
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [showClientSelector, setShowClientSelector] = useState(true)
+
   const [pages, setPages] = useState<StatementPage[]>([])
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([])
-  const [accountMaster, setAccountMaster] = useState<AccountItem[]>(() => loadAccountMaster())
-  const [subAccountMaster, setSubAccountMaster] = useState<SubAccountItem[]>(() => loadSubAccountMaster())
+  const [accountMaster, setAccountMaster] = useState<AccountItem[]>([])
+  const [subAccountMaster, setSubAccountMaster] = useState<SubAccountItem[]>([])
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [uploadConfig, setUploadConfig] = useState<UploadConfig | null>(null)
@@ -39,6 +46,31 @@ export default function BankStatementContent() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [showPatternList, setShowPatternList] = useState(false)
+
+  // 顧問先選択ハンドラ
+  const handleClientSelect = useCallback((client: Client) => {
+    setSelectedClient(client)
+    setShowClientSelector(false)
+    // 顧問先別データを読み込み
+    setAccountMaster(loadAccountMaster())
+    setSubAccountMaster(loadSubAccountMaster())
+    // 仕訳データをリセット
+    setPages([])
+    setJournalEntries([])
+  }, [])
+
+  const handleBackToClientList = useCallback(() => {
+    setSelectedClientId(null)
+    setSelectedClient(null)
+    setShowClientSelector(true)
+    setPages([])
+    setJournalEntries([])
+  }, [])
+
+  // 顧問先選択画面
+  if (showClientSelector) {
+    return <ClientSelector onSelect={handleClientSelect} />
+  }
 
   // 列マッピング用state
   const [showColumnMapping, setShowColumnMapping] = useState(false)
@@ -198,9 +230,13 @@ export default function BankStatementContent() {
       <header className="bg-gray-800 px-4 py-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
           <h1 className="text-base font-bold text-white">通帳CSV変換</h1>
-          <a href="/" className="text-xs text-gray-400 hover:text-white hover:underline">
-            トップ
-          </a>
+          {selectedClient && (
+            <span className="text-sm text-blue-300 font-medium">{selectedClient.name}</span>
+          )}
+          <button onClick={handleBackToClientList}
+            className="text-xs text-gray-400 hover:text-white hover:underline">
+            顧問先一覧
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <AccountMasterUploader
