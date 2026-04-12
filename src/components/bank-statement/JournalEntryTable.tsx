@@ -404,8 +404,8 @@ export default function JournalEntryTable({
               <th className="px-2 py-2 text-center w-44 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>貸方科目</th>
               <th className="px-2 py-2 text-center w-24 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>金額</th>
               <th className="px-2 py-2 text-center w-28 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>残高</th>
-              <th className="px-2 py-2 text-center w-36 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>消費税</th>
-              <th className="px-2 py-2 text-center font-medium" style={{ borderRight: '1px solid #94a3b8' }}>摘要</th>
+              <th className="px-2 py-2 text-center w-20 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>税区</th>
+              <th className="px-2 py-2 text-center font-medium" style={{ borderRight: '1px solid #94a3b8', minWidth: '200px' }}>摘要</th>
               <th className="px-1 py-2 w-14 font-medium"></th>
             </tr>
           </thead>

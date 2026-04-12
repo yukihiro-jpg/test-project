@@ -168,19 +168,12 @@ export default function JournalEntryRow({
           </span>
         </td>
 
-        {/* 消費税（CD+区分まとめ） */}
-        <td style={CB} className={emptyBg('debitTaxCode')}>
-          <div className="flex items-center gap-0.5">
-            <input type="text" value={entry.debitTaxCode}
-              onChange={(e) => onChange(entry.id, 'debitTaxCode', toHalfWidth(e.target.value))}
-              onKeyDown={handleNav} placeholder="CD" inputMode="numeric"
-              style={{ imeMode: 'disabled' } as React.CSSProperties}
-              className="w-10 shrink-0 px-1 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800" />
-            <input type="text" value={entry.debitTaxType}
-              onChange={(e) => onChange(entry.id, 'debitTaxType', e.target.value)}
-              onKeyDown={handleNav} placeholder="区分"
-              className="flex-1 px-1 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800" />
-          </div>
+        {/* 消費税（税区のみ） */}
+        <td style={CB} className={emptyBg('debitTaxType')}>
+          <input type="text" value={entry.debitTaxType}
+            onChange={(e) => onChange(entry.id, 'debitTaxType', e.target.value)}
+            onKeyDown={handleNav} placeholder="税区"
+            className="w-full px-1 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800" />
         </td>
 
         {/* 摘要（25文字制限） */}
@@ -259,10 +252,13 @@ function AccountField({
     <div ref={ref} className="relative cursor-text" onClick={() => inputRef.current?.focus()}>
       <div className="flex items-center gap-0 min-h-[28px]">
         <input ref={inputRef} type="text" inputMode="numeric" value={val}
-          onChange={(e) => { const v = toHalfWidth(e.target.value); setVal(v); setShow(true) }}
+          onChange={(e) => { const v = toHalfWidth(e.target.value); setVal(v); onCodeChange(v); setShow(true) }}
           onFocus={() => setShow(true)}
-          onBlur={() => setTimeout(() => { if (!show) onCodeChange(val) }, 300)}
-          onKeyDown={handleNav}
+          onBlur={() => setTimeout(() => { onCodeChange(val); setShow(false) }, 150)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onCodeChange(val); setShow(false); navCell(e.currentTarget, 'right') }
+            else handleNav(e)
+          }}
           style={{ imeMode: 'disabled' } as React.CSSProperties}
           className="w-12 shrink-0 px-1 py-0.5 text-sm text-blue-700 font-bold bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded" />
         <span className="text-sm text-gray-800 font-semibold truncate flex-1">{name}</span>
