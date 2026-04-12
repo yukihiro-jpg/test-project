@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import type { AccountItem, JournalEntry } from '@/lib/bank-statement/types'
-import { getFixedJournals, addFixedJournal, deleteFixedJournal, type FixedJournalEntry } from '@/lib/bank-statement/fixed-journal-store'
-import { createBlankEntry } from '@/lib/bank-statement/journal-mapper'
+import { getFixedJournals, addFixedJournal, deleteFixedJournal, type FixedJournalEntry, type FixedJournalLine } from '@/lib/bank-statement/fixed-journal-store'
+import { createBlankEntry, createCompoundEntry } from '@/lib/bank-statement/journal-mapper'
 import { appendTempEntries } from '@/lib/bank-statement/temp-store'
 
 interface Props {
@@ -13,47 +13,56 @@ interface Props {
   onTempCountChange: (count: number) => void
 }
 
+function emptyLine(): FixedJournalLine {
+  return { debitCode: '', debitName: '', creditCode: '', creditName: '', taxType: '', amount: 0 }
+}
+
 export default function FixedJournalDialog({ open, onClose, accountMaster, onTempCountChange }: Props) {
   const [items, setItems] = useState<FixedJournalEntry[]>([])
   const [showAdd, setShowAdd] = useState(false)
-
-  // 登録フォーム
-  const [fDebitCode, setFDebitCode] = useState('')
-  const [fDebitName, setFDebitName] = useState('')
-  const [fCreditCode, setFCreditCode] = useState('')
-  const [fCreditName, setFCreditName] = useState('')
-  const [fTax, setFTax] = useState('')
-  const [fAmount, setFAmount] = useState('')
-  const [fDesc, setFDesc] = useState('')
-
-  // 一括作成
+  const [formLines, setFormLines] = useState<FixedJournalLine[]>([emptyLine()])
+  const [formDesc, setFormDesc] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDate, setBulkDate] = useState('')
   const [showPreview, setShowPreview] = useState(false)
   const [previewEntries, setPreviewEntries] = useState<JournalEntry[]>([])
 
   useEffect(() => { if (open) setItems(getFixedJournals()) }, [open])
-
   if (!open) return null
 
-  const handleCodeInput = (code: string, setter: (c: string) => void, nameSetter: (n: string) => void) => {
-    setter(code)
+  const resolveCode = (code: string) => {
     const acc = accountMaster.find((a) => a.code === code)
-    if (acc) nameSetter(acc.shortName || acc.name)
+    return acc?.shortName || acc?.name || ''
   }
 
-  const handleAdd = () => {
-    if (!fDebitCode || !fCreditCode || !fAmount) return
-    addFixedJournal({
-      debitCode: fDebitCode, debitName: fDebitName,
-      creditCode: fCreditCode, creditName: fCreditName,
-      taxType: fTax, amount: parseInt(fAmount.replace(/[^0-9]/g, '')) || 0,
-      description: fDesc.slice(0, 25),
-    })
+  const updateLine = (idx: number, field: keyof FixedJournalLine, value: string | number) => {
+    setFormLines((prev) => prev.map((l, i) => {
+      if (i !== idx) return l
+      const updated = { ...l, [field]: value }
+      if (field === 'debitCode') updated.debitName = resolveCode(value as string)
+      if (field === 'creditCode') updated.creditName = resolveCode(value as string)
+      return updated
+    }))
+  }
+
+  const addLine = (afterIdx: number) => {
+    const next = [...formLines]
+    next.splice(afterIdx + 1, 0, emptyLine())
+    setFormLines(next)
+  }
+
+  const removeLine = (idx: number) => {
+    if (formLines.length <= 1) return
+    setFormLines((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleRegister = () => {
+    if (formLines.every((l) => !l.debitCode && !l.creditCode)) return
+    addFixedJournal({ lines: formLines, description: formDesc.slice(0, 25) })
     setItems(getFixedJournals())
     setShowAdd(false)
-    setFDebitCode(''); setFDebitName(''); setFCreditCode(''); setFCreditName('')
-    setFTax(''); setFAmount(''); setFDesc('')
+    setFormLines([emptyLine()])
+    setFormDesc('')
   }
 
   const toggleSelect = (id: string) => {
@@ -62,25 +71,39 @@ export default function FixedJournalDialog({ open, onClose, accountMaster, onTem
     setSelectedIds(next)
   }
 
-  const selectAll = () => {
-    if (selectedIds.size === items.length) setSelectedIds(new Set())
-    else setSelectedIds(new Set(items.map((i) => i.id)))
-  }
-
   const handleCreateEntries = () => {
     if (selectedIds.size === 0 || !bulkDate) { alert('日付と対象を選択してください'); return }
     const date = bulkDate.replace(/-/g, '')
     const entries: JournalEntry[] = []
     for (const item of items) {
       if (!selectedIds.has(item.id)) continue
-      const e = createBlankEntry()
-      e.date = date
-      e.debitCode = item.debitCode; e.debitName = item.debitName
-      e.creditCode = item.creditCode; e.creditName = item.creditName
-      e.debitAmount = item.amount; e.creditAmount = item.amount
-      e.debitTaxType = item.taxType
-      e.description = item.description; e.originalDescription = item.description
-      entries.push(e)
+      if (item.lines.length === 1) {
+        const l = item.lines[0]
+        const e = createBlankEntry()
+        e.date = date; e.debitCode = l.debitCode; e.debitName = l.debitName
+        e.creditCode = l.creditCode; e.creditName = l.creditName
+        e.debitAmount = l.amount; e.creditAmount = l.amount
+        e.debitTaxType = l.taxType; e.description = item.description; e.originalDescription = item.description
+        entries.push(e)
+      } else {
+        // 複合仕訳
+        const first = item.lines[0]
+        const parent = createBlankEntry()
+        parent.date = date; parent.debitCode = first.debitCode; parent.debitName = first.debitName
+        parent.creditCode = first.creditCode; parent.creditName = first.creditName
+        parent.debitAmount = first.amount; parent.creditAmount = first.amount
+        parent.debitTaxType = first.taxType; parent.description = item.description; parent.originalDescription = item.description
+        entries.push(parent)
+        for (let i = 1; i < item.lines.length; i++) {
+          const l = item.lines[i]
+          const child = createCompoundEntry(parent)
+          child.debitCode = l.debitCode; child.debitName = l.debitName
+          child.creditCode = l.creditCode; child.creditName = l.creditName
+          child.debitAmount = l.amount; child.creditAmount = l.amount
+          child.debitTaxType = l.taxType; child.description = item.description; child.originalDescription = item.description
+          entries.push(child)
+        }
+      }
     }
     setPreviewEntries(entries)
     setShowPreview(true)
@@ -89,78 +112,61 @@ export default function FixedJournalDialog({ open, onClose, accountMaster, onTem
   const handleConfirmSave = () => {
     const count = appendTempEntries(previewEntries)
     onTempCountChange(count)
-    setShowPreview(false)
-    setSelectedIds(new Set())
-    setBulkDate('')
+    setShowPreview(false); setSelectedIds(new Set()); setBulkDate('')
     alert(`${previewEntries.length}件の仕訳を一時保存しました（合計${count}件）`)
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[85vh] flex flex-col">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-800">定型処理仕訳</h2>
-          <button onClick={() => setShowAdd(!showAdd)}
-            className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">
-            + 新規登録
-          </button>
+          <button onClick={() => { setShowAdd(!showAdd); if (!showAdd) setFormLines([emptyLine()]) }}
+            className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">+ 新規登録</button>
         </div>
 
-        {/* 登録フォーム */}
+        {/* 登録フォーム（1行表示 + 複合仕訳行追加） */}
         {showAdd && (
-          <div className="px-6 py-4 bg-blue-50 border-b border-blue-200">
-            <div className="grid grid-cols-4 gap-2 mb-2">
-              <div>
-                <label className="text-xs text-gray-600">借方CD</label>
-                <input type="text" value={fDebitCode}
-                  onChange={(e) => handleCodeInput(e.target.value, setFDebitCode, setFDebitName)}
-                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded" placeholder="コード" />
-                <span className="text-xs text-gray-500">{fDebitName}</span>
+          <div className="px-6 py-3 bg-blue-50 border-b border-blue-200 space-y-1">
+            {formLines.map((line, idx) => (
+              <div key={idx} className="flex items-center gap-1">
+                <button onClick={() => addLine(idx)} className="w-6 h-6 text-xs text-blue-600 hover:bg-blue-100 rounded font-bold border border-blue-300">+</button>
+                <button onClick={() => removeLine(idx)} disabled={formLines.length <= 1}
+                  className="w-6 h-6 text-xs text-red-500 hover:bg-red-50 rounded font-bold border border-red-200 disabled:opacity-30">-</button>
+                <input type="text" value={line.debitCode} onChange={(e) => updateLine(idx, 'debitCode', e.target.value)}
+                  placeholder="借方CD" className="w-16 px-1 py-1 text-sm border border-gray-300 rounded text-center" />
+                <span className="text-xs text-gray-500 w-16 truncate">{line.debitName}</span>
+                <input type="text" value={line.creditCode} onChange={(e) => updateLine(idx, 'creditCode', e.target.value)}
+                  placeholder="貸方CD" className="w-16 px-1 py-1 text-sm border border-gray-300 rounded text-center" />
+                <span className="text-xs text-gray-500 w-16 truncate">{line.creditName}</span>
+                <input type="text" value={line.amount || ''} onChange={(e) => updateLine(idx, 'amount', parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0)}
+                  placeholder="金額" className="w-20 px-1 py-1 text-sm border border-gray-300 rounded text-right" />
+                <input type="text" value={line.taxType} onChange={(e) => updateLine(idx, 'taxType', e.target.value)}
+                  placeholder="税区" className="w-20 px-1 py-1 text-sm border border-gray-300 rounded" />
               </div>
-              <div>
-                <label className="text-xs text-gray-600">貸方CD</label>
-                <input type="text" value={fCreditCode}
-                  onChange={(e) => handleCodeInput(e.target.value, setFCreditCode, setFCreditName)}
-                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded" placeholder="コード" />
-                <span className="text-xs text-gray-500">{fCreditName}</span>
-              </div>
-              <div>
-                <label className="text-xs text-gray-600">金額</label>
-                <input type="text" value={fAmount} onChange={(e) => setFAmount(e.target.value)}
-                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded text-right" placeholder="0" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-600">税区</label>
-                <input type="text" value={fTax} onChange={(e) => setFTax(e.target.value)}
-                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded" placeholder="課仕10%" />
-              </div>
-            </div>
-            <div className="flex gap-2 items-end">
-              <div className="flex-1">
-                <label className="text-xs text-gray-600">摘要（25文字以内）</label>
-                <input type="text" value={fDesc} onChange={(e) => setFDesc(e.target.value.slice(0, 25))}
-                  maxLength={25} className="w-full px-2 py-1 text-sm border border-gray-300 rounded" />
-              </div>
-              <button onClick={handleAdd} className="px-4 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">登録</button>
+            ))}
+            <div className="flex items-center gap-2 pt-1">
+              <input type="text" value={formDesc} onChange={(e) => setFormDesc(e.target.value.slice(0, 25))}
+                maxLength={25} placeholder="摘要（25文字以内）" className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded" />
+              <button onClick={handleRegister} className="px-4 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">登録</button>
               <button onClick={() => setShowAdd(false)} className="px-3 py-1 text-sm bg-gray-200 rounded">取消</button>
             </div>
+            {formLines.length > 1 && <p className="text-xs text-blue-600">複合仕訳（{formLines.length}行）として登録されます</p>}
           </div>
         )}
 
         {/* 一括日付入力 + 作成ボタン */}
         {items.length > 0 && (
           <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-3">
-            <button onClick={selectAll} className="text-xs text-blue-600 hover:underline">
+            <button onClick={() => setSelectedIds(selectedIds.size === items.length ? new Set() : new Set(items.map((i) => i.id)))}
+              className="text-xs text-blue-600 hover:underline">
               {selectedIds.size === items.length ? '全解除' : '全選択'}
             </button>
             <span className="text-xs text-gray-500">{selectedIds.size}件選択</span>
             <input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)}
               className="px-2 py-1 text-sm border border-gray-300 rounded" />
-            <button onClick={handleCreateEntries}
-              disabled={selectedIds.size === 0 || !bulkDate}
-              className="px-4 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-40">
-              仕訳作成
-            </button>
+            <button onClick={handleCreateEntries} disabled={selectedIds.size === 0 || !bulkDate}
+              className="px-4 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-40">仕訳作成</button>
           </div>
         )}
 
@@ -169,41 +175,51 @@ export default function FixedJournalDialog({ open, onClose, accountMaster, onTem
           <table className="w-full text-sm border-collapse">
             <thead className="sticky top-0 bg-gray-100">
               <tr>
-                <th className="px-3 py-2 w-10 text-center border-b border-gray-300"></th>
-                <th className="px-3 py-2 text-left border-b border-gray-300">借方科目</th>
-                <th className="px-3 py-2 text-left border-b border-gray-300">貸方科目</th>
-                <th className="px-3 py-2 text-right border-b border-gray-300">金額</th>
-                <th className="px-3 py-2 text-left border-b border-gray-300">税区</th>
-                <th className="px-3 py-2 text-left border-b border-gray-300">摘要</th>
-                <th className="px-3 py-2 w-12 border-b border-gray-300"></th>
+                <th className="px-2 py-2 w-10 text-center border-b border-gray-300"></th>
+                <th className="px-2 py-2 text-left border-b border-gray-300">借方科目</th>
+                <th className="px-2 py-2 text-left border-b border-gray-300">貸方科目</th>
+                <th className="px-2 py-2 text-right border-b border-gray-300">金額</th>
+                <th className="px-2 py-2 text-left border-b border-gray-300 w-16">税区</th>
+                <th className="px-2 py-2 text-left border-b border-gray-300">摘要</th>
+                <th className="px-2 py-2 w-12 border-b border-gray-300"></th>
               </tr>
             </thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-2 text-center">
-                    <input type="checkbox" checked={selectedIds.has(item.id)}
-                      onChange={() => toggleSelect(item.id)} className="rounded" />
+                  <td className="px-2 py-2 text-center">
+                    <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} />
                   </td>
-                  <td className="px-3 py-2">
-                    <span className="text-blue-700 font-bold">{item.debitCode}</span> {item.debitName}
+                  <td className="px-2 py-2">
+                    {item.lines.map((l, i) => (
+                      <div key={i} className="text-xs"><span className="text-blue-700 font-bold">{l.debitCode}</span> {l.debitName}</div>
+                    ))}
+                    {item.lines.length > 1 && <span className="text-xs text-violet-600">複合{item.lines.length}行</span>}
                   </td>
-                  <td className="px-3 py-2">
-                    <span className="text-blue-700 font-bold">{item.creditCode}</span> {item.creditName}
+                  <td className="px-2 py-2">
+                    {item.lines.map((l, i) => (
+                      <div key={i} className="text-xs"><span className="text-blue-700 font-bold">{l.creditCode}</span> {l.creditName}</div>
+                    ))}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{item.amount.toLocaleString()}</td>
-                  <td className="px-3 py-2 text-xs">{item.taxType}</td>
-                  <td className="px-3 py-2 text-xs text-gray-600">{item.description}</td>
-                  <td className="px-3 py-2 text-center">
+                  <td className="px-2 py-2 text-right tabular-nums">
+                    {item.lines.map((l, i) => (
+                      <div key={i} className="text-xs">{l.amount.toLocaleString()}</div>
+                    ))}
+                  </td>
+                  <td className="px-2 py-2">
+                    {item.lines.map((l, i) => (
+                      <div key={i} className="text-xs">{l.taxType}</div>
+                    ))}
+                  </td>
+                  <td className="px-2 py-2 text-xs text-gray-600">{item.description}</td>
+                  <td className="px-2 py-2 text-center">
                     <button onClick={() => { deleteFixedJournal(item.id); setItems(getFixedJournals()) }}
                       className="text-xs text-red-500 hover:underline">削除</button>
                   </td>
                 </tr>
               ))}
               {items.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">
-                  定型仕訳が登録されていません
-                </td></tr>
+                <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">定型仕訳が登録されていません</td></tr>
               )}
             </tbody>
           </table>
@@ -212,45 +228,39 @@ export default function FixedJournalDialog({ open, onClose, accountMaster, onTem
         {/* プレビュー確認 */}
         {showPreview && (
           <div className="px-6 py-4 bg-green-50 border-t border-green-200">
-            <h3 className="text-sm font-bold text-green-800 mb-3">
-              作成される仕訳（{previewEntries.length}件）
-            </h3>
+            <h3 className="text-sm font-bold text-green-800 mb-3">作成される仕訳（{previewEntries.length}件）</h3>
             <div className="max-h-48 overflow-auto mb-3 border border-green-200 rounded">
               <table className="w-full text-sm border-collapse">
                 <thead className="bg-green-100 sticky top-0">
                   <tr>
-                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">日付</th>
-                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">借方コード</th>
-                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">借方科目名</th>
-                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">貸方コード</th>
-                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">貸方科目名</th>
-                    <th className="px-3 py-1.5 text-right text-xs font-medium text-green-800 border-b border-green-200">金額</th>
-                    <th className="px-3 py-1.5 text-left text-xs font-medium text-green-800 border-b border-green-200">摘要</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium border-b border-green-200">日付</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium border-b border-green-200">借方コード</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium border-b border-green-200">借方科目名</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium border-b border-green-200">貸方コード</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium border-b border-green-200">貸方科目名</th>
+                    <th className="px-3 py-1.5 text-right text-xs font-medium border-b border-green-200">金額</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium border-b border-green-200">摘要</th>
                   </tr>
                 </thead>
                 <tbody>
                   {previewEntries.map((e, i) => (
-                    <tr key={i} className="border-b border-green-100 hover:bg-green-50">
-                      <td className="px-3 py-1.5 text-xs">{e.date}</td>
-                      <td className="px-3 py-1.5 text-xs text-blue-700 font-bold">{e.debitCode}</td>
-                      <td className="px-3 py-1.5 text-xs">{e.debitName}</td>
-                      <td className="px-3 py-1.5 text-xs text-blue-700 font-bold">{e.creditCode}</td>
-                      <td className="px-3 py-1.5 text-xs">{e.creditName}</td>
-                      <td className="px-3 py-1.5 text-xs text-right tabular-nums font-medium">{e.debitAmount.toLocaleString()}</td>
-                      <td className="px-3 py-1.5 text-xs text-gray-600">{e.description}</td>
+                    <tr key={i} className="border-b border-green-100">
+                      <td className="px-3 py-1 text-xs">{e.date}</td>
+                      <td className="px-3 py-1 text-xs text-blue-700 font-bold">{e.debitCode}</td>
+                      <td className="px-3 py-1 text-xs">{e.debitName}</td>
+                      <td className="px-3 py-1 text-xs text-blue-700 font-bold">{e.creditCode}</td>
+                      <td className="px-3 py-1 text-xs">{e.creditName}</td>
+                      <td className="px-3 py-1 text-xs text-right tabular-nums font-medium">{e.debitAmount.toLocaleString()}</td>
+                      <td className="px-3 py-1 text-xs text-gray-600">{e.description}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className="text-sm text-green-800 font-medium mb-2">
-              この仕訳をCSVデータとして一時保存しますか？
-            </p>
+            <p className="text-sm text-green-800 font-medium mb-2">この仕訳をCSVデータとして一時保存しますか？</p>
             <div className="flex gap-2">
-              <button onClick={handleConfirmSave}
-                className="px-4 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700">はい</button>
-              <button onClick={() => setShowPreview(false)}
-                className="px-4 py-1.5 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300">いいえ</button>
+              <button onClick={handleConfirmSave} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700">はい</button>
+              <button onClick={() => setShowPreview(false)} className="px-4 py-1.5 text-sm bg-gray-200 rounded hover:bg-gray-300">いいえ</button>
             </div>
           </div>
         )}

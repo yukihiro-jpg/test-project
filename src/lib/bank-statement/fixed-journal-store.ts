@@ -1,13 +1,17 @@
-import { getSelectedClientId, clientStorageKey } from './client-store'
+import { getSelectedClientId } from './client-store'
 
-export interface FixedJournalEntry {
-  id: string
+export interface FixedJournalLine {
   debitCode: string
   debitName: string
   creditCode: string
   creditName: string
   taxType: string
   amount: number
+}
+
+export interface FixedJournalEntry {
+  id: string
+  lines: FixedJournalLine[]
   description: string
 }
 
@@ -20,7 +24,22 @@ export function getFixedJournals(): FixedJournalEntry[] {
   if (typeof window === 'undefined') return []
   try {
     const stored = localStorage.getItem(getKey())
-    if (stored) return JSON.parse(stored)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      // 旧形式互換
+      return parsed.map((p: FixedJournalEntry) => {
+        if (!p.lines) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const old = p as any
+          p.lines = [{
+            debitCode: old.debitCode || '', debitName: old.debitName || '',
+            creditCode: old.creditCode || '', creditName: old.creditName || '',
+            taxType: old.taxType || '', amount: old.amount || 0,
+          }]
+        }
+        return p
+      })
+    }
   } catch { /* ignore */ }
   return []
 }
