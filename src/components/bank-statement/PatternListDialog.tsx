@@ -110,11 +110,12 @@ export default function PatternListDialog({ open, onClose }: Props) {
                   </td>
                   <td className="px-3 py-2">
                     {p.lines.map((line, i) => (
-                      <div key={i} className="text-xs text-gray-600">
-                        <span className="text-blue-700 font-medium">{line.debitCode}</span>
-                        {line.debitCode && ' → '}
-                        <span className="text-blue-700 font-medium">{line.creditCode}</span>
-                        {line.description && <span className="ml-2 text-gray-500">{line.description}</span>}
+                      <div key={i} className="text-xs text-gray-600 flex gap-2">
+                        <span className="font-medium text-gray-800">{line.debitCode}</span>
+                        <span>{line.debitName}</span>
+                        <span className="font-medium text-gray-800">{line.creditCode}</span>
+                        <span>{line.creditName}</span>
+                        {line.description && <span className="text-gray-500">{line.description}</span>}
                       </div>
                     ))}
                     {p.lines.length > 1 && (

@@ -49,17 +49,29 @@ export default function PatternDetailDialog({ open, patternId, onClose }: Props)
 
           <div>
             <div className="text-xs text-gray-500 mb-1">仕訳内容</div>
-            <div className="bg-gray-50 rounded-lg p-3 space-y-1">
-              {pattern.lines.map((line, i) => (
-                <div key={i} className="text-xs text-gray-700">
-                  <span className="text-blue-700 font-bold">{line.debitCode}</span>
-                  {' '}{line.debitName}
-                  <span className="mx-2 text-gray-400">→</span>
-                  <span className="text-blue-700 font-bold">{line.creditCode}</span>
-                  {' '}{line.creditName}
-                  {line.description && <div className="ml-4 text-gray-500">摘要: {line.description}</div>}
-                </div>
-              ))}
+            <div className="bg-gray-50 rounded-lg p-3">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="text-gray-500">
+                    <th className="text-left py-0.5 pr-2">借方CD</th>
+                    <th className="text-left py-0.5 pr-2">借方科目</th>
+                    <th className="text-left py-0.5 pr-2">貸方CD</th>
+                    <th className="text-left py-0.5 pr-2">貸方科目</th>
+                    <th className="text-left py-0.5">摘要</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pattern.lines.map((line, i) => (
+                    <tr key={i}>
+                      <td className="py-0.5 pr-2 font-bold text-gray-800">{line.debitCode}</td>
+                      <td className="py-0.5 pr-2 text-gray-700">{line.debitName}</td>
+                      <td className="py-0.5 pr-2 font-bold text-gray-800">{line.creditCode}</td>
+                      <td className="py-0.5 pr-2 text-gray-700">{line.creditName}</td>
+                      <td className="py-0.5 text-gray-500">{line.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
               {pattern.lines.length > 1 && (
                 <div className="text-xs text-violet-600 font-medium pt-1">（複合仕訳 {pattern.lines.length}行）</div>
               )}

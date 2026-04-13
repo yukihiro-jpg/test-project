@@ -28,14 +28,22 @@ export default function ApplyPatternDialog({
         {/* 適用パターン表示 */}
         <div className="px-6 py-3 bg-blue-50 border-b border-blue-200">
           <div className="text-xs font-bold text-blue-800 mb-1">適用するパターン</div>
-          {patternLines.map((line, i) => (
-            <div key={i} className="text-xs text-gray-700">
-              <span className="text-blue-700 font-bold">{line.debitCode}</span> {line.debitName}
-              → <span className="text-blue-700 font-bold">{line.creditCode}</span> {line.creditName}
-              {line.description && <span className="ml-2 text-gray-600">{line.description}</span>}
-              {line.taxCode && <span className="ml-2 text-gray-500">[税{line.taxCode}]</span>}
-            </div>
-          ))}
+          <table className="w-full text-xs border-collapse">
+            <thead><tr className="text-blue-700">
+              <th className="text-left py-0.5 pr-2">借方CD</th><th className="text-left py-0.5 pr-2">借方科目</th>
+              <th className="text-left py-0.5 pr-2">貸方CD</th><th className="text-left py-0.5 pr-2">貸方科目</th>
+              <th className="text-left py-0.5">摘要</th>
+            </tr></thead>
+            <tbody>{patternLines.map((line, i) => (
+              <tr key={i}>
+                <td className="py-0.5 pr-2 font-bold text-gray-800">{line.debitCode}</td>
+                <td className="py-0.5 pr-2 text-gray-700">{line.debitName}</td>
+                <td className="py-0.5 pr-2 font-bold text-gray-800">{line.creditCode}</td>
+                <td className="py-0.5 pr-2 text-gray-700">{line.creditName}</td>
+                <td className="py-0.5 text-gray-600">{line.description}</td>
+              </tr>
+            ))}</tbody>
+          </table>
           {patternLines.length > 1 && (
             <span className="text-xs text-violet-600 font-medium">（複合仕訳 {patternLines.length}行に展開されます）</span>
           )}
@@ -49,7 +57,8 @@ export default function ApplyPatternDialog({
                 <th className="px-3 py-2 text-left border-b border-gray-300 font-medium w-24">日付</th>
                 <th className="px-3 py-2 text-left border-b border-gray-300 font-medium">通帳摘要（元）</th>
                 <th className="px-3 py-2 text-right border-b border-gray-300 font-medium w-28">金額</th>
-                <th className="px-3 py-2 text-left border-b border-gray-300 font-medium">現在の借方→貸方</th>
+                <th className="px-3 py-2 text-left border-b border-gray-300 font-medium">借方CD</th>
+                <th className="px-3 py-2 text-left border-b border-gray-300 font-medium">貸方CD</th>
               </tr>
             </thead>
             <tbody>
@@ -62,17 +71,15 @@ export default function ApplyPatternDialog({
                     <td className="px-3 py-1.5 text-xs text-right font-medium tabular-nums">
                       {amount.toLocaleString()}
                     </td>
-                    <td className="px-3 py-1.5 text-xs">
-                      <span className="text-gray-500">{entry.debitCode || '—'}</span>
-                      <span className="mx-1 text-gray-400">→</span>
-                      <span className="text-gray-500">{entry.creditCode || '—'}</span>
+                    <td className="px-3 py-1.5 text-xs text-gray-700">{entry.debitCode || '—'}</td>
+                    <td className="px-3 py-1.5 text-xs text-gray-700">{entry.creditCode || '—'}
                     </td>
                   </tr>
                 )
               })}
               {targetEntries.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-gray-400">
+                  <td colSpan={5} className="px-3 py-8 text-center text-gray-400">
                     反映対象の仕訳がありません
                   </td>
                 </tr>

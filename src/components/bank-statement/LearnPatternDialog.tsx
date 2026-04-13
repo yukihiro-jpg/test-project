@@ -46,13 +46,28 @@ export default function LearnPatternDialog({
             <div className="text-xs text-gray-500 mb-1">通帳摘要（元）</div>
             <div className="font-medium text-gray-800 mb-2">{entry.originalDescription || '—'}</div>
             <div className="text-xs text-gray-500 mb-1">学習する仕訳</div>
-            {relatedEntries.map((e, i) => (
-              <div key={i} className="text-xs text-gray-700">
-                <span className="text-blue-700 font-bold">{e.debitCode}</span> {e.debitName}
-                → <span className="text-blue-700 font-bold">{e.creditCode}</span> {e.creditName}
-                {e.description && <span className="ml-2 text-gray-500">{e.description}</span>}
-              </div>
-            ))}
+            <table className="w-full text-xs border-collapse mb-1">
+              <thead>
+                <tr className="text-gray-500">
+                  <th className="text-left py-0.5 pr-2">借方CD</th>
+                  <th className="text-left py-0.5 pr-2">借方科目</th>
+                  <th className="text-left py-0.5 pr-2">貸方CD</th>
+                  <th className="text-left py-0.5 pr-2">貸方科目</th>
+                  <th className="text-left py-0.5">摘要</th>
+                </tr>
+              </thead>
+              <tbody>
+                {relatedEntries.map((e, i) => (
+                  <tr key={i}>
+                    <td className="py-0.5 pr-2 font-bold text-gray-800">{e.debitCode}</td>
+                    <td className="py-0.5 pr-2 text-gray-700">{e.debitName}</td>
+                    <td className="py-0.5 pr-2 font-bold text-gray-800">{e.creditCode}</td>
+                    <td className="py-0.5 pr-2 text-gray-700">{e.creditName}</td>
+                    <td className="py-0.5 text-gray-500">{e.description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             {relatedEntries.length > 1 && (
               <span className="text-xs text-violet-600 font-medium">（複合仕訳 {relatedEntries.length}行）</span>
             )}
