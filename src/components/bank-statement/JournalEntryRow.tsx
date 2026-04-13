@@ -56,28 +56,11 @@ export default function JournalEntryRow({
   }, [entry.id, onChange])
 
   const handleDebitCodeChange = (code: string) => {
-    onChange(entry.id, 'debitCode', code)
-    const acc = accountMaster.find((a) => a.code === code)
-    if (acc) {
-      onChange(entry.id, 'debitName', acc.shortName || acc.name)
-      // PL科目の場合、消費税CDを自動設定
-      if (!entry.debitTaxCode && isPL(acc.bsPl) && acc.normalBalance === '借方') {
-        const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'purchase')
-        if (tax) { onChange(entry.id, 'debitTaxCode', tax.taxCode); onChange(entry.id, 'debitTaxType', tax.taxName) }
-      }
-    }
+    // 科目コード+名前+消費税を一括更新（クロージャ問題回避）
+    onChange(entry.id, '_debitCodeFull' as keyof JournalEntry, code)
   }
   const handleCreditCodeChange = (code: string) => {
-    onChange(entry.id, 'creditCode', code)
-    const acc = accountMaster.find((a) => a.code === code)
-    if (acc) {
-      onChange(entry.id, 'creditName', acc.shortName || acc.name)
-      // PL売上科目の場合、消費税CDを自動設定
-      if (!entry.debitTaxCode && isPL(acc.bsPl) && acc.normalBalance === '貸方') {
-        const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'sales')
-        if (tax) { onChange(entry.id, 'debitTaxCode', tax.taxCode); onChange(entry.id, 'debitTaxType', tax.taxName) }
-      }
-    }
+    onChange(entry.id, '_creditCodeFull' as keyof JournalEntry, code)
   }
 
   const isEmpty = (f: keyof JournalEntry) => { const v = entry[f]; return !v || (typeof v === 'string' && !v.trim()) }
@@ -192,8 +175,7 @@ export default function JournalEntryRow({
             creditCode={entry.creditCode}
             accountMaster={accountMaster}
             onChange={(code, name) => {
-              onChange(entry.id, 'debitTaxCode', code)
-              onChange(entry.id, 'debitTaxType', name)
+              onChange(entry.id, '_taxFull' as keyof JournalEntry, `${code}|${name}`)
             }}
           />
         </td>

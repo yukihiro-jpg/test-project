@@ -14,6 +14,7 @@ import {
 } from '@/lib/bank-statement/journal-mapper'
 import { learnFromEntriesWithRange, getPatterns } from '@/lib/bank-statement/pattern-store'
 import { saveSubAccountMaster } from '@/lib/bank-statement/account-master'
+import { isPL, getDefaultTaxCodeByName } from '@/lib/bank-statement/tax-codes'
 import JournalEntryRow from './JournalEntryRow'
 import LearnPatternDialog from './LearnPatternDialog'
 import ApplyPatternDialog from './ApplyPatternDialog'
@@ -236,14 +237,43 @@ export default function JournalEntryTable({
     (id: string, field: keyof JournalEntry, value: string | number) => {
       onEntriesChange(entries.map((e) => {
         if (e.id !== id) return e
-        // _amount は debitAmount と creditAmount の両方を同時更新する特殊フィールド
+        // _amount は debitAmount と creditAmount の両方を同時更新
         if (field === '_amount' as keyof JournalEntry) {
           return { ...e, debitAmount: value as number, creditAmount: value as number }
+        }
+        // _debitCodeFull: 借方コード+科目名+消費税を一括更新
+        if (field === '_debitCodeFull' as keyof JournalEntry) {
+          const code = value as string
+          const acc = accountMaster.find((a) => a.code === code)
+          const updated = { ...e, debitCode: code, debitName: acc ? (acc.shortName || acc.name) : '' }
+          // PL費用科目 → 消費税自動設定
+          if (acc && isPL(acc.bsPl) && acc.normalBalance === '借方' && !e.debitTaxCode) {
+            const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'purchase')
+            if (tax) { updated.debitTaxCode = tax.taxCode; updated.debitTaxType = tax.taxName; updated.debitTaxRate = '4' }
+          }
+          return updated
+        }
+        // _creditCodeFull: 貸方コード+科目名+消費税を一括更新
+        if (field === '_creditCodeFull' as keyof JournalEntry) {
+          const code = value as string
+          const acc = accountMaster.find((a) => a.code === code)
+          const updated = { ...e, creditCode: code, creditName: acc ? (acc.shortName || acc.name) : '' }
+          // PL売上科目 → 消費税自動設定
+          if (acc && isPL(acc.bsPl) && acc.normalBalance === '貸方' && !e.debitTaxCode) {
+            const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'sales')
+            if (tax) { updated.debitTaxCode = tax.taxCode; updated.debitTaxType = tax.taxName; updated.debitTaxRate = '4' }
+          }
+          return updated
+        }
+        // _taxFull: 消費税CD+名称を一括更新
+        if (field === '_taxFull' as keyof JournalEntry) {
+          const [code, name] = (value as string).split('|')
+          return { ...e, debitTaxCode: code || '', debitTaxType: name || '' }
         }
         return { ...e, [field]: value }
       }))
     },
-    [entries, onEntriesChange],
+    [entries, onEntriesChange, accountMaster],
   )
 
   const handleAddCompoundRow = useCallback(
