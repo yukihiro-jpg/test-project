@@ -10,6 +10,7 @@ import JournalEntryTable from '@/components/bank-statement/JournalEntryTable'
 import ColumnMappingDialog from '@/components/bank-statement/ColumnMappingDialog'
 import CsvExportButton from '@/components/bank-statement/CsvExportButton'
 import { appendTempEntries, getTempEntryCount, clearTempEntries, getTempEntries } from '@/lib/bank-statement/temp-store'
+import { generateQuestionList, downloadQuestionExcel } from '@/lib/bank-statement/question-list'
 import { applyCompoundAutoAmounts, downloadCsv } from '@/lib/bank-statement/csv-generator'
 import { learnAllFromEntries } from '@/lib/bank-statement/pattern-store'
 import ResizableSplitPanel from '@/components/bank-statement/ResizableSplitPanel'
@@ -424,6 +425,18 @@ export default function BankStatementContent() {
     setTempCount(0)
   }, [])
 
+  // 仮払金質問リストExcel出力
+  const handleQuestionList = useCallback(() => {
+    const clientName = selectedClient?.name || '顧問先'
+    const rows = generateQuestionList(accountMaster, clientName)
+    if (rows.length === 0) {
+      alert('一時保存データに仮払金の仕訳がありません。')
+      return
+    }
+    downloadQuestionExcel(rows, clientName)
+    setInfo(`仮払金質問リスト（${rows.length}件）をExcel出力しました`)
+  }, [accountMaster, selectedClient])
+
   const selectedTransactionId = (() => {
     if (!selectedEntryId) return null
     const entry = journalEntries.find((e) => e.id === selectedEntryId)
@@ -485,6 +498,10 @@ export default function BankStatementContent() {
               <button onClick={handleTempExport}
                 className="px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded">
                 一括CSV出力 ({tempCount}件)
+              </button>
+              <button onClick={handleQuestionList}
+                className="px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
+                仮払金質問リスト
               </button>
               <button onClick={handleTempClear}
                 className="px-2 py-1.5 text-xs text-gray-400 hover:text-red-400" title="一時保存をクリア">
