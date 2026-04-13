@@ -50,6 +50,27 @@ export const PURCHASE_TAX_CODES: TaxCodeItem[] = [
 
 export const ALL_TAX_CODES = [...SALES_TAX_CODES, ...PURCHASE_TAX_CODES]
 
+// BS/PL判定ヘルパー（全角半角混在に対応）
+export function isPL(bsPl?: string): boolean {
+  if (!bsPl) return false
+  const normalized = bsPl.replace(/[Ａ-Ｚａ-ｚ]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).toUpperCase()
+  return normalized === 'PL' || normalized.includes('PL') || bsPl === 'ＰＬ'
+}
+
+export function isBS(bsPl?: string): boolean {
+  if (!bsPl) return false
+  const normalized = bsPl.replace(/[Ａ-Ｚａ-ｚ]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).toUpperCase()
+  return normalized === 'BS' || normalized.includes('BS') || bsPl === 'ＢＳ'
+}
+
+function isDebitNormal(normalBalance?: string): boolean {
+  return normalBalance === '借方'
+}
+
+function isCreditNormal(normalBalance?: string): boolean {
+  return normalBalance === '貸方'
+}
+
 /**
  * 仕訳の借方・貸方科目から売上/仕入を判定して適切な消費税コードを返す
  */
@@ -58,27 +79,23 @@ export function getTaxCodesForEntry(
   creditCode: string,
   accountMaster: { code: string; bsPl?: string; normalBalance?: string }[],
 ): TaxCodeItem[] {
-  // 貸方が売上系科目 → 売上関係
-  // 借方が経費・仕入系科目 → 仕入関係
   const debitAcc = accountMaster.find((a) => a.code === debitCode)
   const creditAcc = accountMaster.find((a) => a.code === creditCode)
 
   // PL科目の正残区分で判定
-  if (creditAcc?.bsPl === 'ＰＬ' && creditAcc?.normalBalance === '貸方') {
-    return SALES_TAX_CODES // 売上系
+  if (creditAcc && isPL(creditAcc.bsPl) && isCreditNormal(creditAcc.normalBalance)) {
+    return SALES_TAX_CODES
   }
-  if (debitAcc?.bsPl === 'ＰＬ' && debitAcc?.normalBalance === '借方') {
-    return PURCHASE_TAX_CODES // 仕入・経費系
+  if (debitAcc && isPL(debitAcc.bsPl) && isDebitNormal(debitAcc.normalBalance)) {
+    return PURCHASE_TAX_CODES
   }
 
   // コード番号で簡易判定
   const debitNum = parseInt(debitCode)
   const creditNum = parseInt(creditCode)
   if (creditNum >= 400 && creditNum < 600) return SALES_TAX_CODES
-  if (debitNum >= 600 && debitNum < 900) return PURCHASE_TAX_CODES
-  if (debitNum >= 500 && debitNum < 600) return PURCHASE_TAX_CODES
+  if (debitNum >= 500 && debitNum < 900) return PURCHASE_TAX_CODES
 
-  // デフォルトは両方表示
   return [...SALES_TAX_CODES, ...PURCHASE_TAX_CODES]
 }
 

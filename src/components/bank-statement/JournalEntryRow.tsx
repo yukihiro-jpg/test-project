@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type { JournalEntry, AccountItem, SubAccountItem } from '@/lib/bank-statement/types'
-import { getTaxCodesForEntry, type TaxCodeItem } from '@/lib/bank-statement/tax-codes'
+import { getTaxCodesForEntry, isBS, isPL, getDefaultTaxCodeByName } from '@/lib/bank-statement/tax-codes'
 
 interface Props {
   entry: JournalEntry
@@ -58,12 +58,26 @@ export default function JournalEntryRow({
   const handleDebitCodeChange = (code: string) => {
     onChange(entry.id, 'debitCode', code)
     const acc = accountMaster.find((a) => a.code === code)
-    if (acc) onChange(entry.id, 'debitName', acc.shortName || acc.name)
+    if (acc) {
+      onChange(entry.id, 'debitName', acc.shortName || acc.name)
+      // PL科目の場合、消費税CDを自動設定
+      if (!entry.debitTaxCode && isPL(acc.bsPl) && acc.normalBalance === '借方') {
+        const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'purchase')
+        if (tax) { onChange(entry.id, 'debitTaxCode', tax.taxCode); onChange(entry.id, 'debitTaxType', tax.taxName) }
+      }
+    }
   }
   const handleCreditCodeChange = (code: string) => {
     onChange(entry.id, 'creditCode', code)
     const acc = accountMaster.find((a) => a.code === code)
-    if (acc) onChange(entry.id, 'creditName', acc.shortName || acc.name)
+    if (acc) {
+      onChange(entry.id, 'creditName', acc.shortName || acc.name)
+      // PL売上科目の場合、消費税CDを自動設定
+      if (!entry.debitTaxCode && isPL(acc.bsPl) && acc.normalBalance === '貸方') {
+        const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'sales')
+        if (tax) { onChange(entry.id, 'debitTaxCode', tax.taxCode); onChange(entry.id, 'debitTaxType', tax.taxName) }
+      }
+    }
   }
 
   const isEmpty = (f: keyof JournalEntry) => { const v = entry[f]; return !v || (typeof v === 'string' && !v.trim()) }
@@ -379,9 +393,7 @@ function TaxCodeField({
   // BS科目のみの仕訳は消費税登録不可
   const debitAcc = accountMaster.find((a) => a.code === debitCode)
   const creditAcc = accountMaster.find((a) => a.code === creditCode)
-  const isBsOnly = debitAcc && creditAcc &&
-    (debitAcc.bsPl === 'ＢＳ' || debitAcc.bsPl === 'BS') &&
-    (creditAcc.bsPl === 'ＢＳ' || creditAcc.bsPl === 'BS')
+  const isBsOnly = debitAcc && creditAcc && isBS(debitAcc.bsPl) && isBS(creditAcc.bsPl)
 
   // Enter押下時に最初のサジェストを確定
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

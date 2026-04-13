@@ -27,7 +27,7 @@ import { parseFile, applyColumnMapping } from '@/lib/bank-statement/transaction-
 import { mapTransactionsToJournalEntries } from '@/lib/bank-statement/journal-mapper'
 import { getPatterns } from '@/lib/bank-statement/pattern-store'
 import { loadAccountMaster, loadSubAccountMaster, loadAccountTaxMaster, getDefaultTaxCode } from '@/lib/bank-statement/account-master'
-import { getDefaultTaxCodeByName } from '@/lib/bank-statement/tax-codes'
+import { getDefaultTaxCodeByName, isPL } from '@/lib/bank-statement/tax-codes'
 import type { AccountTaxItem } from '@/lib/bank-statement/types'
 import ClientSelector from '@/components/bank-statement/ClientSelector'
 import type { Client } from '@/lib/bank-statement/client-store'
@@ -121,9 +121,9 @@ export default function BankStatementContent() {
             const creditAcc = accountMaster.find((a) => a.code === updated.creditCode)
             // PL売上/仕入の判定
             let category: 'sales' | 'purchase' | null = null
-            if (creditAcc && (creditAcc.bsPl === 'ＰＬ' || creditAcc.bsPl === 'PL') && creditAcc.normalBalance === '貸方') {
+            if (creditAcc && isPL(creditAcc.bsPl) && creditAcc.normalBalance === '貸方') {
               category = 'sales'
-            } else if (debitAcc && (debitAcc.bsPl === 'ＰＬ' || debitAcc.bsPl === 'PL') && debitAcc.normalBalance === '借方') {
+            } else if (debitAcc && isPL(debitAcc.bsPl) && debitAcc.normalBalance === '借方') {
               category = 'purchase'
             }
             const nameTax = getDefaultTaxCodeByName(
