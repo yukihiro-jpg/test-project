@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type { JournalEntry, AccountItem, SubAccountItem } from '@/lib/bank-statement/types'
+import { getTaxCodesForEntry, type TaxCodeItem } from '@/lib/bank-statement/tax-codes'
 
 interface Props {
   entry: JournalEntry
@@ -168,12 +169,19 @@ export default function JournalEntryRow({
           </span>
         </td>
 
-        {/* 消費税（税区のみ） */}
-        <td style={CB} className={emptyBg('debitTaxType')}>
-          <input type="text" value={entry.debitTaxType}
-            onChange={(e) => onChange(entry.id, 'debitTaxType', e.target.value)}
-            onKeyDown={handleNav} placeholder="税区"
-            className="w-full px-1 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800" />
+        {/* 消費税コード */}
+        <td style={CB} className={emptyBg('debitTaxCode')}>
+          <TaxCodeField
+            taxCode={entry.debitTaxCode}
+            taxType={entry.debitTaxType}
+            debitCode={entry.debitCode}
+            creditCode={entry.creditCode}
+            accountMaster={accountMaster}
+            onChange={(code, name) => {
+              onChange(entry.id, 'debitTaxCode', code)
+              onChange(entry.id, 'debitTaxType', name)
+            }}
+          />
         </td>
 
         {/* 摘要（25文字制限） */}
@@ -328,6 +336,57 @@ function RowMenu({ onLearn, onAddBlank, onDelete }: { onLearn: () => void; onAdd
           <button onClick={() => { onAddBlank(); setOpen(false) }} className="w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50">空白行を追加</button>
           <hr className="border-gray-100" />
           <button onClick={() => { onDelete(); setOpen(false) }} className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50">削除</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 消費税コード選択フィールド
+function TaxCodeField({
+  taxCode, taxType, debitCode, creditCode, accountMaster, onChange,
+}: {
+  taxCode: string; taxType: string
+  debitCode: string; creditCode: string
+  accountMaster: AccountItem[]
+  onChange: (code: string, name: string) => void
+}) {
+  const [show, setShow] = useState(false)
+  const [inputVal, setInputVal] = useState(taxCode)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { setInputVal(taxCode) }, [taxCode])
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setShow(false) }
+    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  const taxCodes = getTaxCodesForEntry(debitCode, creditCode, accountMaster)
+  const filtered = inputVal
+    ? taxCodes.filter((t) => t.code.includes(inputVal) || t.name.includes(inputVal))
+    : taxCodes
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="flex items-center gap-0.5">
+        <input type="text" value={inputVal}
+          onChange={(e) => { setInputVal(e.target.value); setShow(true); onChange(e.target.value, '') }}
+          onFocus={() => setShow(true)}
+          onKeyDown={handleNav}
+          placeholder="CD"
+          className="w-8 shrink-0 px-0.5 py-0.5 text-sm text-blue-700 font-bold bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-center" />
+        <span className="text-xs text-gray-600 truncate">{taxType}</span>
+      </div>
+      {show && filtered.length > 0 && (
+        <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-xl z-30 max-h-48 overflow-auto">
+          {filtered.map((t) => (
+            <button key={`${t.category}-${t.code}`}
+              onMouseDown={(e) => { e.preventDefault(); setInputVal(t.code); onChange(t.code, t.name); setShow(false) }}
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-blue-50 flex gap-2">
+              <span className="text-blue-700 font-bold w-8 shrink-0">{t.code}</span>
+              <span className="text-gray-700 text-xs">{t.name}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>

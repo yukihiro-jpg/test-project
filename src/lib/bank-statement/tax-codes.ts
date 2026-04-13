@@ -1,0 +1,93 @@
+// 消費税コードマスタ（内税入力用のみ）
+
+export interface TaxCodeItem {
+  code: string
+  name: string
+  category: 'sales' | 'purchase'
+}
+
+// 売上関係（内税入力）
+export const SALES_TAX_CODES: TaxCodeItem[] = [
+  { code: '10', name: '課税売上', category: 'sales' },
+  { code: '12', name: '課税売上控除', category: 'sales' },
+  { code: '13', name: '課税貸倒償却', category: 'sales' },
+  { code: '15', name: '課税貸倒回収', category: 'sales' },
+  { code: '30', name: '非課税売上', category: 'sales' },
+  { code: '34', name: '有価証券売上等（非課税）', category: 'sales' },
+  { code: '40', name: '不課税売上（精算取引）', category: 'sales' },
+  { code: '41', name: '不課税売上（免税期間）', category: 'sales' },
+  { code: '60', name: '輸出売上', category: 'sales' },
+  { code: '64', name: '非課税資産 輸出売上', category: 'sales' },
+  { code: '80', name: '課税仕入対応特定収入', category: 'sales' },
+  { code: '81', name: '共通仕入対応特定収入', category: 'sales' },
+  { code: '84', name: '非課税仕入対応特定収入', category: 'sales' },
+  { code: '89', name: '使途不特定の特定収入', category: 'sales' },
+  { code: '99', name: '不明', category: 'sales' },
+]
+
+// 仕入関係（内税入力）
+export const PURCHASE_TAX_CODES: TaxCodeItem[] = [
+  { code: '10', name: '課税仕入', category: 'purchase' },
+  { code: '11', name: '課税非課税共通売上対応課税仕入', category: 'purchase' },
+  { code: '12', name: '課税仕入控除', category: 'purchase' },
+  { code: '14', name: '非課税売上対応課税仕入', category: 'purchase' },
+  { code: '15', name: '課税非課税共通売上対応課税仕入控除', category: 'purchase' },
+  { code: '16', name: '非課税売上対応課税仕入控除', category: 'purchase' },
+  { code: '30', name: '非課税仕入', category: 'purchase' },
+  { code: '40', name: '不課税仕入（精算取引）', category: 'purchase' },
+  { code: '41', name: '不課税仕入（免税期間）', category: 'purchase' },
+  { code: '70', name: '輸入仕入', category: 'purchase' },
+  { code: '71', name: '輸入共通仕入', category: 'purchase' },
+  { code: '74', name: '非課税売上対応輸入仕入', category: 'purchase' },
+  { code: '80', name: '課税売上対応特定課税仕入', category: 'purchase' },
+  { code: '81', name: '共通売上対応特定課税仕入', category: 'purchase' },
+  { code: '82', name: '課税売上対応特定課税仕入控除', category: 'purchase' },
+  { code: '84', name: '非課税売上対応特定課税仕入', category: 'purchase' },
+  { code: '85', name: '共通売上対応特定課税仕入控除', category: 'purchase' },
+  { code: '86', name: '非課税売上対応特定課税仕入控除', category: 'purchase' },
+  { code: '99', name: '不明', category: 'purchase' },
+]
+
+export const ALL_TAX_CODES = [...SALES_TAX_CODES, ...PURCHASE_TAX_CODES]
+
+/**
+ * 仕訳の借方・貸方科目から売上/仕入を判定して適切な消費税コードを返す
+ */
+export function getTaxCodesForEntry(
+  debitCode: string,
+  creditCode: string,
+  accountMaster: { code: string; bsPl?: string; normalBalance?: string }[],
+): TaxCodeItem[] {
+  // 貸方が売上系科目 → 売上関係
+  // 借方が経費・仕入系科目 → 仕入関係
+  const debitAcc = accountMaster.find((a) => a.code === debitCode)
+  const creditAcc = accountMaster.find((a) => a.code === creditCode)
+
+  // PL科目の正残区分で判定
+  if (creditAcc?.bsPl === 'ＰＬ' && creditAcc?.normalBalance === '貸方') {
+    return SALES_TAX_CODES // 売上系
+  }
+  if (debitAcc?.bsPl === 'ＰＬ' && debitAcc?.normalBalance === '借方') {
+    return PURCHASE_TAX_CODES // 仕入・経費系
+  }
+
+  // コード番号で簡易判定
+  const debitNum = parseInt(debitCode)
+  const creditNum = parseInt(creditCode)
+  if (creditNum >= 400 && creditNum < 600) return SALES_TAX_CODES
+  if (debitNum >= 600 && debitNum < 900) return PURCHASE_TAX_CODES
+  if (debitNum >= 500 && debitNum < 600) return PURCHASE_TAX_CODES
+
+  // デフォルトは両方表示
+  return [...SALES_TAX_CODES, ...PURCHASE_TAX_CODES]
+}
+
+/**
+ * 消費税コードを検索
+ */
+export function findTaxCode(code: string, category?: 'sales' | 'purchase'): TaxCodeItem | undefined {
+  const list = category === 'sales' ? SALES_TAX_CODES
+    : category === 'purchase' ? PURCHASE_TAX_CODES
+    : ALL_TAX_CODES
+  return list.find((t) => t.code === code)
+}
