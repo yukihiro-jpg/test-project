@@ -280,6 +280,17 @@ function AccountField({
 
   const confirm = (c: string) => { onCodeChange(c); setShow(false); if (subAccountMaster.filter((s) => s.parentCode === c).length > 0) setShowSub(true) }
 
+  // 科目名のフォントカラー判定
+  const acc = accountMaster.find((a) => a.code === code)
+  let nameColor = 'text-gray-800' // BS: 黒
+  if (acc) {
+    if (isPL(acc.bsPl) && acc.normalBalance === '貸方') {
+      nameColor = 'text-blue-600' // PL売上: 青
+    } else if (isPL(acc.bsPl) && acc.normalBalance === '借方') {
+      nameColor = 'text-red-600' // PL仕入経費: 赤
+    }
+  }
+
   return (
     <div ref={ref} className="relative cursor-text" onClick={() => inputRef.current?.focus()}>
       <div className="flex items-center gap-0 min-h-[28px]">
@@ -292,8 +303,8 @@ function AccountField({
             else handleNav(e)
           }}
           style={{ imeMode: 'disabled' } as React.CSSProperties}
-          className="w-12 shrink-0 px-1 py-0.5 text-sm text-blue-700 font-bold bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded" />
-        <span className="text-sm text-gray-800 font-semibold truncate flex-1">{name}</span>
+          className="w-12 shrink-0 px-1 py-0.5 text-sm text-gray-800 font-bold bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded" />
+        <span className={`text-sm font-semibold truncate flex-1 ${nameColor}`}>{name}</span>
         {subName && <span className="text-xs text-gray-500 truncate">[{subName}]</span>}
       </div>
 
