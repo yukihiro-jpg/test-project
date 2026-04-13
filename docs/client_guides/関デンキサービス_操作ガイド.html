@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>現金管理スマホアプリ 操作ガイド - 関デンキサービス㈱ 様</title>
+<style>
+  @page { margin: 18mm 15mm; }
+  body {
+    font-family: 'Yu Gothic', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+    max-width: 750px;
+    margin: 0 auto;
+    padding: 30px;
+    color: #333;
+    line-height: 1.9;
+    font-size: 14px;
+  }
+  .header {
+    text-align: center;
+    border-bottom: 3px solid #1a73e8;
+    padding-bottom: 15px;
+    margin-bottom: 10px;
+  }
+  .header h1 { font-size: 22px; color: #1a73e8; margin: 0 0 5px 0; }
+  .header p { color: #888; font-size: 13px; margin: 0; }
+  .intro {
+    background: #f0f4ff;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 25px 0;
+  }
+  .intro h2 { font-size: 17px; color: #1a53a8; margin: 0 0 10px 0; }
+  h2 {
+    font-size: 17px;
+    color: #1a53a8;
+    margin-top: 35px;
+    padding: 8px 12px;
+    background: #f0f4ff;
+    border-left: 4px solid #1a73e8;
+  }
+  h3 { font-size: 15px; color: #333; margin-top: 20px; }
+  .step {
+    background: #fafafa;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 18px;
+    margin: 12px 0;
+  }
+  .step-num {
+    display: inline-block;
+    background: #1a73e8;
+    color: white;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 28px;
+    font-weight: bold;
+    font-size: 14px;
+    margin-right: 8px;
+  }
+  .step-title { font-weight: bold; font-size: 15px; }
+  .step p { margin: 8px 0 0 36px; color: #555; }
+  .important {
+    background: #fff3e0;
+    border-left: 4px solid #f9ab00;
+    padding: 14px 18px;
+    margin: 18px 0;
+    border-radius: 4px;
+  }
+  .important-title { font-weight: bold; color: #e65100; margin-bottom: 6px; }
+  .warning {
+    background: #fce4ec;
+    border-left: 4px solid #e53935;
+    padding: 14px 18px;
+    margin: 18px 0;
+    border-radius: 4px;
+  }
+  .warning-title { font-weight: bold; color: #c62828; margin-bottom: 6px; }
+  .tip {
+    background: #e8f5e9;
+    border-left: 4px solid #43a047;
+    padding: 14px 18px;
+    margin: 18px 0;
+    border-radius: 4px;
+  }
+  .tip-title { font-weight: bold; color: #2e7d32; margin-bottom: 6px; }
+  .blue-box {
+    background: #e3f2fd;
+    border-left: 4px solid #1a73e8;
+    padding: 14px 18px;
+    margin: 18px 0;
+    border-radius: 4px;
+  }
+  .blue-box-title { font-weight: bold; color: #0d47a1; margin-bottom: 6px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+  }
+  th {
+    background: #f0f4ff;
+    padding: 10px;
+    text-align: left;
+    border: 1px solid #d0d7de;
+    font-size: 13px;
+  }
+  td {
+    padding: 10px;
+    border: 1px solid #d0d7de;
+    font-size: 13px;
+  }
+  ul { padding-left: 22px; }
+  li { margin: 6px 0; }
+  .flow-box {
+    background: #fafafa;
+    border: 2px solid #1a73e8;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+    text-align: center;
+  }
+  .flow-box p {
+    margin: 5px 0;
+    font-size: 14px;
+  }
+  .flow-arrow {
+    font-size: 20px;
+    color: #1a73e8;
+    margin: 3px 0;
+  }
+  .footer {
+    margin-top: 40px;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+    text-align: center;
+    font-size: 12px;
+    color: #999;
+  }
+  @media print {
+    body { margin: 15px; padding: 15px; }
+    .page-break { page-break-before: always; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>現金管理スマホアプリ 操作ガイド</h1>
+  <p>関デンキサービス㈱ 様 | 日下部税理士事務所</p>
+</div>
+
+<div class="intro">
+  <h2>このアプリで何ができるの？</h2>
+  <p>
+    スマートフォンだけで<strong>現金の管理</strong>ができるアプリです。<br>
+    難しい操作は一切ありません。やることは3つだけです。
+  </p>
+  <div class="flow-box">
+    <p><strong>銀行から現金を引き出したら</strong></p>
+    <p>→ アプリで「現金引出」を登録</p>
+    <p class="flow-arrow">↓</p>
+    <p><strong>現金で経費を支払ったら</strong></p>
+    <p>→ レシートをスマホで撮影して送信</p>
+    <p class="flow-arrow">↓</p>
+    <p><strong>売上金を銀行に預けたら</strong></p>
+    <p>→ アプリで「現金預入」を登録</p>
+    <p class="flow-arrow">↓</p>
+    <p style="color: #1a73e8; font-weight: bold; font-size: 16px;">
+      現金出納帳が自動で完成します！
+    </p>
+  </div>
+  <p>
+    これにより、<strong>お金の出入りが明確</strong>になり、
+    確定申告や税務調査の際にもスムーズに対応できるようになります。
+  </p>
+</div>
+
+<h2>1. アプリの開き方</h2>
+
+<p>
+  <strong>アプリのインストールは不要です。</strong>
+  スマートフォンのブラウザでURLを開くだけで使えます。
+</p>
+
+<div class="step">
+  <span class="step-num">1</span>
+  <span class="step-title">お渡しするURLまたはQRコードをスマホで開く</span>
+  <p>※ URLは別途お知らせします。ブックマークしておくと便利です。</p>
+</div>
+
+<div class="step">
+  <span class="step-num">2</span>
+  <span class="step-title">画面上部に「関デンキサービス㈱」と表示されればOK</span>
+</div>
+
+<div class="tip">
+  <div class="tip-title">ホーム画面に追加すると便利です</div>
+  iPhone: Safari → 共有ボタン →「ホーム画面に追加」<br>
+  Android: Chrome → メニュー →「ホーム画面に追加」<br>
+  アプリのように1タップで開けるようになります。
+</div>
+
+<h2>2. 銀行から現金を引き出したとき</h2>
+
+<p>通帳からお金を下ろしたら、<strong>その日のうちに</strong>登録してください。</p>
+
+<div class="step">
+  <span class="step-num">1</span>
+  <span class="step-title">画面下部の「現金引出・現金預入を登録する」をタップ</span>
+  <p>オレンジ色のボタンです。</p>
+</div>
+
+<div class="step">
+  <span class="step-num">2</span>
+  <span class="step-title">「現金引出」タブが選択されていることを確認</span>
+  <p>青色になっているタブが選択中です。</p>
+</div>
+
+<div class="step">
+  <span class="step-num">3</span>
+  <span class="step-title">日付・銀行名・口座番号・金額を入力</span>
+  <p>
+    銀行名と口座番号は一度入力すると、次回から候補として表示されます。
+  </p>
+</div>
+
+<div class="step">
+  <span class="step-num">4</span>
+  <span class="step-title">「登録する」をタップ</span>
+  <p>「登録完了！」と表示されれば成功です。</p>
+</div>
+
+<div class="important">
+  <div class="important-title">引き出した金額を正確に入力してください</div>
+  <p>
+    例えば5万円下ろした場合は「50000」と入力します。<br>
+    この金額が現金出納帳の「入金額」（手元の現金が増えた金額）として記録されます。
+  </p>
+</div>
+
+<h2>3. 現金で経費を支払ったとき（レシート撮影）</h2>
+
+<p>現金で買い物をしたら、レシートをスマホで撮影して送信します。</p>
+
+<div class="step">
+  <span class="step-num">1</span>
+  <span class="step-title">書類の種類で「レシート・領収書」を選ぶ</span>
+</div>
+
+<div class="step">
+  <span class="step-num">2</span>
+  <span class="step-title">使用者名にフルネームを入力</span>
+  <p>
+    例：関太郎<br>
+    誰が使ったお金なのかを区別するために必要です。
+  </p>
+</div>
+
+<div class="step">
+  <span class="step-num">3</span>
+  <span class="step-title">「撮影する」をタップしてレシートを撮影</span>
+  <p>
+    複数枚のレシートがある場合は続けて「撮影する」をタップしてください。<br>
+    1枚の写真に2〜3枚のレシートを並べて撮影してもOKです（重ならないように）。
+  </p>
+</div>
+
+<div class="step">
+  <span class="step-num">4</span>
+  <span class="step-title">「まとめて送信する」をタップ</span>
+  <p>「送信完了！」と表示されれば成功です。</p>
+</div>
+
+<div class="important">
+  <div class="important-title">撮影するのは現金払いのレシートだけです</div>
+  <table>
+    <tr><th>支払方法</th><th>撮影する？</th></tr>
+    <tr><td>現金で支払ったレシート</td><td style="color: #2e7d32; font-weight: bold;">撮影する</td></tr>
+    <tr><td>クレジットカードで支払ったレシート</td><td style="color: #e53935; font-weight: bold;">撮影しない</td></tr>
+    <tr><td>クレジットカード利用明細書</td><td style="color: #2e7d32; font-weight: bold;">撮影する（書類種別を変更）</td></tr>
+  </table>
+</div>
+
+<div class="page-break"></div>
+
+<h2>4. 売上金を銀行に預けたとき</h2>
+
+<div class="step">
+  <span class="step-num">1</span>
+  <span class="step-title">「現金引出・現金預入を登録する」をタップ</span>
+</div>
+
+<div class="step">
+  <span class="step-num">2</span>
+  <span class="step-title">「現金預入」タブをタップ</span>
+</div>
+
+<div class="step">
+  <span class="step-num">3</span>
+  <span class="step-title">日付・銀行名・口座番号・金額を入力</span>
+</div>
+
+<div class="step">
+  <span class="step-num">4</span>
+  <span class="step-title">「預入の種類」を選択</span>
+  <p>
+    <strong>売上金の預入</strong>：お客様から受け取った現金を銀行に入れた場合<br>
+    <strong>その他の預入</strong>：上記以外の場合
+  </p>
+</div>
+
+<div class="step">
+  <span class="step-num">5</span>
+  <span class="step-title">「登録する」をタップ</span>
+</div>
+
+<h2>5. 日々の作業まとめ</h2>
+
+<table>
+  <tr><th>タイミング</th><th>やること</th><th>操作時間</th></tr>
+  <tr><td>銀行でお金を下ろしたとき</td><td>「現金引出」を登録</td><td>30秒</td></tr>
+  <tr><td>現金で買い物をしたとき</td><td>レシートを撮影して送信</td><td>1分</td></tr>
+  <tr><td>売上金を銀行に預けたとき</td><td>「現金預入」を登録</td><td>30秒</td></tr>
+</table>
+
+<div class="blue-box">
+  <div class="blue-box-title">これだけで現金出納帳が自動で完成します</div>
+  <p>
+    税理士事務所側で、送信されたデータをもとに自動的に現金出納帳を作成します。
+    社長様に帳簿を手書きしていただく必要はありません。
+  </p>
+</div>
+
+<h2>6. 定着させるコツ</h2>
+
+<div class="tip">
+  <div class="tip-title">「その場で、すぐに」が鉄則です</div>
+  <ul>
+    <li><strong>レシートをもらったら、その場で撮影</strong>。後回しにするとレシートが行方不明になります。</li>
+    <li><strong>銀行から出たら、すぐに引出登録</strong>。金額を忘れてしまう前に。</li>
+    <li>1日の終わりにまとめてやるより、<strong>都度やる方が圧倒的に楽</strong>です。</li>
+  </ul>
+</div>
+
+<div class="tip">
+  <div class="tip-title">レシートは印字が薄くなる前に撮影</div>
+  <p>
+    感熱紙のレシートは時間が経つと文字が消えてしまいます。<br>
+    <strong>遅くとも1週間以内</strong>に撮影してください。
+  </p>
+</div>
+
+<div class="tip">
+  <div class="tip-title">最初の1週間を乗り越えれば習慣になります</div>
+  <ul>
+    <li>最初は面倒に感じるかもしれませんが、1回の操作は30秒〜1分です。</li>
+    <li>スマホのホーム画面にアプリを追加しておくと、すぐ開けて便利です。</li>
+    <li>1週間続けると自然と習慣になります。</li>
+  </ul>
+</div>
+
+<h2>7. レシートの保管について</h2>
+
+<div class="warning">
+  <div class="warning-title">撮影後もレシートは捨てないでください</div>
+  <p>
+    このアプリは税理士事務所への資料送付を効率化するためのものです。<br>
+    <strong>電子帳簿保存法の要件を満たすものではありません。</strong><br>
+    法律上、レシート・領収書の原本（紙）は保管が必要です。<br>
+    撮影後は<strong>月ごとに封筒にまとめて保管</strong>してください。
+  </p>
+</div>
+
+<h2>8. よくある質問</h2>
+
+<h3>Q. カード払いのレシートも撮影するの？</h3>
+<p>
+  <strong>いいえ、撮影しません。</strong>
+  カード払いの経費はクレジットカード利用明細書で管理します。
+  利用明細書は書類種別を「クレジットカード利用明細書」に変えて撮影するか、
+  決算時にPDFデータでお送りください。
+</p>
+
+<h3>Q. 引き出しを登録し忘れたらどうする？</h3>
+<p>
+  気づいた時点で登録してください。日付は実際に引き出した日を入力すれば、
+  自動的に正しい日付の位置に入ります。
+</p>
+
+<h3>Q. レシートを撮り忘れていたものが出てきたら？</h3>
+<p>
+  そのまま撮影して送信してください。日付が前後しても、
+  自動的に日付順に並べ替えられます。
+</p>
+
+<h3>Q. 金額を間違えて登録してしまったら？</h3>
+<p>
+  日下部税理士事務所にご連絡ください。修正いたします。
+</p>
+
+<h3>Q. カメラが起動しない</h3>
+<p>
+  ブラウザの設定でカメラの使用を「許可」にしてください。
+</p>
+
+<h3>Q. URLがわからなくなった</h3>
+<p>
+  日下部税理士事務所にご連絡いただければ、すぐにお伝えします。
+</p>
+
+<h2>9. 全体の流れ（まとめ）</h2>
+
+<div class="flow-box">
+  <p><strong>① 銀行から現金を引き出す</strong></p>
+  <p>→ アプリで「現金引出」を登録（金額・銀行名）</p>
+  <p class="flow-arrow">↓</p>
+  <p><strong>② 現金で経費を支払う</strong></p>
+  <p>→ レシートをスマホで撮影して送信（使用者名を入力）</p>
+  <p class="flow-arrow">↓</p>
+  <p><strong>③ 売上金を銀行に預ける</strong></p>
+  <p>→ アプリで「現金預入」を登録（金額・銀行名）</p>
+  <p class="flow-arrow">↓</p>
+  <p><strong>④ 税理士事務所で自動処理</strong></p>
+  <p>→ 現金出納帳が自動作成される</p>
+  <p>→ 引出額と経費+残高が一致するか確認できる</p>
+  <p class="flow-arrow">↓</p>
+  <p style="color: #2e7d32; font-weight: bold; font-size: 15px;">
+    お金の流れが明確になり、税務リスクを回避できます
+  </p>
+</div>
+
+<div class="footer">
+  日下部税理士事務所<br>
+  ご不明な点がございましたらお気軽にお問い合わせください
+</div>
+
+</body>
+</html>
