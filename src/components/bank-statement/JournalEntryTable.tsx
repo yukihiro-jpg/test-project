@@ -281,7 +281,15 @@ export default function JournalEntryTable({
     [subAccountMaster, accountMaster, onSubAccountUpdate],
   )
 
-  // 複合仕訳グループと997自動計算
+  // 諸口コードを科目チェックリストから検索（997固定ではない）
+  const shoguchiCode = useMemo(() => {
+    const item = accountMaster.find((a) =>
+      a.name.includes('諸口') || a.shortName.includes('諸口')
+    )
+    return item?.code || '997'
+  }, [accountMaster])
+
+  // 複合仕訳グループと諸口自動計算
   const compoundInfo = useMemo(() => {
     const info: Record<string, { isGroup: boolean; isFirst: boolean; isLast: boolean; autoAmount: number }> = {}
 
@@ -316,16 +324,16 @@ export default function JournalEntryTable({
       for (const m of members) {
         if (m.id === lastEntry.id) continue // 最終行は除外
         const amt = m.debitAmount || m.creditAmount || 0
-        if (m.debitCode === '997') debit997Total += amt
-        if (m.creditCode === '997') credit997Total += amt
+        if (m.debitCode === shoguchiCode) debit997Total += amt
+        if (m.creditCode === shoguchiCode) credit997Total += amt
       }
 
       // 最終行の自動計算: 997の貸借が一致する金額
       console.log(`[997Calc] group size=${members.length}, debit997Total=${debit997Total}, credit997Total=${credit997Total}, lastEntry.debitCode=${lastEntry.debitCode}, lastEntry.creditCode=${lastEntry.creditCode}`)
       let autoAmount = 0
-      if (lastEntry.debitCode === '997') {
+      if (lastEntry.debitCode === shoguchiCode) {
         autoAmount = credit997Total - debit997Total
-      } else if (lastEntry.creditCode === '997') {
+      } else if (lastEntry.creditCode === shoguchiCode) {
         autoAmount = debit997Total - credit997Total
       }
 
@@ -339,7 +347,7 @@ export default function JournalEntryTable({
       }
     }
     return info
-  }, [entries])
+  }, [entries, shoguchiCode])
 
   const getPageIndex = (entry: JournalEntry, pgs: StatementPage[]): number => {
     if (!entry.transactionId) return -1

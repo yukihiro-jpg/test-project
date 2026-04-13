@@ -59,7 +59,24 @@ function escapeCsvField(field: string): string {
  * 複合仕訳の最終行の金額を997貸借一致で自動計算して適用する
  * CSV出力前、学習前に呼び出して金額を確定する
  */
-export function applyCompoundAutoAmounts(entries: JournalEntry[]): JournalEntry[] {
+// 複合仕訳で最も多く使われている諸口コードを推定
+function detectShoguchiCode(entries: JournalEntry[]): string | null {
+  const codeCount: Record<string, number> = {}
+  for (const e of entries) {
+    if (e.parentId || entries.some((c) => c.parentId === e.id)) {
+      // 複合仕訳内の行
+      if (e.debitName?.includes('諸口')) { codeCount[e.debitCode] = (codeCount[e.debitCode] || 0) + 1 }
+      if (e.creditName?.includes('諸口')) { codeCount[e.creditCode] = (codeCount[e.creditCode] || 0) + 1 }
+    }
+  }
+  const sorted = Object.entries(codeCount).sort((a, b) => b[1] - a[1])
+  return sorted.length > 0 ? sorted[0][0] : null
+}
+
+export function applyCompoundAutoAmounts(entries: JournalEntry[], shoguchiCode?: string): JournalEntry[] {
+  // 諸口コードを判定（指定なければ複合仕訳内で最も多く使われるコードを推定）
+  const sgCode = shoguchiCode || detectShoguchiCode(entries) || '997'
+
   // グループ化
   const groupMembers: Record<string, JournalEntry[]> = {}
   for (const e of entries) {
@@ -82,14 +99,14 @@ export function applyCompoundAutoAmounts(entries: JournalEntry[]): JournalEntry[
     for (const m of members) {
       if (m.id === lastEntry.id) continue
       const amt = m.debitAmount || m.creditAmount || 0
-      if (m.debitCode === '997') debit997Total += amt
-      if (m.creditCode === '997') credit997Total += amt
+      if (m.debitCode === sgCode) debit997Total += amt
+      if (m.creditCode === sgCode) credit997Total += amt
     }
 
     let autoAmount = 0
-    if (lastEntry.debitCode === '997') {
+    if (lastEntry.debitCode === sgCode) {
       autoAmount = credit997Total - debit997Total
-    } else if (lastEntry.creditCode === '997') {
+    } else if (lastEntry.creditCode === sgCode) {
       autoAmount = debit997Total - credit997Total
     }
 

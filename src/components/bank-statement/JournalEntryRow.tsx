@@ -376,13 +376,40 @@ function TaxCodeField({
     ? taxCodes.filter((t) => t.code.includes(inputVal) || t.name.includes(inputVal))
     : taxCodes
 
+  // BS科目のみの仕訳は消費税登録不可
+  const debitAcc = accountMaster.find((a) => a.code === debitCode)
+  const creditAcc = accountMaster.find((a) => a.code === creditCode)
+  const isBsOnly = debitAcc && creditAcc &&
+    (debitAcc.bsPl === 'ＢＳ' || debitAcc.bsPl === 'BS') &&
+    (creditAcc.bsPl === 'ＢＳ' || creditAcc.bsPl === 'BS')
+
+  // Enter押下時に最初のサジェストを確定
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (filtered.length > 0 && inputVal) {
+        const match = filtered[0]
+        setInputVal(match.code)
+        onChange(match.code, match.name)
+        setShow(false)
+      }
+      navCell(e.currentTarget, 'right')
+    } else {
+      handleNav(e)
+    }
+  }
+
+  if (isBsOnly) {
+    return <span className="text-xs text-gray-300 px-1">—</span>
+  }
+
   return (
     <div ref={ref} className="relative">
       <div className="flex items-center gap-0.5">
         <input type="text" value={inputVal}
           onChange={(e) => { setInputVal(e.target.value); setShow(true); onChange(e.target.value, '') }}
           onFocus={() => setShow(true)}
-          onKeyDown={handleNav}
+          onKeyDown={handleKeyDown}
           placeholder="CD"
           className="w-8 shrink-0 px-0.5 py-0.5 text-sm text-blue-700 font-bold bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-center" />
         <span className="text-xs text-gray-600 truncate">{taxType}</span>
