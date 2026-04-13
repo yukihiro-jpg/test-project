@@ -364,13 +364,42 @@ export default function JournalEntryTable({
     <div className="flex flex-col h-full bg-white">
       <div className="px-4 py-2 bg-gray-700 flex items-center justify-between shrink-0">
         <span className="text-sm font-medium text-white">仕訳データ ({entries.length}件)</span>
-        <button onClick={() => {
-          const idx = selectedEntryId ? entries.findIndex((e) => e.id === selectedEntryId) : 0
-          const ne = [...entries]
-          ne.splice(Math.max(idx, 0), 0, createBlankEntry())
-          onEntriesChange(ne)
-        }}
-          className="px-3 py-1 text-xs bg-white text-gray-700 font-medium rounded hover:bg-gray-100">+ 選択行の上に1行追加</button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => {
+            // 科目チェックリストから仮払金を検索
+            const karibarai = accountMaster.find((a) =>
+              a.name.includes('仮払') || a.shortName.includes('仮払')
+            )
+            if (!karibarai) {
+              alert('科目チェックリストに「仮払金」が見つかりません。\n科目チェックリストを先に登録してください。')
+              return
+            }
+            // 未入力の借方・貸方コードに仮払金を一括設定（ユーザー入力済みは除外）
+            const updated = entries.map((e) => {
+              const u = { ...e }
+              if (!u.debitCode && !u.patternId) {
+                u.debitCode = karibarai.code
+                u.debitName = karibarai.shortName || karibarai.name
+              }
+              if (!u.creditCode && !u.patternId) {
+                u.creditCode = karibarai.code
+                u.creditName = karibarai.shortName || karibarai.name
+              }
+              return u
+            })
+            onEntriesChange(updated)
+          }}
+            className="px-3 py-1 text-xs bg-amber-500 text-white font-medium rounded hover:bg-amber-600">
+            仮払金一括登録
+          </button>
+          <button onClick={() => {
+            const idx = selectedEntryId ? entries.findIndex((e) => e.id === selectedEntryId) : 0
+            const ne = [...entries]
+            ne.splice(Math.max(idx, 0), 0, createBlankEntry())
+            onEntriesChange(ne)
+          }}
+            className="px-3 py-1 text-xs bg-white text-gray-700 font-medium rounded hover:bg-gray-100">+ 選択行の上に1行追加</button>
+        </div>
       </div>
 
       {showBulkEdit && selectedRange.size > 0 && (

@@ -187,7 +187,8 @@ export function learnFromEntries(
 }
 
 /**
- * CSV出力時に全仕訳を一括パターン学習
+ * CSV出力/一時保存時に全仕訳を一括パターン学習
+ * パターン学習済みの仕訳でもユーザーが修正した場合は上書きする
  */
 export function learnAllFromEntries(entries: JournalEntry[]): number {
   let learnedCount = 0
@@ -200,16 +201,41 @@ export function learnAllFromEntries(entries: JournalEntry[]): number {
     groups[groupId].push(e)
   }
 
+  const currentPatterns = getPatterns()
+
   for (const [, group] of Object.entries(groups)) {
     const primary = group[0]
     const originalDesc = primary.originalDescription
     if (!originalDesc) continue
     const amount = primary.debitAmount || primary.creditAmount || 0
 
+    // 既存パターンと内容が同じかチェック
+    if (primary.patternId) {
+      const existingPattern = currentPatterns.find((p) => p.id === primary.patternId)
+      if (existingPattern) {
+        // 内容が変わっていなければスキップ（useCountだけ増やす）
+        const isSame = existingPattern.lines.length === group.length &&
+          existingPattern.lines.every((line, i) =>
+            line.debitCode === group[i].debitCode &&
+            line.creditCode === group[i].creditCode &&
+            line.description === group[i].description &&
+            line.taxCode === group[i].debitTaxCode &&
+            line.businessType === group[i].debitBusinessType
+          )
+        if (isSame) {
+          existingPattern.useCount++
+          continue
+        }
+        // 内容が変わっている → 上書き（learnFromEntriesで処理）
+      }
+    }
+
     learnFromEntries(originalDesc, group, amount)
     learnedCount++
   }
 
+  // useCountだけ変更したパターンも保存
+  savePatterns(currentPatterns)
   return learnedCount
 }
 
