@@ -26,7 +26,8 @@ import type {
 import { parseFile, applyColumnMapping } from '@/lib/bank-statement/transaction-extractor'
 import { mapTransactionsToJournalEntries } from '@/lib/bank-statement/journal-mapper'
 import { getPatterns } from '@/lib/bank-statement/pattern-store'
-import { loadAccountMaster, loadSubAccountMaster } from '@/lib/bank-statement/account-master'
+import { loadAccountMaster, loadSubAccountMaster, loadAccountTaxMaster, getDefaultTaxCode } from '@/lib/bank-statement/account-master'
+import type { AccountTaxItem } from '@/lib/bank-statement/types'
 import ClientSelector from '@/components/bank-statement/ClientSelector'
 import type { Client } from '@/lib/bank-statement/client-store'
 import { getSelectedClientId, setSelectedClientId } from '@/lib/bank-statement/client-store'
@@ -40,6 +41,7 @@ export default function BankStatementContent() {
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([])
   const [accountMaster, setAccountMaster] = useState<AccountItem[]>([])
   const [subAccountMaster, setSubAccountMaster] = useState<SubAccountItem[]>([])
+  const [accountTaxMaster, setAccountTaxMaster] = useState<AccountTaxItem[]>([])
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [uploadConfig, setUploadConfig] = useState<UploadConfig | null>(null)
@@ -60,6 +62,7 @@ export default function BankStatementContent() {
     // 顧問先別データを読み込み
     setAccountMaster(loadAccountMaster())
     setSubAccountMaster(loadSubAccountMaster())
+    setAccountTaxMaster(loadAccountTaxMaster())
     // 仕訳データをリセット
     setPages([])
     setJournalEntries([])
@@ -94,7 +97,20 @@ export default function BankStatementContent() {
         patterns,
         accountMaster,
       )
-      setJournalEntries(entries)
+      // 科目別消費税CDを自動設定（パターン学習で設定済みでないもの）
+      const taxMaster = loadAccountTaxMaster()
+      const entriesWithTax = entries.map((e) => {
+        if (e.debitTaxCode && e.debitTaxCode !== '0') return e // 既に設定済み
+        // 借方・貸方の科目コードで消費税を検索
+        const debitTax = getDefaultTaxCode(taxMaster, e.debitCode)
+        const creditTax = getDefaultTaxCode(taxMaster, e.creditCode)
+        const tax = debitTax || creditTax
+        if (tax) {
+          return { ...e, debitTaxCode: tax.taxCode, debitTaxType: tax.taxName }
+        }
+        return e
+      })
+      setJournalEntries(entriesWithTax)
     },
     [accountMaster],
   )
@@ -403,8 +419,10 @@ export default function BankStatementContent() {
           <AccountMasterUploader
             accountMaster={accountMaster}
             subAccountMaster={subAccountMaster}
+            accountTaxMaster={accountTaxMaster}
             onAccountUpdate={handleAccountMasterUpdate}
             onSubAccountUpdate={handleSubAccountMasterUpdate}
+            onAccountTaxUpdate={setAccountTaxMaster}
           />
           <button onClick={() => setShowPatternList(true)}
             className="px-3 py-1.5 text-xs font-medium bg-white/10 hover:bg-white/20 text-white rounded border border-white/20">

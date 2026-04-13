@@ -68,6 +68,18 @@ export interface AccountItem {
   bsPl?: string         // BS/PL区分
 }
 
+// 科目別消費税登録マスタ
+export interface AccountTaxItem {
+  accountCode: string        // 科目コード
+  accountName: string        // 科目名称
+  categoryCode: string       // 科目区分（0対象外, 1売上, 2仕入）
+  categoryName: string       // 科目名称（売上, 仕入, 対象外）
+  purchaseTaxCode: string    // 仕入消費税コード
+  purchaseTaxName: string    // 仕入消費税名称
+  salesTaxCode: string       // 売上消費税コード
+  salesTaxName: string       // 売上消費税名称
+}
+
 // 補助科目マスタ
 export interface SubAccountItem {
   parentCode: string    // 科目コード

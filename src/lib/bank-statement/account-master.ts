@@ -1,4 +1,4 @@
-import type { AccountItem, SubAccountItem } from './types'
+import type { AccountItem, SubAccountItem, AccountTaxItem } from './types'
 import { clientStorageKey, getSelectedClientId } from './client-store'
 
 function getAccountKey(): string {
@@ -159,4 +159,110 @@ function splitLine(line: string, delimiter: string): string[] {
 function isHeaderLine(line: string, keywords: string[]): boolean {
   const lower = line.toLowerCase()
   return keywords.some((k) => lower.includes(k.toLowerCase()))
+}
+
+// --- 科目別消費税登録マスタ ---
+
+function getAccountTaxKey(): string {
+  const cid = getSelectedClientId()
+  return cid ? `bs-account-tax-${cid}` : 'bs-account-tax'
+}
+
+export function loadAccountTaxMaster(): AccountTaxItem[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const stored = localStorage.getItem(getAccountTaxKey())
+    if (stored) return JSON.parse(stored)
+  } catch { /* ignore */ }
+  return []
+}
+
+export function saveAccountTaxMaster(items: AccountTaxItem[]): void {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(getAccountTaxKey(), JSON.stringify(items))
+}
+
+/**
+ * 科目別消費税登録チェックリストTSV/CSVをパース
+ * 列: A科目別補助区分, B科目コード, C科目名称, D科目区分, E科目名称,
+ *     F仕入消費税コード, G仕入消費税名称, H仕入消費税率区分, I仕入消費税率,
+ *     J売上消費税コード, K売上消費税名称, L売上消費税率区分, M売上消費税率, N売上消費税率
+ */
+export function parseAccountTaxMasterFile(text: string): AccountTaxItem[] {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim())
+  if (lines.length === 0) return []
+
+  const delimiter = detectDelimiter(lines[0])
+  const startIndex = isHeaderLine(lines[0], ['科目', 'コード', 'ｺｰﾄﾞ', '消費税']) ? 1 : 0
+
+  const items: AccountTaxItem[] = []
+  for (let i = startIndex; i < lines.length; i++) {
+    const cells = splitLine(lines[i], delimiter)
+    if (cells.length < 7) continue
+
+    const subFlag = cells[0]?.trim() || ''
+    const accountCode = cells[1]?.trim() || ''
+    const accountName = cells[2]?.trim() || ''
+    const categoryCode = cells[3]?.trim() || '0'
+    const categoryName = cells[4]?.trim() || ''
+    const purchaseTaxCode = cells[5]?.trim() || '0'
+    const purchaseTaxName = cells[6]?.trim() || ''
+    const salesTaxCode = cells[9]?.trim() || '0'
+    const salesTaxName = cells[10]?.trim() || ''
+
+    // +マーク行のみが科目の親行（補助科目行はスキップ）
+    if (subFlag !== '+' && accountCode && /^\d+$/.test(accountCode)) {
+      // 補助科目でない行（subFlagが空 or +）
+      items.push({
+        accountCode,
+        accountName,
+        categoryCode,
+        categoryName,
+        purchaseTaxCode,
+        purchaseTaxName,
+        salesTaxCode,
+        salesTaxName,
+      })
+    } else if (subFlag === '+') {
+      items.push({
+        accountCode,
+        accountName,
+        categoryCode,
+        categoryName,
+        purchaseTaxCode,
+        purchaseTaxName,
+        salesTaxCode,
+        salesTaxName,
+      })
+    }
+  }
+  return items
+}
+
+/**
+ * 科目コードから消費税コードを取得
+ * category: 1=売上, 2=仕入 で判定しコードを返す
+ */
+export function getDefaultTaxCode(
+  accountTaxMaster: AccountTaxItem[],
+  accountCode: string,
+): { taxCode: string; taxName: string } | null {
+  const item = accountTaxMaster.find((t) => t.accountCode === accountCode)
+  if (!item) return null
+
+  if (item.categoryCode === '1') {
+    // 売上: 売上消費税コードを使用
+    if (item.salesTaxCode && item.salesTaxCode !== '0') {
+      return { taxCode: item.salesTaxCode, taxName: item.salesTaxName || '' }
+    }
+  }
+  if (item.categoryCode === '2') {
+    // 仕入: 仕入消費税コードを使用
+    if (item.purchaseTaxCode && item.purchaseTaxCode !== '0') {
+      return { taxCode: item.purchaseTaxCode, taxName: item.purchaseTaxName || '' }
+    }
+  }
+
+  // 対象外や0の場合はnull
+  return null
 }

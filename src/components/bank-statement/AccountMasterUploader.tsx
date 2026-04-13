@@ -1,12 +1,14 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import type { AccountItem, SubAccountItem } from '@/lib/bank-statement/types'
+import type { AccountItem, SubAccountItem, AccountTaxItem } from '@/lib/bank-statement/types'
 import {
   parseAccountMasterFile,
   parseSubAccountMasterFile,
+  parseAccountTaxMasterFile,
   saveAccountMaster,
   saveSubAccountMaster,
+  saveAccountTaxMaster,
 } from '@/lib/bank-statement/account-master'
 
 // Shift-JIS / UTF-8 自動判定で読み込む
@@ -26,18 +28,23 @@ async function readFileWithEncoding(file: File): Promise<string> {
 interface Props {
   accountMaster: AccountItem[]
   subAccountMaster: SubAccountItem[]
+  accountTaxMaster: AccountTaxItem[]
   onAccountUpdate: (items: AccountItem[]) => void
   onSubAccountUpdate: (items: SubAccountItem[]) => void
+  onAccountTaxUpdate: (items: AccountTaxItem[]) => void
 }
 
 export default function AccountMasterUploader({
   accountMaster,
   subAccountMaster,
+  accountTaxMaster,
   onAccountUpdate,
   onSubAccountUpdate,
+  onAccountTaxUpdate,
 }: Props) {
   const accountInputRef = useRef<HTMLInputElement>(null)
   const subAccountInputRef = useRef<HTMLInputElement>(null)
+  const accountTaxInputRef = useRef<HTMLInputElement>(null)
   const restoreInputRef = useRef<HTMLInputElement>(null)
   const [showPanel, setShowPanel] = useState(false)
 
@@ -87,6 +94,15 @@ export default function AccountMasterUploader({
 
       <input ref={accountInputRef} type="file" accept=".csv,.tsv,.txt" onChange={handleAccountFile} className="hidden" />
       <input ref={subAccountInputRef} type="file" accept=".csv,.tsv,.txt" onChange={handleSubAccountFile} className="hidden" />
+      <input ref={accountTaxInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" onChange={async (e) => {
+        const file = e.target.files?.[0]; if (!file) return
+        const text = await readFileWithEncoding(file)
+        const items = parseAccountTaxMasterFile(text)
+        if (items.length === 0) { alert('科目別消費税データを読み取れませんでした'); return }
+        saveAccountTaxMaster(items); onAccountTaxUpdate(items)
+        alert(`科目別消費税 ${items.length}件を登録しました`)
+        e.target.value = ''
+      }} className="hidden" />
       <input ref={restoreInputRef} type="file" accept=".json" onChange={async (e) => {
         const file = e.target.files?.[0]; if (!file) return
         try {
@@ -132,6 +148,20 @@ export default function AccountMasterUploader({
               </button>
             </div>
 
+            {/* 科目別消費税 */}
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-700">科目別消費税</span>
+                <span className="text-xs text-gray-500">{accountTaxMaster.length}件</span>
+              </div>
+              <button
+                onClick={() => accountTaxInputRef.current?.click()}
+                className="w-full py-2 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 text-gray-700"
+              >
+                科目別消費税登録チェックリストを読込
+              </button>
+            </div>
+
             <p className="text-xs text-gray-400">
               TSV（タブ区切り）/ CSV / Shift-JIS対応
             </p>
@@ -151,8 +181,8 @@ export default function AccountMasterUploader({
                 </button>
                 <button onClick={() => {
                   if (confirm('登録済みの科目マスタ・補助科目マスタをすべて削除しますか？')) {
-                    saveAccountMaster([]); saveSubAccountMaster([])
-                    onAccountUpdate([]); onSubAccountUpdate([])
+                    saveAccountMaster([]); saveSubAccountMaster([]); saveAccountTaxMaster([])
+                    onAccountUpdate([]); onSubAccountUpdate([]); onAccountTaxUpdate([])
                   }
                 }}
                   className="w-full py-2 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50">
