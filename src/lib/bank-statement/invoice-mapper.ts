@@ -24,25 +24,21 @@ export function salesInvoiceToEntries(
     const totalAmount = inv.taxLines.reduce((s, t) => s + t.totalAmount, 0)
 
     if (inv.taxLines.length <= 1) {
-      // 単一税率: 1行仕訳
       const line = inv.taxLines[0]
       const entry = makeEntry({
-        date,
-        debitCode, debitName,
-        creditCode, creditName,
+        date, debitCode, debitName, creditCode, creditName,
         amount: totalAmount,
         taxType: line ? getTaxCategory('sales', line.taxRate, true) : '',
+        taxRate: line?.taxRate,
+        hasInvoice: true,
         description,
       })
       entries.push(entry)
     } else {
-      // 複数税率: 複合仕訳（997諸口）
       const parentEntry = makeEntry({
-        date,
-        debitCode, debitName,
+        date, debitCode, debitName,
         creditCode: '997', creditName: '諸口',
-        amount: totalAmount,
-        taxType: '',
+        amount: totalAmount, taxType: '',
         description,
       })
       entries.push(parentEntry)
@@ -54,6 +50,8 @@ export function salesInvoiceToEntries(
           creditCode, creditName,
           amount: line.totalAmount,
           taxType: getTaxCategory('sales', line.taxRate, true),
+          taxRate: line.taxRate,
+          hasInvoice: true,
           description,
         })
         childEntry.isCompound = true
@@ -87,21 +85,19 @@ export function purchaseInvoiceToEntries(
     if (inv.taxLines.length <= 1) {
       const line = inv.taxLines[0]
       const entry = makeEntry({
-        date,
-        debitCode, debitName,
-        creditCode, creditName,
+        date, debitCode, debitName, creditCode, creditName,
         amount: totalAmount,
         taxType: line ? getTaxCategory('purchase', line.taxRate, hasInvoice) : '',
+        taxRate: line?.taxRate,
+        hasInvoice,
         description,
       })
       entries.push(entry)
     } else {
       const parentEntry = makeEntry({
-        date,
-        debitCode: '997', debitName: '諸口',
+        date, debitCode: '997', debitName: '諸口',
         creditCode, creditName,
-        amount: totalAmount,
-        taxType: '',
+        amount: totalAmount, taxType: '',
         description,
       })
       entries.push(parentEntry)
@@ -113,6 +109,8 @@ export function purchaseInvoiceToEntries(
           creditCode: '997', creditName: '諸口',
           amount: line.totalAmount,
           taxType: getTaxCategory('purchase', line.taxRate, hasInvoice),
+          taxRate: line.taxRate,
+          hasInvoice,
           description,
         })
         childEntry.isCompound = true
@@ -137,10 +135,15 @@ function getTaxCategory(type: 'sales' | 'purchase', taxRate: string, hasInvoice:
   }
 }
 
+function taxRateToCode(taxRate: string): string {
+  if (taxRate.includes('8')) return '5' // 軽減税率8% → 5
+  return '4' // 標準税率10% → 4
+}
+
 function makeEntry(p: {
   date: string; debitCode: string; debitName: string;
   creditCode: string; creditName: string; amount: number;
-  taxType: string; description: string;
+  taxType: string; taxRate?: string; hasInvoice?: boolean; description: string;
 }): JournalEntry {
   const entry = createBlankEntry()
   entry.id = genId()
@@ -152,6 +155,8 @@ function makeEntry(p: {
   entry.debitAmount = p.amount
   entry.creditAmount = p.amount
   entry.debitTaxType = p.taxType
+  entry.debitTaxRate = p.taxRate ? taxRateToCode(p.taxRate) : ''
+  entry.debitBusinessType = p.hasInvoice != null ? (p.hasInvoice ? '0' : '1') : '0'
   entry.description = p.description.slice(0, 25)
   entry.originalDescription = p.description
   return entry

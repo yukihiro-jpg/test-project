@@ -184,6 +184,16 @@ export default function JournalEntryRow({
           />
         </td>
 
+        {/* 事業者取引区分（0=インボイス登録, 1=未登録） */}
+        <td style={CB}>
+          <select value={entry.debitBusinessType || '0'}
+            onChange={(e) => onChange(entry.id, 'debitBusinessType', e.target.value)}
+            className="w-full px-0.5 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-center">
+            <option value="0">0</option>
+            <option value="1">1</option>
+          </select>
+        </td>
+
         {/* 摘要（25文字制限） */}
         <td style={CB}>
           <input type="text" value={entry.description}

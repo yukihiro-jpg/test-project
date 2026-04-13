@@ -100,15 +100,26 @@ export default function BankStatementContent() {
       // 科目別消費税CDを自動設定（パターン学習で設定済みでないもの）
       const taxMaster = loadAccountTaxMaster()
       const entriesWithTax = entries.map((e) => {
-        if (e.debitTaxCode && e.debitTaxCode !== '0') return e // 既に設定済み
-        // 借方・貸方の科目コードで消費税を検索
-        const debitTax = getDefaultTaxCode(taxMaster, e.debitCode)
-        const creditTax = getDefaultTaxCode(taxMaster, e.creditCode)
-        const tax = debitTax || creditTax
-        if (tax) {
-          return { ...e, debitTaxCode: tax.taxCode, debitTaxType: tax.taxName }
+        const updated = { ...e }
+        // 事業者取引区分: パターン学習で未設定なら0（インボイス登録事業者）をデフォルト
+        if (!updated.debitBusinessType) {
+          updated.debitBusinessType = '0'
         }
-        return e
+        // 消費税CD
+        if (!updated.debitTaxCode || updated.debitTaxCode === '0') {
+          const debitTax = getDefaultTaxCode(taxMaster, updated.debitCode)
+          const creditTax = getDefaultTaxCode(taxMaster, updated.creditCode)
+          const tax = debitTax || creditTax
+          if (tax) {
+            updated.debitTaxCode = tax.taxCode
+            updated.debitTaxType = tax.taxName
+          }
+        }
+        // 消費税率: 標準税率10%→4、軽減税率8%→5
+        if (!updated.debitTaxRate && updated.debitTaxCode && updated.debitTaxCode !== '0') {
+          updated.debitTaxRate = '4' // デフォルトは標準税率10%（=4）
+        }
+        return updated
       })
       setJournalEntries(entriesWithTax)
     },

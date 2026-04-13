@@ -34,13 +34,11 @@ export function receiptToEntries(
     if (rcp.taxLines.length <= 1) {
       const line = rcp.taxLines[0]
       const entry = makeEntry({
-        date,
-        debitCode: '', debitName: '',
-        creditCode, creditName,
+        date, debitCode: '', debitName: '', creditCode, creditName,
         amount: totalAmount,
         taxType: line ? getTaxCategory(line.taxRate, hasInvoice) : '',
-        description,
-        originalDescription: `${rcp.storeName}_${rcp.mainContent}`,
+        taxRate: line?.taxRate, hasInvoice,
+        description, originalDescription: `${rcp.storeName}_${rcp.mainContent}`,
       })
       entries.push(entry)
     } else {
@@ -58,13 +56,12 @@ export function receiptToEntries(
 
       for (const line of rcp.taxLines) {
         const childEntry = makeEntry({
-          date,
-          debitCode: '', debitName: '',
+          date, debitCode: '', debitName: '',
           creditCode: '997', creditName: '諸口',
           amount: line.totalAmount,
           taxType: getTaxCategory(line.taxRate, hasInvoice),
-          description,
-          originalDescription: `${rcp.storeName}_${rcp.mainContent}`,
+          taxRate: line.taxRate, hasInvoice,
+          description, originalDescription: `${rcp.storeName}_${rcp.mainContent}`,
         })
         childEntry.isCompound = true
         childEntry.parentId = parentEntry.id
@@ -83,10 +80,16 @@ function getTaxCategory(taxRate: string, hasInvoice: boolean): string {
   return `課仕${rate}%（経過措置）`
 }
 
+function taxRateToCode(taxRate: string): string {
+  if (taxRate.includes('8')) return '5'
+  return '4'
+}
+
 function makeEntry(p: {
   date: string; debitCode: string; debitName: string;
   creditCode: string; creditName: string; amount: number;
-  taxType: string; description: string; originalDescription: string;
+  taxType: string; taxRate?: string; hasInvoice?: boolean;
+  description: string; originalDescription: string;
 }): JournalEntry {
   const entry = createBlankEntry()
   entry.id = genId()
@@ -98,6 +101,8 @@ function makeEntry(p: {
   entry.debitAmount = p.amount
   entry.creditAmount = p.amount
   entry.debitTaxType = p.taxType
+  entry.debitTaxRate = p.taxRate ? taxRateToCode(p.taxRate) : ''
+  entry.debitBusinessType = p.hasInvoice != null ? (p.hasInvoice ? '0' : '1') : '0'
   entry.description = p.description
   entry.originalDescription = p.originalDescription
   return entry
