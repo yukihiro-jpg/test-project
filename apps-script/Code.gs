@@ -37,6 +37,15 @@ function doPost(e) {
     } else {
       data = JSON.parse(e.postData.contents);
     }
+    // 現金引出・預入の場合
+    if (data.action === 'cashEntry') {
+      const result = saveCashEntry(data);
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        message: '現金登録成功'
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     const result = saveBatchToDrive(data);
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
@@ -156,6 +165,127 @@ function saveBatchToDrive(data) {
 /**
  * PDFファイル名を生成
  */
+// ============================================================
+// 現金引出・預入の保存
+// ============================================================
+
+function saveCashEntry(data) {
+  const { clientName, entryType, date, bankName, accountNumber, amount, depositType, timestamp } = data;
+
+  const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
+  const clientFolder = getOrCreateFolder(rootFolder, clientName);
+  const clientSheet = getOrCreateClientAnalysisSheet_Code(clientName, clientFolder);
+
+  // 現金出納帳シートを取得
+  let cashSheet = clientSheet.getSheetByName('現金出納帳');
+  if (!cashSheet) {
+    cashSheet = clientSheet.insertSheet('現金出納帳');
+    cashSheet.appendRow(['月日', '相手先名称', '主な品名', '入金額', '出金額', '残高', '処理日']);
+    cashSheet.setFrozenRows(1);
+  }
+
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
+  let description = '';
+  let inAmount = 0;
+  let outAmount = 0;
+
+  if (entryType === '現金引出') {
+    description = `${bankName}_現金引出`;
+    inAmount = amount;
+  } else {
+    // 現金預入
+    const typeLabel = depositType || '預入';
+    description = `${bankName}_${typeLabel}`;
+    outAmount = amount;
+  }
+
+  const accountInfo = accountNumber ? `(${accountNumber})` : '';
+
+  // 新しいデータを一時的に追加
+  const newRow = [date, `${description}${accountInfo}`, entryType, inAmount, outAmount, 0, today];
+
+  // 全データを取得して日付順にソート+残高再計算
+  const allData = cashSheet.getDataRange().getValues();
+  const rows = [];
+  for (let i = 1; i < allData.length; i++) {
+    rows.push(allData[i]);
+  }
+  rows.push(newRow);
+
+  // 月日（列0）でソート
+  rows.sort((a, b) => {
+    const dateA = new Date(a[0]);
+    const dateB = new Date(b[0]);
+    if (dateA.getTime() === dateB.getTime()) {
+      // 同日の場合は処理日でソート
+      return new Date(a[6]) - new Date(b[6]);
+    }
+    return dateA - dateB;
+  });
+
+  // 残高を再計算
+  let balance = 0;
+  rows.forEach(row => {
+    balance += (Number(row[3]) || 0) - (Number(row[4]) || 0);
+    row[5] = balance;
+  });
+
+  // シートをヘッダー以外クリアして再書き込み
+  if (cashSheet.getLastRow() > 1) {
+    cashSheet.getRange(2, 1, cashSheet.getLastRow() - 1, 7).clearContent();
+  }
+  if (rows.length > 0) {
+    cashSheet.getRange(2, 1, rows.length, 7).setValues(rows);
+  }
+
+  return { success: true };
+}
+
+/**
+ * Code.gsから解析結果スプシを取得or作成（GeminiAnalysis.gsのgetOrCreateClientAnalysisSheetと同等）
+ */
+function getOrCreateClientAnalysisSheet_Code(clientName, clientFolder) {
+  const sheetName = `${clientName}_解析結果`;
+  const files = clientFolder.getFilesByName(sheetName);
+
+  if (files.hasNext()) {
+    return SpreadsheetApp.open(files.next());
+  }
+
+  const ss = SpreadsheetApp.create(sheetName);
+
+  const receiptSheet = ss.getActiveSheet();
+  receiptSheet.setName('レシート・領収書');
+  receiptSheet.appendRow(['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '支払総額', '主な品名', 'インボイス番号', '備考']);
+  receiptSheet.setFrozenRows(1);
+
+  const ccSheet = ss.insertSheet('クレジットカード利用明細書');
+  ccSheet.appendRow(['解析日', 'カード会社名', '利用日', '利用先名称', '利用金額', '支払区分', '備考']);
+  ccSheet.setFrozenRows(1);
+
+  const bankSheet = ss.insertSheet('通帳');
+  bankSheet.appendRow(['解析日', '銀行名', '口座番号', '年月日', '摘要', '入金額', '出金額', '残高', '備考']);
+  bankSheet.setFrozenRows(1);
+
+  const salesSheet = ss.insertSheet('売上請求書');
+  salesSheet.appendRow(['解析日', '請求日', '請求相手先名称', '案件名', '10%売上高', '軽減8%売上高', '不課税売上高', '総売上高', '備考']);
+  salesSheet.setFrozenRows(1);
+
+  const purchaseSheet = ss.insertSheet('仕入請求書');
+  purchaseSheet.appendRow(['解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '総仕入高', '備考']);
+  purchaseSheet.setFrozenRows(1);
+
+  const cashSheet = ss.insertSheet('現金出納帳');
+  cashSheet.appendRow(['月日', '相手先名称', '主な品名', '入金額', '出金額', '残高', '処理日']);
+  cashSheet.setFrozenRows(1);
+
+  const file = DriveApp.getFileById(ss.getId());
+  clientFolder.addFile(file);
+  DriveApp.getRootFolder().removeFile(file);
+
+  return ss;
+}
+
 function buildPdfFileName(docType, bankName, userName, timestamp, pageCount) {
   const date = new Date(timestamp);
   const dateStr = Utilities.formatDate(date, 'Asia/Tokyo', 'yyyyMMdd_HHmm');

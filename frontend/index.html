@@ -368,6 +368,58 @@
         </p>
 
         <div class="history-list" id="historyList"></div>
+
+        <!-- 現金引出・預入セクション -->
+        <div class="card" style="margin-top: 8px;">
+            <button class="capture-btn" id="cashToggleBtn" onclick="toggleCashSection()" style="background: #ff8f00;">
+                <span>現金引出・現金預入を登録する</span>
+            </button>
+        </div>
+
+        <div id="cashSection" style="display: none; width: 100%; max-width: 500px;">
+            <div class="card">
+                <!-- タブ -->
+                <div style="display: flex; margin-bottom: 16px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd;">
+                    <button id="tabWithdraw" onclick="switchCashTab('withdraw')"
+                        style="flex:1; padding: 12px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; background: #1a73e8; color: white;">
+                        現金引出
+                    </button>
+                    <button id="tabDeposit" onclick="switchCashTab('deposit')"
+                        style="flex:1; padding: 12px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; background: #f1f3f4; color: #333;">
+                        現金預入
+                    </button>
+                </div>
+
+                <label>日付</label>
+                <input type="date" id="cashDate" style="margin-bottom: 10px;">
+
+                <label>銀行名</label>
+                <input type="text" id="cashBankName" list="cashBankList" placeholder="例: 三菱UFJ銀行">
+                <datalist id="cashBankList"></datalist>
+
+                <label style="margin-top: 10px;">口座番号</label>
+                <input type="text" id="cashAccountNumber" list="cashAccountList" placeholder="例: 1234567">
+                <datalist id="cashAccountList"></datalist>
+
+                <label style="margin-top: 10px;">金額</label>
+                <input type="number" id="cashAmount" placeholder="例: 50000">
+
+                <!-- 預入時のみ表示 -->
+                <div id="depositTypeRow" style="display: none; margin-top: 10px;">
+                    <label>預入の種類</label>
+                    <select id="depositType">
+                        <option value="売上金の預入">売上金の預入</option>
+                        <option value="その他の預入">その他の預入</option>
+                    </select>
+                </div>
+
+                <button class="send-btn" onclick="submitCashEntry()" style="margin-top: 16px;">
+                    <span>登録する</span>
+                </button>
+            </div>
+
+            <div class="history-list" id="cashHistoryList"></div>
+        </div>
     </div>
 
     <div class="processing-overlay" id="processingOverlay">
@@ -823,6 +875,135 @@
         toast.textContent = message;
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), duration);
+    }
+
+    // ============================================================
+    // 現金引出・預入
+    // ============================================================
+    let currentCashTab = 'withdraw';
+    const CASH_BANK_STORAGE_KEY = 'cashBankHistory';
+
+    function toggleCashSection() {
+        const section = document.getElementById('cashSection');
+        const isHidden = section.style.display === 'none';
+        section.style.display = isHidden ? 'block' : 'none';
+        if (isHidden) {
+            // 今日の日付をセット
+            document.getElementById('cashDate').value = new Date().toISOString().split('T')[0];
+            loadBankHistory();
+        }
+    }
+
+    function switchCashTab(tab) {
+        currentCashTab = tab;
+        const tabW = document.getElementById('tabWithdraw');
+        const tabD = document.getElementById('tabDeposit');
+        const depositRow = document.getElementById('depositTypeRow');
+        if (tab === 'withdraw') {
+            tabW.style.background = '#1a73e8'; tabW.style.color = 'white';
+            tabD.style.background = '#f1f3f4'; tabD.style.color = '#333';
+            depositRow.style.display = 'none';
+        } else {
+            tabD.style.background = '#1a73e8'; tabD.style.color = 'white';
+            tabW.style.background = '#f1f3f4'; tabW.style.color = '#333';
+            depositRow.style.display = 'block';
+        }
+    }
+
+    function loadBankHistory() {
+        try {
+            const history = JSON.parse(localStorage.getItem(CASH_BANK_STORAGE_KEY) || '[]');
+            const bankList = document.getElementById('cashBankList');
+            const accountList = document.getElementById('cashAccountList');
+            bankList.innerHTML = '';
+            accountList.innerHTML = '';
+            const banks = [...new Set(history.map(h => h.bank).filter(Boolean))];
+            const accounts = [...new Set(history.map(h => h.account).filter(Boolean))];
+            banks.forEach(b => { const o = document.createElement('option'); o.value = b; bankList.appendChild(o); });
+            accounts.forEach(a => { const o = document.createElement('option'); o.value = a; accountList.appendChild(o); });
+        } catch(e) {}
+    }
+
+    function saveBankHistory(bank, account) {
+        try {
+            const history = JSON.parse(localStorage.getItem(CASH_BANK_STORAGE_KEY) || '[]');
+            if (!history.some(h => h.bank === bank && h.account === account)) {
+                history.push({ bank, account });
+                localStorage.setItem(CASH_BANK_STORAGE_KEY, JSON.stringify(history));
+            }
+        } catch(e) {}
+    }
+
+    async function submitCashEntry() {
+        const cashDate = document.getElementById('cashDate').value;
+        const bankName = document.getElementById('cashBankName').value.trim();
+        const accountNumber = document.getElementById('cashAccountNumber').value.trim();
+        const amount = document.getElementById('cashAmount').value;
+        const depositType = currentCashTab === 'deposit' ? document.getElementById('depositType').value : '';
+
+        if (!cashDate) { showToast('日付を入力してください'); return; }
+        if (!bankName) { showToast('銀行名を入力してください'); return; }
+        if (!amount || Number(amount) <= 0) { showToast('金額を入力してください'); return; }
+
+        if (!CONFIG.APPS_SCRIPT_URL) { showToast('サーバーURLが設定されていません'); return; }
+
+        showProcessing('登録中...');
+
+        const entryType = currentCashTab === 'withdraw' ? '現金引出' : '現金預入';
+        const payload = {
+            action: 'cashEntry',
+            clientId: CONFIG.CLIENT_ID,
+            clientName: CONFIG.CLIENT_NAME,
+            entryType: entryType,
+            date: cashDate,
+            bankName: bankName,
+            accountNumber: accountNumber,
+            amount: Number(amount),
+            depositType: depositType,
+            timestamp: new Date().toISOString()
+        };
+
+        try {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = CONFIG.APPS_SCRIPT_URL;
+            form.target = 'postFrame';
+            form.style.display = 'none';
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'payload';
+            input.value = JSON.stringify(payload);
+            form.appendChild(input);
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
+
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            // 銀行情報を候補に保存
+            saveBankHistory(bankName, accountNumber);
+
+            // 履歴表示
+            const list = document.getElementById('cashHistoryList');
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            const label = `${entryType} - ${bankName}${depositType ? `（${depositType}）` : ''}`;
+            item.innerHTML = `
+                <div class="info">
+                    <div class="name">${label}</div>
+                    <div class="detail">${cashDate} | ${Number(amount).toLocaleString()}円 | 登録完了</div>
+                </div>
+                <span class="status-icon status-done">✓</span>
+            `;
+            list.prepend(item);
+
+            showToast('登録完了！');
+            document.getElementById('cashAmount').value = '';
+        } catch (error) {
+            showToast('登録に失敗しました');
+        }
+
+        hideProcessing();
     }
 
     // ============================================================

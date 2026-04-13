@@ -80,6 +80,11 @@ function analyzeUploadedDocuments() {
         // スプレッドシートに書き込み
         writeAnalysisResult(clientSheet, target.docType, analysisResult, target.bankName, target.accountNumber, target.userName);
 
+        // レシート・領収書の場合、現金出納帳にも書き込み
+        if (target.docType === 'レシート・領収書') {
+          writeToCashBook(clientSheet, analysisResult);
+        }
+
         // ステータスを更新
         sheet.getRange(target.rowIndex, 11).setValue('analyzed');
 
@@ -377,6 +382,11 @@ function getOrCreateClientAnalysisSheet(clientName) {
   purchaseSheet.appendRow(['解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '総仕入高', '備考']);
   purchaseSheet.setFrozenRows(1);
 
+  // シート5: 現金出納帳
+  const cashSheet = ss.insertSheet('現金出納帳');
+  cashSheet.appendRow(['月日', '相手先名称', '主な品名', '入金額', '出金額', '残高', '処理日']);
+  cashSheet.setFrozenRows(1);
+
   // ファイルを顧問先フォルダに移動
   const file = DriveApp.getFileById(ss.getId());
   clientFolder.addFile(file);
@@ -584,6 +594,11 @@ function analyzeSyncedFiles() {
           const analysisResult = callGeminiApi(base64Data, classification.docType, bankName, clientSheet);
           writeAnalysisResult(clientSheet, classification.docType, analysisResult, bankName, accountNumber, userName);
 
+          // レシートの場合、現金出納帳にも書き込み
+          if (classification.docType === 'レシート・領収書') {
+            writeToCashBook(clientSheet, analysisResult);
+          }
+
           resultSummary.push({
             clientName: clientName,
             docType: classification.docType,
@@ -687,6 +702,88 @@ JSONのみを返してください。`;
     return JSON.parse(text);
   } catch (e) {
     return { docType: 'その他', confidence: '判定不能', note: '応答解析エラー' };
+  }
+}
+
+// ============================================================
+// レシートデータを現金出納帳に書き込み
+// ============================================================
+
+/**
+ * レシート解析結果を現金出納帳に追加し、日付順ソート+残高再計算を行う
+ * 10%と8%が両方ある場合は2行に分けて記録する
+ */
+function writeToCashBook(clientSheet, receiptRows) {
+  let cashSheet = clientSheet.getSheetByName('現金出納帳');
+  if (!cashSheet) {
+    cashSheet = clientSheet.insertSheet('現金出納帳');
+    cashSheet.appendRow(['月日', '相手先名称', '主な品名', '入金額', '出金額', '残高', '処理日']);
+    cashSheet.setFrozenRows(1);
+  }
+
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
+
+  // 新しいレシートデータを行に変換
+  const newRows = [];
+  receiptRows.forEach(row => {
+    const date = row['日付'] || '';
+    const vendor = row['相手先名称'] || '';
+    const mainItem = row['主な品名'] || '';
+    const amount10 = Number(row['10%対象額']) || 0;
+    const amount8 = Number(row['軽減8%対象額']) || 0;
+
+    if (amount10 > 0 && amount8 > 0) {
+      // 両方ある場合は2行に分ける
+      newRows.push([date, `${vendor}_${mainItem}_10%`, mainItem, 0, amount10, 0, today]);
+      newRows.push([date, `${vendor}_${mainItem}_軽8%`, mainItem, 0, amount8, 0, today]);
+    } else if (amount10 > 0) {
+      newRows.push([date, `${vendor}_10%`, mainItem, 0, amount10, 0, today]);
+    } else if (amount8 > 0) {
+      newRows.push([date, `${vendor}_軽8%`, mainItem, 0, amount8, 0, today]);
+    } else {
+      // 税率不明の場合は支払総額を使用
+      const total = Number(row['支払総額']) || 0;
+      if (total > 0) {
+        newRows.push([date, vendor, mainItem, 0, total, 0, today]);
+      }
+    }
+  });
+
+  if (newRows.length === 0) return;
+
+  // 既存データを取得
+  const allData = cashSheet.getDataRange().getValues();
+  const existingRows = [];
+  for (let i = 1; i < allData.length; i++) {
+    existingRows.push(allData[i]);
+  }
+
+  // 既存 + 新規を結合
+  const allRows = existingRows.concat(newRows);
+
+  // 月日でソート
+  allRows.sort((a, b) => {
+    const dateA = new Date(a[0]);
+    const dateB = new Date(b[0]);
+    if (dateA.getTime() === dateB.getTime()) {
+      return new Date(a[6]) - new Date(b[6]);
+    }
+    return dateA - dateB;
+  });
+
+  // 残高を再計算
+  let balance = 0;
+  allRows.forEach(row => {
+    balance += (Number(row[3]) || 0) - (Number(row[4]) || 0);
+    row[5] = balance;
+  });
+
+  // シートをヘッダー以外クリアして再書き込み
+  if (cashSheet.getLastRow() > 1) {
+    cashSheet.getRange(2, 1, cashSheet.getLastRow() - 1, 7).clearContent();
+  }
+  if (allRows.length > 0) {
+    cashSheet.getRange(2, 1, allRows.length, 7).setValues(allRows);
   }
 }
 
