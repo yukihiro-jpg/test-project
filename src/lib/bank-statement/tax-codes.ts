@@ -91,3 +91,49 @@ export function findTaxCode(code: string, category?: 'sales' | 'purchase'): TaxC
     : ALL_TAX_CODES
   return list.find((t) => t.code === code)
 }
+
+/**
+ * 科目名から消費税コードのデフォルト値を判定
+ * パターン学習未済・科目別消費税マスタ未登録の場合に使用
+ */
+export function getDefaultTaxCodeByName(
+  accountName: string,
+  category: 'sales' | 'purchase' | null,
+): { taxCode: string; taxName: string } | null {
+  if (!accountName || !category) return null
+  const name = accountName
+
+  if (category === 'purchase') {
+    // 経費仕入関係
+    // 対象外(40)
+    if (name.includes('減価償却') || name.includes('租税公課') ||
+        name.includes('諸会費') || name.includes('給料') ||
+        name.includes('役員報酬') || name.includes('賞与') ||
+        name.includes('雑給') || name.includes('退職')) {
+      return { taxCode: '40', taxName: '不課税仕入（精算取引）' }
+    }
+    // 非課税仕入(30)
+    if (name.includes('保険料') || name.includes('支払保険') ||
+        name.includes('法定福利')) {
+      return { taxCode: '30', taxName: '非課税仕入' }
+    }
+    // それ以外は課税仕入(10)
+    return { taxCode: '10', taxName: '課税仕入' }
+  }
+
+  if (category === 'sales') {
+    // 売上関係
+    // 非課税売上(30)
+    if (name.includes('受取利息')) {
+      return { taxCode: '30', taxName: '非課税売上' }
+    }
+    // 対象外(40)
+    if (name.includes('受取配当') || name.includes('配当金')) {
+      return { taxCode: '40', taxName: '不課税売上（精算取引）' }
+    }
+    // それ以外は課税売上(10)
+    return { taxCode: '10', taxName: '課税売上' }
+  }
+
+  return null
+}
