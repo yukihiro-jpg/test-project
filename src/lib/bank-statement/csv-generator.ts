@@ -1,62 +1,50 @@
 import type { JournalEntry } from './types'
 
 const CSV_HEADERS = [
-  '伝票日付',
-  '借方科目コード',
-  '借方科目名',
-  '借方補助コード',
-  '借方補助名',
-  '借方税売仕区分',
-  '借方業種',
-  '借方税込抜区分',
-  '借方金額',
-  '借方消費税額',
-  '借方税コード',
-  '借方税率',
-  '借方事業者区分',
-  '貸方科目コード',
-  '貸方科目名',
-  '貸方補助コード',
-  '貸方補助名',
-  '貸方税売仕区分',
-  '貸方業種',
-  '貸方税込抜区分',
-  '貸方金額',
-  '貸方消費税額',
-  '貸方税コード',
-  '貸方税率',
-  '貸方事業者区分',
-  '摘要',
+  '伝票日付',                    // 1
+  '(借方)勘定科目コード',          // 2
+  '(借方)勘定科目名称',           // 3
+  '(借方)科目別補助コード',        // 4
+  '(借方)科目別補助名称',         // 5
+  '(借方)消費税売上/仕入区分',     // 6
+  '(借方)業種コード',             // 7
+  '(借方)税込/税抜区分',          // 8
+  '(貸方)勘定科目コード',          // 9
+  '(貸方)勘定科目名称',           // 10
+  '(貸方)科目別補助コード',        // 11
+  '(貸方)科目別補助名称',         // 12
+  '(貸方)消費税売上/仕入区分',     // 13
+  '(貸方)業種コード',             // 14
+  '(貸方)税込/税抜区分',          // 15
+  '消費税コード',                 // 16
+  '消費税率',                    // 17
+  '事業者取引区分',               // 18
+  '金額(入力金額)',               // 19
+  '摘要',                       // 20
 ]
 
 function entryToRow(entry: JournalEntry): string[] {
   return [
-    entry.date,
-    entry.debitCode,
-    entry.debitName,
-    entry.debitSubCode,
-    entry.debitSubName,
-    entry.debitTaxType,
-    entry.debitIndustry,
-    entry.debitTaxInclude,
-    entry.debitAmount ? String(entry.debitAmount) : '',
-    entry.debitTaxAmount ? String(entry.debitTaxAmount) : '',
-    entry.debitTaxCode,
-    entry.debitTaxRate,
-    entry.debitBusinessType,
-    entry.creditCode,
-    entry.creditName,
-    entry.creditSubCode,
-    entry.creditSubName,
-    entry.creditTaxType,
-    entry.creditIndustry,
-    entry.creditTaxInclude,
-    entry.creditAmount ? String(entry.creditAmount) : '',
-    entry.creditTaxAmount ? String(entry.creditTaxAmount) : '',
-    entry.creditTaxCode,
-    entry.creditTaxRate,
-    entry.creditBusinessType,
-    entry.description,
+    entry.date,                                           // 1 伝票日付
+    entry.debitCode,                                      // 2 借方勘定科目コード
+    entry.debitName,                                      // 3 借方勘定科目名称
+    entry.debitSubCode,                                   // 4 借方科目別補助コード
+    entry.debitSubName,                                   // 5 借方科目別補助名称
+    entry.debitTaxType,                                   // 6 借方消費税売上/仕入区分
+    entry.debitIndustry,                                  // 7 借方業種コード
+    entry.debitTaxInclude,                                // 8 借方税込/税抜区分
+    entry.creditCode,                                     // 9 貸方勘定科目コード
+    entry.creditName,                                     // 10 貸方勘定科目名称
+    entry.creditSubCode,                                  // 11 貸方科目別補助コード
+    entry.creditSubName,                                  // 12 貸方科目別補助名称
+    entry.creditTaxType,                                  // 13 貸方消費税売上/仕入区分
+    entry.creditIndustry,                                 // 14 貸方業種コード
+    entry.creditTaxInclude,                               // 15 貸方税込/税抜区分
+    entry.debitTaxCode,                                   // 16 消費税コード
+    entry.debitTaxRate,                                   // 17 消費税率
+    entry.debitBusinessType,                              // 18 事業者取引区分
+    entry.debitAmount ? String(entry.debitAmount) : '',    // 19 金額
+    entry.description,                                    // 20 摘要
   ]
 }
 
