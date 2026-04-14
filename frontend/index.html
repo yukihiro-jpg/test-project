@@ -468,50 +468,37 @@
     }
 
     // ============================================================
-    // 候補リスト管理（localStorage）
+    // 候補リスト管理（スプレッドシートから取得）
     // ============================================================
-    const STORAGE_KEYS = {
-      bankName: 'history_bankName',
-      accountNumber: 'history_accountNumber',
-      userName: 'history_userName'
-    };
-
-    function loadAllCandidates() {
-      loadCandidates('bankName', 'bankNameList');
-      loadCandidates('bankName', 'cashBankList');
-      loadCandidates('accountNumber', 'accountNumberList');
-      loadCandidates('accountNumber', 'cashAccountList');
-      loadCandidates('userName', 'userNameList');
-    }
-
-    function loadCandidates(key, datalistId) {
+    async function loadAllCandidates() {
+      if (!CONFIG.APPS_SCRIPT_URL) return;
       try {
-        const list = JSON.parse(localStorage.getItem(STORAGE_KEYS[key]) || '[]');
-        const datalist = document.getElementById(datalistId);
-        if (!datalist) return;
-        datalist.innerHTML = '';
-        list.forEach(v => {
-          const o = document.createElement('option');
-          o.value = v;
-          datalist.appendChild(o);
-        });
-      } catch(e) {}
+        const url = `${CONFIG.APPS_SCRIPT_URL}?action=getCandidates&client=${encodeURIComponent(CONFIG.CLIENT_NAME)}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        fillDatalist('bankNameList', data.bankNames || []);
+        fillDatalist('cashBankList', data.bankNames || []);
+        fillDatalist('accountNumberList', data.accountNumbers || []);
+        fillDatalist('cashAccountList', data.accountNumbers || []);
+        fillDatalist('userNameList', data.userNames || []);
+      } catch(e) {
+        console.log('候補リスト取得エラー:', e);
+      }
     }
 
-    function saveCandidate(key, value) {
-      if (!value) return;
-      try {
-        const list = JSON.parse(localStorage.getItem(STORAGE_KEYS[key]) || '[]');
-        if (!list.includes(value)) {
-          list.push(value);
-          localStorage.setItem(STORAGE_KEYS[key], JSON.stringify(list));
-          // 全datalistを更新
-          loadAllCandidates();
-        }
-      } catch(e) {}
+    function fillDatalist(datalistId, values) {
+      const datalist = document.getElementById(datalistId);
+      if (!datalist) return;
+      datalist.innerHTML = '';
+      values.forEach(v => {
+        const o = document.createElement('option');
+        o.value = v;
+        datalist.appendChild(o);
+      });
     }
 
-    // 初期読み込み
+    // ページ読み込み時に候補を取得
     loadAllCandidates();
 
     // ============================================================
@@ -862,10 +849,8 @@
             updateHistory(historyId, 'done');
             showToast('送信完了！');
 
-            // 候補リストに保存
-            if (bankName) saveCandidate('bankName', bankName);
-            if (accountNumber) saveCandidate('accountNumber', accountNumber);
-            if (userName) saveCandidate('userName', userName);
+            // 候補リストを再取得（送信したデータが反映される）
+            setTimeout(() => loadAllCandidates(), 5000);
 
             capturedPages = [];
             updateThumbStrip();
@@ -944,7 +929,6 @@
         section.style.display = isHidden ? 'block' : 'none';
         if (isHidden) {
             document.getElementById('cashDate').value = new Date().toISOString().split('T')[0];
-            loadAllCandidates();
         }
     }
 
@@ -1011,9 +995,8 @@
 
             await new Promise(resolve => setTimeout(resolve, 3000));
 
-            // 銀行情報を候補に保存
-            saveCandidate('bankName', bankName);
-            if (accountNumber) saveCandidate('accountNumber', accountNumber);
+            // 候補リストを再取得
+            setTimeout(() => loadAllCandidates(), 5000);
 
             // 履歴表示
             const list = document.getElementById('cashHistoryList');

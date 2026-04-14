@@ -62,10 +62,57 @@ function doPost(e) {
 }
 
 function doGet(e) {
+  // 候補リスト取得API
+  if (e && e.parameter && e.parameter.action === 'getCandidates') {
+    const clientName = decodeURIComponent(e.parameter.client || '');
+    const candidates = getCandidatesForClient(clientName);
+    return ContentService.createTextOutput(JSON.stringify(candidates))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   return ContentService.createTextOutput(JSON.stringify({
     status: 'ok',
     message: '書類スキャンAPIは稼働中です'
   })).setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * アップロード履歴と現金出納帳から、顧問先の候補リストを取得
+ */
+function getCandidatesForClient(clientName) {
+  const result = { bankNames: [], accountNumbers: [], userNames: [] };
+
+  try {
+    const ss = getOrCreateLogSheet();
+    const sheet = ss.getSheetByName('アップロード履歴');
+    if (!sheet) return result;
+
+    const data = sheet.getDataRange().getValues();
+    const bankSet = new Set();
+    const accountSet = new Set();
+    const userSet = new Set();
+
+    for (let i = 1; i < data.length; i++) {
+      // 顧問先名が一致する行のみ
+      if (data[i][1] !== clientName) continue;
+
+      const bankName = (data[i][3] || '').toString().trim();
+      const accountNumber = (data[i][4] || '').toString().trim();
+      const userName = (data[i][5] || '').toString().trim();
+
+      if (bankName) bankSet.add(bankName);
+      if (accountNumber) accountSet.add(accountNumber);
+      if (userName) userSet.add(userName);
+    }
+
+    result.bankNames = [...bankSet];
+    result.accountNumbers = [...accountSet];
+    result.userNames = [...userSet];
+  } catch (err) {
+    console.error('getCandidatesForClient error:', err);
+  }
+
+  return result;
 }
 
 // ============================================================
