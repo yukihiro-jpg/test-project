@@ -39,10 +39,9 @@ export function generateQuestionList(
 
     const direction = isDebitKari ? '出金' : '入金'
     const amount = e.debitAmount || e.creditAmount || 0
-    // ユーザーが摘要を変換している場合はそちらを表示
+    // ユーザーが摘要を変換している場合はそちらを表示（通帳摘要列・確認事項内の括弧とも）
     const displayDesc = e.description || e.originalDescription || ''
-    const originalForQuestion = e.originalDescription || e.description || ''
-    const question = generateQuestion(direction, amount, originalForQuestion, bankAccount)
+    const question = generateQuestion(direction, amount, displayDesc, bankAccount)
 
     rows.push({ no: no++, date: formatDate(e.date), bankAccount, direction, amount, originalDescription: displayDesc, question, answer: '' })
   }
