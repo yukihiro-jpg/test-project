@@ -39,10 +39,12 @@ export function generateQuestionList(
 
     const direction = isDebitKari ? '出金' : '入金'
     const amount = e.debitAmount || e.creditAmount || 0
-    const desc = e.originalDescription || e.description || ''
-    const question = generateQuestion(direction, amount, desc, bankAccount)
+    // ユーザーが摘要を変換している場合はそちらを表示
+    const displayDesc = e.description || e.originalDescription || ''
+    const originalForQuestion = e.originalDescription || e.description || ''
+    const question = generateQuestion(direction, amount, originalForQuestion, bankAccount)
 
-    rows.push({ no: no++, date: formatDate(e.date), bankAccount, direction, amount, originalDescription: desc, question, answer: '' })
+    rows.push({ no: no++, date: formatDate(e.date), bankAccount, direction, amount, originalDescription: displayDesc, question, answer: '' })
   }
   return rows
 }

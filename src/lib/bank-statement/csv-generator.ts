@@ -31,10 +31,24 @@ function taxCategoryToNum(taxType: string): string {
   return '0'
 }
 
+// 課税取引かどうか判定（消費税CDが0/30/40/空でなければ課税）
+function isTaxable(taxCode: string): boolean {
+  if (!taxCode || taxCode === '0' || taxCode === '30' || taxCode === '40' || taxCode === '41') return false
+  return true
+}
+
 function entryToRow(entry: JournalEntry, clientTaxType?: string): string[] {
-  // 業種コードは簡易課税の場合のみ使用
   const debitIndustry = clientTaxType === 'simplified' ? (entry.debitIndustry || '0') : '0'
   const creditIndustry = clientTaxType === 'simplified' ? (entry.creditIndustry || '0') : '0'
+
+  // 税込/税抜区分: 課税取引かつPL科目の側を1、それ以外は0
+  const debitTaxCat = taxCategoryToNum(entry.debitTaxType)
+  const creditTaxCat = taxCategoryToNum(entry.creditTaxType)
+  const taxable = isTaxable(entry.debitTaxCode)
+  // 借方がPL仕入経費（debitTaxCat=2）で課税 → 借方税込=1
+  const debitTaxInclude = taxable && debitTaxCat === '2' ? '1' : '0'
+  // 貸方がPL売上（creditTaxCat=1）で課税 → 貸方税込=1
+  const creditTaxInclude = taxable && creditTaxCat === '1' ? '1' : '0'
 
   return [
     entry.date,                                           // 1 伝票日付
@@ -42,16 +56,16 @@ function entryToRow(entry: JournalEntry, clientTaxType?: string): string[] {
     entry.debitName,                                      // 3 借方勘定科目名称
     entry.debitSubCode,                                   // 4 借方科目別補助コード
     entry.debitSubName,                                   // 5 借方科目別補助名称
-    taxCategoryToNum(entry.debitTaxType),                  // 6 借方消費税売上/仕入区分（数値）
+    debitTaxCat,                                          // 6 借方消費税売上/仕入区分（数値）
     debitIndustry,                                        // 7 借方業種コード（数値）
-    entry.debitTaxInclude || '0',                          // 8 借方税込/税抜区分
+    debitTaxInclude,                                      // 8 借方税込/税抜区分
     entry.creditCode,                                     // 9 貸方勘定科目コード
     entry.creditName,                                     // 10 貸方勘定科目名称
     entry.creditSubCode,                                  // 11 貸方科目別補助コード
     entry.creditSubName,                                  // 12 貸方科目別補助名称
-    taxCategoryToNum(entry.creditTaxType),                 // 13 貸方消費税売上/仕入区分（数値）
+    creditTaxCat,                                         // 13 貸方消費税売上/仕入区分（数値）
     creditIndustry,                                       // 14 貸方業種コード（数値）
-    entry.creditTaxInclude || '0',                         // 15 貸方税込/税抜区分
+    creditTaxInclude,                                     // 15 貸方税込/税抜区分
     entry.debitTaxCode || '0',                             // 16 消費税コード
     entry.debitTaxRate || '0',                             // 17 消費税率（数値）
     entry.debitBusinessType || '0',                        // 18 事業者取引区分
