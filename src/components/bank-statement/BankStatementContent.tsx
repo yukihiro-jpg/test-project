@@ -105,6 +105,15 @@ export default function BankStatementContent() {
       const taxMaster = loadAccountTaxMaster()
       const entriesWithTax = entries.map((e) => {
         const updated = { ...e }
+        // 科目名が空の場合、科目チェックリストから補完
+        if (updated.debitCode && !updated.debitName) {
+          const acc = accountMaster.find((a) => a.code === updated.debitCode)
+          if (acc) updated.debitName = acc.shortName || acc.name
+        }
+        if (updated.creditCode && !updated.creditName) {
+          const acc = accountMaster.find((a) => a.code === updated.creditCode)
+          if (acc) updated.creditName = acc.shortName || acc.name
+        }
         // 事業者取引区分: パターン学習で未設定なら0（インボイス登録事業者）をデフォルト
         if (!updated.debitBusinessType) {
           updated.debitBusinessType = '0'
@@ -394,11 +403,24 @@ export default function BankStatementContent() {
       alert('保存する仕訳データがありません')
       return
     }
+    // 科目名が空の場合、科目チェックリストから補完
+    const completed = journalEntries.map((e) => {
+      const u = { ...e }
+      if (u.debitCode && !u.debitName) {
+        const acc = accountMaster.find((a) => a.code === u.debitCode)
+        if (acc) u.debitName = acc.shortName || acc.name
+      }
+      if (u.creditCode && !u.creditName) {
+        const acc = accountMaster.find((a) => a.code === u.creditCode)
+        if (acc) u.creditName = acc.shortName || acc.name
+      }
+      return u
+    })
     // パターン学習
-    const applied = applyCompoundAutoAmounts(journalEntries)
+    const applied = applyCompoundAutoAmounts(completed)
     learnAllFromEntries(applied)
     // 一時保存に追記
-    const totalCount = appendTempEntries(journalEntries)
+    const totalCount = appendTempEntries(completed)
     setTempCount(totalCount)
     // 仕訳データをクリアして次の通帳を処理可能に
     setPages([])
