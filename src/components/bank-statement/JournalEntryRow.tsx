@@ -269,7 +269,12 @@ function AccountField({
 
   useEffect(() => { setVal(code) }, [code])
   useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setShow(false); setShowSub(false); setShowNew(false) } }
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setShow(false); setShowSub(false)
+        // showNewは閉じない（入力中に消えないように）
+      }
+    }
     document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
   }, [])
 
@@ -278,7 +283,15 @@ function AccountField({
     .slice(0, 12)
   const subs = subAccountMaster.filter((s) => s.parentCode === code)
 
-  const confirm = (c: string) => { onCodeChange(c); setShow(false); if (subAccountMaster.filter((s) => s.parentCode === c).length > 0) setShowSub(true) }
+  const confirm = (c: string) => {
+    onCodeChange(c)
+    setShow(false)
+    // 補助科目がある場合は少し遅延してからサジェスト表示（外側クリックイベントとの競合回避）
+    const hasSubs = subAccountMaster.filter((s) => s.parentCode === c).length > 0
+    if (hasSubs) {
+      setTimeout(() => setShowSub(true), 200)
+    }
+  }
 
   // 科目名のフォントカラー判定
   const acc = accountMaster.find((a) => a.code === code)
@@ -334,6 +347,17 @@ function AccountField({
               <span className="text-gray-800">{s.shortName || s.name}</span>
             </button>
           ))}
+          <button onMouseDown={(e) => { e.preventDefault(); setShowSub(false); setShowNew(true) }}
+            className="w-full px-3 py-2 text-left text-xs text-blue-600 hover:bg-blue-50 border-t border-gray-100 font-medium">+ 新しく補助科目を登録する</button>
+        </div>
+      )}
+
+      {/* 補助科目がないが新規登録したい場合も表示 */}
+      {showSub && subs.length === 0 && (
+        <div className="absolute left-0 top-full mt-1 w-56 bg-white border border-gray-300 rounded-lg shadow-xl z-30">
+          <div className="px-3 py-2 text-xs text-gray-500">補助科目がありません</div>
+          <button onMouseDown={(e) => { e.preventDefault(); setShowSub(false); setShowNew(true) }}
+            className="w-full px-3 py-2 text-left text-xs text-blue-600 hover:bg-blue-50 border-t border-gray-100 font-medium">+ 新しく補助科目を登録する</button>
         </div>
       )}
 
