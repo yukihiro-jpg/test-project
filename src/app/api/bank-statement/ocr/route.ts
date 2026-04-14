@@ -120,14 +120,16 @@ async function processOnePage(
   model: any,
   imageDataUrl: string,
   pageIndex: number,
+  promptAddition: string = '',
 ): Promise<{ pageIndex: number; transactions: Transaction[]; error?: string }> {
   const base64Match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/)
   if (!base64Match) {
     return { pageIndex, transactions: [], error: '画像形式が不正です' }
   }
 
+  const fullPrompt = PROMPT_PER_PAGE + promptAddition
   const result = await model.generateContent([
-    PROMPT_PER_PAGE,
+    fullPrompt,
     { inlineData: { mimeType: base64Match[1], data: base64Match[2] } },
   ])
 
@@ -163,8 +165,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { images } = await request.json()
-    console.log(`OCR request: ${images?.length || 0} pages`)
+    const { images, templateHint } = await request.json()
+    console.log(`OCR request: ${images?.length || 0} pages${templateHint ? ' (with template)' : ''}`)
 
     if (!images || !Array.isArray(images) || images.length === 0) {
       return NextResponse.json({ error: '画像データがありません' }, { status: 400 })
@@ -173,11 +175,14 @@ export async function POST(request: NextRequest) {
     const genAI = new GoogleGenerativeAI(apiKey)
     const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
     console.log(`Using model: ${modelName}, sending ${images.length} pages in parallel`)
-    const model = genAI.getGenerativeModel({ model: modelName })
+    const model = genAI.getGenerativeModel({ model: modelName, generationConfig: { temperature: 0 } })
+
+    // テンプレート情報があればプロンプトに追加
+    const promptAddition = templateHint ? `\n${templateHint}` : ''
 
     // 全ページを並列でAPIに送信
     const startTime = Date.now()
-    const promises = images.map((img: string, i: number) => processOnePage(model, img, i))
+    const promises = images.map((img: string, i: number) => processOnePage(model, img, i, promptAddition))
     const results = await Promise.all(promises)
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
     console.log(`All ${images.length} pages completed in ${elapsed}s (parallel)`)

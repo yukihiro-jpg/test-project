@@ -237,7 +237,7 @@ export default function BankStatementContent() {
 
         if (config.documentType === 'cash-book') {
           // 現金出納帳処理（通帳と同じロジック）
-          const result = await parseFile(config.file)
+          const result = await parseFile(config.file, config.accountCode)
           clearInterval(progressTimer)
           setLoadingProgress(100)
 
@@ -310,7 +310,7 @@ export default function BankStatementContent() {
         }
 
         // 通帳処理（従来通り）
-        const result = await parseFile(config.file)
+        const result = await parseFile(config.file, config.accountCode)
         clearInterval(progressTimer)
         setLoadingProgress(100)
 

@@ -155,7 +155,7 @@ export async function renderPdfPageToImage(
   const ctx = canvas.getContext('2d')!
   await page.render({ canvasContext: ctx, viewport }).promise
 
-  return canvas.toDataURL('image/png')
+  return canvas.toDataURL('image/jpeg', 0.8)
 }
 
 export async function getPdfPageCount(file: File): Promise<number> {

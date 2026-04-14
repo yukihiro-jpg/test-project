@@ -8,6 +8,7 @@ import type {
 import { parsePdfText, renderPdfPageToImage, getPdfPageCount } from './pdf-text-parser'
 import { parseExcel } from './excel-parser'
 import { updatePageBalances } from './balance-validator'
+import { getTemplatePromptAddition, learnBankTemplate } from './bank-template'
 
 let idCounter = 0
 function generateId(): string {
@@ -236,13 +237,13 @@ function extractTransactions(
 /**
  * メインのパースエントリポイント
  */
-export async function parseFile(file: File): Promise<ParseResult> {
+export async function parseFile(file: File, accountCode?: string): Promise<ParseResult> {
   const fileName = file.name.toLowerCase()
 
   if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
     return parseExcelFile(file)
   } else if (fileName.endsWith('.pdf')) {
-    return parsePdfFile(file)
+    return parsePdfFile(file, accountCode)
   } else {
     throw new Error(
       '対応していないファイル形式です。PDF (.pdf) または Excel (.xlsx, .xls) を選択してください。',
@@ -250,7 +251,7 @@ export async function parseFile(file: File): Promise<ParseResult> {
   }
 }
 
-async function parsePdfFile(file: File): Promise<ParseResult> {
+async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResult> {
   // まずテキスト抽出を試みる
   const { pages: rawPages, isTextPdf } = await parsePdfText(file)
 
@@ -268,7 +269,7 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
       const response = await fetch('/api/bank-statement/ocr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images: imageDataUrls }),
+        body: JSON.stringify({ images: imageDataUrls, templateHint: accountCode ? getTemplatePromptAddition(accountCode) : '' }),
       })
 
       if (!response.ok) {
@@ -351,6 +352,14 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
         }
       })
 
+      // テンプレート自動学習
+      if (accountCode) {
+        const allTx = statementPages.flatMap((p) => p.transactions)
+        if (allTx.length > 0) {
+          learnBankTemplate(accountCode, accountCode, allTx)
+        }
+      }
+
       return {
         pages: updatePageBalances(statementPages),
         sourceType: 'pdf-ocr',
@@ -398,7 +407,7 @@ async function parsePdfFile(file: File): Promise<ParseResult> {
       const response = await fetch('/api/bank-statement/ocr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images: imageDataUrls }),
+        body: JSON.stringify({ images: imageDataUrls, templateHint: accountCode ? getTemplatePromptAddition(accountCode) : '' }),
       })
 
       if (!response.ok) {

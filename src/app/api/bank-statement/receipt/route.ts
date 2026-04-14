@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 
     const genAI = new GoogleGenerativeAI(apiKey)
     const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
-    const model = genAI.getGenerativeModel({ model: modelName })
+    const model = genAI.getGenerativeModel({ model: modelName, generationConfig: { temperature: 0 } })
 
     const startTime = Date.now()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
