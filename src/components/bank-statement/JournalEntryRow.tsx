@@ -496,7 +496,14 @@ function navCell(current: HTMLElement, dir: 'up' | 'down' | 'left' | 'right' | '
   else if (dir === 'next-row') {
     const tbody = tr.closest('tbody'); if (!tbody) return false
     const rows = Array.from(tbody.querySelectorAll('tr')); const ri = rows.indexOf(tr)
-    const next = rows[ri + 1]; if (next) for (const c of Array.from(next.querySelectorAll('td'))) if (c.querySelector('input')) { tgt = c; break }
+    // 次の行を探す（ヘッダー行など input がない行はスキップ）
+    for (let r = ri + 1; r < rows.length; r++) {
+      const next = rows[r]
+      for (const c of Array.from(next.querySelectorAll('td'))) {
+        if (c.querySelector('input')) { tgt = c; break }
+      }
+      if (tgt) break
+    }
   } else {
     const tbody = tr.closest('tbody'); if (!tbody) return false
     const rows = Array.from(tbody.querySelectorAll('tr')); const ri = rows.indexOf(tr)
