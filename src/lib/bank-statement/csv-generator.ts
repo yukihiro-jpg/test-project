@@ -165,10 +165,10 @@ export function downloadCsv(entries: JournalEntry[], fileName?: string, clientTa
   const appliedEntries = applyCompoundAutoAmounts(entries)
   const csvContent = generateCsv(appliedEntries, clientTaxType)
 
-  // UTF-8 BOM付き（Excel互換）
-  const bom = '\uFEFF'
-  const blob = new Blob([bom + csvContent], {
-    type: 'text/csv;charset=utf-8',
+  // Shift-JIS (ANSI) エンコードで出力
+  const sjisBytes = unicodeToShiftJIS(csvContent)
+  const blob = new Blob([sjisBytes], {
+    type: 'text/csv;charset=shift_jis',
   })
 
   const url = URL.createObjectURL(blob)
@@ -184,4 +184,18 @@ export function downloadCsv(entries: JournalEntry[], fileName?: string, clientTa
 function formatDateForFileName(): string {
   const now = new Date()
   return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Unicode文字列をShift-JIS (ANSI) のバイト配列に変換
+ */
+function unicodeToShiftJIS(str: string): ArrayBuffer {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
+  const Encoding = require('encoding-japanese') as any
+  const unicodeArray = Encoding.stringToCode(str)
+  const sjisArray: number[] = Encoding.convert(unicodeArray, { to: 'SJIS', from: 'UNICODE' })
+  const buf = new ArrayBuffer(sjisArray.length)
+  const view = new DataView(buf)
+  for (let i = 0; i < sjisArray.length; i++) view.setUint8(i, sjisArray[i])
+  return buf
 }
