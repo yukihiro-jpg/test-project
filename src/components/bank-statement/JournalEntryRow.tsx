@@ -172,23 +172,28 @@ export default function JournalEntryRow({
           <TaxCodeField
             taxCode={entry.debitTaxCode}
             taxType={entry.debitTaxType}
+            taxRate={entry.debitTaxRate}
             debitCode={entry.debitCode}
             creditCode={entry.creditCode}
             accountMaster={accountMaster}
             onChange={(code, name) => {
               onChange(entry.id, '_taxFull' as keyof JournalEntry, `${code}|${name}`)
             }}
+            onRateChange={(rate) => onChange(entry.id, 'debitTaxRate', rate)}
           />
         </td>
 
-        {/* 事業者取引区分（0=インボイス登録, 1=未登録） */}
-        <td style={CB}>
-          <select value={entry.debitBusinessType || '0'}
-            onChange={(e) => onChange(entry.id, 'debitBusinessType', e.target.value)}
-            className="w-full px-0.5 py-0.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-center">
-            <option value="0">0</option>
-            <option value="1">1</option>
-          </select>
+        {/* 事業者取引区分 */}
+        <td style={CB} className="text-center">
+          {entry.debitBusinessType === '1' ? (
+            <button onClick={(e) => { e.stopPropagation(); onChange(entry.id, 'debitBusinessType', '0') }}
+              title="インボイス未登録 → クリックで登録者に変更"
+              className="text-red-500 font-bold text-sm cursor-pointer hover:text-red-700">※</button>
+          ) : (
+            <button onClick={(e) => { e.stopPropagation(); onChange(entry.id, 'debitBusinessType', '1') }}
+              title="インボイス登録者 → クリックで未登録に変更"
+              className="text-gray-300 text-xs cursor-pointer hover:text-red-400">—</button>
+          )}
         </td>
 
         {/* 業種コード（簡易課税のみ表示） */}
@@ -401,14 +406,39 @@ function RowMenu({ onLearn, onAddBlank, onDelete }: { onLearn: () => void; onAdd
   )
 }
 
+// 消費税名を短縮表示
+function shortTaxName(name: string): string {
+  if (!name) return ''
+  if (name.includes('不課税')) return '不課'
+  if (name.includes('非課税売上')) return '非売'
+  if (name.includes('非課税仕入')) return '非仕'
+  if (name.includes('課税売上')) return '課売'
+  if (name.includes('課税仕入')) return '課仕'
+  if (name.includes('非売')) return '非売'
+  if (name.includes('非仕')) return '非仕'
+  if (name.includes('課売')) return '課売'
+  if (name.includes('課仕')) return '課仕'
+  return name.slice(0, 2)
+}
+
+// 税率コードの表示名
+function taxRateLabel(rate: string): string {
+  if (rate === '4') return '10%'
+  if (rate === '5') return '8%軽'
+  if (rate === '3') return '8%'
+  if (rate === '0' || !rate) return ''
+  return rate
+}
+
 // 消費税コード選択フィールド
 function TaxCodeField({
-  taxCode, taxType, debitCode, creditCode, accountMaster, onChange,
+  taxCode, taxType, taxRate, debitCode, creditCode, accountMaster, onChange, onRateChange,
 }: {
-  taxCode: string; taxType: string
+  taxCode: string; taxType: string; taxRate: string
   debitCode: string; creditCode: string
   accountMaster: AccountItem[]
   onChange: (code: string, name: string) => void
+  onRateChange: (rate: string) => void
 }) {
   const [show, setShow] = useState(false)
   const [inputVal, setInputVal] = useState(taxCode)
@@ -425,12 +455,10 @@ function TaxCodeField({
     ? taxCodes.filter((t) => t.code.includes(inputVal) || t.name.includes(inputVal))
     : taxCodes
 
-  // BS科目のみの仕訳は消費税登録不可
   const debitAcc = accountMaster.find((a) => a.code === debitCode)
   const creditAcc = accountMaster.find((a) => a.code === creditCode)
   const isBsOnly = debitAcc && creditAcc && isBS(debitAcc.bsPl) && isBS(creditAcc.bsPl)
 
-  // Enter押下時に最初のサジェストを確定
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -441,34 +469,41 @@ function TaxCodeField({
         setShow(false)
       }
       navCell(e.currentTarget, 'right')
-    } else {
-      handleNav(e)
-    }
+    } else { handleNav(e) }
   }
 
-  if (isBsOnly) {
-    return <span className="text-xs text-gray-300 px-1">—</span>
-  }
+  if (isBsOnly) return <span className="text-xs text-gray-300 px-1">—</span>
+
+  // 課税取引の場合のみ税率選択を表示
+  const showRate = taxCode && taxCode !== '0' && taxCode !== '30' && taxCode !== '40' && taxCode !== '41'
 
   return (
     <div ref={ref} className="relative">
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-0">
         <input type="text" value={inputVal}
           onChange={(e) => { setInputVal(e.target.value); setShow(true); onChange(e.target.value, '') }}
           onFocus={() => setShow(true)}
           onKeyDown={handleKeyDown}
           placeholder="CD"
-          className="w-8 shrink-0 px-0.5 py-0.5 text-sm text-blue-700 font-bold bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-center" />
-        <span className="text-xs text-gray-600 truncate">{taxType}</span>
+          className="w-7 shrink-0 px-0 py-0.5 text-xs font-bold bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-center" />
+        <span className="text-xs text-gray-600 shrink-0">{shortTaxName(taxType)}</span>
+        {showRate && (
+          <select value={taxRate || '4'}
+            onChange={(e) => onRateChange(e.target.value)}
+            className="ml-0.5 text-xs bg-transparent border-0 outline-none text-blue-600 font-medium cursor-pointer py-0 px-0">
+            <option value="4">10%</option>
+            <option value="5">8%軽</option>
+          </select>
+        )}
       </div>
       {show && filtered.length > 0 && (
-        <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-xl z-30 max-h-48 overflow-auto">
+        <div className="absolute left-0 top-full mt-1 w-56 bg-white border border-gray-300 rounded-lg shadow-xl z-30 max-h-48 overflow-auto">
           {filtered.map((t) => (
             <button key={`${t.category}-${t.code}`}
               onMouseDown={(e) => { e.preventDefault(); setInputVal(t.code); onChange(t.code, t.name); setShow(false) }}
-              className="w-full px-3 py-1.5 text-left text-sm hover:bg-blue-50 flex gap-2">
-              <span className="text-blue-700 font-bold w-8 shrink-0">{t.code}</span>
-              <span className="text-gray-700 text-xs">{t.name}</span>
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-blue-50 flex gap-2">
+              <span className="text-blue-700 font-bold w-6 shrink-0">{t.code}</span>
+              <span className="text-gray-700">{t.name}</span>
             </button>
           ))}
         </div>

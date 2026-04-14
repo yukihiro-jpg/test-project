@@ -472,8 +472,8 @@ export default function JournalEntryTable({
               <th className="px-2 py-2 text-center w-44 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>貸方科目</th>
               <th className="px-2 py-2 text-center w-24 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>金額</th>
               <th className="px-2 py-2 text-center w-28 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>残高</th>
-              <th className="px-2 py-2 text-center w-28 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>消費税</th>
-              <th className="px-2 py-2 text-center w-12 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>事業者</th>
+              <th className="px-1 py-2 text-center w-24 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>消費税</th>
+              <th className="px-1 py-2 text-center w-8 font-medium" style={{ borderRight: '1px solid #94a3b8' }} title="インボイス">iv</th>
               {clientTaxType === 'simplified' && (
                 <th className="px-2 py-2 text-center w-12 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>業種</th>
               )}
