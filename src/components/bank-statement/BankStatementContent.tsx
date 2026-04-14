@@ -454,11 +454,24 @@ export default function BankStatementContent() {
       alert('一時保存されたデータがありません')
       return
     }
-    downloadCsv(tempEntries)
+    // 科目名補完（仮払金一括登録等で名前が空の場合）
+    const completed = tempEntries.map((e) => {
+      const u = { ...e }
+      if (u.debitCode && !u.debitName) {
+        const acc = accountMaster.find((a) => a.code === u.debitCode)
+        if (acc) u.debitName = acc.shortName || acc.name
+      }
+      if (u.creditCode && !u.creditName) {
+        const acc = accountMaster.find((a) => a.code === u.creditCode)
+        if (acc) u.creditName = acc.shortName || acc.name
+      }
+      return u
+    })
+    downloadCsv(completed, undefined, selectedClient?.taxType)
     clearTempEntries()
     setTempCount(0)
     setInfo('一時保存データをCSV出力しました。一時保存はクリアされました。')
-  }, [])
+  }, [accountMaster, selectedClient])
 
   const handleTempClear = useCallback(() => {
     if (!confirm('一時保存データをすべて削除しますか？')) return
