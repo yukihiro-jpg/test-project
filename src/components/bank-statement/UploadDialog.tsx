@@ -7,6 +7,8 @@ interface Props {
   accountMaster: AccountItem[]
   onUpload: (config: UploadConfig) => void
   isLoading: boolean
+  lastPeriodFrom?: string
+  lastPeriodTo?: string
 }
 
 const DOC_TYPES: { value: DocumentType; label: string }[] = [
@@ -17,7 +19,7 @@ const DOC_TYPES: { value: DocumentType; label: string }[] = [
   { value: 'receipt', label: 'レシート・領収書' },
 ]
 
-export default function UploadDialog({ accountMaster, onUpload, isLoading }: Props) {
+export default function UploadDialog({ accountMaster, onUpload, isLoading, lastPeriodFrom, lastPeriodTo }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [docType, setDocType] = useState<DocumentType>('bank-statement')
   const [accountCode, setAccountCode] = useState('')
@@ -27,6 +29,8 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading }: Pro
   const [creditCode, setCreditCode] = useState('')
   const [creditName, setCreditName] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [periodFrom, setPeriodFrom] = useState('')
+  const [periodTo, setPeriodTo] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleAccountSelect = (code: string, setter: (c: string) => void, nameSetter: (n: string) => void) => {
@@ -37,17 +41,17 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading }: Pro
 
   const handleSubmit = () => {
     if (!selectedFile) return
+    const period = { periodFrom: periodFrom || undefined, periodTo: periodTo || undefined }
     if (docType === 'bank-statement' || docType === 'cash-book') {
       if (!accountCode || !accountName) return
-      onUpload({ documentType: docType, accountCode, accountName, file: selectedFile })
+      onUpload({ documentType: docType, accountCode, accountName, file: selectedFile, ...period })
     } else if (docType === 'receipt') {
-      // レシート: 貸方（支払原資）のみ
       if (!creditCode || !creditName) return
       onUpload({
         documentType: docType,
         accountCode: creditCode, accountName: creditName,
         creditCode, creditName,
-        file: selectedFile,
+        file: selectedFile, ...period,
       })
     } else {
       if (!debitCode || !creditCode) return
@@ -55,7 +59,7 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading }: Pro
         documentType: docType,
         accountCode: '', accountName: '',
         debitCode, debitName, creditCode, creditName,
-        file: selectedFile,
+        file: selectedFile, ...period,
       })
     }
     setIsOpen(false)
@@ -158,6 +162,24 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading }: Pro
                 <input ref={fileInputRef} type="file" accept={acceptFiles}
                   onChange={(e) => { if (e.target.files?.[0]) setSelectedFile(e.target.files[0]) }}
                   className="hidden" />
+              </div>
+
+              {/* 処理対象期間 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">処理対象期間</label>
+                <div className="flex items-center gap-2">
+                  <input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)}
+                    className="flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm" />
+                  <span className="text-sm text-gray-500">〜</span>
+                  <input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)}
+                    className="flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm" />
+                </div>
+                {lastPeriodFrom && lastPeriodTo && (
+                  <button onClick={() => { setPeriodFrom(lastPeriodFrom); setPeriodTo(lastPeriodTo) }}
+                    className="mt-1 text-xs text-blue-600 hover:underline">
+                    前回の期間をセット（{lastPeriodFrom} 〜 {lastPeriodTo}）
+                  </button>
+                )}
               </div>
 
               {/* 科目選択 */}

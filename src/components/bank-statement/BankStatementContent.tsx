@@ -55,6 +55,8 @@ export default function BankStatementContent() {
   const [info, setInfo] = useState<string | null>(null)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [lastPeriodFrom, setLastPeriodFrom] = useState('')
+  const [lastPeriodTo, setLastPeriodTo] = useState('')
   const [showPatternList, setShowPatternList] = useState(false)
   const [showFixedJournal, setShowFixedJournal] = useState(false)
   const [showQuestionList, setShowQuestionList] = useState(false)
@@ -94,6 +96,10 @@ export default function BankStatementContent() {
     (result: ParseResult, config: UploadConfig) => {
       setPages(result.pages)
       setCurrentPageIndex(0)
+
+      // 期間を保存（次回の「前回の期間をセット」用）
+      if (config.periodFrom) setLastPeriodFrom(config.periodFrom)
+      if (config.periodTo) setLastPeriodTo(config.periodTo)
 
       const patterns = getPatterns()
       const entries = mapTransactionsToJournalEntries(
@@ -156,7 +162,16 @@ export default function BankStatementContent() {
         }
         return updated
       })
-      setJournalEntries(entriesWithTax)
+      // 処理対象期間でフィルタ
+      const from = config.periodFrom?.replace(/-/g, '') || ''
+      const to = config.periodTo?.replace(/-/g, '') || ''
+      const filtered = entriesWithTax.filter((e) => {
+        if (!e.date) return true
+        if (from && e.date < from) return false
+        if (to && e.date > to) return false
+        return true
+      })
+      setJournalEntries(filtered)
     },
     [accountMaster],
   )
@@ -499,6 +514,8 @@ export default function BankStatementContent() {
             accountMaster={accountMaster}
             onUpload={handleUpload}
             isLoading={isLoading}
+            lastPeriodFrom={lastPeriodFrom}
+            lastPeriodTo={lastPeriodTo}
           />
           {journalEntries.length > 0 && (
             <>

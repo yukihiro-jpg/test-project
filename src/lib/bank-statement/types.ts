@@ -164,6 +164,8 @@ export interface UploadConfig {
   creditCode?: string
   creditName?: string
   file: File
+  periodFrom?: string  // 処理対象期間（開始）YYYY-MM-DD
+  periodTo?: string    // 処理対象期間（終了）YYYY-MM-DD
 }
 
 // 請求書の解析結果
