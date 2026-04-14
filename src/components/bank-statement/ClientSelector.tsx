@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import type { Client } from '@/lib/bank-statement/client-store'
-import { getClients, addClient, deleteClient, setSelectedClientId } from '@/lib/bank-statement/client-store'
+import { getClients, addClient, deleteClient, setSelectedClientId, updateClient, type TaxType } from '@/lib/bank-statement/client-store'
 
 interface Props {
   onSelect: (client: Client) => void
@@ -122,11 +122,22 @@ export default function ClientSelector({ onSelect }: Props) {
                       <span className="text-sm font-medium text-gray-800 group-hover:text-blue-700">
                         {client.name}
                       </span>
+                      <span className="ml-2 text-xs text-gray-400">
+                        {client.taxType === 'exempt' ? '免税' : client.taxType === 'simplified' ? '簡易課税' : '原則課税'}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">
-                        {client.createdAt.slice(0, 10)}
-                      </span>
+                      <select value={client.taxType || 'standard'}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          updateClient(client.id, { taxType: e.target.value as TaxType })
+                          setClients(getClients())
+                        }}
+                        className="text-xs border border-gray-200 rounded px-1 py-0.5 bg-white">
+                        <option value="standard">原則課税</option>
+                        <option value="simplified">簡易課税</option>
+                        <option value="exempt">免税</option>
+                      </select>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDelete(client.id, client.name) }}
                         className="text-xs text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"

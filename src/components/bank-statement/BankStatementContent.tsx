@@ -603,6 +603,7 @@ export default function BankStatementContent() {
               onSubAccountUpdate={handleSubAccountMasterUpdate}
               pages={pages}
               bankAccountCode={uploadConfig?.accountCode || ''}
+              clientTaxType={selectedClient?.taxType || 'standard'}
             />
           }
         />

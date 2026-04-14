@@ -30,11 +30,12 @@ interface Props {
   onSubAccountUpdate: (items: SubAccountItem[]) => void
   pages: StatementPage[]
   bankAccountCode: string
+  clientTaxType?: string
 }
 
 export default function JournalEntryTable({
   entries, accountMaster, subAccountMaster, selectedEntryId,
-  onSelect, onEntriesChange, onSubAccountUpdate, pages, bankAccountCode,
+  onSelect, onEntriesChange, onSubAccountUpdate, pages, bankAccountCode, clientTaxType,
 }: Props) {
   const [selectedRange, setSelectedRange] = useState<Set<string>>(new Set())
   const [lastClickedId, setLastClickedId] = useState<string | null>(null)
@@ -473,6 +474,9 @@ export default function JournalEntryTable({
               <th className="px-2 py-2 text-center w-28 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>残高</th>
               <th className="px-2 py-2 text-center w-28 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>消費税</th>
               <th className="px-2 py-2 text-center w-12 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>事業者</th>
+              {clientTaxType === 'simplified' && (
+                <th className="px-2 py-2 text-center w-12 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>業種</th>
+              )}
               <th className="px-2 py-2 text-center font-medium" style={{ borderRight: '1px solid #94a3b8', minWidth: '180px' }}>摘要</th>
               <th className="px-1 py-2 w-14 font-medium"></th>
             </tr>
@@ -517,6 +521,7 @@ export default function JournalEntryTable({
                   onAddCompound={() => handleAddCompoundRow(entry.id)}
                   onDelete={() => onEntriesChange(entries.filter((e) => e.id !== entry.id))}
                   onSubAccountRegister={handleSubAccountRegister}
+                  clientTaxType={clientTaxType}
                   onPatternClick={(pid) => setPatternDetailId(pid)}
                 />
               )

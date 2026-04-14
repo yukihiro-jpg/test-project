@@ -16,6 +16,7 @@ interface Props {
   isCompoundGroup?: boolean
   isCompoundFirst?: boolean
   isCompoundLast?: boolean
+  clientTaxType?: string
   compoundAutoAmount?: number
   onSelect: (id: string) => void
   onChange: (id: string, field: keyof JournalEntry, value: string | number) => void
@@ -37,7 +38,7 @@ function toHalfWidth(str: string): string {
 export default function JournalEntryRow({
   entry, isSelected, accountMaster, subAccountMaster,
   isPageBoundary, pageLabel, runningBalance, rowNumber,
-  isCompoundGroup, isCompoundFirst, isCompoundLast, compoundAutoAmount,
+  isCompoundGroup, isCompoundFirst, isCompoundLast, compoundAutoAmount, clientTaxType,
   onSelect, onChange, onAddCompound, onDelete, onLearn, onAddBlank, onSubAccountRegister, onPatternClick,
 }: Props) {
   const amount = entry.debitAmount || entry.creditAmount || 0
@@ -189,6 +190,23 @@ export default function JournalEntryRow({
             <option value="1">1</option>
           </select>
         </td>
+
+        {/* 業種コード（簡易課税のみ表示） */}
+        {clientTaxType === 'simplified' && (
+          <td style={CB}>
+            <select value={entry.debitIndustry || '0'}
+              onChange={(e) => onChange(entry.id, 'debitIndustry', e.target.value)}
+              className="w-full px-0.5 py-0.5 text-xs bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-center">
+              <option value="0">-</option>
+              <option value="1">1種</option>
+              <option value="2">2種</option>
+              <option value="3">3種</option>
+              <option value="4">4種</option>
+              <option value="5">5種</option>
+              <option value="6">6種</option>
+            </select>
+          </td>
+        )}
 
         {/* 摘要（25文字制限） */}
         <td style={CB}>

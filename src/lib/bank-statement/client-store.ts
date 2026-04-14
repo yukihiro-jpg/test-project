@@ -1,7 +1,10 @@
+export type TaxType = 'exempt' | 'standard' | 'simplified'
+
 export interface Client {
   id: string
   name: string
   createdAt: string
+  taxType?: TaxType  // exempt=免税, standard=原則課税, simplified=簡易課税
 }
 
 const CLIENTS_KEY = 'bank-statement-clients'
@@ -41,6 +44,15 @@ export function deleteClient(id: string): void {
     localStorage.removeItem(`bs-accounts-${id}`)
     localStorage.removeItem(`bs-sub-accounts-${id}`)
     localStorage.removeItem(`bs-patterns-${id}`)
+  }
+}
+
+export function updateClient(id: string, updates: Partial<Client>): void {
+  const clients = getClients()
+  const idx = clients.findIndex((c) => c.id === id)
+  if (idx >= 0) {
+    clients[idx] = { ...clients[idx], ...updates }
+    saveClients(clients)
   }
 }
 

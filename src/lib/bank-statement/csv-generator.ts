@@ -23,28 +23,40 @@ const CSV_HEADERS = [
   '摘要',                       // 20
 ]
 
-function entryToRow(entry: JournalEntry): string[] {
+// 消費税売上/仕入区分を数値に変換 (0:なし, 1:売上, 2:仕入)
+function taxCategoryToNum(taxType: string): string {
+  if (!taxType) return '0'
+  if (taxType.includes('売上') || taxType.includes('売')) return '1'
+  if (taxType.includes('仕入') || taxType.includes('仕')) return '2'
+  return '0'
+}
+
+function entryToRow(entry: JournalEntry, clientTaxType?: string): string[] {
+  // 業種コードは簡易課税の場合のみ使用
+  const debitIndustry = clientTaxType === 'simplified' ? (entry.debitIndustry || '0') : '0'
+  const creditIndustry = clientTaxType === 'simplified' ? (entry.creditIndustry || '0') : '0'
+
   return [
     entry.date,                                           // 1 伝票日付
     entry.debitCode,                                      // 2 借方勘定科目コード
     entry.debitName,                                      // 3 借方勘定科目名称
     entry.debitSubCode,                                   // 4 借方科目別補助コード
     entry.debitSubName,                                   // 5 借方科目別補助名称
-    entry.debitTaxType,                                   // 6 借方消費税売上/仕入区分
-    entry.debitIndustry,                                  // 7 借方業種コード
-    entry.debitTaxInclude,                                // 8 借方税込/税抜区分
+    taxCategoryToNum(entry.debitTaxType),                  // 6 借方消費税売上/仕入区分（数値）
+    debitIndustry,                                        // 7 借方業種コード（数値）
+    entry.debitTaxInclude || '0',                          // 8 借方税込/税抜区分
     entry.creditCode,                                     // 9 貸方勘定科目コード
     entry.creditName,                                     // 10 貸方勘定科目名称
     entry.creditSubCode,                                  // 11 貸方科目別補助コード
     entry.creditSubName,                                  // 12 貸方科目別補助名称
-    entry.creditTaxType,                                  // 13 貸方消費税売上/仕入区分
-    entry.creditIndustry,                                 // 14 貸方業種コード
-    entry.creditTaxInclude,                               // 15 貸方税込/税抜区分
-    entry.debitTaxCode,                                   // 16 消費税コード
-    entry.debitTaxRate,                                   // 17 消費税率
-    entry.debitBusinessType,                              // 18 事業者取引区分
-    entry.debitAmount ? String(entry.debitAmount) : '',    // 19 金額
-    entry.description,                                    // 20 摘要
+    taxCategoryToNum(entry.creditTaxType),                 // 13 貸方消費税売上/仕入区分（数値）
+    creditIndustry,                                       // 14 貸方業種コード（数値）
+    entry.creditTaxInclude || '0',                         // 15 貸方税込/税抜区分
+    entry.debitTaxCode || '0',                             // 16 消費税コード
+    entry.debitTaxRate || '0',                             // 17 消費税率（数値）
+    entry.debitBusinessType || '0',                        // 18 事業者取引区分
+    entry.debitAmount ? String(entry.debitAmount) : '',     // 19 金額
+    entry.description,                                     // 20 摘要
   ]
 }
 
@@ -125,25 +137,19 @@ export function applyCompoundAutoAmounts(entries: JournalEntry[], shoguchiCode?:
   })
 }
 
-export function generateCsv(entries: JournalEntry[]): string {
+export function generateCsv(entries: JournalEntry[], clientTaxType?: string): string {
   const lines: string[] = []
-
-  // ヘッダー行
   lines.push(CSV_HEADERS.map(escapeCsvField).join(','))
-
-  // データ行
   for (const entry of entries) {
-    const row = entryToRow(entry)
+    const row = entryToRow(entry, clientTaxType)
     lines.push(row.map(escapeCsvField).join(','))
   }
-
   return lines.join('\r\n')
 }
 
-export function downloadCsv(entries: JournalEntry[], fileName?: string): void {
-  // 複合仕訳の997自動計算金額を反映してからCSV化
+export function downloadCsv(entries: JournalEntry[], fileName?: string, clientTaxType?: string): void {
   const appliedEntries = applyCompoundAutoAmounts(entries)
-  const csvContent = generateCsv(appliedEntries)
+  const csvContent = generateCsv(appliedEntries, clientTaxType)
 
   // UTF-8 BOM付き（Excel互換）
   const bom = '\uFEFF'
