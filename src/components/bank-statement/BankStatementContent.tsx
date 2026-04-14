@@ -12,6 +12,7 @@ import CsvExportButton from '@/components/bank-statement/CsvExportButton'
 import { appendTempEntries, getTempEntryCount, clearTempEntries, getTempEntries } from '@/lib/bank-statement/temp-store'
 import { generateQuestionList, downloadQuestionExcel } from '@/lib/bank-statement/question-list'
 import QuestionListDialog from '@/components/bank-statement/QuestionListDialog'
+import TempDataDialog from '@/components/bank-statement/TempDataDialog'
 import { applyCompoundAutoAmounts, downloadCsv } from '@/lib/bank-statement/csv-generator'
 import { learnAllFromEntries } from '@/lib/bank-statement/pattern-store'
 import ResizableSplitPanel from '@/components/bank-statement/ResizableSplitPanel'
@@ -57,6 +58,7 @@ export default function BankStatementContent() {
   const [showPatternList, setShowPatternList] = useState(false)
   const [showFixedJournal, setShowFixedJournal] = useState(false)
   const [showQuestionList, setShowQuestionList] = useState(false)
+  const [showTempData, setShowTempData] = useState(false)
   const [tempCount, setTempCount] = useState(() => getTempEntryCount())
 
   // 顧問先選択ハンドラ
@@ -511,9 +513,13 @@ export default function BankStatementContent() {
           )}
           {tempCount > 0 && (
             <div className="flex items-center gap-1">
+              <button onClick={() => setShowTempData(true)}
+                className="px-3 py-1.5 text-xs font-medium bg-gray-500 hover:bg-gray-600 text-white rounded">
+                一時保存確認 ({tempCount}件)
+              </button>
               <button onClick={handleTempExport}
                 className="px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded">
-                一括CSV出力 ({tempCount}件)
+                一括CSV出力
               </button>
               <button onClick={handleQuestionList}
                 className="px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded">
@@ -633,6 +639,12 @@ export default function BankStatementContent() {
         onClose={() => setShowFixedJournal(false)}
         accountMaster={accountMaster}
         onTempCountChange={setTempCount}
+      />
+
+      <TempDataDialog
+        open={showTempData}
+        onClose={() => setShowTempData(false)}
+        onCountChange={setTempCount}
       />
 
       <QuestionListDialog
