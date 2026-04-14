@@ -399,10 +399,45 @@ export default function JournalEntryTable({
     return balances
   }, [entries, pages, bankAccountCode])
 
+  // 残高不一致チェック（全ページ）
+  const balanceMismatch = useMemo(() => {
+    const mismatches: { pageIndex: number; calculated: number; expected: number; diff: number }[] = []
+    for (const page of pages) {
+      if (page.transactions.length === 0) continue
+      const pageEntries = entries.filter((e) =>
+        page.transactions.some((t) => t.id === e.transactionId)
+      )
+      let deposit = 0, withdrawal = 0
+      for (const e of pageEntries) {
+        const amt = e.debitAmount || e.creditAmount || 0
+        if (e.debitCode === bankAccountCode) deposit += amt
+        else if (e.creditCode === bankAccountCode) withdrawal += amt
+      }
+      const calculated = page.openingBalance + deposit - withdrawal
+      const diff = calculated - page.closingBalance
+      if (Math.abs(diff) >= 1) {
+        mismatches.push({ pageIndex: page.pageIndex, calculated, expected: page.closingBalance, diff })
+      }
+    }
+    return mismatches
+  }, [entries, pages, bankAccountCode])
+
   return (
     <div className="flex flex-col h-full bg-white">
       <div className="px-4 py-2 bg-gray-700 flex items-center justify-between shrink-0">
-        <span className="text-sm font-medium text-white">仕訳データ ({entries.length}件)</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-white">仕訳データ ({entries.length}件)</span>
+          {balanceMismatch.length > 0 && (
+            <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded animate-pulse">
+              残高不一致 {balanceMismatch.length}ページ
+            </span>
+          )}
+          {balanceMismatch.length === 0 && pages.length > 0 && entries.length > 0 && (
+            <span className="px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded">
+              残高一致
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <button onClick={() => {
             // 科目チェックリストから仮払金を検索
@@ -440,6 +475,18 @@ export default function JournalEntryTable({
             className="px-3 py-1 text-xs bg-white text-gray-700 font-medium rounded hover:bg-gray-100">+ 選択行の上に1行追加</button>
         </div>
       </div>
+
+      {/* 残高不一致の詳細 */}
+      {balanceMismatch.length > 0 && (
+        <div className="px-4 py-2 bg-red-50 border-b border-red-200 shrink-0">
+          <div className="text-xs font-bold text-red-700 mb-1">残高不一致の詳細</div>
+          {balanceMismatch.map((m) => (
+            <div key={m.pageIndex} className="text-xs text-red-600">
+              P{m.pageIndex + 1}: 計算残高 &yen;{m.calculated.toLocaleString()} / 通帳残高 &yen;{m.expected.toLocaleString()}（差額 &yen;{Math.abs(m.diff).toLocaleString()}）
+            </div>
+          ))}
+        </div>
+      )}
 
       {showBulkEdit && selectedRange.size > 0 && (
         <div className="px-3 py-2 bg-blue-100 border-b border-blue-300 flex items-center gap-2 shrink-0">
