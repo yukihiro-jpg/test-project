@@ -98,13 +98,19 @@ export default function JournalEntryRow({
         onClick={(e) => onSelect(entry.id, e)}
       >
         {/* 選択チェックボックス */}
-        <td style={CB} className="text-center px-1">
+        <td style={CB} className="text-center px-1 select-none">
           <input
             type="checkbox"
             checked={!!isChecked}
             onChange={() => { /* クリックで処理 */ }}
+            onMouseDown={(e) => {
+              // Shift+クリックでブラウザのテキスト範囲選択が走らないように抑止
+              if (e.shiftKey) e.preventDefault()
+            }}
             onClick={(e) => {
               e.stopPropagation()
+              // 既に選択されたテキストがあれば解除
+              if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges()
               onCheckToggle?.(entry.id, e)
             }}
             className="w-4 h-4 cursor-pointer accent-blue-600"
