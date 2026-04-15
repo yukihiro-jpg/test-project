@@ -183,6 +183,32 @@ function detectColumnMapping(rows: RawTableRow[]): ColumnMapping | null {
 }
 
 /**
+ * ヘッダー行に「取引区分」列があれば、その列インデックスを返す
+ * 「摘要」列と併存する場合のみ有効とする（同列なら無視）
+ */
+function detectTransactionTypeColumn(
+  rows: RawTableRow[],
+  descriptionColumn: number,
+): number {
+  const HEADER_KEYWORDS = ['取引区分', '区分', '種別', 'お取引内容', '取引内容', '取引種別']
+  for (const row of rows) {
+    // ヘッダー行らしいか：日付セルを含まず、テキストセルが複数ある
+    const hasDate = row.cells.some((c) => isDateCell(c))
+    if (hasDate) continue
+    const hasDesc = row.cells.some((c) => c.includes('摘要'))
+    if (!hasDesc) continue
+    for (let i = 0; i < row.cells.length; i++) {
+      if (i === descriptionColumn) continue
+      const cell = row.cells[i].trim()
+      if (HEADER_KEYWORDS.some((k) => cell === k || cell.includes(k))) {
+        return i
+      }
+    }
+  }
+  return -1
+}
+
+/**
  * RawTableRowsからBankTransactionに変換
  */
 function extractTransactions(
@@ -191,16 +217,24 @@ function extractTransactions(
   pageIndex: number,
 ): BankTransaction[] {
   const transactions: BankTransaction[] = []
+  const txTypeCol = mapping.transactionTypeColumn
+  const hasTxType = typeof txTypeCol === 'number' && txTypeCol >= 0
 
   for (const row of rows) {
     const dateText = row.cells[mapping.dateColumn] || ''
     const date = parseDate(dateText)
     if (!date) continue // 日付のない行はスキップ（ヘッダー等）
 
-    const description =
+    const baseDesc =
       mapping.descriptionColumn >= 0
         ? row.cells[mapping.descriptionColumn] || ''
         : ''
+    const txTypeText = hasTxType ? (row.cells[txTypeCol!] || '').trim() : ''
+    // 取引区分がある場合は「取引区分 摘要」として結合
+    const description =
+      txTypeText && baseDesc.trim()
+        ? `${txTypeText} ${baseDesc.trim()}`
+        : txTypeText || baseDesc
 
     const depositText = row.cells[mapping.depositColumn] || ''
     const withdrawalText =
@@ -515,7 +549,11 @@ async function parseExcelFile(file: File): Promise<ParseResult> {
 function detectColumnMappingFromAllPages(allPages: RawTableRow[][]): ColumnMapping | null {
   // 全ページの行を結合して列検出
   const allRows = allPages.flat()
-  return detectColumnMapping(allRows)
+  const mapping = detectColumnMapping(allRows)
+  if (!mapping) return null
+  const txTypeCol = detectTransactionTypeColumn(allRows, mapping.descriptionColumn)
+  if (txTypeCol >= 0) mapping.transactionTypeColumn = txTypeCol
+  return mapping
 }
 
 /**

@@ -136,6 +136,7 @@ export interface ColumnMapping {
   depositColumn: number
   withdrawalColumn: number
   balanceColumn: number
+  transactionTypeColumn?: number // 取引区分列（摘要と別列で存在する場合）
 }
 
 // パース結果

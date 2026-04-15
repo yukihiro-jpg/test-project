@@ -399,6 +399,32 @@ export default function JournalEntryTable({
     return balances
   }, [entries, pages, bankAccountCode])
 
+  // 取引ID→通帳残高のルックアップ
+  const txBalanceMap = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of pages) for (const t of p.transactions) m.set(t.id, t.balance)
+    return m
+  }, [pages])
+
+  // 不一致が最初に発生した仕訳のインデックス（全体で1箇所）
+  const firstMismatchIndex = useMemo(() => {
+    const opening = pages.length > 0 ? pages[0].openingBalance : 0
+    let running = opening
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i]
+      const amt = e.debitAmount || e.creditAmount || 0
+      let affects = false
+      if (e.debitCode === bankAccountCode) { running += amt; affects = true }
+      else if (e.creditCode === bankAccountCode) { running -= amt; affects = true }
+      if (!affects) continue
+      if (!e.transactionId) continue
+      const expected = txBalanceMap.get(e.transactionId)
+      if (expected == null) continue
+      if (Math.abs(running - expected) >= 1) return i
+    }
+    return -1
+  }, [entries, pages, bankAccountCode, txBalanceMap])
+
   // 残高不一致チェック（全ページ）
   const balanceMismatch = useMemo(() => {
     const mismatches: { pageIndex: number; calculated: number; expected: number; diff: number }[] = []
@@ -551,6 +577,7 @@ export default function JournalEntryTable({
                   isCompoundFirst={ci?.isFirst}
                   isCompoundLast={ci?.isLast}
                   compoundAutoAmount={ci?.isLast ? ci.autoAmount : undefined}
+                  isBalanceMismatch={firstMismatchIndex >= 0 && idx >= firstMismatchIndex}
                   onSelect={(id: string) => handleRowSelect(id)}
                   onChange={handleEntryChange}
                   onLearn={() => {
