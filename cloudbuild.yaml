@@ -1,0 +1,48 @@
+# =============================================================================
+# Google Cloud Build 設定
+# =============================================================================
+# デプロイ方法:
+#   gcloud builds submit --config cloudbuild.yaml
+#
+# 前提:
+#   - Cloud Build / Cloud Run / Artifact Registry API が有効
+#   - サービスアカウントに Cloud Run 管理者権限
+
+steps:
+  # Docker イメージビルド
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/financial-report-app/app:$COMMIT_SHA'
+      - '.'
+
+  # Artifact Registry にプッシュ
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/financial-report-app/app:$COMMIT_SHA'
+
+  # Cloud Run へデプロイ
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - financial-report-app
+      - '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/financial-report-app/app:$COMMIT_SHA'
+      - '--region=asia-northeast1'
+      - '--platform=managed'
+      - '--no-allow-unauthenticated'
+      - '--memory=2Gi'
+      - '--cpu=1'
+      - '--timeout=300'
+      - '--max-instances=3'
+      - '--set-env-vars=NODE_ENV=production'
+      - '--set-secrets=SESSION_SECRET=session-secret:latest,GEMINI_API_KEY=gemini-api-key:latest,ESTAT_APP_ID=estat-app-id:latest,GOOGLE_OAUTH_CLIENT_ID=oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=oauth-client-secret:latest'
+
+images:
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/financial-report-app/app:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

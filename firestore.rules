@@ -1,0 +1,69 @@
+rules_version = '2';
+
+// =============================================================================
+// Firestore セキュリティルール
+// =============================================================================
+// 方針：
+//   - 許可メールアドレスのユーザーのみアクセス可能
+//   - テストコレクション（test_* プレフィックス）はアクセス不可
+//   - その他の全てのアクセスは拒否
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ユーティリティ: 現在のユーザーが許可リストに含まれるか
+    function isAllowedUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          // .env.local の ALLOWED_EMAIL と一致させる
+          'your@gmail.com'
+        ];
+    }
+
+    // 顧問先
+    match /clients/{clientId} {
+      allow read, write: if isAllowedUser();
+
+      // プロファイル
+      match /profile/{profileId} {
+        allow read, write: if isAllowedUser();
+      }
+
+      // 月次レポート
+      match /reports/{reportId} {
+        allow read, write: if isAllowedUser();
+
+        match /sections/{sectionId} {
+          allow read, write: if isAllowedUser();
+        }
+
+        match /comments/{commentId} {
+          allow read, write: if isAllowedUser();
+        }
+      }
+    }
+
+    // ベンチマーク
+    match /benchmark/{fiscalYear}/indicators/{indicatorId} {
+      allow read: if isAllowedUser();
+      allow write: if false; // 書き込みはサーバーサイドのみ
+    }
+
+    // 監査ログ
+    match /audit/{auditId} {
+      allow read: if isAllowedUser();
+      allow write: if false; // 書き込みはサーバーサイドのみ
+    }
+
+    // テストコレクションへのクライアント直アクセスは禁止
+    match /test_{tail=**} {
+      allow read, write: if false;
+    }
+
+    // 明示されていないパスへのアクセスは全拒否
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
