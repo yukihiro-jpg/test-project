@@ -1,23 +1,23 @@
 {
+  // =========================================================================
+  // Dev Container 設定（シンプル版）
+  // =========================================================================
+  // Node.js 20 の公式イメージを使い、追加機能は入れない。
+  // GitHub CLI / Google Cloud CLI はデプロイ時に必要だが、
+  // Codespace でのアプリ開発には不要なため除外。必要になったら個別にインストールする。
+  // =========================================================================
   "name": "financial-report-app",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:20",
-  "features": {
-    "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/devcontainers/features/google-cloud-cli:1": {}
-  },
   "customizations": {
     "vscode": {
       "extensions": [
         "bradlc.vscode-tailwindcss",
         "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode",
-        "ms-azuretools.vscode-docker",
-        "googlecloudtools.cloudcode"
+        "esbenp.prettier-vscode"
       ],
       "settings": {
         "editor.formatOnSave": true,
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "typescript.preferences.importModuleSpecifier": "non-relative"
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
       }
     }
   },
