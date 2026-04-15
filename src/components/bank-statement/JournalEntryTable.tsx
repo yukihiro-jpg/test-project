@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState, useMemo } from 'react'
+import { useCallback, useState, useMemo, useEffect } from 'react'
 import type {
   JournalEntry,
   AccountItem,
@@ -190,34 +190,93 @@ export default function JournalEntryTable({
   }, [applyTargetEntries, applyPatternLines, entries, onEntriesChange, bankAccountCode])
 
   const handleRowSelect = useCallback(
-    (entryId: string) => {
-      // 常に選択状態を更新（どのセルクリックでも）
-      setLastClickedId(entryId)
-      onSelect(entryId)
-    },
-    [onSelect],
-  )
-
-  const handleRowShiftClick = useCallback(
-    (entryId: string, e: React.MouseEvent) => {
-      if (e.shiftKey && lastClickedId) {
+    (entryId: string, e?: React.MouseEvent) => {
+      // Shift+クリック: lastClickedIdから範囲選択
+      if (e?.shiftKey && lastClickedId) {
         e.preventDefault()
         const s = entries.findIndex((en) => en.id === lastClickedId)
         const ed = entries.findIndex((en) => en.id === entryId)
-        const [from, to] = s < ed ? [s, ed] : [ed, s]
-        const range = new Set<string>()
-        for (let i = from; i <= to; i++) range.add(entries[i].id)
-        setSelectedRange(range)
-        setShowBulkEdit(true)
-      } else {
-        setSelectedRange(new Set())
-        setShowBulkEdit(false)
-        onSelect(entryId === selectedEntryId ? null : entryId)
+        if (s >= 0 && ed >= 0) {
+          const [from, to] = s < ed ? [s, ed] : [ed, s]
+          const range = new Set<string>()
+          for (let i = from; i <= to; i++) range.add(entries[i].id)
+          setSelectedRange(range)
+          setShowBulkEdit(true)
+        }
+        setLastClickedId(entryId)
+        return
       }
+      // Ctrl/Cmd+クリック: 個別にトグル追加
+      if (e && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        const newRange = new Set(selectedRange)
+        // 範囲がまだ無い場合は既存の単一選択をseedとして含める
+        if (newRange.size === 0 && selectedEntryId) newRange.add(selectedEntryId)
+        if (newRange.has(entryId)) newRange.delete(entryId)
+        else newRange.add(entryId)
+        setSelectedRange(newRange)
+        setShowBulkEdit(newRange.size > 0)
+        setLastClickedId(entryId)
+        return
+      }
+      // 通常クリック: 単一選択・範囲解除
+      setSelectedRange(new Set())
+      setShowBulkEdit(false)
       setLastClickedId(entryId)
+      onSelect(entryId)
     },
-    [entries, lastClickedId, selectedEntryId, onSelect],
+    [entries, lastClickedId, selectedEntryId, selectedRange, onSelect],
   )
+
+  // 全選択/全解除
+  const handleSelectAll = useCallback(() => {
+    if (entries.length === 0) return
+    if (selectedRange.size === entries.length) {
+      // 既に全選択 → 解除
+      setSelectedRange(new Set())
+      setShowBulkEdit(false)
+    } else {
+      setSelectedRange(new Set(entries.map((e) => e.id)))
+      setShowBulkEdit(true)
+    }
+  }, [entries, selectedRange])
+
+  // 選択行の削除（複合仕訳の子も連鎖削除）
+  const handleDeleteSelected = useCallback(() => {
+    const ids = new Set<string>()
+    if (selectedRange.size > 0) {
+      selectedRange.forEach((id) => ids.add(id))
+    } else if (selectedEntryId) {
+      ids.add(selectedEntryId)
+    }
+    if (ids.size === 0) return
+    // 親を削除する場合は子(parentId==親id)も削除
+    for (const e of entries) {
+      if (e.parentId && ids.has(e.parentId)) ids.add(e.id)
+    }
+    if (!window.confirm(`選択された ${ids.size} 件の仕訳を削除します。よろしいですか？`)) return
+    onEntriesChange(entries.filter((e) => !ids.has(e.id)))
+    setSelectedRange(new Set())
+    setShowBulkEdit(false)
+    onSelect(null)
+  }, [entries, selectedRange, selectedEntryId, onEntriesChange, onSelect])
+
+  // Delete キーで選択削除（入力フィールド内では無効）
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Delete') return
+      const el = document.activeElement as HTMLElement | null
+      if (el) {
+        const tag = el.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable) return
+      }
+      if (selectedRange.size === 0 && !selectedEntryId) return
+      ev.preventDefault()
+      handleDeleteSelected()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [handleDeleteSelected, selectedRange.size, selectedEntryId])
 
   const applyBulkEdit = useCallback(() => {
     if (!bulkField || selectedRange.size === 0) return
@@ -465,6 +524,19 @@ export default function JournalEntryTable({
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleSelectAll}
+            disabled={entries.length === 0}
+            className="px-3 py-1 text-xs bg-white text-gray-700 font-medium rounded hover:bg-gray-100 disabled:opacity-40">
+            {selectedRange.size === entries.length && entries.length > 0 ? '全解除' : '全選択'}
+          </button>
+          <button
+            onClick={handleDeleteSelected}
+            disabled={selectedRange.size === 0 && !selectedEntryId}
+            title="選択した仕訳を削除 (Shift+クリック=範囲, Ctrl+クリック=個別追加)"
+            className="px-3 py-1 text-xs bg-rose-600 text-white font-medium rounded hover:bg-rose-700 disabled:opacity-40">
+            選択削除 {selectedRange.size > 0 ? `(${selectedRange.size})` : ''}
+          </button>
           <button onClick={() => {
             // 科目チェックリストから仮払金を検索
             const karibarai = accountMaster.find((a) =>
@@ -530,6 +602,8 @@ export default function JournalEntryTable({
             placeholder="値" className="px-2 py-1 text-xs border border-blue-300 rounded w-28" />
           <button onClick={applyBulkEdit} disabled={!bulkField}
             className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40">適用</button>
+          <button onClick={handleDeleteSelected}
+            className="px-3 py-1 text-xs bg-rose-600 text-white rounded hover:bg-rose-700">削除</button>
           <button onClick={() => { setShowBulkEdit(false); setSelectedRange(new Set()) }}
             className="px-2 py-1 text-xs text-blue-600 hover:underline">解除</button>
         </div>

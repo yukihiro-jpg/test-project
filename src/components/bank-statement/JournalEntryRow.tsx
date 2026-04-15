@@ -19,7 +19,7 @@ interface Props {
   clientTaxType?: string
   compoundAutoAmount?: number
   isBalanceMismatch?: boolean
-  onSelect: (id: string) => void
+  onSelect: (id: string, e?: React.MouseEvent) => void
   onChange: (id: string, field: keyof JournalEntry, value: string | number) => void
   onAddCompound: () => void
   onDelete: () => void
@@ -93,7 +93,7 @@ export default function JournalEntryRow({
           borderLeft: isCompoundGroup ? '2px solid #f87171' : undefined,
           borderRight: isCompoundGroup ? '2px solid #f87171' : undefined,
         }}
-        onClick={() => onSelect(entry.id)}
+        onClick={(e) => onSelect(entry.id, e)}
       >
         {/* 学習 */}
         <td style={CB} className="text-center">
