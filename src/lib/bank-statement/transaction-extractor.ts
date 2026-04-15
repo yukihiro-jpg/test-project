@@ -112,11 +112,64 @@ function isAmountCell(text: string): boolean {
   return /^\d+$/.test(cleaned) && cleaned.length > 0
 }
 
+// ヘッダー行で使われる列名キーワード
+const HEADER_DATE = ['日付', '年月日', '取引日', '計算日']
+const HEADER_DESC = ['摘要', 'お取引内容', '取引内容', '内容', '記事', '備考']
+const HEADER_DEPOSIT = ['入金', '預入', '預り', 'お預入れ', 'お預入', '入金金額', '入金額', '預入金額']
+const HEADER_WITHDRAW = ['出金', '引出', '払戻', 'お引出', 'お支払い', '出金金額', '出金額', '引出金額', '支払金額']
+const HEADER_BALANCE = ['残高', '差引残高', '残額', 'お預り残高']
+
+function matchHeaderKeyword(cell: string, keywords: string[]): boolean {
+  const c = cell.trim()
+  if (!c) return false
+  return keywords.some((k) => c === k || c.includes(k))
+}
+
+/**
+ * ヘッダー行からマッピングを検出する（行内に日付セルがなく、
+ * 「入金/出金/残高」等のキーワードが揃っている行）
+ */
+function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
+  for (const row of rows) {
+    if (row.cells.some((c) => isDateCell(c))) continue
+    let dateCol = -1
+    let descCol = -1
+    let depositCol = -1
+    let withdrawCol = -1
+    let balanceCol = -1
+    for (let i = 0; i < row.cells.length; i++) {
+      const cell = row.cells[i]
+      if (!cell) continue
+      if (dateCol < 0 && matchHeaderKeyword(cell, HEADER_DATE)) dateCol = i
+      else if (depositCol < 0 && matchHeaderKeyword(cell, HEADER_DEPOSIT)) depositCol = i
+      else if (withdrawCol < 0 && matchHeaderKeyword(cell, HEADER_WITHDRAW)) withdrawCol = i
+      else if (balanceCol < 0 && matchHeaderKeyword(cell, HEADER_BALANCE)) balanceCol = i
+      else if (descCol < 0 && matchHeaderKeyword(cell, HEADER_DESC)) descCol = i
+    }
+    // 必須: 日付 + 残高 + (入金 or 出金)
+    if (dateCol >= 0 && balanceCol >= 0 && (depositCol >= 0 || withdrawCol >= 0)) {
+      // 入金/出金どちらか欠けていれば同列扱い（混合列）
+      return {
+        dateColumn: dateCol,
+        descriptionColumn: descCol,
+        depositColumn: depositCol >= 0 ? depositCol : withdrawCol,
+        withdrawalColumn: withdrawCol >= 0 ? withdrawCol : depositCol,
+        balanceColumn: balanceCol,
+      }
+    }
+  }
+  return null
+}
+
 /**
  * 列の役割を自動検出する
  */
 function detectColumnMapping(rows: RawTableRow[]): ColumnMapping | null {
   if (rows.length < 2) return null
+
+  // まずヘッダー行から列名で検出を試みる（精度が高い）
+  const headerMapping = detectMappingFromHeaderRow(rows)
+  if (headerMapping) return headerMapping
 
   const maxCols = Math.max(...rows.map((r) => r.cells.length))
   if (maxCols < 3) return null
