@@ -274,10 +274,22 @@ const CB: React.CSSProperties = { borderRight: '1px solid #94a3b8', padding: '2p
 function CellInput({ value, onChange, placeholder, halfWidth, align }: {
   value: string; onChange: (v: string) => void; placeholder?: string; halfWidth?: boolean; align?: string
 }) {
+  // ローカル state で編集して blur/Enter でのみ親に反映 → 打鍵のたびの全体再レンダを回避
+  const [local, setLocal] = useState(value)
+  useEffect(() => { setLocal(value) }, [value])
+  const commit = useCallback((raw: string) => {
+    const v = halfWidth ? toHalfWidth(raw) : raw
+    if (v !== value) onChange(v)
+  }, [halfWidth, value, onChange])
   return (
-    <input type="text" value={value}
-      onChange={(e) => onChange(halfWidth ? toHalfWidth(e.target.value) : e.target.value)}
-      onKeyDown={handleNav} placeholder={placeholder}
+    <input type="text" value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { commit(e.currentTarget.value); handleNav(e) }
+        else handleNav(e)
+      }}
+      placeholder={placeholder}
       inputMode={halfWidth ? 'numeric' : undefined}
       style={halfWidth ? { imeMode: 'disabled' } as React.CSSProperties : undefined}
       className={`w-full px-1.5 py-1 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800 ${align === 'right' ? 'text-right font-medium tabular-nums' : ''}`} />
@@ -344,15 +356,15 @@ function AccountField({
     <div ref={ref} className="relative">
       <div className="flex items-center gap-0 min-h-[28px] cursor-text" onClick={() => inputRef.current?.focus()}>
         <input ref={inputRef} type="text" inputMode="numeric" value={val}
-          onChange={(e) => { const v = toHalfWidth(e.target.value); setVal(v); onCodeChange(v); setShow(true) }}
+          onChange={(e) => { const v = toHalfWidth(e.target.value); setVal(v); setShow(true) /* 打鍵のたびは親に伝播しない */ }}
           onFocus={() => {
             setShow(true)
             // 既に親コードが入っていて補助科目が登録されていれば補助サジェストを表示
             if (code && subAccountMaster.some((s) => s.parentCode === code)) setShowSub(true)
           }}
-          onBlur={() => setTimeout(() => { onCodeChange(val); setShow(false) }, 150)}
+          onBlur={() => setTimeout(() => { if (val !== code) onCodeChange(val); setShow(false) }, 150)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); onCodeChange(val); setShow(false); navCell(e.currentTarget, 'right') }
+            if (e.key === 'Enter') { e.preventDefault(); if (val !== code) onCodeChange(val); setShow(false); navCell(e.currentTarget, 'right') }
             else handleNav(e)
           }}
           style={{ imeMode: 'disabled' } as React.CSSProperties}
@@ -531,8 +543,15 @@ function TaxCodeField({
     <div ref={ref} className="relative">
       <div className="flex items-center gap-0">
         <input type="text" value={inputVal}
-          onChange={(e) => { setInputVal(e.target.value); setShow(true); onChange(e.target.value, '') }}
+          onChange={(e) => { setInputVal(e.target.value); setShow(true) /* 親への伝播は blur/Enter まで遅延 */ }}
           onFocus={() => setShow(true)}
+          onBlur={() => setTimeout(() => {
+            if (inputVal === taxCode) { setShow(false); return }
+            const m = taxCodes.find((t) => t.code === inputVal)
+            if (m) onChange(m.code, m.name)
+            else if (inputVal) onChange(inputVal, '')
+            setShow(false)
+          }, 150)}
           onKeyDown={handleKeyDown}
           placeholder="CD"
           className="w-7 shrink-0 px-0 py-0.5 text-xs font-bold bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-center" />
