@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { exchangeCodeForTokens, getUserEmail } from '@/lib/auth/google-oauth'
+import { publicUrl } from '@/lib/auth/public-url'
 import { createSession, getCookieMaxAge, getCookieName } from '@/lib/auth/session'
 
 export async function GET(request: NextRequest) {
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
   const stateParam = request.nextUrl.searchParams.get('state')
 
   if (!code || !stateParam) {
-    return NextResponse.redirect(new URL('/login?error=invalid_callback', request.url))
+    return NextResponse.redirect(publicUrl('/login?error=invalid_callback', request))
   }
 
   let from = '/'
@@ -22,26 +23,26 @@ export async function GET(request: NextRequest) {
     const state = JSON.parse(Buffer.from(stateParam, 'base64url').toString('utf-8'))
     from = typeof state.from === 'string' ? state.from : '/'
   } catch {
-    return NextResponse.redirect(new URL('/login?error=invalid_state', request.url))
+    return NextResponse.redirect(publicUrl('/login?error=invalid_state', request))
   }
 
   try {
     const tokens = await exchangeCodeForTokens(code)
     if (!tokens.access_token) {
-      return NextResponse.redirect(new URL('/login?error=no_token', request.url))
+      return NextResponse.redirect(publicUrl('/login?error=no_token', request))
     }
     const email = await getUserEmail(tokens.access_token)
     if (!email) {
-      return NextResponse.redirect(new URL('/login?error=no_email', request.url))
+      return NextResponse.redirect(publicUrl('/login?error=no_email', request))
     }
 
     const allowedEmail = process.env.ALLOWED_EMAIL
     if (allowedEmail && email !== allowedEmail) {
-      return NextResponse.redirect(new URL('/login?error=not_allowed', request.url))
+      return NextResponse.redirect(publicUrl('/login?error=not_allowed', request))
     }
 
     const sessionToken = await createSession(email)
-    const response = NextResponse.redirect(new URL(from, request.url))
+    const response = NextResponse.redirect(publicUrl(from, request))
     response.cookies.set(getCookieName(), sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -52,6 +53,6 @@ export async function GET(request: NextRequest) {
     return response
   } catch (err) {
     console.error('OAuth callback error:', err)
-    return NextResponse.redirect(new URL('/login?error=oauth_failed', request.url))
+    return NextResponse.redirect(publicUrl('/login?error=oauth_failed', request))
   }
 }

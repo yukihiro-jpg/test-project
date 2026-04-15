@@ -32,7 +32,17 @@ export async function middleware(request: NextRequest) {
   // 許可メールアドレスかチェック
   const allowedEmail = process.env.ALLOWED_EMAIL
   if (!session || (allowedEmail && session.email !== allowedEmail)) {
-    const loginUrl = new URL('/login', request.url)
+    // Codespace 等のプロキシ環境では request.url が内部 URL になるため、
+    // NEXT_PUBLIC_APP_URL または x-forwarded ヘッダから外部 URL を組み立てる
+    const proto = request.headers.get('x-forwarded-proto')
+    const host = request.headers.get('x-forwarded-host')
+    const envUrl = process.env.NEXT_PUBLIC_APP_URL
+    const base = envUrl
+      ? envUrl.replace(/\/$/, '')
+      : proto && host
+        ? `${proto}://${host}`
+        : new URL(request.url).origin
+    const loginUrl = new URL('/login', base)
     loginUrl.searchParams.set('from', request.nextUrl.pathname)
     return NextResponse.redirect(loginUrl)
   }
