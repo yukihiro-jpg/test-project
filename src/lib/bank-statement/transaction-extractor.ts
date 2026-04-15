@@ -23,6 +23,8 @@ const DATE_PATTERNS = [
   /(令和|平成|昭和|大正)(\d{1,2})年(\d{1,2})月(\d{1,2})日?/,
   // 2024/4/1, 2024-04-01, 2024.4.1
   /(20\d{2})[/\-.](\d{1,2})[/\-.](\d{1,2})/,
+  // 20240401, 20260101 (YYYYMMDD 8桁)
+  /^(20|21)\d{6}$/,
   // 4/1, 04/01（年なし）
   /^(\d{1,2})[/.](\d{1,2})$/,
   // 0401（4桁の月日）
@@ -63,6 +65,15 @@ function parseDate(text: string, defaultYear?: number): string | null {
   const m3 = cleaned.match(/^(20\d{2})[/\-.](\d{1,2})[/\-.](\d{1,2})$/)
   if (m3) {
     return formatDate(parseInt(m3[1]), parseInt(m3[2]), parseInt(m3[3]))
+  }
+
+  // YYYYMMDD 8桁: 20260101, 20240401
+  const m3b = cleaned.match(/^(20\d{2}|21\d{2})(\d{2})(\d{2})$/)
+  if (m3b) {
+    const y = parseInt(m3b[1])
+    const mo = parseInt(m3b[2])
+    const d = parseInt(m3b[3])
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return formatDate(y, mo, d)
   }
 
   // 月/日のみ
@@ -156,7 +167,19 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
     let withdrawCol = -1
     let balanceCol = -1
     let signedCol = -1
+
+    // 第1パス: 「入出金/出入金」は最優先でマーク
+    // (HEADER_DEPOSIT の '出金' 等が '入出金' に誤マッチするのを防ぐ)
     for (let i = 0; i < row.cells.length; i++) {
+      const c = (row.cells[i] || '').replace(/[\s\u3000]/g, '')
+      if (signedCol < 0 && ['入出金', '出入金', '入出金額', '出入金額'].some((k) => c === k || c.includes(k))) {
+        signedCol = i
+      }
+    }
+
+    // 第2パス: その他の列
+    for (let i = 0; i < row.cells.length; i++) {
+      if (i === signedCol) continue
       const cell = row.cells[i]
       if (!cell) continue
       if (dateCol < 0 && matchHeaderKeyword(cell, HEADER_DATE)) dateCol = i
@@ -166,14 +189,15 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
       else if (descCol < 0 && matchHeaderKeyword(cell, HEADER_DESC)) descCol = i
       else if (signedCol < 0 && matchHeaderKeyword(cell, HEADER_SIGNED)) signedCol = i
     }
-    // 符号付1列モード: 日付 + 残高 + 入出金列 があり、入金/出金の専用列は無い
-    if (dateCol >= 0 && balanceCol >= 0 && signedCol >= 0 && depositCol < 0 && withdrawCol < 0) {
+    // 符号付1列モード: 日付 + 入出金列 があり、入金/出金の専用列は無い
+    // 残高列は任意（無ければ -1 として 0 から running で算出）
+    if (dateCol >= 0 && signedCol >= 0 && depositCol < 0 && withdrawCol < 0) {
       return {
         dateColumn: dateCol,
         descriptionColumn: descCol,
         depositColumn: signedCol,
         withdrawalColumn: signedCol,
-        balanceColumn: balanceCol,
+        balanceColumn: balanceCol, // -1 の場合は extractTransactions で 0 初期
         signedAmountColumn: signedCol,
       }
     }
@@ -301,6 +325,8 @@ function extractTransactions(
   const transactions: BankTransaction[] = []
   const txTypeCol = mapping.transactionTypeColumn
   const hasTxType = typeof txTypeCol === 'number' && txTypeCol >= 0
+  const hasBalanceCol = mapping.balanceColumn >= 0
+  let runningBalance = 0 // 残高列がない場合のために running 集計
 
   for (const row of rows) {
     const dateText = row.cells[mapping.dateColumn] || ''
@@ -318,9 +344,12 @@ function extractTransactions(
         ? `${txTypeText} ${baseDesc.trim()}`
         : txTypeText || baseDesc
 
-    const balanceText = row.cells[mapping.balanceColumn] || ''
-    const balance = parseAmount(balanceText)
-    if (balance === null) continue // 残高がない行はスキップ
+    let balance: number | null = null
+    if (hasBalanceCol) {
+      const balanceText = row.cells[mapping.balanceColumn] || ''
+      balance = parseAmount(balanceText)
+      if (balance === null) continue // 残高列があるのに空の行はスキップ
+    }
 
     let deposit: number | null = null
     let withdrawal: number | null = null
@@ -346,6 +375,12 @@ function extractTransactions(
           : null
     }
 
+    // 残高列が無い場合は running で集計（開始残高0）
+    if (!hasBalanceCol) {
+      runningBalance += (deposit ?? 0) - (withdrawal ?? 0)
+      balance = runningBalance
+    }
+
     transactions.push({
       id: generateId(),
       pageIndex,
@@ -354,7 +389,7 @@ function extractTransactions(
       description,
       deposit: deposit ?? null,
       withdrawal: withdrawal ?? null,
-      balance,
+      balance: balance!,
       boundingBox: row.boundingBox,
     })
   }
