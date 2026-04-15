@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, memo } from 'react'
 import type { JournalEntry, AccountItem, SubAccountItem } from '@/lib/bank-statement/types'
 import { getTaxCodesForEntry, isBS, isPL, getDefaultTaxCodeByName } from '@/lib/bank-statement/tax-codes'
 
@@ -23,10 +23,10 @@ interface Props {
   onSelect: (id: string, e?: React.MouseEvent) => void
   onCheckToggle?: (id: string, e: React.MouseEvent) => void
   onChange: (id: string, field: keyof JournalEntry, value: string | number) => void
-  onAddCompound: () => void
-  onDelete: () => void
-  onLearn: () => void
-  onAddBlank: () => void
+  onAddCompound: (id: string) => void
+  onDelete: (id: string) => void
+  onLearn: (id: string) => void
+  onAddBlank: (id: string) => void
   onSubAccountRegister: (parentCode: string, subCode: string, name: string) => void
   onPatternClick?: (patternId: string) => void
 }
@@ -38,7 +38,7 @@ function toHalfWidth(str: string): string {
     .replace(/[Ａ-Ｚａ-ｚ]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
 }
 
-export default function JournalEntryRow({
+function JournalEntryRowInner({
   entry, isSelected, accountMaster, subAccountMaster,
   isPageBoundary, pageLabel, runningBalance, rowNumber,
   isCompoundGroup, isCompoundFirst, isCompoundLast, compoundAutoAmount, clientTaxType,
@@ -256,9 +256,12 @@ export default function JournalEntryRow({
         {/* 操作 */}
         <td className="px-1 py-1">
           <div className="flex items-center gap-0.5" onMouseDown={(e) => e.stopPropagation()}>
-            <button onClick={onAddCompound} title="複合仕訳行を追加"
+            <button onClick={() => onAddCompound(entry.id)} title="複合仕訳行を追加"
               className="w-6 h-6 flex items-center justify-center text-xs text-violet-600 hover:bg-violet-100 rounded font-bold border border-violet-200">+</button>
-            <RowMenu onLearn={onLearn} onAddBlank={onAddBlank} onDelete={onDelete} />
+            <RowMenu
+              onLearn={() => onLearn(entry.id)}
+              onAddBlank={() => onAddBlank(entry.id)}
+              onDelete={() => onDelete(entry.id)} />
           </div>
         </td>
       </tr>
@@ -338,11 +341,15 @@ function AccountField({
   }
 
   return (
-    <div ref={ref} className="relative cursor-text" onClick={() => inputRef.current?.focus()}>
-      <div className="flex items-center gap-0 min-h-[28px]">
+    <div ref={ref} className="relative">
+      <div className="flex items-center gap-0 min-h-[28px] cursor-text" onClick={() => inputRef.current?.focus()}>
         <input ref={inputRef} type="text" inputMode="numeric" value={val}
           onChange={(e) => { const v = toHalfWidth(e.target.value); setVal(v); onCodeChange(v); setShow(true) }}
-          onFocus={() => setShow(true)}
+          onFocus={() => {
+            setShow(true)
+            // 既に親コードが入っていて補助科目が登録されていれば補助サジェストを表示
+            if (code && subAccountMaster.some((s) => s.parentCode === code)) setShowSub(true)
+          }}
           onBlur={() => setTimeout(() => { onCodeChange(val); setShow(false) }, 150)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') { e.preventDefault(); onCodeChange(val); setShow(false); navCell(e.currentTarget, 'right') }
@@ -395,15 +402,26 @@ function AccountField({
       )}
 
       {showNew && (
-        <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-xl z-30 p-3">
+        <div
+          className="absolute left-0 top-full mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-xl z-30 p-3"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <div className="text-xs font-bold text-gray-700 mb-2">補助科目を登録 (科目: {code})</div>
           <div className="space-y-2">
-            <input type="text" value={nsc} onChange={(e) => setNsc(e.target.value)} placeholder="補助コード" className="w-full px-2 py-1 text-sm border border-gray-300 rounded" />
-            <input type="text" value={nsn} onChange={(e) => setNsn(e.target.value)} placeholder="補助科目名" className="w-full px-2 py-1 text-sm border border-gray-300 rounded" />
+            <input type="text" autoFocus value={nsc}
+              onChange={(e) => setNsc(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.currentTarget.parentElement?.querySelectorAll('input')[1] as HTMLInputElement | null)?.focus() } }}
+              placeholder="補助コード" className="w-full px-2 py-1 text-sm border border-gray-300 rounded" />
+            <input type="text" value={nsn}
+              onChange={(e) => setNsn(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && code && nsc && nsn) { e.preventDefault(); onSubAccountRegister(code, nsc, nsn); onSubCodeChange(nsc, nsn); setShowNew(false); setNsc(''); setNsn('') } }}
+              placeholder="補助科目名" className="w-full px-2 py-1 text-sm border border-gray-300 rounded" />
             <div className="flex gap-2">
-              <button onClick={() => setShowNew(false)} className="flex-1 py-1 text-xs bg-gray-100 rounded">キャンセル</button>
-              <button onClick={() => { if (code && nsc && nsn) { onSubAccountRegister(code, nsc, nsn); onSubCodeChange(nsc, nsn); setShowNew(false); setNsc(''); setNsn('') } }}
-                className="flex-1 py-1 text-xs bg-blue-600 text-white rounded">登録</button>
+              <button type="button" onClick={() => { setShowNew(false); setNsc(''); setNsn('') }} className="flex-1 py-1 text-xs bg-gray-100 rounded">キャンセル</button>
+              <button type="button" disabled={!code || !nsc || !nsn}
+                onClick={() => { onSubAccountRegister(code, nsc, nsn); onSubCodeChange(nsc, nsn); setShowNew(false); setNsc(''); setNsn('') }}
+                className="flex-1 py-1 text-xs bg-blue-600 text-white rounded disabled:opacity-40">登録</button>
             </div>
           </div>
         </div>
@@ -411,6 +429,10 @@ function AccountField({
     </div>
   )
 }
+
+// 入力速度改善のため memo 化。entry や master の参照が変わらない行は再レンダしない
+const JournalEntryRow = memo(JournalEntryRowInner)
+export default JournalEntryRow
 
 function RowMenu({ onLearn, onAddBlank, onDelete }: { onLearn: () => void; onAddBlank: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false)

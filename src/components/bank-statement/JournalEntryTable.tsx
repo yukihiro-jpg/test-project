@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState, useMemo, useEffect } from 'react'
+import { useCallback, useState, useMemo, useEffect, useRef } from 'react'
 import type {
   JournalEntry,
   AccountItem,
@@ -42,6 +42,14 @@ export default function JournalEntryTable({
   const [showBulkEdit, setShowBulkEdit] = useState(false)
   const [bulkField, setBulkField] = useState<string>('')
   const [bulkValue, setBulkValue] = useState<string>('')
+  // 未入力行のみを表示するフィルタ
+  const [showOnlyIncomplete, setShowOnlyIncomplete] = useState(false)
+
+  // ハンドラを安定参照にするため、最新 entries/accountMaster を ref に保持
+  const entriesRef = useRef(entries)
+  const accountMasterRef = useRef(accountMaster)
+  useEffect(() => { entriesRef.current = entries }, [entries])
+  useEffect(() => { accountMasterRef.current = accountMaster }, [accountMaster])
 
   // パターン学習ダイアログ
   const [learnDialogEntry, setLearnDialogEntry] = useState<JournalEntry | null>(null)
@@ -323,7 +331,9 @@ export default function JournalEntryTable({
 
   const handleEntryChange = useCallback(
     (id: string, field: keyof JournalEntry, value: string | number) => {
-      onEntriesChange(entries.map((e) => {
+      const currentEntries = entriesRef.current
+      const currentAccountMaster = accountMasterRef.current
+      onEntriesChange(currentEntries.map((e) => {
         if (e.id !== id) return e
         // _amount は debitAmount と creditAmount の両方を同時更新
         if (field === '_amount' as keyof JournalEntry) {
@@ -332,9 +342,8 @@ export default function JournalEntryTable({
         // _debitCodeFull: 借方コード+科目名+消費税を一括更新
         if (field === '_debitCodeFull' as keyof JournalEntry) {
           const code = value as string
-          const acc = accountMaster.find((a) => a.code === code)
+          const acc = currentAccountMaster.find((a) => a.code === code)
           const updated = { ...e, debitCode: code, debitName: acc ? (acc.shortName || acc.name) : '' }
-          // PL費用科目 → 消費税自動設定
           if (acc && isPL(acc.bsPl) && acc.normalBalance === '借方' && !e.debitTaxCode) {
             const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'purchase')
             if (tax) { updated.debitTaxCode = tax.taxCode; updated.debitTaxType = tax.taxName; updated.debitTaxRate = '4' }
@@ -344,9 +353,8 @@ export default function JournalEntryTable({
         // _creditCodeFull: 貸方コード+科目名+消費税を一括更新
         if (field === '_creditCodeFull' as keyof JournalEntry) {
           const code = value as string
-          const acc = accountMaster.find((a) => a.code === code)
+          const acc = currentAccountMaster.find((a) => a.code === code)
           const updated = { ...e, creditCode: code, creditName: acc ? (acc.shortName || acc.name) : '' }
-          // PL売上科目 → 消費税自動設定
           if (acc && isPL(acc.bsPl) && acc.normalBalance === '貸方' && !e.debitTaxCode) {
             const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'sales')
             if (tax) { updated.debitTaxCode = tax.taxCode; updated.debitTaxType = tax.taxName; updated.debitTaxRate = '4' }
@@ -361,30 +369,34 @@ export default function JournalEntryTable({
         return { ...e, [field]: value }
       }))
     },
-    [entries, onEntriesChange, accountMaster],
+    [onEntriesChange],
   )
 
   const handleAddCompoundRow = useCallback(
     (parentId: string) => {
-      // parentIdが既に複合仕訳の子の場合、その親を使う
-      const entry = entries.find((e) => e.id === parentId)
+      const currentEntries = entriesRef.current
+      const entry = currentEntries.find((e) => e.id === parentId)
       if (!entry) return
       const realParentId = entry.parentId || entry.id
-      const idx = entries.findIndex((e) => e.id === realParentId)
+      const idx = currentEntries.findIndex((e) => e.id === realParentId)
       let insertIdx = idx + 1
-      while (insertIdx < entries.length && entries[insertIdx].parentId === realParentId) insertIdx++
-      const parent = entries.find((e) => e.id === realParentId)!
+      while (insertIdx < currentEntries.length && currentEntries[insertIdx].parentId === realParentId) insertIdx++
+      const parent = currentEntries.find((e) => e.id === realParentId)!
       const newEntry = createCompoundEntry(parent)
-      const newEntries = [...entries]
+      const newEntries = [...currentEntries]
       newEntries.splice(insertIdx, 0, newEntry)
       onEntriesChange(newEntries)
     },
-    [entries, onEntriesChange],
+    [onEntriesChange],
   )
+
+  // ハンドラの参照を安定させるため ref 経由で最新値にアクセス
+  const subAccountMasterRef = useRef(subAccountMaster)
+  useEffect(() => { subAccountMasterRef.current = subAccountMaster }, [subAccountMaster])
 
   const handleSubAccountRegister = useCallback(
     (parentCode: string, subCode: string, name: string) => {
-      const parentAcc = accountMaster.find((a) => a.code === parentCode)
+      const parentAcc = accountMasterRef.current.find((a) => a.code === parentCode)
       const newItem: SubAccountItem = {
         parentCode,
         parentName: parentAcc?.shortName || parentAcc?.name || '',
@@ -392,12 +404,40 @@ export default function JournalEntryTable({
         name,
         shortName: name,
       }
-      const updated = [...subAccountMaster, newItem]
+      const updated = [...subAccountMasterRef.current, newItem]
       saveSubAccountMaster(updated)
       onSubAccountUpdate(updated)
     },
-    [subAccountMaster, accountMaster, onSubAccountUpdate],
+    [onSubAccountUpdate],
   )
+
+  // 行メニュー用の安定ハンドラ（id ベース）
+  const handleLearnRequest = useCallback((id: string) => {
+    const list = entriesRef.current
+    const entry = list.find((e) => e.id === id)
+    if (!entry) return
+    if (!entry.originalDescription && !entry.description) return
+    const groupId = entry.parentId || entry.id
+    const groupEntries = list.filter((e) => e.id === groupId || e.parentId === groupId)
+    setLearnDialogEntry(entry)
+    setLearnRelatedEntries(groupEntries.length > 0 ? groupEntries : [entry])
+  }, [])
+
+  const handleAddBlankAfter = useCallback((id: string) => {
+    const list = entriesRef.current
+    const i = list.findIndex((e) => e.id === id)
+    const ne = [...list]
+    ne.splice(i + 1, 0, createBlankEntry())
+    onEntriesChange(ne)
+  }, [onEntriesChange])
+
+  const handleDeleteEntry = useCallback((id: string) => {
+    const list = entriesRef.current
+    // 複合仕訳の子も連鎖削除
+    const ids = new Set<string>([id])
+    for (const e of list) if (e.parentId === id) ids.add(e.id)
+    onEntriesChange(list.filter((e) => !ids.has(e.id)))
+  }, [onEntriesChange])
 
   // 諸口コードを科目チェックリストから検索（997固定ではない）
   const shoguchiCode = useMemo(() => {
@@ -553,6 +593,17 @@ export default function JournalEntryTable({
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowOnlyIncomplete((v) => !v)}
+            disabled={entries.length === 0}
+            title="借方/貸方/消費税のいずれかが未入力の行のみ表示"
+            className={`px-3 py-1 text-xs font-medium rounded disabled:opacity-40 ${
+              showOnlyIncomplete
+                ? 'bg-amber-500 text-white hover:bg-amber-600'
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}>
+            {showOnlyIncomplete ? '未入力のみ表示中' : '未入力のみ表示'}
+          </button>
+          <button
             onClick={handleSelectAll}
             disabled={entries.length === 0}
             className="px-3 py-1 text-xs bg-white text-gray-700 font-medium rounded hover:bg-gray-100 disabled:opacity-40">
@@ -670,6 +721,10 @@ export default function JournalEntryTable({
           </thead>
           <tbody>
             {entries.map((entry, idx) => {
+              // 未入力のみ表示フィルタ: 借方/貸方/消費税のいずれかが未入力の行のみを描画
+              if (showOnlyIncomplete && entry.debitCode && entry.creditCode && entry.debitTaxCode) {
+                return null
+              }
               const prevEntry = idx > 0 ? entries[idx - 1] : null
               const cp = getPageIndex(entry, pages)
               const pp = prevEntry ? getPageIndex(prevEntry, pages) : cp
@@ -694,22 +749,12 @@ export default function JournalEntryTable({
                   isBalanceMismatch={firstMismatchIndex >= 0 && idx >= firstMismatchIndex}
                   isChecked={selectedRange.has(entry.id)}
                   onCheckToggle={handleCheckToggle}
-                  onSelect={(id: string, e?: React.MouseEvent) => handleRowSelect(id, e)}
+                  onSelect={handleRowSelect}
                   onChange={handleEntryChange}
-                  onLearn={() => {
-                    if (!entry.originalDescription && !entry.description) return
-                    // 複合仕訳グループ全体を学習対象にする
-                    const groupId = entry.parentId || entry.id
-                    const groupEntries = entries.filter((e) => e.id === groupId || e.parentId === groupId)
-                    setLearnDialogEntry(entry)
-                    setLearnRelatedEntries(groupEntries.length > 0 ? groupEntries : [entry])
-                  }}
-                  onAddBlank={() => {
-                    const i = entries.findIndex((e) => e.id === entry.id)
-                    const ne = [...entries]; ne.splice(i + 1, 0, createBlankEntry()); onEntriesChange(ne)
-                  }}
-                  onAddCompound={() => handleAddCompoundRow(entry.id)}
-                  onDelete={() => onEntriesChange(entries.filter((e) => e.id !== entry.id))}
+                  onLearn={handleLearnRequest}
+                  onAddBlank={handleAddBlankAfter}
+                  onAddCompound={handleAddCompoundRow}
+                  onDelete={handleDeleteEntry}
                   onSubAccountRegister={handleSubAccountRegister}
                   clientTaxType={clientTaxType}
                   onPatternClick={(pid) => setPatternDetailId(pid)}
