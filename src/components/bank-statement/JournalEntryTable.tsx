@@ -228,6 +228,34 @@ export default function JournalEntryTable({
     [entries, lastClickedId, selectedEntryId, selectedRange, onSelect],
   )
 
+  // チェックボックスのクリック処理（範囲/個別トグル対応）
+  const handleCheckToggle = useCallback(
+    (entryId: string, e: React.MouseEvent) => {
+      // Shift+クリック: 直前チェック項目から範囲選択
+      if (e.shiftKey && lastClickedId) {
+        const s = entries.findIndex((en) => en.id === lastClickedId)
+        const ed = entries.findIndex((en) => en.id === entryId)
+        if (s >= 0 && ed >= 0) {
+          const [from, to] = s < ed ? [s, ed] : [ed, s]
+          const newRange = new Set(selectedRange)
+          for (let i = from; i <= to; i++) newRange.add(entries[i].id)
+          setSelectedRange(newRange)
+          setShowBulkEdit(newRange.size > 0)
+        }
+        setLastClickedId(entryId)
+        return
+      }
+      // 通常/Ctrl+クリック: 単独でトグル
+      const newRange = new Set(selectedRange)
+      if (newRange.has(entryId)) newRange.delete(entryId)
+      else newRange.add(entryId)
+      setSelectedRange(newRange)
+      setShowBulkEdit(newRange.size > 0)
+      setLastClickedId(entryId)
+    },
+    [entries, lastClickedId, selectedRange],
+  )
+
   // 全選択/全解除
   const handleSelectAll = useCallback(() => {
     if (entries.length === 0) return
@@ -613,6 +641,18 @@ export default function JournalEntryTable({
         <table className="w-full text-sm border-collapse min-w-[950px]">
           <thead className="sticky top-0 bg-gray-600 text-white z-10">
             <tr>
+              <th className="px-1 py-2 text-center w-8 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>
+                <input
+                  type="checkbox"
+                  checked={entries.length > 0 && selectedRange.size === entries.length}
+                  ref={(el) => {
+                    if (el) el.indeterminate = selectedRange.size > 0 && selectedRange.size < entries.length
+                  }}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 cursor-pointer accent-blue-600"
+                  title="全選択 / 全解除"
+                />
+              </th>
               <th className="px-2 py-2 text-center w-12 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>学習</th>
               <th className="px-2 py-2 text-center w-24 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>日付</th>
               <th className="px-2 py-2 text-center w-44 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>借方科目</th>
@@ -652,7 +692,9 @@ export default function JournalEntryTable({
                   isCompoundLast={ci?.isLast}
                   compoundAutoAmount={ci?.isLast ? ci.autoAmount : undefined}
                   isBalanceMismatch={firstMismatchIndex >= 0 && idx >= firstMismatchIndex}
-                  onSelect={(id: string) => handleRowSelect(id)}
+                  isChecked={selectedRange.has(entry.id)}
+                  onCheckToggle={handleCheckToggle}
+                  onSelect={(id: string, e?: React.MouseEvent) => handleRowSelect(id, e)}
                   onChange={handleEntryChange}
                   onLearn={() => {
                     if (!entry.originalDescription && !entry.description) return

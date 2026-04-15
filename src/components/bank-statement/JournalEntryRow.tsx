@@ -19,7 +19,9 @@ interface Props {
   clientTaxType?: string
   compoundAutoAmount?: number
   isBalanceMismatch?: boolean
+  isChecked?: boolean
   onSelect: (id: string, e?: React.MouseEvent) => void
+  onCheckToggle?: (id: string, e: React.MouseEvent) => void
   onChange: (id: string, field: keyof JournalEntry, value: string | number) => void
   onAddCompound: () => void
   onDelete: () => void
@@ -40,8 +42,8 @@ export default function JournalEntryRow({
   entry, isSelected, accountMaster, subAccountMaster,
   isPageBoundary, pageLabel, runningBalance, rowNumber,
   isCompoundGroup, isCompoundFirst, isCompoundLast, compoundAutoAmount, clientTaxType,
-  isBalanceMismatch,
-  onSelect, onChange, onAddCompound, onDelete, onLearn, onAddBlank, onSubAccountRegister, onPatternClick,
+  isBalanceMismatch, isChecked,
+  onSelect, onCheckToggle, onChange, onAddCompound, onDelete, onLearn, onAddBlank, onSubAccountRegister, onPatternClick,
 }: Props) {
   const amount = entry.debitAmount || entry.creditAmount || 0
   const hasAutoCalc = compoundAutoAmount != null && compoundAutoAmount !== 0
@@ -78,7 +80,7 @@ export default function JournalEntryRow({
     <>
       {isPageBoundary && (
         <tr className="bg-teal-600">
-          <td colSpan={11} className="px-3 py-1 text-xs font-bold text-white">{pageLabel} ページ</td>
+          <td colSpan={12} className="px-3 py-1 text-xs font-bold text-white">{pageLabel} ページ</td>
         </tr>
       )}
       {isCompoundFirst && (
@@ -95,6 +97,20 @@ export default function JournalEntryRow({
         }}
         onClick={(e) => onSelect(entry.id, e)}
       >
+        {/* 選択チェックボックス */}
+        <td style={CB} className="text-center px-1">
+          <input
+            type="checkbox"
+            checked={!!isChecked}
+            onChange={() => { /* クリックで処理 */ }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onCheckToggle?.(entry.id, e)
+            }}
+            className="w-4 h-4 cursor-pointer accent-blue-600"
+            title="クリック=選択, Shift+クリック=範囲選択, Ctrl+クリック=個別追加"
+          />
+        </td>
         {/* 学習 */}
         <td style={CB} className="text-center">
           {entry.patternId ? (
