@@ -71,6 +71,13 @@ function JournalEntryRowInner({
   const isEmpty = (f: keyof JournalEntry) => { const v = entry[f]; return !v || (typeof v === 'string' && !v.trim()) }
   const emptyBg = (f: keyof JournalEntry) => REQUIRED_FIELDS.includes(f) && isEmpty(f) ? 'bg-rose-50' : ''
 
+  // 消費税セル用: BS同士で税区不要 or 不課税が選択済みの場合は赤色にしない
+  const debitAccForTax = accountMaster.find((a) => a.code === entry.debitCode)
+  const creditAccForTax = accountMaster.find((a) => a.code === entry.creditCode)
+  const isBsBothForTax = !!(debitAccForTax && creditAccForTax && isBS(debitAccForTax.bsPl) && isBS(creditAccForTax.bsPl))
+  const isNonTaxable = (entry.debitTaxType || '').includes('不課')
+  const taxCellBg = (isBsBothForTax || isNonTaxable) ? '' : emptyBg('debitTaxCode')
+
   let bgClass: string
   if (isSelected) bgClass = 'bg-sky-100'
   else if (isCompoundGroup) bgClass = 'bg-violet-50'
@@ -196,7 +203,7 @@ function JournalEntryRowInner({
         </td>
 
         {/* 消費税コード */}
-        <td style={CB} className={emptyBg('debitTaxCode')}>
+        <td style={CB} className={taxCellBg}>
           <TaxCodeField
             taxCode={entry.debitTaxCode}
             taxType={entry.debitTaxType}
