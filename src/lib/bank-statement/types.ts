@@ -137,6 +137,7 @@ export interface ColumnMapping {
   withdrawalColumn: number
   balanceColumn: number
   transactionTypeColumn?: number // 取引区分列（摘要と別列で存在する場合）
+  signedAmountColumn?: number    // 入出金を1列で表す場合(正=入金,負=出金)
 }
 
 // パース結果

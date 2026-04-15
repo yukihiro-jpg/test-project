@@ -103,6 +103,18 @@ function parseAmount(text: string): number | null {
   return isNaN(num) ? null : Math.abs(num)
 }
 
+// 符号付き金額を取り出す（正=入金, 負=出金の単一列向け）
+function parseSignedAmount(text: string): number | null {
+  // ▲△△▼( )はすべてマイナスとして扱う
+  let cleaned = text.replace(/[¥￥,、\s\u3000]/g, '')
+  // カッコ表記 (1,000) を負数として扱う
+  if (/^\(.+\)$/.test(cleaned)) cleaned = '-' + cleaned.slice(1, -1)
+  cleaned = cleaned.replace(/[▲△]/g, '-')
+  if (!cleaned || cleaned === '-' || cleaned === '*') return null
+  const num = parseInt(cleaned, 10)
+  return isNaN(num) ? null : num
+}
+
 function isDateCell(text: string): boolean {
   return DATE_PATTERNS.some((p) => p.test(text.trim()))
 }
@@ -118,6 +130,8 @@ const HEADER_DESC = ['摘要', 'お取引内容', '取引内容', '内容', '記
 const HEADER_DEPOSIT = ['入金', '預入', '預り', 'お預入れ', 'お預入', '入金金額', '入金額', '預入金額']
 const HEADER_WITHDRAW = ['出金', '引出', '払戻', 'お引出', 'お支払い', '出金金額', '出金額', '引出金額', '支払金額']
 const HEADER_BALANCE = ['残高', '差引残高', '残額', 'お預り残高']
+// 入出金が1列で符号付の場合の列名
+const HEADER_SIGNED = ['入出金', '出入金', '入出金額', '取引金額', 'お取引金額', '金額']
 
 function matchHeaderKeyword(cell: string, keywords: string[]): boolean {
   // 全角/半角スペース・改行等を除去して比較（「残　高（円）」等の表記ゆれに対応）
@@ -141,6 +155,7 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
     let depositCol = -1
     let withdrawCol = -1
     let balanceCol = -1
+    let signedCol = -1
     for (let i = 0; i < row.cells.length; i++) {
       const cell = row.cells[i]
       if (!cell) continue
@@ -149,10 +164,21 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
       else if (withdrawCol < 0 && matchHeaderKeyword(cell, HEADER_WITHDRAW)) withdrawCol = i
       else if (balanceCol < 0 && matchHeaderKeyword(cell, HEADER_BALANCE)) balanceCol = i
       else if (descCol < 0 && matchHeaderKeyword(cell, HEADER_DESC)) descCol = i
+      else if (signedCol < 0 && matchHeaderKeyword(cell, HEADER_SIGNED)) signedCol = i
     }
-    // 必須: 日付 + 残高 + (入金 or 出金)
+    // 符号付1列モード: 日付 + 残高 + 入出金列 があり、入金/出金の専用列は無い
+    if (dateCol >= 0 && balanceCol >= 0 && signedCol >= 0 && depositCol < 0 && withdrawCol < 0) {
+      return {
+        dateColumn: dateCol,
+        descriptionColumn: descCol,
+        depositColumn: signedCol,
+        withdrawalColumn: signedCol,
+        balanceColumn: balanceCol,
+        signedAmountColumn: signedCol,
+      }
+    }
+    // 通常モード: 日付 + 残高 + (入金 or 出金)
     if (dateCol >= 0 && balanceCol >= 0 && (depositCol >= 0 || withdrawCol >= 0)) {
-      // 入金/出金どちらか欠けていれば同列扱い（混合列）
       return {
         dateColumn: dateCol,
         descriptionColumn: descCol,
@@ -292,21 +318,33 @@ function extractTransactions(
         ? `${txTypeText} ${baseDesc.trim()}`
         : txTypeText || baseDesc
 
-    const depositText = row.cells[mapping.depositColumn] || ''
-    const withdrawalText =
-      mapping.withdrawalColumn !== mapping.depositColumn
-        ? row.cells[mapping.withdrawalColumn] || ''
-        : ''
     const balanceText = row.cells[mapping.balanceColumn] || ''
-
-    const deposit = parseAmount(depositText)
-    const withdrawal =
-      mapping.withdrawalColumn !== mapping.depositColumn
-        ? parseAmount(withdrawalText)
-        : null
     const balance = parseAmount(balanceText)
-
     if (balance === null) continue // 残高がない行はスキップ
+
+    let deposit: number | null = null
+    let withdrawal: number | null = null
+
+    // 符号付き1列モード: 正=入金, 負=出金
+    if (typeof mapping.signedAmountColumn === 'number' && mapping.signedAmountColumn >= 0) {
+      const signedText = row.cells[mapping.signedAmountColumn] || ''
+      const signed = parseSignedAmount(signedText)
+      if (signed != null) {
+        if (signed > 0) deposit = signed
+        else if (signed < 0) withdrawal = Math.abs(signed)
+      }
+    } else {
+      const depositText = row.cells[mapping.depositColumn] || ''
+      const withdrawalText =
+        mapping.withdrawalColumn !== mapping.depositColumn
+          ? row.cells[mapping.withdrawalColumn] || ''
+          : ''
+      deposit = parseAmount(depositText)
+      withdrawal =
+        mapping.withdrawalColumn !== mapping.depositColumn
+          ? parseAmount(withdrawalText)
+          : null
+    }
 
     transactions.push({
       id: generateId(),
@@ -332,13 +370,86 @@ export async function parseFile(file: File, accountCode?: string): Promise<Parse
 
   if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
     return parseExcelFile(file)
+  } else if (fileName.endsWith('.csv')) {
+    return parseCsvFile(file)
   } else if (fileName.endsWith('.pdf')) {
     return parsePdfFile(file, accountCode)
   } else {
     throw new Error(
-      '対応していないファイル形式です。PDF (.pdf) または Excel (.xlsx, .xls) を選択してください。',
+      '対応していないファイル形式です。PDF (.pdf), Excel (.xlsx, .xls), CSV (.csv) のいずれかを選択してください。',
     )
   }
+}
+
+/**
+ * CSVを読み込んで解析（UTF-8, Shift-JIS 自動判定）
+ */
+async function parseCsvFile(file: File): Promise<ParseResult> {
+  const buffer = await file.arrayBuffer()
+  const text = decodeCsvText(buffer)
+  const rows = parseCsvText(text)
+  if (rows.length === 0) {
+    return { pages: [], rawPages: [[]], sourceType: 'excel', needsColumnMapping: true }
+  }
+  const rawRows: RawTableRow[] = rows.map((cells, i) => ({ cells, rowIndex: i }))
+  const allRawPages = [rawRows]
+  const mapping = detectColumnMappingFromAllPages(allRawPages)
+  if (!mapping) {
+    return { pages: [], rawPages: allRawPages, sourceType: 'excel', needsColumnMapping: true }
+  }
+  const transactions = extractTransactions(rawRows, mapping, 0)
+  const statementPages: StatementPage[] = [{
+    pageIndex: 0,
+    transactions,
+    openingBalance: 0,
+    closingBalance: 0,
+    isBalanceValid: true,
+    balanceDifference: 0,
+  }]
+  return { pages: updatePageBalances(statementPages), sourceType: 'excel', needsColumnMapping: false }
+}
+
+// BOM/Shift-JIS判定付きデコード
+function decodeCsvText(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  // UTF-8 BOM
+  if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+    return new TextDecoder('utf-8').decode(bytes.slice(3))
+  }
+  // UTF-8 として試してみて、化けたら Shift_JIS
+  try {
+    const asUtf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    return asUtf8
+  } catch {
+    return new TextDecoder('shift_jis').decode(bytes)
+  }
+}
+
+// CSV をパース（ダブルクォート対応）
+function parseCsvText(text: string): string[][] {
+  const rows: string[][] = []
+  let cur: string[] = []
+  let field = ''
+  let inQuote = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQuote) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++ }
+        else inQuote = false
+      } else {
+        field += c
+      }
+    } else {
+      if (c === '"') inQuote = true
+      else if (c === ',') { cur.push(field); field = '' }
+      else if (c === '\r') { /* skip, handled by \n */ }
+      else if (c === '\n') { cur.push(field); rows.push(cur); cur = []; field = '' }
+      else field += c
+    }
+  }
+  if (field.length > 0 || cur.length > 0) { cur.push(field); rows.push(cur) }
+  return rows.filter((r) => r.some((c) => c.trim().length > 0))
 }
 
 async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResult> {
