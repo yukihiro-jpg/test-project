@@ -1,30 +1,35 @@
 {
-  "name": "nenmatsu-chosei-app",
-  "version": "1.0.0",
+  "name": "financial-report-app",
+  "version": "0.1.0",
   "private": true,
+  "description": "月次財務報告資料自動生成アプリ（MJS会計大将 + Gemini AI + Google Workspace連携）",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "cron:spreadsheet": "npx tsx src/scripts/update-spreadsheet.ts",
-    "cron:email": "npx tsx src/scripts/send-progress-email.ts"
+    "typecheck": "tsc --noEmit",
+    "mask:sample": "tsx scripts/mask-sample-data.ts",
+    "cleanup:test-data": "tsx scripts/cleanup-test-data.ts",
+    "estat:import": "tsx scripts/estat-import.ts"
   },
   "dependencies": {
-    "@types/archiver": "^7.0.0",
-    "archiver": "^7.0.1",
-    "dotenv": "^17.3.1",
+    "@google-cloud/firestore": "^7.10.0",
+    "@google-cloud/storage": "^7.14.0",
+    "@google/generative-ai": "^0.21.0",
+    "chardet": "^2.0.0",
+    "exceljs": "^4.4.0",
     "googleapis": "^144.0.0",
+    "iconv-lite": "^0.6.3",
     "next": "^14.2.0",
-    "pdf-lib": "^1.17.1",
-    "qrcode": "^1.5.4",
+    "puppeteer": "^23.0.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "sharp": "^0.33.0"
+    "recharts": "^2.13.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/qrcode": "^1.5.5",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.0",
@@ -34,5 +39,8 @@
     "tailwindcss": "^3.4.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

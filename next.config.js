@@ -1,9 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Cloud Run用にスタンドアロン出力を有効化（Dockerイメージを小さくする）
   output: 'standalone',
   experimental: {
-    serverComponentsExternalPackages: ['sharp'],
+    serverComponentsExternalPackages: ['puppeteer', 'exceljs'],
+  },
+  // Cloud Run 用に大きなファイルサイズを許容
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
   },
 }
 

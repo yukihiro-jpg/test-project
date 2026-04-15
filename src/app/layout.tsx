@@ -1,15 +1,9 @@
-import type { Metadata, Viewport } from 'next'
+import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: '年末調整書類アップロード',
-  description: '年末調整に必要な書類をスマートフォンで撮影・提出できます',
-}
-
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
+  title: '月次財務報告アプリ',
+  description: '会計データから顧問先社長向けの月次報告資料を自動生成',
 }
 
 export default function RootLayout({
@@ -19,7 +13,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body className="bg-gray-50 min-h-screen">{children}</body>
+      <body className="min-h-screen bg-gray-50 text-neutral font-sans">
+        {children}
+      </body>
     </html>
   )
 }

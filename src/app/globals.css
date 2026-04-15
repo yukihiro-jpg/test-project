@@ -2,29 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body {
-  /* プルツーリフレッシュ無効化（iOS含む全モバイル対応） */
-  overscroll-behavior-y: contain;
-  overscroll-behavior: contain;
-}
+/* 印刷用スタイル（A4縦） */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
 
-/* iOS Safari でプルツーリフレッシュを完全に防ぐためのレイアウト */
-html.no-pull-refresh,
-html.no-pull-refresh body {
-  position: fixed;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  -webkit-overflow-scrolling: touch;
-}
+  body {
+    font-size: 10pt;
+    color: black;
+    background: white;
+  }
 
-html.no-pull-refresh #__next,
-html.no-pull-refresh body > div {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  .no-print {
+    display: none !important;
+  }
+
+  .page-break {
+    page-break-after: always;
+  }
 }
