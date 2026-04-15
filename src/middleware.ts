@@ -17,7 +17,17 @@ export const config = {
 
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get(getCookieName())?.value
-  const session = token ? await verifySession(token) : null
+
+  // SESSION_SECRET 未設定の場合は verifySession が例外を投げる。
+  // 開発環境セットアップ前の画面確認を通すため、例外は握りつぶしてログイン画面に逃がす。
+  let session = null
+  if (token) {
+    try {
+      session = await verifySession(token)
+    } catch {
+      session = null
+    }
+  }
 
   // 許可メールアドレスかチェック
   const allowedEmail = process.env.ALLOWED_EMAIL
