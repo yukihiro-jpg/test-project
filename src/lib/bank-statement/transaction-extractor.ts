@@ -168,26 +168,37 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
     let balanceCol = -1
     let signedCol = -1
 
-    // 第1パス: 「入出金/出入金」は最優先でマーク
-    // (HEADER_DEPOSIT の '出金' 等が '入出金' に誤マッチするのを防ぐ)
+    // Pass1: 「入出金/出入金」列を最優先で確定（単位カッコ除去後の完全一致のみ）
+    // ※'入出金内容' は '入出金' を含むが、ここでは完全一致のみ合格させて誤爆を防ぐ
     for (let i = 0; i < row.cells.length; i++) {
-      const c = (row.cells[i] || '').replace(/[\s\u3000]/g, '')
-      if (signedCol < 0 && ['入出金', '出入金', '入出金額', '出入金額'].some((k) => c === k || c.includes(k))) {
+      const raw = row.cells[i] || ''
+      const stripped = raw
+        .replace(/[\s\u3000]/g, '')
+        .replace(/[（\(][^）\)]*[）\)]/g, '') // (円) 等を除去
+      if (signedCol < 0 && ['入出金', '出入金', '入出金額', '出入金額'].includes(stripped)) {
         signedCol = i
       }
     }
 
-    // 第2パス: その他の列
+    // Pass2: 日付・摘要を先に確定
+    // ('入出金内容' を摘要として捕捉し、後段で '出金' に誤マッチしないようにする)
     for (let i = 0; i < row.cells.length; i++) {
       if (i === signedCol) continue
       const cell = row.cells[i]
       if (!cell) continue
-      if (dateCol < 0 && matchHeaderKeyword(cell, HEADER_DATE)) dateCol = i
-      else if (depositCol < 0 && matchHeaderKeyword(cell, HEADER_DEPOSIT)) depositCol = i
-      else if (withdrawCol < 0 && matchHeaderKeyword(cell, HEADER_WITHDRAW)) withdrawCol = i
-      else if (balanceCol < 0 && matchHeaderKeyword(cell, HEADER_BALANCE)) balanceCol = i
-      else if (descCol < 0 && matchHeaderKeyword(cell, HEADER_DESC)) descCol = i
-      else if (signedCol < 0 && matchHeaderKeyword(cell, HEADER_SIGNED)) signedCol = i
+      if (dateCol < 0 && matchHeaderKeyword(cell, HEADER_DATE)) { dateCol = i; continue }
+      if (descCol < 0 && matchHeaderKeyword(cell, HEADER_DESC)) { descCol = i; continue }
+    }
+
+    // Pass3: 残りのセルを金額系に分類
+    for (let i = 0; i < row.cells.length; i++) {
+      if (i === signedCol || i === dateCol || i === descCol) continue
+      const cell = row.cells[i]
+      if (!cell) continue
+      if (depositCol < 0 && matchHeaderKeyword(cell, HEADER_DEPOSIT)) { depositCol = i; continue }
+      if (withdrawCol < 0 && matchHeaderKeyword(cell, HEADER_WITHDRAW)) { withdrawCol = i; continue }
+      if (balanceCol < 0 && matchHeaderKeyword(cell, HEADER_BALANCE)) { balanceCol = i; continue }
+      if (signedCol < 0 && matchHeaderKeyword(cell, HEADER_SIGNED)) { signedCol = i; continue }
     }
     // 符号付1列モード: 日付 + 入出金列 があり、入金/出金の専用列は無い
     // 残高列は任意（無ければ -1 として 0 から running で算出）
