@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils/cn';
 import {
   Home, User, Users, LayoutList, MapPin, Building2, Banknote,
   TrendingUp, Shield, Gift, FileText, Calculator, Download, ChevronDown, ChevronRight,
-  ArrowRightLeft, TrendingDown,
+  ArrowRightLeft, TrendingDown, ClipboardList, FileCheck, Calendar,
 } from 'lucide-react';
 import { useState } from 'react';
 import { GoogleDrivePanel } from '@/components/google/GoogleDrivePanel';
@@ -25,6 +25,9 @@ export function Sidebar({ caseId }: { caseId: string }) {
 
   const navItems: NavItem[] = [
     { label: 'ダッシュボード', href: base, icon: <Home size={18} /> },
+    { label: '業務フロー', href: `${base}/workflow`, icon: <ClipboardList size={18} /> },
+    { label: '資料チェックリスト', href: `${base}/documents`, icon: <FileCheck size={18} /> },
+    { label: 'スケジュール', href: `${base}/schedule`, icon: <Calendar size={18} /> },
     { label: '被相続人情報', href: `${base}/decedent`, icon: <User size={18} /> },
     { label: '相続人情報', href: `${base}/heirs`, icon: <Users size={18} /> },
   ];

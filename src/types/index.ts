@@ -34,6 +34,7 @@ export interface Case {
   giftSimulation?: GiftPlan;
   secondaryConfig?: SecondaryInheritanceConfig;
   taxSavingStrategies?: TaxSavingStrategy[];
+  workflow?: CaseWorkflow;
   createdAt: string;
   updatedAt: string;
 }
@@ -384,3 +385,144 @@ export interface StrategyResult {
   saving: number;
   detail: string;
 }
+
+// ============================================================
+// 業務フロー管理（ワークフロー）
+// ============================================================
+
+export type WorkflowPhase =
+  | 'reception'         // 1. 受任・初回面談
+  | 'document_request'  // 2. 資料依頼
+  | 'document_collect'  // 3. 資料収集・確認
+  | 'evaluation'        // 4. 財産評価・申告書作成
+  | 'report'            // 5. 報告・分割協議
+  | 'agreement'         // 6. 分割協議書作成
+  | 'filing'            // 7. 電子申告
+  | 'delivery';         // 8. 納品・完了
+
+export const WORKFLOW_PHASE_LABELS: Record<WorkflowPhase, string> = {
+  reception: '受任・初回面談',
+  document_request: '資料依頼',
+  document_collect: '資料収集・確認',
+  evaluation: '財産評価・申告書作成',
+  report: '報告・分割協議',
+  agreement: '分割協議書作成',
+  filing: '電子申告',
+  delivery: '納品・完了',
+};
+
+export const WORKFLOW_PHASES: WorkflowPhase[] = [
+  'reception', 'document_request', 'document_collect',
+  'evaluation', 'report', 'agreement', 'filing', 'delivery',
+];
+
+export interface CaseWorkflow {
+  currentPhase: WorkflowPhase;
+  phases: Record<WorkflowPhase, PhaseStatus>;
+  documents: DocumentRequest[];
+  schedule: ScheduleItem[];
+  notes: WorkflowNote[];
+}
+
+export interface PhaseStatus {
+  status: 'not_started' | 'in_progress' | 'completed';
+  startedAt?: string;
+  completedAt?: string;
+  memo?: string;
+}
+
+// --- 資料依頼チェックリスト ---
+export type DocumentCategory =
+  | 'identity'       // 身分関係
+  | 'real_estate'    // 不動産
+  | 'financial'      // 金融資産
+  | 'insurance'      // 保険
+  | 'debt'           // 債務
+  | 'other';         // その他
+
+export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
+  identity: '身分関係書類',
+  real_estate: '不動産関係書類',
+  financial: '金融資産関係書類',
+  insurance: '保険関係書類',
+  debt: '債務関係書類',
+  other: 'その他',
+};
+
+export interface DocumentRequest {
+  id: string;
+  category: DocumentCategory;
+  name: string;                    // 資料名
+  description?: string;            // 補足説明
+  required: boolean;               // 必須かどうか
+  status: 'not_requested' | 'requested' | 'received' | 'confirmed' | 'not_applicable';
+  requestedAt?: string;
+  receivedAt?: string;
+  confirmedAt?: string;
+  note?: string;
+}
+
+// --- スケジュール管理 ---
+export interface ScheduleItem {
+  id: string;
+  title: string;
+  dueDate: string;                 // YYYY-MM-DD
+  description?: string;
+  completed: boolean;
+  completedAt?: string;
+  category: 'deadline' | 'meeting' | 'task' | 'milestone';
+}
+
+// --- 業務メモ ---
+export interface WorkflowNote {
+  id: string;
+  date: string;
+  author: string;
+  content: string;
+}
+
+// --- 資料依頼テンプレート ---
+export const DOCUMENT_TEMPLATES: Omit<DocumentRequest, 'id' | 'status' | 'requestedAt' | 'receivedAt' | 'confirmedAt' | 'note'>[] = [
+  // 身分関係
+  { category: 'identity', name: '被相続人の戸籍謄本（出生から死亡まで）', required: true },
+  { category: 'identity', name: '被相続人の住民票の除票', required: true },
+  { category: 'identity', name: '相続人全員の戸籍謄本', required: true },
+  { category: 'identity', name: '相続人全員の住民票', required: true },
+  { category: 'identity', name: '相続人全員の印鑑証明書', required: true },
+  { category: 'identity', name: '相続人全員のマイナンバー確認書類', required: true },
+  { category: 'identity', name: '遺言書（ある場合）', required: false },
+  { category: 'identity', name: '死亡診断書のコピー', required: false },
+  // 不動産
+  { category: 'real_estate', name: '固定資産税の課税明細書（名寄帳）', required: true },
+  { category: 'real_estate', name: '登記簿謄本（全部事項証明書）', required: true },
+  { category: 'real_estate', name: '固定資産税評価証明書', required: true },
+  { category: 'real_estate', name: '公図・地積測量図', required: true },
+  { category: 'real_estate', name: '住宅地図', required: false },
+  { category: 'real_estate', name: '賃貸借契約書（賃貸の場合）', required: false },
+  { category: 'real_estate', name: '路線価図', description: '税理士側で取得可', required: false },
+  // 金融資産
+  { category: 'financial', name: '預貯金の残高証明書（死亡日現在）', required: true },
+  { category: 'financial', name: '預貯金の既経過利息計算書', required: true },
+  { category: 'financial', name: '過去5年分の通帳コピー', required: true, description: '名義預金・生前贈与の確認用' },
+  { category: 'financial', name: '証券会社の残高証明書（死亡日現在）', required: true },
+  { category: 'financial', name: '配当金の支払通知書', required: false },
+  { category: 'financial', name: '投資信託の取引残高報告書', required: false },
+  { category: 'financial', name: '非上場株式の決算書（3期分）', required: false },
+  // 保険
+  { category: 'insurance', name: '生命保険金の支払通知書', required: true },
+  { category: 'insurance', name: '保険証券のコピー', required: true },
+  { category: 'insurance', name: '解約返戻金の証明書（解約していない保険）', required: false },
+  // 債務
+  { category: 'debt', name: '借入金の残高証明書', required: true },
+  { category: 'debt', name: '未払いの医療費の領収書', required: true },
+  { category: 'debt', name: '未払いの税金の通知書', required: true },
+  { category: 'debt', name: '葬式費用の領収書一式', required: true },
+  { category: 'debt', name: '香典帳', required: false },
+  // その他
+  { category: 'other', name: '確定申告書（過去3年分）', required: true },
+  { category: 'other', name: '贈与税の申告書（過去分）', required: false },
+  { category: 'other', name: '生前贈与の契約書・振込記録', required: false },
+  { category: 'other', name: '自動車の車検証', required: false },
+  { category: 'other', name: '貴金属・美術品等の鑑定書', required: false },
+  { category: 'other', name: '退職手当金の支払通知書', required: false },
+];
