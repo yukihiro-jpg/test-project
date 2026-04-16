@@ -1,0 +1,21 @@
+appId: com.bookkeeping.app
+productName: 帳簿管理
+directories:
+  output: release
+files:
+  - dist
+  - dist-electron
+  - node_modules
+win:
+  target:
+    - nsis
+  icon: null
+nsis:
+  oneClick: true
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  shortcutName: 帳簿管理
+mac:
+  target:
+    - dmg
+  category: public.app-category.finance
