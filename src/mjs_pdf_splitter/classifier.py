@@ -1,5 +1,6 @@
 """書類種類の判定、境界検出、会社名・決算期の抽出"""
 
+import hashlib
 import logging
 import re
 from dataclasses import dataclass
@@ -211,4 +212,44 @@ def find_document_boundaries(pages: list[PageText]) -> list[DocumentSegment]:
                 else "消費税申告書（原則）"
             )
 
+    # 重複セグメントの削除
+    segments = remove_duplicate_segments(segments, pages)
+
     return segments
+
+
+def remove_duplicate_segments(
+    segments: list[DocumentSegment],
+    pages: list[PageText],
+) -> list[DocumentSegment]:
+    """重複するセグメントを削除する。
+
+    同じ書類種類で、同じテキスト内容を持つセグメントを重複とみなし、
+    最初のものだけを残す。例: 法人税用と消費税用の税務代理権限証書が
+    同一内容の場合、片方を削除する。
+    """
+    def _segment_hash(seg: DocumentSegment) -> str:
+        """セグメントのページテキストからハッシュ値を計算"""
+        combined = "\n".join(
+            pages[i].full_text
+            for i in range(seg.start_page, seg.end_page + 1)
+        )
+        # 空白を正規化してからハッシュ化
+        normalized = re.sub(r"\s+", "", combined)
+        return hashlib.md5(normalized.encode("utf-8")).hexdigest()
+
+    seen: set[tuple[str, str]] = set()
+    result: list[DocumentSegment] = []
+
+    for seg in segments:
+        key = (seg.doc_type, _segment_hash(seg))
+        if key in seen:
+            logger.info(
+                "重複セグメント削除: %s ページ%d-%d",
+                seg.doc_type, seg.start_page + 1, seg.end_page + 1,
+            )
+            continue
+        seen.add(key)
+        result.append(seg)
+
+    return result

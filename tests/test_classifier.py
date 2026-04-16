@@ -330,3 +330,40 @@ class TestFindDocumentBoundaries:
         segments = find_document_boundaries(pages)
         assert len(segments) == 1
         assert segments[0].doc_type == "消費税申告書（簡易）"
+
+    def test_duplicate_segments_removed(self):
+        """同じ書類種類で同じテキスト内容のセグメントは重複削除される"""
+        pages = [
+            self._make_page(0, "別表一", "別表一 合同会社和泉 令和7年3月"),
+            self._make_page(1, "税務代理権限証書", "税務代理権限証書 合同会社和泉 税理士A"),
+            self._make_page(2, "消費税 確定申告書", "消費税及び地方消費税 合同会社和泉"),
+            self._make_page(3, "税務代理権限証書", "税務代理権限証書 合同会社和泉 税理士A"),
+        ]
+        segments = find_document_boundaries(pages)
+        # 2つの税務代理権限証書のうち1つは重複なので削除される
+        tax_proxy_segments = [s for s in segments if s.doc_type == "税務代理権限証書"]
+        assert len(tax_proxy_segments) == 1
+
+    def test_different_content_not_deduped(self):
+        """同じ書類種類でも内容が異なれば削除されない"""
+        pages = [
+            self._make_page(0, "別表一", "別表一 合同会社和泉 令和7年3月"),
+            self._make_page(1, "税務代理権限証書", "税務代理権限証書 合同会社和泉 税理士A 法人税担当"),
+            self._make_page(2, "消費税 確定申告書", "消費税及び地方消費税 合同会社和泉"),
+            self._make_page(3, "税務代理権限証書", "税務代理権限証書 合同会社和泉 税理士B 消費税担当"),
+        ]
+        segments = find_document_boundaries(pages)
+        tax_proxy_segments = [s for s in segments if s.doc_type == "税務代理権限証書"]
+        assert len(tax_proxy_segments) == 2
+
+    def test_uchiwake_title_priority_over_consumption_tax(self):
+        """16種類の勘定科目内訳明細書タイトルは消費税より優先される"""
+        pages = [
+            self._make_page(
+                0, "雑損失等の内訳書",
+                "雑損失等の内訳書 消費税還付金 合同会社和泉"
+            ),
+        ]
+        segments = find_document_boundaries(pages)
+        assert len(segments) == 1
+        assert segments[0].doc_type == "勘定科目内訳明細書"
