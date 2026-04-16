@@ -17,6 +17,7 @@ export interface CashEntry {
   id: string
   date: string           // "YYYY-MM-DD"
   description: string    // 摘要（必須）
+  accountCode?: string   // 勘定科目コード（任意）
   counterparty: string   // 取引先
   income: number | null   // 収入金額
   expense: number | null  // 支出金額
@@ -48,6 +49,7 @@ export interface BankEntry {
   date: string
   passbookDescription: string   // 通帳記載の摘要（必須）
   transactionType: string       // 取引内容（必須・税理士向け最重要フィールド）
+  accountCode?: string          // 勘定科目コード（任意）
   counterparty: string          // 取引先
   deposit: number | null        // お預り金額
   withdrawal: number | null     // お引出金額
@@ -90,10 +92,45 @@ export interface SuggestionData {
 }
 
 // ============================
+// 税理士メモ
+// ============================
+
+export interface TaxAccountantMemo {
+  content: string
+  updatedAt: string
+}
+
+// ============================
+// 勘定科目コード
+// ============================
+
+export interface AccountCode {
+  code: string
+  name: string
+  category: string
+}
+
+// ============================
+// CSV学習データ
+// ============================
+
+export interface CsvLearningData {
+  descriptionToAccountCode: {
+    [passbookDesc: string]: { code: string; name: string; count: number }
+  }
+  descriptionToTransactionType: {
+    [passbookDesc: string]: { type: string; count: number }
+  }
+  descriptionToCounterparty: {
+    [passbookDesc: string]: { counterparty: string; count: number }
+  }
+}
+
+// ============================
 // UI用型
 // ============================
 
-export type PageType = 'dashboard' | 'cash-ledger' | 'bank-book' | 'settings'
+export type PageType = 'dashboard' | 'cash-ledger' | 'bank-book' | 'settings' | 'help'
 
 export interface MonthOption {
   value: string  // "YYYY-MM"

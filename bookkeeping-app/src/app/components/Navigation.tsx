@@ -11,6 +11,7 @@ const NAV_ITEMS: { page: PageType; label: string; icon: string }[] = [
   { page: 'cash-ledger', label: '現金出納帳', icon: '💴' },
   { page: 'bank-book', label: '通帳記録', icon: '🏦' },
   { page: 'settings', label: '設定', icon: '⚙️' },
+  { page: 'help', label: '操作ガイド', icon: '📖' },
 ]
 
 export default function Navigation({ currentPage, onNavigate, companyName }: Props) {

@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import type { AppConfig } from '../lib/types'
+import { useState, useEffect } from 'react'
+import type { AppConfig, TaxAccountantMemo, AccountCode } from '../lib/types'
 import { useCompanySettings } from '../hooks/useCompanySettings'
-import { selectFolder } from '../lib/ipc'
+import { selectFolder, selectCsv, readMemo, saveMemo, readAccountCodes, saveAccountCodes } from '../lib/ipc'
 
 interface Props {
   config: AppConfig
@@ -18,6 +18,19 @@ export default function SettingsPage({ config, onConfigUpdate }: Props) {
   // 新規口座フォーム
   const [showAccountForm, setShowAccountForm] = useState(false)
   const [newBank, setNewBank] = useState({ bankName: '', branchName: '', accountType: '普通', accountNumber: '', openingBalance: '' })
+
+  // 税理士メモ
+  const [memo, setMemo] = useState('')
+  const [memoSaved, setMemoSaved] = useState(false)
+
+  // 勘定科目コード
+  const [accountCodes, setAccountCodes] = useState<AccountCode[]>([])
+  const [csvImportResult, setCsvImportResult] = useState<string | null>(null)
+
+  useEffect(() => {
+    readMemo().then((m) => { if (m) setMemo(m.content) })
+    readAccountCodes().then(setAccountCodes)
+  }, [])
 
   async function handleSave() {
     const updated: AppConfig = {
@@ -50,6 +63,43 @@ export default function SettingsPage({ config, onConfigUpdate }: Props) {
     })
     setNewBank({ bankName: '', branchName: '', accountType: '普通', accountNumber: '', openingBalance: '' })
     setShowAccountForm(false)
+  }
+
+  async function handleSaveMemo() {
+    await saveMemo({ content: memo, updatedAt: new Date().toISOString() })
+    setMemoSaved(true)
+    setTimeout(() => setMemoSaved(false), 3000)
+  }
+
+  async function handleImportAccountCodes() {
+    const csv = await selectCsv()
+    if (!csv) return
+    const lines = csv.split('\n').filter((l) => l.trim())
+    const codes: AccountCode[] = []
+    for (let i = 0; i < lines.length; i++) {
+      const cols = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''))
+      if (cols.length >= 2) {
+        codes.push({
+          code: cols[0],
+          name: cols[1],
+          category: cols[2] || '',
+        })
+      }
+    }
+    if (codes.length === 0) {
+      setCsvImportResult('有効なデータが見つかりませんでした')
+      return
+    }
+    await saveAccountCodes(codes)
+    setAccountCodes(codes)
+    setCsvImportResult(`${codes.length}件の勘定科目を取り込みました`)
+    setTimeout(() => setCsvImportResult(null), 5000)
+  }
+
+  async function handleClearAccountCodes() {
+    if (!confirm('勘定科目コードをすべて削除しますか？')) return
+    await saveAccountCodes([])
+    setAccountCodes([])
   }
 
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -233,6 +283,85 @@ export default function SettingsPage({ config, onConfigUpdate }: Props) {
               </button>
             </div>
           </div>
+        )}
+      </section>
+
+      {/* 税理士メモ */}
+      <section className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+        <h2 className="text-sm font-medium text-gray-600 mb-4">税理士メモ</h2>
+        <p className="text-xs text-gray-400 mb-3">
+          この顧問先に対するメモを記載できます。顧問先には表示されません。
+        </p>
+        <textarea
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          placeholder="税理士用のメモを入力..."
+          rows={5}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-y"
+        />
+        <div className="flex items-center gap-3 mt-3">
+          <button
+            onClick={handleSaveMemo}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+          >
+            メモを保存
+          </button>
+          {memoSaved && <span className="text-sm text-green-600">保存しました</span>}
+        </div>
+      </section>
+
+      {/* 勘定科目コード管理 */}
+      <section className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+        <h2 className="text-sm font-medium text-gray-600 mb-4">勘定科目コード</h2>
+        <p className="text-xs text-gray-400 mb-3">
+          CSVファイルで勘定科目コードを取り込むと、取引入力時にコードで科目を選択できます。
+          CSV形式: コード,科目名,分類（1行1科目）
+        </p>
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={handleImportAccountCodes}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+          >
+            CSVから取り込み
+          </button>
+          {accountCodes.length > 0 && (
+            <button
+              onClick={handleClearAccountCodes}
+              className="px-4 py-2 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50"
+            >
+              すべて削除
+            </button>
+          )}
+          {csvImportResult && (
+            <span className="text-sm text-green-600">{csvImportResult}</span>
+          )}
+        </div>
+        {accountCodes.length > 0 && (
+          <div className="max-h-48 overflow-y-auto border border-gray-100 rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="text-left px-3 py-2 text-xs text-gray-500">コード</th>
+                  <th className="text-left px-3 py-2 text-xs text-gray-500">科目名</th>
+                  <th className="text-left px-3 py-2 text-xs text-gray-500">分類</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accountCodes.map((code, i) => (
+                  <tr key={i} className="border-t border-gray-50">
+                    <td className="px-3 py-1.5 font-mono text-gray-600">{code.code}</td>
+                    <td className="px-3 py-1.5">{code.name}</td>
+                    <td className="px-3 py-1.5 text-gray-400">{code.category}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {accountCodes.length === 0 && (
+          <p className="text-sm text-gray-400 py-4 text-center">
+            勘定科目コードが登録されていません
+          </p>
         )}
       </section>
     </div>

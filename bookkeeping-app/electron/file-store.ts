@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import type { AppConfig, CashLedgerMonth, BankBookMonth, BankAccount, SuggestionData } from '../src/app/lib/types'
+import type { AppConfig, CashLedgerMonth, BankBookMonth, BankAccount, SuggestionData, TaxAccountantMemo, AccountCode, CsvLearningData } from '../src/app/lib/types'
 
 /**
  * ローカルファイルベースのデータストア
@@ -31,6 +31,18 @@ export class FileStore {
 
   private get suggestionsPath(): string {
     return path.join(this.dataDir, 'suggestions.json')
+  }
+
+  private get memoPath(): string {
+    return path.join(this.dataDir, 'tax-memo.json')
+  }
+
+  private get accountCodesPath(): string {
+    return path.join(this.dataDir, 'account-codes.json')
+  }
+
+  private get csvLearningPath(): string {
+    return path.join(this.dataDir, 'csv-learning.json')
   }
 
   private cashDir(): string {
@@ -153,5 +165,39 @@ export class FileStore {
 
   saveSuggestions(data: SuggestionData): void {
     this.writeJson(this.suggestionsPath, data)
+  }
+
+  // ===== 税理士メモ =====
+
+  readMemo(): TaxAccountantMemo | null {
+    return this.readJson<TaxAccountantMemo>(this.memoPath)
+  }
+
+  saveMemo(memo: TaxAccountantMemo): void {
+    this.writeJson(this.memoPath, memo)
+  }
+
+  // ===== 勘定科目コード =====
+
+  readAccountCodes(): AccountCode[] {
+    return this.readJson<AccountCode[]>(this.accountCodesPath) || []
+  }
+
+  saveAccountCodes(codes: AccountCode[]): void {
+    this.writeJson(this.accountCodesPath, codes)
+  }
+
+  // ===== CSV学習データ =====
+
+  readCsvLearning(): CsvLearningData {
+    return this.readJson<CsvLearningData>(this.csvLearningPath) || {
+      descriptionToAccountCode: {},
+      descriptionToTransactionType: {},
+      descriptionToCounterparty: {},
+    }
+  }
+
+  saveCsvLearning(data: CsvLearningData): void {
+    this.writeJson(this.csvLearningPath, data)
   }
 }

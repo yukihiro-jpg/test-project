@@ -9,6 +9,9 @@ import type {
   BankBookMonth,
   BankAccount,
   SuggestionData,
+  TaxAccountantMemo,
+  AccountCode,
+  CsvLearningData,
 } from './types'
 
 function getApi() {
@@ -83,6 +86,36 @@ export async function saveSuggestions(data: SuggestionData): Promise<void> {
   return getApi().store.saveSuggestions(data)
 }
 
+// ===== Tax Accountant Memo =====
+
+export async function readMemo(): Promise<TaxAccountantMemo | null> {
+  return getApi().store.readMemo()
+}
+
+export async function saveMemo(memo: TaxAccountantMemo): Promise<void> {
+  return getApi().store.saveMemo(memo)
+}
+
+// ===== Account Codes =====
+
+export async function readAccountCodes(): Promise<AccountCode[]> {
+  return getApi().store.readAccountCodes()
+}
+
+export async function saveAccountCodes(codes: AccountCode[]): Promise<void> {
+  return getApi().store.saveAccountCodes(codes)
+}
+
+// ===== CSV Learning =====
+
+export async function readCsvLearning(): Promise<CsvLearningData> {
+  return getApi().store.readCsvLearning()
+}
+
+export async function saveCsvLearning(data: CsvLearningData): Promise<void> {
+  return getApi().store.saveCsvLearning(data)
+}
+
 // ===== Export =====
 
 export async function exportCashLedger(
@@ -105,4 +138,8 @@ export async function exportBankBook(
 
 export async function selectFolder(): Promise<string | null> {
   return getApi().dialog.selectFolder()
+}
+
+export async function selectCsv(): Promise<string | null> {
+  return getApi().dialog.selectCsv()
 }

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import fs from 'fs'
 import path from 'path'
 import { FileStore } from './file-store'
 import { exportCashLedgerExcel, exportBankBookExcel } from './excel-export'
@@ -86,6 +87,33 @@ function setupIpcHandlers() {
     fileStore!.saveSuggestions(data)
   })
 
+  // --- Tax Accountant Memo ---
+  ipcMain.handle('store:read-memo', async () => {
+    return fileStore!.readMemo()
+  })
+
+  ipcMain.handle('store:save-memo', async (_event, memo) => {
+    fileStore!.saveMemo(memo)
+  })
+
+  // --- Account Codes ---
+  ipcMain.handle('store:read-account-codes', async () => {
+    return fileStore!.readAccountCodes()
+  })
+
+  ipcMain.handle('store:save-account-codes', async (_event, codes) => {
+    fileStore!.saveAccountCodes(codes)
+  })
+
+  // --- CSV Learning ---
+  ipcMain.handle('store:read-csv-learning', async () => {
+    return fileStore!.readCsvLearning()
+  })
+
+  ipcMain.handle('store:save-csv-learning', async (_event, data) => {
+    fileStore!.saveCsvLearning(data)
+  })
+
   // --- Excel Export ---
   ipcMain.handle('export:cash-ledger', async (_event, month: string, companyName: string) => {
     const data = fileStore!.readCashMonth(month)
@@ -127,6 +155,18 @@ function setupIpcHandlers() {
     })
     if (result.canceled) return null
     return result.filePaths[0]
+  })
+
+  ipcMain.handle('dialog:select-csv', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      title: 'CSVファイルを選択',
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+    const filePath = result.filePaths[0]
+    const content = fs.readFileSync(filePath, 'utf-8')
+    return content
   })
 }
 

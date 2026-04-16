@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { ValidationError } from '../lib/validation'
+import type { AccountCode } from '../lib/types'
 
 // ===== 現金出納帳入力フォーム =====
 
@@ -167,6 +168,7 @@ export interface BankFormData {
   date: string
   passbookDescription: string
   transactionType: string
+  accountCode: string
   counterparty: string
   deposit: string
   withdrawal: string
@@ -182,6 +184,7 @@ interface BankFormProps {
   typeSuggestions: string[]
   onCounterpartyChange?: (value: string) => void
   onPassbookDescChange?: (value: string) => void
+  accountCodes?: AccountCode[]
 }
 
 export function BankTransactionForm({
@@ -194,17 +197,22 @@ export function BankTransactionForm({
   typeSuggestions,
   onCounterpartyChange,
   onPassbookDescChange,
+  accountCodes,
 }: BankFormProps) {
   const defaultDate = `${month}-${String(new Date().getDate()).padStart(2, '0')}`
-  const [form, setForm] = useState<BankFormData>(
-    initialData || { date: defaultDate, passbookDescription: '', transactionType: '', counterparty: '', deposit: '', withdrawal: '' }
-  )
+  const emptyForm: BankFormData = { date: defaultDate, passbookDescription: '', transactionType: '', accountCode: '', counterparty: '', deposit: '', withdrawal: '' }
+  const [form, setForm] = useState<BankFormData>(initialData || emptyForm)
 
   useEffect(() => {
     if (!initialData) {
-      setForm({ date: defaultDate, passbookDescription: '', transactionType: '', counterparty: '', deposit: '', withdrawal: '' })
+      setForm({ ...emptyForm, date: `${month}-${String(new Date().getDate()).padStart(2, '0')}` })
     }
   }, [month])
+
+  function handleAccountCodeChange(code: string) {
+    const found = accountCodes?.find((c) => c.code === code)
+    setForm({ ...form, accountCode: code, transactionType: found ? found.name : form.transactionType })
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -243,21 +251,39 @@ export function BankTransactionForm({
             className={`w-full border rounded-lg px-2 py-2 text-sm ${getError('passbookDescription') ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
           />
         </div>
-        <div className="col-span-2">
-          <label className="text-xs text-gray-500">取引内容</label>
-          <input
-            type="text"
-            value={form.transactionType}
-            onChange={(e) => setForm({ ...form, transactionType: e.target.value })}
-            placeholder="例: 売上入金"
-            list="bank-type-list"
-            className={`w-full border rounded-lg px-2 py-2 text-sm font-medium ${getError('transactionType') ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
-          />
-          <datalist id="bank-type-list">
-            {typeSuggestions.map((s) => <option key={s} value={s} />)}
-          </datalist>
-        </div>
-        <div className="col-span-2">
+        {accountCodes && accountCodes.length > 0 ? (
+          <div className="col-span-2">
+            <label className="text-xs text-gray-500">科目コード</label>
+            <select
+              value={form.accountCode}
+              onChange={(e) => handleAccountCodeChange(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm"
+            >
+              <option value="">-- 選択 --</option>
+              {accountCodes.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code}: {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="col-span-2">
+            <label className="text-xs text-gray-500">取引内容</label>
+            <input
+              type="text"
+              value={form.transactionType}
+              onChange={(e) => setForm({ ...form, transactionType: e.target.value })}
+              placeholder="例: 売上入金"
+              list="bank-type-list"
+              className={`w-full border rounded-lg px-2 py-2 text-sm font-medium ${getError('transactionType') ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
+            />
+            <datalist id="bank-type-list">
+              {typeSuggestions.map((s) => <option key={s} value={s} />)}
+            </datalist>
+          </div>
+        )}
+        <div className={accountCodes && accountCodes.length > 0 ? 'col-span-2' : 'col-span-2'}>
           <label className="text-xs text-gray-500">取引先</label>
           <input
             type="text"

@@ -15,6 +15,12 @@ interface ElectronAPI {
     saveBankAccounts: (accounts: import('./app/lib/types').BankAccount[]) => Promise<void>
     readSuggestions: () => Promise<import('./app/lib/types').SuggestionData>
     saveSuggestions: (data: import('./app/lib/types').SuggestionData) => Promise<void>
+    readMemo: () => Promise<import('./app/lib/types').TaxAccountantMemo | null>
+    saveMemo: (memo: import('./app/lib/types').TaxAccountantMemo) => Promise<void>
+    readAccountCodes: () => Promise<import('./app/lib/types').AccountCode[]>
+    saveAccountCodes: (codes: import('./app/lib/types').AccountCode[]) => Promise<void>
+    readCsvLearning: () => Promise<import('./app/lib/types').CsvLearningData>
+    saveCsvLearning: (data: import('./app/lib/types').CsvLearningData) => Promise<void>
   }
   export: {
     cashLedger: (month: string, companyName: string) => Promise<string | null>
@@ -22,6 +28,7 @@ interface ElectronAPI {
   }
   dialog: {
     selectFolder: () => Promise<string | null>
+    selectCsv: () => Promise<string | null>
   }
 }
 

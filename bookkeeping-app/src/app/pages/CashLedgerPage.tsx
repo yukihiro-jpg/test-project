@@ -12,6 +12,7 @@ import { CashTransactionForm, type CashFormData } from '../components/Transactio
 import ReconcileModal from '../components/ReconcileModal'
 import ExportButton from '../components/ExportButton'
 import { exportCashLedger } from '../lib/ipc'
+import AlertModal from '../components/AlertModal'
 import type { ValidationError } from '../lib/validation'
 
 interface Props {
@@ -24,6 +25,7 @@ export default function CashLedgerPage({ config }: Props) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [showReconcile, setShowReconcile] = useState(false)
   const [errors, setErrors] = useState<ValidationError[]>([])
+  const [exportAlert, setExportAlert] = useState(false)
 
   const { data, loading, loadMonth, addEntry, updateEntry, deleteEntry, setCarryOver, setReconciliation } =
     useCashTransactions()
@@ -113,7 +115,11 @@ export default function CashLedgerPage({ config }: Props) {
         <h1 className="text-xl font-bold text-gray-800">現金出納帳</h1>
         <div className="flex items-center gap-3">
           <ExportButton
-            onExport={() => exportCashLedger(selectedMonth, config.companyName)}
+            onExport={async () => {
+              const result = await exportCashLedger(selectedMonth, config.companyName)
+              if (result) setExportAlert(true)
+              return result
+            }}
           />
           <button
             onClick={() => setShowReconcile(true)}
@@ -206,6 +212,21 @@ export default function CashLedgerPage({ config }: Props) {
             setShowReconcile(false)
           }}
           onClose={() => setShowReconcile(false)}
+        />
+      )}
+
+      {/* ダウンロード後アラート */}
+      {exportAlert && (
+        <AlertModal
+          title="税理士への追加提出資料をご確認ください"
+          type="info"
+          messages={[
+            'ダウンロードしたデータと合わせて、以下の資料もご用意ください：',
+            '領収書・レシートの整理（日付順）',
+            '高額な支出がある場合 → 請求書・契約書',
+            '不明点がある場合は税理士にご相談ください。',
+          ]}
+          onClose={() => setExportAlert(false)}
         />
       )}
     </div>

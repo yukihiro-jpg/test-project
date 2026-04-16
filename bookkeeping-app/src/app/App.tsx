@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage'
 import CashLedgerPage from './pages/CashLedgerPage'
 import BankBookPage from './pages/BankBookPage'
 import SettingsPage from './pages/SettingsPage'
+import HelpPage from './pages/HelpPage'
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true)
@@ -71,6 +72,9 @@ export default function App() {
             config={config}
             onConfigUpdate={(cfg) => setConfig(cfg)}
           />
+        )}
+        {currentPage === 'help' && (
+          <HelpPage />
         )}
       </main>
     </div>

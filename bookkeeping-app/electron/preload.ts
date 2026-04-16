@@ -23,6 +23,17 @@ contextBridge.exposeInMainWorld('api', {
     readSuggestions: () => ipcRenderer.invoke('store:read-suggestions'),
     saveSuggestions: (data: unknown) =>
       ipcRenderer.invoke('store:save-suggestions', data),
+
+    readMemo: () => ipcRenderer.invoke('store:read-memo'),
+    saveMemo: (memo: unknown) => ipcRenderer.invoke('store:save-memo', memo),
+
+    readAccountCodes: () => ipcRenderer.invoke('store:read-account-codes'),
+    saveAccountCodes: (codes: unknown) =>
+      ipcRenderer.invoke('store:save-account-codes', codes),
+
+    readCsvLearning: () => ipcRenderer.invoke('store:read-csv-learning'),
+    saveCsvLearning: (data: unknown) =>
+      ipcRenderer.invoke('store:save-csv-learning', data),
   },
 
   export: {
@@ -34,5 +45,6 @@ contextBridge.exposeInMainWorld('api', {
 
   dialog: {
     selectFolder: () => ipcRenderer.invoke('dialog:select-folder'),
+    selectCsv: () => ipcRenderer.invoke('dialog:select-csv'),
   },
 })
