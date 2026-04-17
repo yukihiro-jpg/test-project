@@ -294,6 +294,8 @@ function DescriptionInput({ value, onCommit }: { value: string; onCommit: (v: st
         else handleNav(e)
       }}
       placeholder="摘要" maxLength={25}
+      lang="ja"
+      style={{ imeMode: 'active' } as React.CSSProperties}
       className="w-full px-1.5 py-1 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800" />
   )
 }

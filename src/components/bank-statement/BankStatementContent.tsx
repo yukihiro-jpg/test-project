@@ -62,6 +62,7 @@ export default function BankStatementContent() {
   const [showQuestionList, setShowQuestionList] = useState(false)
   const [showTempData, setShowTempData] = useState(false)
   const [tempCount, setTempCount] = useState(() => getTempEntryCount())
+  const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set())
 
   // 顧問先選択ハンドラ
   const handleClientSelect = useCallback((client: Client) => {
@@ -414,14 +415,31 @@ export default function BankStatementContent() {
     [],
   )
 
-  // CSV一時保存
+  // CSV一時保存（チェック選択がある場合は選択分のみ保存、残りは画面に残す）
   const handleTempSave = useCallback(() => {
     if (journalEntries.length === 0) {
       alert('保存する仕訳データがありません')
       return
     }
+    const hasSelection = selectedEntryIds.size > 0
+
+    // 保存対象: チェックされたもの or 全部
+    // 複合仕訳の子も含めるため parentId が選択された親のものも含める
+    const targetIds = new Set<string>()
+    if (hasSelection) {
+      selectedEntryIds.forEach((id) => targetIds.add(id))
+      // 親が選択されている場合は子も含める
+      for (const e of journalEntries) {
+        if (e.parentId && targetIds.has(e.parentId)) targetIds.add(e.id)
+      }
+    }
+
+    const entriesToSave = hasSelection
+      ? journalEntries.filter((e) => targetIds.has(e.id))
+      : journalEntries
+
     // 科目名が空の場合、科目チェックリストから補完
-    const completed = journalEntries.map((e) => {
+    const completed = entriesToSave.map((e) => {
       const u = { ...e }
       if (u.debitCode && !u.debitName) {
         const acc = accountMaster.find((a) => a.code === u.debitCode)
@@ -433,19 +451,27 @@ export default function BankStatementContent() {
       }
       return u
     })
-    // パターン学習
+    // パターン学習（上書き保存）
     const applied = applyCompoundAutoAmounts(completed)
     learnAllFromEntries(applied)
     // 一時保存に追記
     const totalCount = appendTempEntries(completed)
     setTempCount(totalCount)
-    // 仕訳データをクリアして次の通帳を処理可能に
-    setPages([])
-    setJournalEntries([])
-    setUploadConfig(null)
-    setError(null)
-    setInfo(`${journalEntries.length}件を一時保存しました（合計${totalCount}件）`)
-  }, [journalEntries])
+
+    if (hasSelection) {
+      // 選択分を保存、残りは画面に残す
+      setJournalEntries(journalEntries.filter((e) => !targetIds.has(e.id)))
+      setSelectedEntryIds(new Set())
+      setInfo(`${entriesToSave.length}件を一時保存しました（合計${totalCount}件）。残り${journalEntries.length - entriesToSave.length}件が表示中です。`)
+    } else {
+      // 全部保存: 従来通り全クリア
+      setPages([])
+      setJournalEntries([])
+      setUploadConfig(null)
+      setError(null)
+      setInfo(`${journalEntries.length}件を一時保存しました（合計${totalCount}件）`)
+    }
+  }, [journalEntries, selectedEntryIds, accountMaster])
 
   // 一時保存データをまとめてCSV出力
   const handleTempExport = useCallback(() => {
@@ -534,7 +560,7 @@ export default function BankStatementContent() {
             <>
               <button onClick={handleTempSave}
                 className="px-3 py-1.5 text-xs font-medium bg-amber-500 hover:bg-amber-600 text-white rounded">
-                一時保存
+                {selectedEntryIds.size > 0 ? `選択分を一時保存 (${selectedEntryIds.size}件)` : '一時保存'}
               </button>
               <CsvExportButton entries={journalEntries}
                 dateFrom={dateFrom} dateTo={dateTo}
@@ -634,6 +660,7 @@ export default function BankStatementContent() {
               pages={pages}
               bankAccountCode={uploadConfig?.accountCode || ''}
               clientTaxType={selectedClient?.taxType || 'standard'}
+              onSelectionChange={setSelectedEntryIds}
             />
           }
         />

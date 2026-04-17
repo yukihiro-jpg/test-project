@@ -31,11 +31,13 @@ interface Props {
   pages: StatementPage[]
   bankAccountCode: string
   clientTaxType?: string
+  onSelectionChange?: (ids: Set<string>) => void
 }
 
 export default function JournalEntryTable({
   entries, accountMaster, subAccountMaster, selectedEntryId,
   onSelect, onEntriesChange, onSubAccountUpdate, pages, bankAccountCode, clientTaxType,
+  onSelectionChange,
 }: Props) {
   const [selectedRange, setSelectedRange] = useState<Set<string>>(new Set())
   const [lastClickedId, setLastClickedId] = useState<string | null>(null)
@@ -44,6 +46,11 @@ export default function JournalEntryTable({
   const [bulkValue, setBulkValue] = useState<string>('')
   // 未入力行のみを表示するフィルタ
   const [showOnlyIncomplete, setShowOnlyIncomplete] = useState(false)
+
+  // 選択変更を親に通知
+  const onSelectionChangeRef = useRef(onSelectionChange)
+  useEffect(() => { onSelectionChangeRef.current = onSelectionChange }, [onSelectionChange])
+  useEffect(() => { onSelectionChangeRef.current?.(selectedRange) }, [selectedRange])
 
   // ハンドラを安定参照にするため、最新 entries/accountMaster を ref に保持
   const entriesRef = useRef(entries)
