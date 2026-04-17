@@ -209,7 +209,8 @@ export function learnAllFromEntries(entries: JournalEntry[]): number {
     groups[groupId].push(e)
   }
 
-  const currentPatterns = getPatterns()
+  // パターン配列を1つだけ読み込み、全操作をこの配列上で行う
+  const patterns = getPatterns()
 
   for (const [, group] of Object.entries(groups)) {
     const primary = group[0]
@@ -217,11 +218,26 @@ export function learnAllFromEntries(entries: JournalEntry[]): number {
     if (!originalDesc) continue
     const amount = primary.debitAmount || primary.creditAmount || 0
 
+    const lines: PatternLine[] = group.map((e) => ({
+      debitCode: e.debitCode,
+      debitName: e.debitName,
+      debitSubCode: e.debitSubCode || '',
+      debitSubName: e.debitSubName || '',
+      creditCode: e.creditCode,
+      creditName: e.creditName,
+      creditSubCode: e.creditSubCode || '',
+      creditSubName: e.creditSubName || '',
+      taxCode: e.debitTaxCode,
+      taxCategory: e.debitTaxType,
+      businessType: e.debitBusinessType,
+      description: e.description,
+      amount: e.debitAmount || e.creditAmount || 0,
+    }))
+
     // 既存パターンと内容が同じかチェック
     if (primary.patternId) {
-      const existingPattern = currentPatterns.find((p) => p.id === primary.patternId)
+      const existingPattern = patterns.find((p) => p.id === primary.patternId)
       if (existingPattern) {
-        // 内容が変わっていなければスキップ（useCountだけ増やす）
         const isSame = existingPattern.lines.length === group.length &&
           existingPattern.lines.every((line, i) =>
             line.debitCode === group[i].debitCode &&
@@ -236,16 +252,37 @@ export function learnAllFromEntries(entries: JournalEntry[]): number {
           existingPattern.useCount++
           continue
         }
-        // 内容が変わっている → 上書き（learnFromEntriesで処理）
+        // 内容が変わっている → 上書き
+        existingPattern.lines = lines
+        existingPattern.useCount++
+        learnedCount++
+        continue
       }
     }
 
-    learnFromEntries(originalDesc, group, amount)
+    // 同じキーワードで金額範囲が重なるパターンがあれば更新
+    const existing = patterns.find(
+      (p) => p.keyword.toLowerCase() === originalDesc.toLowerCase() &&
+        isAmountInRange(amount, p.amountMin, p.amountMax),
+    )
+    if (existing) {
+      existing.lines = lines
+      existing.useCount++
+    } else {
+      patterns.push({
+        id: generatePatternId(),
+        keyword: originalDesc,
+        amountMin: null,
+        amountMax: null,
+        lines,
+        useCount: 1,
+      })
+    }
     learnedCount++
   }
 
-  // useCountだけ変更したパターンも保存
-  savePatterns(currentPatterns)
+  // 全操作完了後に1回だけ保存（上書き競合なし）
+  savePatterns(patterns)
   return learnedCount
 }
 
