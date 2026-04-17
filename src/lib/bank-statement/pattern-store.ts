@@ -104,8 +104,12 @@ export function learnFromEntriesWithRange(
   const lines: PatternLine[] = entries.map((e) => ({
     debitCode: e.debitCode,
     debitName: e.debitName,
+    debitSubCode: e.debitSubCode || '',
+    debitSubName: e.debitSubName || '',
     creditCode: e.creditCode,
     creditName: e.creditName,
+    creditSubCode: e.creditSubCode || '',
+    creditSubName: e.creditSubName || '',
     taxCode: e.debitTaxCode,
     taxCategory: e.debitTaxType,
     businessType: e.debitBusinessType,
@@ -154,8 +158,12 @@ export function learnFromEntries(
   const lines: PatternLine[] = entries.map((e) => ({
     debitCode: e.debitCode,
     debitName: e.debitName,
+    debitSubCode: e.debitSubCode || '',
+    debitSubName: e.debitSubName || '',
     creditCode: e.creditCode,
     creditName: e.creditName,
+    creditSubCode: e.creditSubCode || '',
+    creditSubName: e.creditSubName || '',
     taxCode: e.debitTaxCode,
     taxCategory: e.debitTaxType,
     businessType: e.debitBusinessType,
@@ -218,6 +226,8 @@ export function learnAllFromEntries(entries: JournalEntry[]): number {
           existingPattern.lines.every((line, i) =>
             line.debitCode === group[i].debitCode &&
             line.creditCode === group[i].creditCode &&
+            (line.debitSubCode || '') === (group[i].debitSubCode || '') &&
+            (line.creditSubCode || '') === (group[i].creditSubCode || '') &&
             line.description === group[i].description &&
             line.taxCode === group[i].debitTaxCode &&
             line.businessType === group[i].debitBusinessType

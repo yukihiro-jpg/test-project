@@ -139,25 +139,35 @@ export default function JournalEntryTable({
       const updatedEntry = { ...e }
 
       if (isCompoundPattern) {
-        // 複合仕訳パターン: パターン全体の科目コードをそのまま反映
         updatedEntry.debitCode = firstLine.debitCode
         updatedEntry.debitName = firstLine.debitName
+        updatedEntry.debitSubCode = firstLine.debitSubCode || ''
+        updatedEntry.debitSubName = firstLine.debitSubName || ''
         updatedEntry.creditCode = firstLine.creditCode
         updatedEntry.creditName = firstLine.creditName
+        updatedEntry.creditSubCode = firstLine.creditSubCode || ''
+        updatedEntry.creditSubName = firstLine.creditSubName || ''
       } else {
-        // 単一仕訳パターン: 相手勘定コードのみ反映（通帳側は維持）
         const counter = getCounterpart(firstLine)
         if (e.debitCode === bankAccountCode) {
           updatedEntry.creditCode = counter.code
           updatedEntry.creditName = counter.name
+          updatedEntry.creditSubCode = firstLine.creditSubCode || firstLine.debitSubCode || ''
+          updatedEntry.creditSubName = firstLine.creditSubName || firstLine.debitSubName || ''
         } else if (e.creditCode === bankAccountCode) {
           updatedEntry.debitCode = counter.code
           updatedEntry.debitName = counter.name
+          updatedEntry.debitSubCode = firstLine.debitSubCode || firstLine.creditSubCode || ''
+          updatedEntry.debitSubName = firstLine.debitSubName || firstLine.creditSubName || ''
         } else {
           updatedEntry.debitCode = firstLine.debitCode
           updatedEntry.debitName = firstLine.debitName
+          updatedEntry.debitSubCode = firstLine.debitSubCode || ''
+          updatedEntry.debitSubName = firstLine.debitSubName || ''
           updatedEntry.creditCode = firstLine.creditCode
           updatedEntry.creditName = firstLine.creditName
+          updatedEntry.creditSubCode = firstLine.creditSubCode || ''
+          updatedEntry.creditSubName = firstLine.creditSubName || ''
         }
       }
 
@@ -182,8 +192,12 @@ export default function JournalEntryTable({
           compoundEntry.patternId = updatedEntry.patternId
           compoundEntry.debitCode = line.debitCode
           compoundEntry.debitName = line.debitName
+          compoundEntry.debitSubCode = line.debitSubCode || ''
+          compoundEntry.debitSubName = line.debitSubName || ''
           compoundEntry.creditCode = line.creditCode
           compoundEntry.creditName = line.creditName
+          compoundEntry.creditSubCode = line.creditSubCode || ''
+          compoundEntry.creditSubName = line.creditSubName || ''
           compoundEntry.debitTaxCode = line.taxCode
           compoundEntry.debitTaxType = line.taxCategory
           compoundEntry.debitBusinessType = line.businessType

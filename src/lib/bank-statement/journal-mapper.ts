@@ -43,8 +43,12 @@ export function mapTransactionsToJournalEntries(
       const pLine = pattern?.lines?.[0]
       const pDebitCode = pLine?.debitCode || pattern?.debitCode || ''
       const pDebitName = pLine?.debitName || pattern?.debitName || ''
+      const pDebitSubCode = pLine?.debitSubCode || ''
+      const pDebitSubName = pLine?.debitSubName || ''
       const pCreditCode = pLine?.creditCode || pattern?.creditCode || ''
       const pCreditName = pLine?.creditName || pattern?.creditName || ''
+      const pCreditSubCode = pLine?.creditSubCode || ''
+      const pCreditSubName = pLine?.creditSubName || ''
       const pTaxCode = pLine?.taxCode || pattern?.taxCode || ''
       const pTaxCategory = pLine?.taxCategory || pattern?.taxCategory || ''
       const pBusinessType = pLine?.businessType || pattern?.businessType || ''
@@ -93,7 +97,7 @@ export function mapTransactionsToJournalEntries(
         })
       }
 
-      // パターンの変換後摘要とpatternIdを適用
+      // パターンの変換後摘要・patternId・補助科目を適用
       if (pattern) {
         entry.patternId = pattern.id
         if (pattern.lines?.[0]?.description) {
@@ -101,6 +105,9 @@ export function mapTransactionsToJournalEntries(
         } else if (pattern.convertedDescription) {
           entry.description = pattern.convertedDescription
         }
+        // 補助科目コードの反映
+        if (pDebitSubCode) { entry.debitSubCode = pDebitSubCode; entry.debitSubName = pDebitSubName }
+        if (pCreditSubCode) { entry.creditSubCode = pCreditSubCode; entry.creditSubName = pCreditSubName }
       }
 
       entries.push(entry)
@@ -113,8 +120,12 @@ export function mapTransactionsToJournalEntries(
           compoundEntry.patternId = pattern.id
           compoundEntry.debitCode = line.debitCode
           compoundEntry.debitName = line.debitName
+          compoundEntry.debitSubCode = line.debitSubCode || ''
+          compoundEntry.debitSubName = line.debitSubName || ''
           compoundEntry.creditCode = line.creditCode
           compoundEntry.creditName = line.creditName
+          compoundEntry.creditSubCode = line.creditSubCode || ''
+          compoundEntry.creditSubName = line.creditSubName || ''
           compoundEntry.debitTaxCode = line.taxCode
           compoundEntry.debitTaxType = line.taxCategory
           compoundEntry.debitBusinessType = line.businessType

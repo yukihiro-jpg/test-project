@@ -94,8 +94,12 @@ export interface SubAccountItem {
 export interface PatternLine {
   debitCode: string
   debitName: string
+  debitSubCode?: string
+  debitSubName?: string
   creditCode: string
   creditName: string
+  creditSubCode?: string
+  creditSubName?: string
   taxCode: string
   taxCategory: string
   businessType: string
