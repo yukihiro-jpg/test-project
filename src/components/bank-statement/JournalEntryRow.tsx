@@ -101,6 +101,9 @@ function JournalEntryRowInner({
           borderBottom: isCompoundLast ? '2px solid #f87171' : '1px solid #cbd5e1',
           borderLeft: isCompoundGroup ? '2px solid #f87171' : undefined,
           borderRight: isCompoundGroup ? '2px solid #f87171' : undefined,
+          // 画面外行のレイアウト/ペイントをブラウザにスキップさせる（大量行での打鍵遅延を緩和）
+          contentVisibility: 'auto',
+          containIntrinsicSize: '40px',
         }}
         onClick={(e) => onSelect(entry.id, e)}
       >
@@ -250,14 +253,9 @@ function JournalEntryRowInner({
 
         {/* 摘要（25文字制限） */}
         <td style={CB}>
-          <input type="text" value={entry.description}
-            onChange={(e) => {
-              const v = e.target.value
-              if (v.length > 25) { alert('摘要は25文字以内で入力してください'); return }
-              onChange(entry.id, 'description', v)
-            }}
-            onKeyDown={handleNav} placeholder="摘要" maxLength={25}
-            className="w-full px-1.5 py-1 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800" />
+          <DescriptionInput
+            value={entry.description}
+            onCommit={(v) => onChange(entry.id, 'description', v)} />
         </td>
 
         {/* 操作 */}
@@ -278,19 +276,46 @@ function JournalEntryRowInner({
 
 const CB: React.CSSProperties = { borderRight: '1px solid #94a3b8', padding: '2px 4px' }
 
+// 摘要専用の uncontrolled input: 打鍵中は React の state/再レンダを一切発生させない
+// 親への反映は blur / Enter 時のみ (628件級でも打鍵が軽い)
+function DescriptionInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (ref.current && ref.current.value !== value) ref.current.value = value
+  }, [value])
+  const commit = (raw: string) => {
+    if (raw !== value) onCommit(raw)
+  }
+  return (
+    <input ref={ref} type="text" defaultValue={value}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { commit(e.currentTarget.value); handleNav(e) }
+        else handleNav(e)
+      }}
+      placeholder="摘要" maxLength={25}
+      className="w-full px-1.5 py-1 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-400 rounded text-gray-800" />
+  )
+}
+
 function CellInput({ value, onChange, placeholder, halfWidth, align }: {
   value: string; onChange: (v: string) => void; placeholder?: string; halfWidth?: boolean; align?: string
 }) {
-  // ローカル state で編集して blur/Enter でのみ親に反映 → 打鍵のたびの全体再レンダを回避
-  const [local, setLocal] = useState(value)
-  useEffect(() => { setLocal(value) }, [value])
+  // Uncontrolled input: 打鍵中は React の state/再レンダを一切発生させず
+  // ブラウザ標準の input 動作のみに任せる。親への反映は blur/Enter 時のみ。
+  const ref = useRef<HTMLInputElement>(null)
+  // 親から value が変化した場合にのみ DOM を同期
+  useEffect(() => {
+    if (ref.current && ref.current.value !== value) ref.current.value = value
+  }, [value])
+
   const commit = useCallback((raw: string) => {
     const v = halfWidth ? toHalfWidth(raw) : raw
     if (v !== value) onChange(v)
   }, [halfWidth, value, onChange])
+
   return (
-    <input type="text" value={local}
-      onChange={(e) => setLocal(e.target.value)}
+    <input ref={ref} type="text" defaultValue={value}
       onBlur={(e) => commit(e.target.value)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') { commit(e.currentTarget.value); handleNav(e) }
