@@ -14,7 +14,7 @@ import {
 } from '@/lib/bank-statement/journal-mapper'
 import { learnFromEntriesWithRange, getPatterns } from '@/lib/bank-statement/pattern-store'
 import { saveSubAccountMaster } from '@/lib/bank-statement/account-master'
-import { isPL, getDefaultTaxCodeByName } from '@/lib/bank-statement/tax-codes'
+import { isPL, isBS, getDefaultTaxCodeByName } from '@/lib/bank-statement/tax-codes'
 import JournalEntryRow from './JournalEntryRow'
 import LearnPatternDialog from './LearnPatternDialog'
 import ApplyPatternDialog from './ApplyPatternDialog'
@@ -742,9 +742,16 @@ export default function JournalEntryTable({
           </thead>
           <tbody>
             {entries.map((entry, idx) => {
-              // 未入力のみ表示フィルタ: 借方/貸方/消費税のいずれかが未入力の行のみを描画
-              if (showOnlyIncomplete && entry.debitCode && entry.creditCode && entry.debitTaxCode) {
-                return null
+              // 未入力のみ表示フィルタ:
+              // 借方CD空 or 貸方CD空 or 消費税CD空(ただしBS同士で—表示の場合は未入力扱いしない)
+              if (showOnlyIncomplete) {
+                const debitAcc = accountMaster.find((a) => a.code === entry.debitCode)
+                const creditAcc = accountMaster.find((a) => a.code === entry.creditCode)
+                const isBsBoth = !!(debitAcc && creditAcc && isBS(debitAcc.bsPl) && isBS(creditAcc.bsPl))
+                const taxOk = !!entry.debitTaxCode || isBsBoth
+                if (entry.debitCode && entry.creditCode && taxOk) {
+                  return null
+                }
               }
               const prevEntry = idx > 0 ? entries[idx - 1] : null
               const cp = getPageIndex(entry, pages)
