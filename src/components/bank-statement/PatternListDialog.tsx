@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import type { PatternEntry } from '@/lib/bank-statement/types'
+import { useState, useEffect, useMemo } from 'react'
+import type { PatternEntry, PatternLine } from '@/lib/bank-statement/types'
 import {
   getPatterns,
   savePatterns,
@@ -19,30 +19,66 @@ interface Props {
 export default function PatternListDialog({ open, onClose }: Props) {
   const [patterns, setPatterns] = useState<PatternEntry[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editMin, setEditMin] = useState('')
-  const [editMax, setEditMax] = useState('')
+  const [editData, setEditData] = useState<EditState | null>(null)
+  const [filterDuplicates, setFilterDuplicates] = useState(false)
 
   useEffect(() => {
-    if (open) setPatterns(getPatterns())
+    if (open) { setPatterns(getPatterns()); setEditingId(null); setEditData(null) }
   }, [open])
+
+  // 同一キーワードのパターンをグループ化して重複検出
+  const duplicateKeywords = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const p of patterns) {
+      const key = p.keyword.toLowerCase()
+      counts[key] = (counts[key] || 0) + 1
+    }
+    return new Set(Object.entries(counts).filter(([, c]) => c > 1).map(([k]) => k))
+  }, [patterns])
+
+  const visiblePatterns = useMemo(() => {
+    if (!filterDuplicates) return patterns
+    return patterns.filter((p) => duplicateKeywords.has(p.keyword.toLowerCase()))
+  }, [patterns, filterDuplicates, duplicateKeywords])
 
   if (!open) return null
 
-  const handleSaveRange = (id: string) => {
+  const startEdit = (p: PatternEntry) => {
+    setEditingId(p.id)
+    setEditData({
+      amountMin: p.amountMin != null ? String(p.amountMin) : '',
+      amountMax: p.amountMax != null ? String(p.amountMax) : '',
+      lines: p.lines.map((l) => ({ ...l })),
+    })
+  }
+
+  const handleSave = (id: string) => {
+    if (!editData) return
     const updated = patterns.map((p) => {
       if (p.id !== id) return p
       return {
         ...p,
-        amountMin: editMin ? parseInt(editMin) : null,
-        amountMax: editMax ? parseInt(editMax) : null,
+        amountMin: editData.amountMin ? parseInt(editData.amountMin) : null,
+        amountMax: editData.amountMax ? parseInt(editData.amountMax) : null,
+        lines: editData.lines,
       }
     })
     savePatterns(updated)
     setPatterns(updated)
     setEditingId(null)
+    setEditData(null)
+  }
+
+  const updateLine = (lineIdx: number, field: keyof PatternLine, value: string | number) => {
+    if (!editData) return
+    setEditData({
+      ...editData,
+      lines: editData.lines.map((l, i) => i === lineIdx ? { ...l, [field]: value } : l),
+    })
   }
 
   const handleDelete = (id: string) => {
+    if (!confirm('このパターンを削除しますか？')) return
     deletePattern(id)
     setPatterns(getPatterns())
   }
@@ -78,11 +114,26 @@ export default function PatternListDialog({ open, onClose }: Props) {
     }
   }
 
+  const isDuplicate = (p: PatternEntry) => duplicateKeywords.has(p.keyword.toLowerCase())
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[85vh] flex flex-col">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-800">学習済みパターン一覧 ({patterns.length}件)</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-bold text-gray-800">学習済みパターン一覧 ({patterns.length}件)</h2>
+            {duplicateKeywords.size > 0 && (
+              <button
+                onClick={() => setFilterDuplicates((v) => !v)}
+                className={`px-2 py-0.5 text-xs font-bold rounded ${
+                  filterDuplicates
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                }`}>
+                重複の可能性あり {duplicateKeywords.size}件
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <button onClick={handleImport} className="px-3 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200">インポート</button>
             <button onClick={handleExport} className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">エクスポート</button>
@@ -92,80 +143,137 @@ export default function PatternListDialog({ open, onClose }: Props) {
 
         <div className="flex-1 overflow-auto">
           <table className="w-full text-sm border-collapse">
-            <thead className="sticky top-0 bg-gray-100">
+            <thead className="sticky top-0 bg-gray-100 z-10">
               <tr>
-                <th className="px-3 py-2 text-left border-b border-gray-300 font-medium">通帳摘要（元）</th>
-                <th className="px-3 py-2 text-left border-b border-gray-300 font-medium">仕訳内容</th>
-                <th className="px-3 py-2 text-center border-b border-gray-300 font-medium w-28">金額下限</th>
-                <th className="px-3 py-2 text-center border-b border-gray-300 font-medium w-28">金額上限</th>
-                <th className="px-3 py-2 text-center border-b border-gray-300 font-medium w-16">回数</th>
-                <th className="px-3 py-2 text-center border-b border-gray-300 font-medium w-16">操作</th>
+                <th className="px-3 py-2 text-left border-b border-gray-300 font-medium w-40">通帳摘要（元）</th>
+                <th className="px-3 py-2 text-left border-b border-gray-300 font-medium">借方</th>
+                <th className="px-3 py-2 text-left border-b border-gray-300 font-medium">貸方</th>
+                <th className="px-3 py-2 text-left border-b border-gray-300 font-medium w-20">税CD</th>
+                <th className="px-3 py-2 text-left border-b border-gray-300 font-medium w-28">摘要</th>
+                <th className="px-3 py-2 text-center border-b border-gray-300 font-medium w-20">下限</th>
+                <th className="px-3 py-2 text-center border-b border-gray-300 font-medium w-20">上限</th>
+                <th className="px-3 py-2 text-center border-b border-gray-300 font-medium w-12">回数</th>
+                <th className="px-3 py-2 text-center border-b border-gray-300 font-medium w-24">操作</th>
               </tr>
             </thead>
             <tbody>
-              {patterns.map((p) => (
-                <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-2">
-                    <span className="font-medium text-gray-800">{p.keyword}</span>
-                  </td>
-                  <td className="px-3 py-2">
-                    {p.lines.map((line, i) => (
-                      <div key={i} className="text-xs text-gray-600 flex gap-2">
-                        <span className="font-medium text-gray-800">{line.debitCode}</span>
-                        <span>{line.debitName}</span>
-                        <span className="font-medium text-gray-800">{line.creditCode}</span>
-                        <span>{line.creditName}</span>
-                        {line.description && <span className="text-gray-500">{line.description}</span>}
-                      </div>
-                    ))}
-                    {p.lines.length > 1 && (
-                      <span className="text-xs text-violet-600 font-medium">（複合仕訳 {p.lines.length}行）</span>
+              {visiblePatterns.map((p) => {
+                const isEditing = editingId === p.id
+                const dup = isDuplicate(p)
+                return p.lines.map((line, li) => (
+                  <tr key={`${p.id}-${li}`}
+                    className={`border-b border-gray-100 hover:bg-gray-50 ${dup ? 'bg-amber-50' : ''}`}>
+                    {li === 0 && (
+                      <td className="px-3 py-2 align-top" rowSpan={p.lines.length}>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-medium text-gray-800 text-xs break-all">{p.keyword}</span>
+                          {dup && (
+                            <span className="text-xs text-amber-600 font-bold">* 重複あり</span>
+                          )}
+                          {p.lines.length > 1 && (
+                            <span className="text-xs text-violet-600 font-medium">複合{p.lines.length}行</span>
+                          )}
+                        </div>
+                      </td>
                     )}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {editingId === p.id ? (
-                      <input type="text" value={editMin} onChange={(e) => setEditMin(e.target.value)}
-                        className="w-20 px-1 py-0.5 text-xs border border-gray-300 rounded text-right" placeholder="なし" />
-                    ) : (
-                      <span className="text-xs text-gray-600">
-                        {p.amountMin != null ? p.amountMin.toLocaleString() : '—'}
-                      </span>
+                    {/* 借方 */}
+                    <td className="px-2 py-1">
+                      {isEditing && editData ? (
+                        <div className="flex flex-col gap-0.5">
+                          <input type="text" value={editData.lines[li]?.debitCode || ''} onChange={(e) => updateLine(li, 'debitCode', e.target.value)}
+                            className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded" placeholder="CD" />
+                          <input type="text" value={editData.lines[li]?.debitSubCode || ''} onChange={(e) => updateLine(li, 'debitSubCode', e.target.value)}
+                            className="w-full px-1 py-0.5 text-xs border border-gray-200 rounded" placeholder="補助CD" />
+                        </div>
+                      ) : (
+                        <div className="text-xs">
+                          <span className="font-bold text-gray-800">{line.debitCode}</span>
+                          <span className="ml-1 text-gray-600">{line.debitName}</span>
+                          {line.debitSubCode && (
+                            <span className="ml-1 text-gray-400">[{line.debitSubCode} {line.debitSubName}]</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    {/* 貸方 */}
+                    <td className="px-2 py-1">
+                      {isEditing && editData ? (
+                        <div className="flex flex-col gap-0.5">
+                          <input type="text" value={editData.lines[li]?.creditCode || ''} onChange={(e) => updateLine(li, 'creditCode', e.target.value)}
+                            className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded" placeholder="CD" />
+                          <input type="text" value={editData.lines[li]?.creditSubCode || ''} onChange={(e) => updateLine(li, 'creditSubCode', e.target.value)}
+                            className="w-full px-1 py-0.5 text-xs border border-gray-200 rounded" placeholder="補助CD" />
+                        </div>
+                      ) : (
+                        <div className="text-xs">
+                          <span className="font-bold text-gray-800">{line.creditCode}</span>
+                          <span className="ml-1 text-gray-600">{line.creditName}</span>
+                          {line.creditSubCode && (
+                            <span className="ml-1 text-gray-400">[{line.creditSubCode} {line.creditSubName}]</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    {/* 税CD */}
+                    <td className="px-2 py-1">
+                      {isEditing && editData ? (
+                        <input type="text" value={editData.lines[li]?.taxCode || ''} onChange={(e) => updateLine(li, 'taxCode', e.target.value)}
+                          className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded" placeholder="税CD" />
+                      ) : (
+                        <span className="text-xs text-gray-600">{line.taxCode} {line.taxCategory ? `(${line.taxCategory})` : ''}</span>
+                      )}
+                    </td>
+                    {/* 摘要 */}
+                    <td className="px-2 py-1">
+                      {isEditing && editData ? (
+                        <input type="text" value={editData.lines[li]?.description || ''} onChange={(e) => updateLine(li, 'description', e.target.value)}
+                          className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded" placeholder="摘要" />
+                      ) : (
+                        <span className="text-xs text-gray-500">{line.description || '—'}</span>
+                      )}
+                    </td>
+                    {/* 金額範囲・回数・操作 (最初の行のみ) */}
+                    {li === 0 && (
+                      <>
+                        <td className="px-2 py-1 text-center align-top" rowSpan={p.lines.length}>
+                          {isEditing && editData ? (
+                            <input type="text" value={editData.amountMin} onChange={(e) => setEditData({ ...editData, amountMin: e.target.value })}
+                              className="w-16 px-1 py-0.5 text-xs border border-gray-300 rounded text-right" placeholder="なし" />
+                          ) : (
+                            <span className="text-xs text-gray-600">{p.amountMin != null ? p.amountMin.toLocaleString() : '—'}</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1 text-center align-top" rowSpan={p.lines.length}>
+                          {isEditing && editData ? (
+                            <input type="text" value={editData.amountMax} onChange={(e) => setEditData({ ...editData, amountMax: e.target.value })}
+                              className="w-16 px-1 py-0.5 text-xs border border-gray-300 rounded text-right" placeholder="なし" />
+                          ) : (
+                            <span className="text-xs text-gray-600">{p.amountMax != null ? p.amountMax.toLocaleString() : '—'}</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1 text-center text-xs text-gray-500 align-top" rowSpan={p.lines.length}>{p.useCount}</td>
+                        <td className="px-2 py-1 text-center align-top" rowSpan={p.lines.length}>
+                          {isEditing ? (
+                            <div className="flex flex-col gap-1">
+                              <button onClick={() => handleSave(p.id)} className="text-xs text-blue-600 hover:underline font-bold">保存</button>
+                              <button onClick={() => { setEditingId(null); setEditData(null) }} className="text-xs text-gray-500 hover:underline">取消</button>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-1">
+                              <button onClick={() => startEdit(p)} className="text-xs text-blue-600 hover:underline">編集</button>
+                              <button onClick={() => handleDelete(p.id)} className="text-xs text-red-600 hover:underline">削除</button>
+                            </div>
+                          )}
+                        </td>
+                      </>
                     )}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {editingId === p.id ? (
-                      <input type="text" value={editMax} onChange={(e) => setEditMax(e.target.value)}
-                        className="w-20 px-1 py-0.5 text-xs border border-gray-300 rounded text-right" placeholder="なし" />
-                    ) : (
-                      <span className="text-xs text-gray-600">
-                        {p.amountMax != null ? p.amountMax.toLocaleString() : '—'}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-center text-xs text-gray-500">{p.useCount}</td>
-                  <td className="px-3 py-2 text-center">
-                    {editingId === p.id ? (
-                      <button onClick={() => handleSaveRange(p.id)}
-                        className="text-xs text-blue-600 hover:underline">保存</button>
-                    ) : (
-                      <div className="flex items-center gap-1 justify-center">
-                        <button onClick={() => {
-                          setEditingId(p.id)
-                          setEditMin(p.amountMin != null ? String(p.amountMin) : '')
-                          setEditMax(p.amountMax != null ? String(p.amountMax) : '')
-                        }} className="text-xs text-blue-600 hover:underline">編集</button>
-                        <button onClick={() => handleDelete(p.id)}
-                          className="text-xs text-red-600 hover:underline">削除</button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {patterns.length === 0 && (
+                  </tr>
+                ))
+              })}
+              {visiblePatterns.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-gray-400">
-                    パターンがまだ学習されていません。<br />
-                    仕訳を作成してCSV出力すると自動的に学習されます。
+                  <td colSpan={9} className="px-3 py-8 text-center text-gray-400">
+                    {filterDuplicates ? '重複しているパターンはありません。' : 'パターンがまだ学習されていません。'}
                   </td>
                 </tr>
               )}
@@ -180,4 +288,10 @@ export default function PatternListDialog({ open, onClose }: Props) {
       </div>
     </div>
   )
+}
+
+interface EditState {
+  amountMin: string
+  amountMax: string
+  lines: PatternLine[]
 }
