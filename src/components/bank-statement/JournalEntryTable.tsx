@@ -46,9 +46,34 @@ export default function JournalEntryTable({
   const [bulkValue, setBulkValue] = useState<string>('')
   // 未入力行のみを表示するフィルタ
   const [showOnlyIncomplete, setShowOnlyIncomplete] = useState(false)
-  // 借方/貸方が空の行のみ表示するフィルタ
+  // 借方/貸方が空の行のみ表示するフィルタ（スナップショット方式）
   const [filterEmptyDebit, setFilterEmptyDebit] = useState(false)
   const [filterEmptyCredit, setFilterEmptyCredit] = useState(false)
+  const [filteredDebitIds, setFilteredDebitIds] = useState<Set<string> | null>(null)
+  const [filteredCreditIds, setFilteredCreditIds] = useState<Set<string> | null>(null)
+
+  // 未処理トグル: クリック時点の空欄行IDを記録、再クリックで解除
+  const toggleFilterEmptyDebit = useCallback(() => {
+    if (filterEmptyDebit) {
+      setFilterEmptyDebit(false)
+      setFilteredDebitIds(null)
+    } else {
+      const ids = new Set(entriesRef.current.filter((e) => !e.debitCode).map((e) => e.id))
+      setFilteredDebitIds(ids)
+      setFilterEmptyDebit(true)
+    }
+  }, [filterEmptyDebit])
+
+  const toggleFilterEmptyCredit = useCallback(() => {
+    if (filterEmptyCredit) {
+      setFilterEmptyCredit(false)
+      setFilteredCreditIds(null)
+    } else {
+      const ids = new Set(entriesRef.current.filter((e) => !e.creditCode).map((e) => e.id))
+      setFilteredCreditIds(ids)
+      setFilterEmptyCredit(true)
+    }
+  }, [filterEmptyCredit])
 
   // 選択変更を親に通知
   const onSelectionChangeRef = useRef(onSelectionChange)
@@ -735,7 +760,7 @@ export default function JournalEntryTable({
                   <span>借方科目</span>
                   <label className="flex items-center gap-0.5 cursor-pointer text-xs font-normal opacity-80 hover:opacity-100">
                     <input type="checkbox" checked={filterEmptyDebit}
-                      onChange={() => setFilterEmptyDebit((v) => !v)}
+                      onChange={toggleFilterEmptyDebit}
                       className="w-3 h-3 accent-amber-400 cursor-pointer" />
                     <span className={filterEmptyDebit ? 'text-amber-300' : ''}>未処理</span>
                   </label>
@@ -746,7 +771,7 @@ export default function JournalEntryTable({
                   <span>貸方科目</span>
                   <label className="flex items-center gap-0.5 cursor-pointer text-xs font-normal opacity-80 hover:opacity-100">
                     <input type="checkbox" checked={filterEmptyCredit}
-                      onChange={() => setFilterEmptyCredit((v) => !v)}
+                      onChange={toggleFilterEmptyCredit}
                       className="w-3 h-3 accent-amber-400 cursor-pointer" />
                     <span className={filterEmptyCredit ? 'text-amber-300' : ''}>未処理</span>
                   </label>
@@ -765,10 +790,10 @@ export default function JournalEntryTable({
           </thead>
           <tbody>
             {entries.map((entry, idx) => {
-              // 借方科目の未処理フィルタ: 借方CDが空の行のみ表示
-              if (filterEmptyDebit && entry.debitCode) return null
-              // 貸方科目の未処理フィルタ: 貸方CDが空の行のみ表示
-              if (filterEmptyCredit && entry.creditCode) return null
+              // 借方科目の未処理フィルタ: クリック時に空欄だった行のみ表示（入力後も残る）
+              if (filterEmptyDebit && filteredDebitIds && !filteredDebitIds.has(entry.id)) return null
+              // 貸方科目の未処理フィルタ: 同上
+              if (filterEmptyCredit && filteredCreditIds && !filteredCreditIds.has(entry.id)) return null
               // 未入力のみ表示フィルタ:
               // 借方CD空 or 貸方CD空 or 消費税CD空(ただしBS同士で—表示の場合は未入力扱いしない)
               if (showOnlyIncomplete) {
