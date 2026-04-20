@@ -73,6 +73,12 @@ export default function DriveSyncButton({ clientId, clientName }: Props) {
         return
       }
 
+      // 顧問先名でフォルダをリネームするため、1件以上の顧問先固有アイテムを保証
+      const hasClientItem = items.some((i) => i.clientId === clientId)
+      if (!hasClientItem && clientId) {
+        items.push({ clientId, clientName, key: '_marker', data: { updated: new Date().toISOString() } })
+      }
+
       const res = await fetch('/api/drive', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
