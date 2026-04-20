@@ -13,6 +13,7 @@ import { appendTempEntries, getTempEntryCount, clearTempEntries, getTempEntries 
 import { generateQuestionList, downloadQuestionExcel } from '@/lib/bank-statement/question-list'
 import QuestionListDialog from '@/components/bank-statement/QuestionListDialog'
 import TempDataDialog from '@/components/bank-statement/TempDataDialog'
+import DriveSyncButton from '@/components/bank-statement/DriveSyncButton'
 import { applyCompoundAutoAmounts, downloadCsv } from '@/lib/bank-statement/csv-generator'
 import { learnAllFromEntries } from '@/lib/bank-statement/pattern-store'
 import ResizableSplitPanel from '@/components/bank-statement/ResizableSplitPanel'
@@ -577,6 +578,7 @@ export default function BankStatementContent() {
           </button>
         </div>
         <div className="flex items-center gap-2">
+          <DriveSyncButton clientId={selectedClient?.id || null} />
           <AccountMasterUploader
             accountMaster={accountMaster}
             subAccountMaster={subAccountMaster}
