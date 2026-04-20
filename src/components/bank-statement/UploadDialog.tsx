@@ -14,6 +14,7 @@ interface Props {
 const DOC_TYPES: { value: DocumentType; label: string }[] = [
   { value: 'bank-statement', label: '通帳' },
   { value: 'cash-book', label: '現金出納帳' },
+  { value: 'credit-card', label: 'クレジットカード明細' },
   { value: 'sales-invoice', label: '売上請求書' },
   { value: 'purchase-invoice', label: '仕入請求書' },
   { value: 'receipt', label: 'レシート・領収書' },
@@ -69,13 +70,15 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
   const isBankLike = docType === 'bank-statement' || docType === 'cash-book'
   const isInvoice = docType === 'sales-invoice' || docType === 'purchase-invoice'
   const isReceipt = docType === 'receipt'
+  const isCreditCard = docType === 'credit-card'
   const canSubmit = selectedFile && !isLoading && (
     isBankLike ? (accountCode && accountName)
-      : isReceipt ? (creditCode && creditName)
-        : (debitCode && creditCode)
+      : isCreditCard ? (creditCode && creditName)
+        : isReceipt ? (creditCode && creditName)
+          : (debitCode && creditCode)
   )
 
-  const acceptFiles = isReceipt ? '.pdf,.xlsx,.xls' : isInvoice ? '.pdf,.xlsx,.xls,.csv' : '.pdf,.xlsx,.xls,.csv'
+  const acceptFiles = isCreditCard ? '.pdf' : isReceipt ? '.pdf,.xlsx,.xls' : isInvoice ? '.pdf,.xlsx,.xls,.csv' : '.pdf,.xlsx,.xls,.csv'
 
   const renderAccountSelector = (label: string, code: string, onCodeChange: (c: string) => void, name: string, onNameChange: (n: string) => void, filterKeywords?: string[]) => (
     <div>
@@ -146,7 +149,7 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
               {/* ファイル選択 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  ファイル ({isInvoice ? 'PDF/Excel/CSV' : 'PDF/Excel'})
+                  ファイル ({isCreditCard ? 'PDF' : isInvoice ? 'PDF/Excel/CSV' : 'PDF/Excel/CSV'})
                 </label>
                 <div onClick={() => fileInputRef.current?.click()}
                   className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50">
@@ -189,6 +192,17 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
                   accountCode, setAccountCode, accountName, setAccountName,
                   docType === 'cash-book' ? ['現金'] : ['預金', '当座', '普通', '定期']
                 )
+              ) : isCreditCard ? (
+                <>
+                  {renderAccountSelector(
+                    'クレジットカードの勘定科目（貸方に設定されます）',
+                    creditCode, setCreditCode, creditName, setCreditName,
+                    ['未払', 'クレジ', 'カード']
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    各取引の貸方に {creditName || '—'}({creditCode || '—'}) が設定されます。借方は個別に入力してください。
+                  </p>
+                </>
               ) : isReceipt ? (
                 <>
                   {renderAccountSelector(

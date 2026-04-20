@@ -193,6 +193,50 @@ export default function BankStatementContent() {
           setLoadingProgress(Math.round(progress))
         }, 200)
 
+        if (config.documentType === 'credit-card') {
+          // クレジットカード明細処理
+          const { renderPdfPageToImage, getPdfPageCount } = await import('@/lib/bank-statement/pdf-text-parser')
+          const pageCount = await getPdfPageCount(config.file)
+          const imageDataUrls: string[] = []
+          for (let i = 0; i < pageCount; i++) {
+            imageDataUrls.push(await renderPdfPageToImage(config.file, i + 1, 2))
+          }
+
+          const response = await fetch('/api/bank-statement/credit-card', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images: imageDataUrls }),
+          })
+
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}))
+            throw new Error(data.error || 'クレジットカード明細の解析に失敗しました')
+          }
+
+          const ccData = await response.json()
+          const { creditCardToEntries } = await import('@/lib/bank-statement/credit-card-mapper')
+          const entries = creditCardToEntries(ccData, config.creditCode!, config.creditName!)
+
+          // PDFページ画像を表示用にセット
+          const dummyPages = imageDataUrls.map((url, i) => ({
+            pageIndex: i,
+            transactions: [],
+            openingBalance: 0,
+            closingBalance: 0,
+            isBalanceValid: true,
+            balanceDifference: 0,
+            imageDataUrl: url,
+          }))
+          setPages(dummyPages)
+
+          setJournalEntries(entries)
+          setInfo(`クレジットカード明細: ${entries.length}件の取引を検出（引落日: ${ccData.paymentDate}、引落総額: ¥${(ccData.totalAmount || 0).toLocaleString()}）`)
+          clearInterval(progressTimer)
+          setLoadingProgress(100)
+          setIsLoading(false)
+          return
+        }
+
         if (config.documentType === 'receipt') {
           // レシート・領収書処理
           const { renderPdfPageToImage, getPdfPageCount } = await import('@/lib/bank-statement/pdf-text-parser')

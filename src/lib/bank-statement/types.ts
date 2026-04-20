@@ -157,7 +157,7 @@ export interface ParseResult {
 }
 
 // 書類種別
-export type DocumentType = 'bank-statement' | 'sales-invoice' | 'purchase-invoice' | 'cash-book' | 'receipt'
+export type DocumentType = 'bank-statement' | 'sales-invoice' | 'purchase-invoice' | 'cash-book' | 'receipt' | 'credit-card'
 
 // アップロード設定
 export interface UploadConfig {
@@ -189,4 +189,19 @@ export interface InvoiceData {
   }[]
   pageStart: number         // 開始ページ
   pageEnd: number           // 終了ページ
+}
+
+// クレジットカード明細
+export interface CreditCardData {
+  paymentDate: string          // 引落日 YYYY-MM-DD
+  totalAmount: number          // 引落総額
+  cardName?: string            // カード名称
+  transactions: CreditCardTransaction[]
+}
+
+export interface CreditCardTransaction {
+  usageDate: string            // 利用日 YYYY-MM-DD
+  storeName: string            // 利用店名
+  amount: number               // 利用金額
+  memo?: string                // 備考
 }
