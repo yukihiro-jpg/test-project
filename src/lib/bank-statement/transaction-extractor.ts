@@ -683,7 +683,7 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
     const imageDataUrls: string[] = []
     const pageCount = await getPdfPageCount(file)
     for (let i = 0; i < pageCount; i++) {
-      imageDataUrls.push(await renderPdfPageToImage(file, i + 1, 2))
+      imageDataUrls.push(await renderPdfPageToImage(file, i + 1, 3))
     }
 
     try {
