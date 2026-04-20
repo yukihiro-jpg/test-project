@@ -20,6 +20,7 @@ export interface StatementPage {
   isBalanceValid: boolean
   balanceDifference: number
   imageDataUrl?: string
+  pdfDataUrl?: string   // 元PDFのdata URL（iframe表示用、キャンバス描画失敗時のフォールバック）
 }
 
 // 仕訳行

@@ -131,7 +131,15 @@ export default function StatementViewer({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        {currentPage.imageDataUrl ? (
+        {currentPage.pdfDataUrl ? (
+          // PDFを iframe で表示（pdf.js の描画失敗を回避）
+          <iframe
+            src={`${currentPage.pdfDataUrl}#page=${currentPageIndex + 1}&zoom=${zoom}`}
+            title={`通帳ページ ${currentPageIndex + 1}`}
+            className="w-full h-full border-0"
+            style={{ minHeight: '600px' }}
+          />
+        ) : currentPage.imageDataUrl ? (
           <div className="inline-block" style={{ width: `${zoom}%`, minWidth: '100%' }}>
             <img
               src={currentPage.imageDataUrl}

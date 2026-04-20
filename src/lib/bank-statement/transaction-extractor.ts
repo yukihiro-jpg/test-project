@@ -555,6 +555,7 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
           const pdfPageCount = await getPdfPageCount(file)
           const imageUrls: string[] = []
           for (let i = 0; i < pdfPageCount; i++) imageUrls.push(await renderPdfPageToImage(file, i + 1, 2))
+          const pdfDataUrlForViewer = `data:application/pdf;base64,${pdfBase64}`
           const statementPages: StatementPage[] = []
           for (let i = 0; i < pdfPageCount; i++) {
             const pg = data.pages.find((p: { pageIndex: number }) => p.pageIndex === i)
@@ -570,6 +571,7 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
               pageIndex: i, transactions: txs,
               openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
               imageDataUrl: imageUrls[i],
+              pdfDataUrl: pdfDataUrlForViewer,
             })
           }
           console.log(`PDF-direct OCR succeeded (scanned path): ${data.totalCount} transactions`)
@@ -747,6 +749,7 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
           for (let i = 0; i < pageCount; i++) {
             imageDataUrls.push(await renderPdfPageToImage(file, i + 1, 2))
           }
+          const pdfDataUrlForViewer = `data:application/pdf;base64,${pdfBase64}`
           const statementPages: StatementPage[] = []
           for (let i = 0; i < pageCount; i++) {
             const pageData = data.pages.find((p: { pageIndex: number }) => p.pageIndex === i)
@@ -762,6 +765,7 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
               pageIndex: i, transactions: txs,
               openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
               imageDataUrl: imageDataUrls[i],
+              pdfDataUrl: pdfDataUrlForViewer,
             })
           }
           console.log(`PDF-direct OCR succeeded: ${data.totalCount} transactions`)
