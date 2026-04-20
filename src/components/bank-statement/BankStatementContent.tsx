@@ -14,6 +14,8 @@ import { generateQuestionList, downloadQuestionExcel } from '@/lib/bank-statemen
 import QuestionListDialog from '@/components/bank-statement/QuestionListDialog'
 import TempDataDialog from '@/components/bank-statement/TempDataDialog'
 import DriveSyncButton from '@/components/bank-statement/DriveSyncButton'
+import ProcessingStatusTable from '@/components/bank-statement/ProcessingStatusTable'
+import { updateProcessingStatus } from '@/lib/bank-statement/processing-status-store'
 import { applyCompoundAutoAmounts, downloadCsv } from '@/lib/bank-statement/csv-generator'
 import { learnAllFromEntries } from '@/lib/bank-statement/pattern-store'
 import ResizableSplitPanel from '@/components/bank-statement/ResizableSplitPanel'
@@ -64,6 +66,7 @@ export default function BankStatementContent() {
   const [showTempData, setShowTempData] = useState(false)
   const [tempCount, setTempCount] = useState(() => getTempEntryCount())
   const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set())
+  const [processingStatusVersion, setProcessingStatusVersion] = useState(0)
 
   // 顧問先選択ハンドラ
   const handleClientSelect = useCallback((client: Client) => {
@@ -503,6 +506,20 @@ export default function BankStatementContent() {
     const totalCount = appendTempEntries(completed)
     setTempCount(totalCount)
 
+    // 処理状況を更新: 現在アップロードされた通帳の科目コード単位で最終取引日を記録
+    if (uploadConfig?.accountCode) {
+      const dates = completed.map((e) => e.date).filter((d) => d && d.length === 8)
+      if (dates.length > 0) {
+        updateProcessingStatus(
+          uploadConfig.accountCode,
+          uploadConfig.accountName || '',
+          dates,
+          completed.length,
+        )
+        setProcessingStatusVersion((v) => v + 1)
+      }
+    }
+
     if (hasSelection) {
       // 選択分を保存、残りは画面に残す
       setJournalEntries(journalEntries.filter((e) => !targetIds.has(e.id)))
@@ -711,13 +728,14 @@ export default function BankStatementContent() {
           }
         />
       ) : (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center text-gray-500">
+        <div className="flex-1 overflow-auto p-6">
+          <div className="text-center text-gray-500 mb-4">
             <p className="text-lg mb-2">通帳PDFまたはExcelファイルをアップロードしてください</p>
             <p className="text-sm">
               ヘッダーの「アップロード」ボタンからファイルを選択できます
             </p>
           </div>
+          <ProcessingStatusTable clientId={selectedClient?.id || null} refreshKey={processingStatusVersion} />
         </div>
       )}
 

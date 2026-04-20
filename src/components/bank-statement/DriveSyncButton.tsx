@@ -12,7 +12,7 @@ type SyncState = 'idle' | 'uploading' | 'downloading' | 'error'
 const STORAGE_KEYS = [
   'patterns', 'account-master', 'sub-account-master',
   'account-tax-master', 'temp-entries', 'fixed-journals',
-  'bank-templates',
+  'bank-templates', 'processing-status',
 ]
 
 export default function DriveSyncButton({ clientId, clientName }: Props) {
