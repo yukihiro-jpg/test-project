@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 
 interface Props {
   clientId: string | null
+  clientName: string | null
 }
 
 type SyncState = 'idle' | 'uploading' | 'downloading' | 'error'
@@ -14,7 +15,7 @@ const STORAGE_KEYS = [
   'bank-templates',
 ]
 
-export default function DriveSyncButton({ clientId }: Props) {
+export default function DriveSyncButton({ clientId, clientName }: Props) {
   const [connected, setConnected] = useState(false)
   const [syncState, setSyncState] = useState<SyncState>('idle')
   const [message, setMessage] = useState('')
@@ -49,21 +50,21 @@ export default function DriveSyncButton({ clientId }: Props) {
     setSyncState('uploading')
     setMessage('Drive にアップロード中...')
     try {
-      const items: { clientId: string; key: string; data: unknown }[] = []
+      const items: { clientId: string; clientName: string | null; key: string; data: unknown }[] = []
 
       // 顧問先固有データ
       for (const key of STORAGE_KEYS) {
         const storageKey = getClientStorageKey(key)
         const raw = localStorage.getItem(storageKey)
         if (raw) {
-          try { items.push({ clientId, key, data: JSON.parse(raw) }) } catch { /* skip */ }
+          try { items.push({ clientId, clientName, key, data: JSON.parse(raw) }) } catch { /* skip */ }
         }
       }
 
       // 顧問先一覧（グローバル）
       const clientList = localStorage.getItem('bank-statement-clients')
       if (clientList) {
-        try { items.push({ clientId: '_global', key: 'clients', data: JSON.parse(clientList) }) } catch { /* skip */ }
+        try { items.push({ clientId: '_global', clientName: null, key: 'clients', data: JSON.parse(clientList) }) } catch { /* skip */ }
       }
 
       if (items.length === 0) {
@@ -97,8 +98,9 @@ export default function DriveSyncButton({ clientId }: Props) {
       let downloaded = 0
 
       // 顧問先固有データ
+      const nameParam = clientName ? `&clientName=${encodeURIComponent(clientName)}` : ''
       for (const key of STORAGE_KEYS) {
-        const res = await fetch(`/api/drive?clientId=${encodeURIComponent(clientId)}&key=${encodeURIComponent(key)}`)
+        const res = await fetch(`/api/drive?clientId=${encodeURIComponent(clientId)}${nameParam}&key=${encodeURIComponent(key)}`)
         if (!res.ok) continue
         const { data } = await res.json()
         if (data != null) {

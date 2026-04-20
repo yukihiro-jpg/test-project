@@ -34,9 +34,16 @@ async function getAuthedDrive() {
 
 const ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || ''
 
+// フォルダ名に使えない/面倒な文字をサニタイズ
+function sanitizeFolderName(name: string): string {
+  return name.replace(/[/\\'"`]/g, '_').trim() || 'unnamed'
+}
+
 async function findOrCreateFolder(drive: ReturnType<typeof google.drive>, name: string, parentId: string): Promise<string> {
+  const safeName = sanitizeFolderName(name)
+  const escapedName = safeName.replace(/'/g, "\\'")
   const res = await drive.files.list({
-    q: `name='${name}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    q: `name='${escapedName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
     fields: 'files(id)',
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
@@ -45,7 +52,61 @@ async function findOrCreateFolder(drive: ReturnType<typeof google.drive>, name: 
 
   const folder = await drive.files.create({
     requestBody: {
-      name,
+      name: safeName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentId],
+    },
+    fields: 'id',
+    supportsAllDrives: true,
+  })
+  return folder.data.id!
+}
+
+/**
+ * 顧問先フォルダを検索し、必要に応じて:
+ * - 顧問先名で存在: それを使用
+ * - 顧問先IDの旧フォルダが存在: リネームして使用
+ * - どちらも無い: 顧問先名で新規作成
+ */
+async function getOrMigrateClientFolder(
+  drive: ReturnType<typeof google.drive>,
+  clientId: string,
+  clientName: string,
+  parentId: string,
+): Promise<string> {
+  const safeName = sanitizeFolderName(clientName)
+  const escapedName = safeName.replace(/'/g, "\\'")
+
+  // 1. 顧問先名のフォルダを検索
+  const byName = await drive.files.list({
+    q: `name='${escapedName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    fields: 'files(id)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  })
+  if (byName.data.files && byName.data.files.length > 0) return byName.data.files[0].id!
+
+  // 2. 顧問先IDの旧フォルダを検索 → 見つかればリネーム
+  const byId = await drive.files.list({
+    q: `name='${clientId}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    fields: 'files(id)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  })
+  if (byId.data.files && byId.data.files.length > 0) {
+    const folderId = byId.data.files[0].id!
+    await drive.files.update({
+      fileId: folderId,
+      requestBody: { name: safeName },
+      supportsAllDrives: true,
+    })
+    return folderId
+  }
+
+  // 3. 新規作成（顧問先名）
+  const folder = await drive.files.create({
+    requestBody: {
+      name: safeName,
       mimeType: 'application/vnd.google-apps.folder',
       parents: [parentId],
     },
@@ -101,16 +162,29 @@ async function writeFile(drive: ReturnType<typeof google.drive>, fileName: strin
   }
 }
 
+async function resolveClientFolder(
+  drive: ReturnType<typeof google.drive>,
+  clientId: string,
+  clientName: string | null,
+  appFolder: string,
+): Promise<string> {
+  if (clientId === '_global' || !clientName) {
+    return findOrCreateFolder(drive, clientId, appFolder)
+  }
+  return getOrMigrateClientFolder(drive, clientId, clientName, appFolder)
+}
+
 // GET: Drive からデータ読み込み
 export async function GET(request: NextRequest) {
   try {
     const drive = await getAuthedDrive()
     const clientId = request.nextUrl.searchParams.get('clientId') || '_global'
+    const clientName = request.nextUrl.searchParams.get('clientName')
     const key = request.nextUrl.searchParams.get('key')
     if (!key) return NextResponse.json({ error: 'key is required' }, { status: 400 })
 
     const appFolder = await findOrCreateFolder(drive, 'accounting-app-data', ROOT_FOLDER_ID)
-    const clientFolder = await findOrCreateFolder(drive, clientId, appFolder)
+    const clientFolder = await resolveClientFolder(drive, clientId, clientName, appFolder)
     const data = await readFile(drive, `${key}.json`, clientFolder)
 
     return NextResponse.json({ data: data ? JSON.parse(data) : null })
@@ -127,11 +201,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const drive = await getAuthedDrive()
-    const { clientId = '_global', key, data } = await request.json()
+    const { clientId = '_global', clientName = null, key, data } = await request.json()
     if (!key) return NextResponse.json({ error: 'key is required' }, { status: 400 })
 
     const appFolder = await findOrCreateFolder(drive, 'accounting-app-data', ROOT_FOLDER_ID)
-    const clientFolder = await findOrCreateFolder(drive, clientId, appFolder)
+    const clientFolder = await resolveClientFolder(drive, clientId, clientName, appFolder)
     await writeFile(drive, `${key}.json`, clientFolder, JSON.stringify(data))
 
     return NextResponse.json({ success: true })
@@ -148,15 +222,16 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const drive = await getAuthedDrive()
-    const { items } = await request.json() as { items: { clientId: string; key: string; data: unknown }[] }
+    const { items } = await request.json() as { items: { clientId: string; clientName?: string | null; key: string; data: unknown }[] }
 
     const appFolder = await findOrCreateFolder(drive, 'accounting-app-data', ROOT_FOLDER_ID)
     const folderCache: Record<string, string> = {}
 
     for (const item of items) {
       const cid = item.clientId || '_global'
+      const cname = item.clientName || null
       if (!folderCache[cid]) {
-        folderCache[cid] = await findOrCreateFolder(drive, cid, appFolder)
+        folderCache[cid] = await resolveClientFolder(drive, cid, cname, appFolder)
       }
       await writeFile(drive, `${item.key}.json`, folderCache[cid], JSON.stringify(item.data))
     }

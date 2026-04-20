@@ -578,7 +578,7 @@ export default function BankStatementContent() {
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <DriveSyncButton clientId={selectedClient?.id || null} />
+          <DriveSyncButton clientId={selectedClient?.id || null} clientName={selectedClient?.name || null} />
           <AccountMasterUploader
             accountMaster={accountMaster}
             subAccountMaster={subAccountMaster}
