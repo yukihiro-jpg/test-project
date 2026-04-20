@@ -9,6 +9,77 @@ import { parsePdfText, renderPdfPageToImage, getPdfPageCount } from './pdf-text-
 import { parseExcel } from './excel-parser'
 import { updatePageBalances } from './balance-validator'
 import { getTemplatePromptAddition, learnBankTemplate } from './bank-template'
+import { PDFDocument } from 'pdf-lib'
+
+interface OcrPdfPage {
+  pageIndex: number
+  transactions: {
+    date: string
+    description: string
+    deposit: number | null
+    withdrawal: number | null
+    balance: number
+  }[]
+}
+
+/**
+ * PDFをチャンク分割して並列Gemini処理
+ * 大量ページでも一定時間で処理できる
+ */
+async function processPdfInParallel(
+  file: File,
+  chunkSize: number = 3,
+): Promise<{ totalCount: number; pages: OcrPdfPage[] }> {
+  const pdfBuffer = await file.arrayBuffer()
+  const sourcePdf = await PDFDocument.load(pdfBuffer)
+  const totalPages = sourcePdf.getPageCount()
+
+  const chunks: { startPage: number; pdfBase64: string }[] = []
+  for (let start = 0; start < totalPages; start += chunkSize) {
+    const end = Math.min(start + chunkSize, totalPages)
+    const chunkDoc = await PDFDocument.create()
+    const pageIndices = Array.from({ length: end - start }, (_, i) => start + i)
+    const copiedPages = await chunkDoc.copyPages(sourcePdf, pageIndices)
+    for (const p of copiedPages) chunkDoc.addPage(p)
+    const bytes = await chunkDoc.save()
+    let binary = ''
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+    const base64 = btoa(binary)
+    chunks.push({ startPage: start, pdfBase64: base64 })
+  }
+
+  console.log(`PDF split into ${chunks.length} chunks of up to ${chunkSize} pages`)
+  const startTime = Date.now()
+
+  const promises = chunks.map((chunk) =>
+    fetch('/api/bank-statement/ocr-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdfData: chunk.pdfBase64 }),
+    })
+      .then((r) => (r.ok ? r.json() : { totalCount: 0, pages: [] }))
+      .then((data) => ({ data, startPage: chunk.startPage }))
+      .catch(() => ({ data: { totalCount: 0, pages: [] }, startPage: chunk.startPage })),
+  )
+  const results = await Promise.all(promises)
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+  console.log(`All ${chunks.length} chunks completed in ${elapsed}s (parallel)`)
+
+  // マージ: 各チャンク内のpageIndexを全体のpageIndexに変換
+  const mergedMap = new Map<number, OcrPdfPage>()
+  let totalCount = 0
+  for (const { data, startPage } of results) {
+    totalCount += data.totalCount || 0
+    for (const pg of data.pages || []) {
+      const globalIdx = startPage + pg.pageIndex
+      const existing = mergedMap.get(globalIdx)
+      if (existing) existing.transactions.push(...pg.transactions)
+      else mergedMap.set(globalIdx, { pageIndex: globalIdx, transactions: pg.transactions })
+    }
+  }
+  const pages = Array.from(mergedMap.values()).sort((a, b) => a.pageIndex - b.pageIndex)
+  return { totalCount, pages }
+}
 
 let idCounter = 0
 function generateId(): string {
@@ -539,53 +610,40 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
   const { pages: rawPages, isTextPdf } = await parsePdfText(file)
 
   if (!isTextPdf) {
-    // スキャンPDF: まず PDF を直接 Gemini に送信（画像化なし、レンダリング問題を回避）
-    console.log('Scanned/complex PDF detected, trying PDF-direct Gemini first')
+    // スキャンPDF: まず PDF を直接 Gemini に並列送信（チャンク分割）
+    console.log('Scanned/complex PDF detected, trying PDF-direct Gemini first (parallel)')
     try {
-      const pdfBuffer = await file.arrayBuffer()
-      const pdfBase64 = btoa(new Uint8Array(pdfBuffer).reduce((acc, b) => acc + String.fromCharCode(b), ''))
-      const res = await fetch('/api/bank-statement/ocr-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdfData: pdfBase64 }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.totalCount > 0) {
-          const pdfPageCount = await getPdfPageCount(file)
-          const imageUrls: string[] = []
-          for (let i = 0; i < pdfPageCount; i++) imageUrls.push(await renderPdfPageToImage(file, i + 1, 2))
-          const pdfDataUrlForViewer = `data:application/pdf;base64,${pdfBase64}`
-          const statementPages: StatementPage[] = []
-          for (let i = 0; i < pdfPageCount; i++) {
-            const pg = data.pages.find((p: { pageIndex: number }) => p.pageIndex === i)
-            const txs: BankTransaction[] = (pg?.transactions || []).map((t: {
-              date: string; description: string; deposit: number | null;
-              withdrawal: number | null; balance: number
-            }, ri: number) => ({
-              id: generateId(), pageIndex: i, rowIndex: ri,
-              date: t.date, description: t.description || '',
-              deposit: t.deposit ?? null, withdrawal: t.withdrawal ?? null, balance: t.balance ?? 0,
-            }))
-            statementPages.push({
-              pageIndex: i, transactions: txs,
-              openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
-              imageDataUrl: imageUrls[i],
-              pdfDataUrl: pdfDataUrlForViewer,
-            })
-          }
-          console.log(`PDF-direct OCR succeeded (scanned path): ${data.totalCount} transactions`)
-          // テンプレート学習
-          if (accountCode) {
-            const allTx = statementPages.flatMap((p) => p.transactions)
-            if (allTx.length > 0) learnBankTemplate(accountCode, accountCode, allTx)
-          }
-          return { pages: updatePageBalances(statementPages), sourceType: 'pdf-ocr', needsColumnMapping: false }
+      const data = await processPdfInParallel(file, 3)
+      if (data.totalCount > 0) {
+        const pdfBuffer = await file.arrayBuffer()
+        let binary = ''
+        const bytes = new Uint8Array(pdfBuffer)
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+        const pdfBase64 = btoa(binary)
+        const pdfDataUrlForViewer = `data:application/pdf;base64,${pdfBase64}`
+        const pdfPageCount = await getPdfPageCount(file)
+        const statementPages: StatementPage[] = []
+        for (let i = 0; i < pdfPageCount; i++) {
+          const pg = data.pages.find((p) => p.pageIndex === i)
+          const txs: BankTransaction[] = (pg?.transactions || []).map((t, ri) => ({
+            id: generateId(), pageIndex: i, rowIndex: ri,
+            date: t.date, description: t.description || '',
+            deposit: t.deposit ?? null, withdrawal: t.withdrawal ?? null, balance: t.balance ?? 0,
+          }))
+          statementPages.push({
+            pageIndex: i, transactions: txs,
+            openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
+            pdfDataUrl: pdfDataUrlForViewer,
+          })
         }
-        console.log('PDF-direct OCR returned 0 transactions (scanned path), falling back to image OCR')
-      } else {
-        console.log('PDF-direct OCR HTTP error (scanned path), falling back to image OCR')
+        console.log(`PDF-direct OCR succeeded (scanned path): ${data.totalCount} transactions`)
+        if (accountCode) {
+          const allTx = statementPages.flatMap((p) => p.transactions)
+          if (allTx.length > 0) learnBankTemplate(accountCode, accountCode, allTx)
+        }
+        return { pages: updatePageBalances(statementPages), sourceType: 'pdf-ocr', needsColumnMapping: false }
       }
+      console.log('PDF-direct OCR returned 0 transactions (scanned path), falling back to image OCR')
     } catch (e) {
       console.log('PDF-direct OCR error (scanned path), falling back to image OCR:', e)
     }
@@ -730,53 +788,39 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
 
   if (!mapping) {
     // テキスト抽出はできたが列検出に失敗 → Gemini OCRにフォールバック
-    console.log('Text PDF column detection failed, trying PDF-direct Gemini')
+    console.log('Text PDF column detection failed, trying PDF-direct Gemini (parallel)')
 
-    // 1段目: PDFを直接Geminiに送信（画像変換せず。複雑なレイアウトでも確実）
+    // 1段目: PDF を直接 Gemini に並列送信（チャンク分割）
     try {
-      const pdfBuffer = await file.arrayBuffer()
-      const pdfBase64 = btoa(new Uint8Array(pdfBuffer).reduce((acc, b) => acc + String.fromCharCode(b), ''))
-      const res = await fetch('/api/bank-statement/ocr-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdfData: pdfBase64 }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.totalCount > 0) {
-          const pageCount = await getPdfPageCount(file)
-          const imageDataUrls: string[] = []
-          for (let i = 0; i < pageCount; i++) {
-            imageDataUrls.push(await renderPdfPageToImage(file, i + 1, 2))
-          }
-          const pdfDataUrlForViewer = `data:application/pdf;base64,${pdfBase64}`
-          const statementPages: StatementPage[] = []
-          for (let i = 0; i < pageCount; i++) {
-            const pageData = data.pages.find((p: { pageIndex: number }) => p.pageIndex === i)
-            const txs: BankTransaction[] = (pageData?.transactions || []).map((t: {
-              date: string; description: string; deposit: number | null;
-              withdrawal: number | null; balance: number
-            }, ri: number) => ({
-              id: generateId(), pageIndex: i, rowIndex: ri,
-              date: t.date, description: t.description || '',
-              deposit: t.deposit ?? null, withdrawal: t.withdrawal ?? null, balance: t.balance ?? 0,
-            }))
-            statementPages.push({
-              pageIndex: i, transactions: txs,
-              openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
-              imageDataUrl: imageDataUrls[i],
-              pdfDataUrl: pdfDataUrlForViewer,
-            })
-          }
-          console.log(`PDF-direct OCR succeeded: ${data.totalCount} transactions`)
-          return { pages: updatePageBalances(statementPages), sourceType: 'pdf-ocr', needsColumnMapping: false }
+      const data = await processPdfInParallel(file, 3)
+      if (data.totalCount > 0) {
+        const pdfBuffer = await file.arrayBuffer()
+        let binary = ''
+        const pdfBytes = new Uint8Array(pdfBuffer)
+        for (let i = 0; i < pdfBytes.length; i++) binary += String.fromCharCode(pdfBytes[i])
+        const pdfBase64 = btoa(binary)
+        const pdfDataUrlForViewer = `data:application/pdf;base64,${pdfBase64}`
+        const pageCount = await getPdfPageCount(file)
+        const statementPages: StatementPage[] = []
+        for (let i = 0; i < pageCount; i++) {
+          const pageData = data.pages.find((p) => p.pageIndex === i)
+          const txs: BankTransaction[] = (pageData?.transactions || []).map((t, ri) => ({
+            id: generateId(), pageIndex: i, rowIndex: ri,
+            date: t.date, description: t.description || '',
+            deposit: t.deposit ?? null, withdrawal: t.withdrawal ?? null, balance: t.balance ?? 0,
+          }))
+          statementPages.push({
+            pageIndex: i, transactions: txs,
+            openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
+            pdfDataUrl: pdfDataUrlForViewer,
+          })
         }
-        console.log('PDF-direct OCR returned 0 transactions, falling back to image OCR')
-      } else {
-        console.log('PDF-direct OCR failed with HTTP error, falling back to image OCR')
+        console.log(`PDF-direct OCR succeeded: ${data.totalCount} transactions`)
+        return { pages: updatePageBalances(statementPages), sourceType: 'pdf-ocr', needsColumnMapping: false }
       }
+      console.log('PDF-direct OCR returned 0 transactions, falling back to image OCR')
     } catch (e) {
-      console.log('PDF-direct OCR threw error, falling back to image OCR:', e)
+      console.log('PDF-direct OCR error, falling back to image OCR:', e)
     }
 
     // 2段目: 画像ベースのOCR（従来ロジック）

@@ -39,6 +39,9 @@ export default function StatementViewer({
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     // 画像エリアでのドラッグ開始
     if (!containerRef.current) return
+    // iframe(PDF viewer)上ではドラッグ禁止（iframe内で独自スクロール）
+    const target = e.target as HTMLElement
+    if (target.tagName === 'IFRAME') return
     setIsDragging(true)
     setDragStart({ x: e.clientX, y: e.clientY })
     setScrollStart({
@@ -132,12 +135,14 @@ export default function StatementViewer({
         onMouseLeave={handleMouseUp}
       >
         {currentPage.pdfDataUrl ? (
-          // PDFを iframe で表示（pdf.js の描画失敗を回避）
+          // PDFを iframe で表示。ズーム変更時に再レンダでURLフラグメントを更新。
+          // ドラッグ移動はブラウザ標準PDFビューアのスクロールに任せる
           <iframe
+            key={`${currentPageIndex}-${zoom}`}
             src={`${currentPage.pdfDataUrl}#page=${currentPageIndex + 1}&zoom=${zoom}`}
             title={`通帳ページ ${currentPageIndex + 1}`}
-            className="w-full h-full border-0"
-            style={{ minHeight: '600px' }}
+            className="w-full border-0"
+            style={{ height: 'calc(100vh - 200px)', minHeight: '600px' }}
           />
         ) : currentPage.imageDataUrl ? (
           <div className="inline-block" style={{ width: `${zoom}%`, minWidth: '100%' }}>
