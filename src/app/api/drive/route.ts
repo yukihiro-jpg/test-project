@@ -95,13 +95,20 @@ async function getOrMigrateClientFolder(
   })
   if (byId.data.files && byId.data.files.length > 0) {
     const folderId = byId.data.files[0].id!
-    await drive.files.update({
-      fileId: folderId,
-      requestBody: { name: safeName },
-      supportsAllDrives: true,
-    })
+    console.log(`[Drive] Renaming folder: ${clientId} → ${safeName} (id=${folderId})`)
+    try {
+      await drive.files.update({
+        fileId: folderId,
+        requestBody: { name: safeName },
+        supportsAllDrives: true,
+      })
+      console.log(`[Drive] Rename succeeded`)
+    } catch (e) {
+      console.error(`[Drive] Rename FAILED:`, e)
+    }
     return folderId
   }
+  console.log(`[Drive] No existing folder for clientId=${clientId}, will create new with name=${safeName}`)
 
   // 3. 新規作成（顧問先名）
   const folder = await drive.files.create({
@@ -168,7 +175,9 @@ async function resolveClientFolder(
   clientName: string | null,
   appFolder: string,
 ): Promise<string> {
+  console.log(`[Drive] resolveClientFolder clientId=${clientId}, clientName=${clientName}`)
   if (clientId === '_global' || !clientName) {
+    console.log(`[Drive] fallback to findOrCreateFolder by id`)
     return findOrCreateFolder(drive, clientId, appFolder)
   }
   return getOrMigrateClientFolder(drive, clientId, clientName, appFolder)
