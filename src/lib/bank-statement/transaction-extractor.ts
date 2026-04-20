@@ -539,10 +539,59 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
   const { pages: rawPages, isTextPdf } = await parsePdfText(file)
 
   if (!isTextPdf) {
-    // スキャンPDF: Gemini APIでOCR処理
+    // スキャンPDF: まず PDF を直接 Gemini に送信（画像化なし、レンダリング問題を回避）
+    console.log('Scanned/complex PDF detected, trying PDF-direct Gemini first')
+    try {
+      const pdfBuffer = await file.arrayBuffer()
+      const pdfBase64 = btoa(new Uint8Array(pdfBuffer).reduce((acc, b) => acc + String.fromCharCode(b), ''))
+      const res = await fetch('/api/bank-statement/ocr-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdfData: pdfBase64 }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.totalCount > 0) {
+          const pdfPageCount = await getPdfPageCount(file)
+          const imageUrls: string[] = []
+          for (let i = 0; i < pdfPageCount; i++) imageUrls.push(await renderPdfPageToImage(file, i + 1, 2))
+          const statementPages: StatementPage[] = []
+          for (let i = 0; i < pdfPageCount; i++) {
+            const pg = data.pages.find((p: { pageIndex: number }) => p.pageIndex === i)
+            const txs: BankTransaction[] = (pg?.transactions || []).map((t: {
+              date: string; description: string; deposit: number | null;
+              withdrawal: number | null; balance: number
+            }, ri: number) => ({
+              id: generateId(), pageIndex: i, rowIndex: ri,
+              date: t.date, description: t.description || '',
+              deposit: t.deposit ?? null, withdrawal: t.withdrawal ?? null, balance: t.balance ?? 0,
+            }))
+            statementPages.push({
+              pageIndex: i, transactions: txs,
+              openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
+              imageDataUrl: imageUrls[i],
+            })
+          }
+          console.log(`PDF-direct OCR succeeded (scanned path): ${data.totalCount} transactions`)
+          // テンプレート学習
+          if (accountCode) {
+            const allTx = statementPages.flatMap((p) => p.transactions)
+            if (allTx.length > 0) learnBankTemplate(accountCode, accountCode, allTx)
+          }
+          return { pages: updatePageBalances(statementPages), sourceType: 'pdf-ocr', needsColumnMapping: false }
+        }
+        console.log('PDF-direct OCR returned 0 transactions (scanned path), falling back to image OCR')
+      } else {
+        console.log('PDF-direct OCR HTTP error (scanned path), falling back to image OCR')
+      }
+    } catch (e) {
+      console.log('PDF-direct OCR error (scanned path), falling back to image OCR:', e)
+    }
+
+    // 従来の画像ベースOCR
     const imageDataUrls: string[] = []
     const pageCount = rawPages.length > 0 ? rawPages.length : await getPdfPageCount(file)
-    console.log(`Scanned PDF detected: ${pageCount} pages`)
+    console.log(`Falling back to image-based OCR: ${pageCount} pages`)
     for (let i = 0; i < pageCount; i++) {
       const imageDataUrl = await renderPdfPageToImage(file, i + 1, 2)
       imageDataUrls.push(imageDataUrl)
