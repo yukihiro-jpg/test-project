@@ -679,7 +679,55 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
 
   if (!mapping) {
     // テキスト抽出はできたが列検出に失敗 → Gemini OCRにフォールバック
-    console.log('Text PDF column detection failed, falling back to Gemini OCR')
+    console.log('Text PDF column detection failed, trying PDF-direct Gemini')
+
+    // 1段目: PDFを直接Geminiに送信（画像変換せず。複雑なレイアウトでも確実）
+    try {
+      const pdfBuffer = await file.arrayBuffer()
+      const pdfBase64 = btoa(new Uint8Array(pdfBuffer).reduce((acc, b) => acc + String.fromCharCode(b), ''))
+      const res = await fetch('/api/bank-statement/ocr-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdfData: pdfBase64 }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.totalCount > 0) {
+          const pageCount = await getPdfPageCount(file)
+          const imageDataUrls: string[] = []
+          for (let i = 0; i < pageCount; i++) {
+            imageDataUrls.push(await renderPdfPageToImage(file, i + 1, 2))
+          }
+          const statementPages: StatementPage[] = []
+          for (let i = 0; i < pageCount; i++) {
+            const pageData = data.pages.find((p: { pageIndex: number }) => p.pageIndex === i)
+            const txs: BankTransaction[] = (pageData?.transactions || []).map((t: {
+              date: string; description: string; deposit: number | null;
+              withdrawal: number | null; balance: number
+            }, ri: number) => ({
+              id: generateId(), pageIndex: i, rowIndex: ri,
+              date: t.date, description: t.description || '',
+              deposit: t.deposit ?? null, withdrawal: t.withdrawal ?? null, balance: t.balance ?? 0,
+            }))
+            statementPages.push({
+              pageIndex: i, transactions: txs,
+              openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
+              imageDataUrl: imageDataUrls[i],
+            })
+          }
+          console.log(`PDF-direct OCR succeeded: ${data.totalCount} transactions`)
+          return { pages: updatePageBalances(statementPages), sourceType: 'pdf-ocr', needsColumnMapping: false }
+        }
+        console.log('PDF-direct OCR returned 0 transactions, falling back to image OCR')
+      } else {
+        console.log('PDF-direct OCR failed with HTTP error, falling back to image OCR')
+      }
+    } catch (e) {
+      console.log('PDF-direct OCR threw error, falling back to image OCR:', e)
+    }
+
+    // 2段目: 画像ベースのOCR（従来ロジック）
+    console.log('Falling back to image-based Gemini OCR')
     const imageDataUrls: string[] = []
     const pageCount = await getPdfPageCount(file)
     for (let i = 0; i < pageCount; i++) {
