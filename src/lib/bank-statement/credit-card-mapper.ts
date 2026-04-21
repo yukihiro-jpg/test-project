@@ -65,6 +65,7 @@ export function creditCardToEntries(
     }
 
     // マイナス金額（返品・キャンセル）→ 貸借逆転
+    // 消費税CDは常に設定（返品でも課税仕入のまま）
     const entry: JournalEntry = {
       id: generateEntryId(),
       transactionId: null,
@@ -73,14 +74,14 @@ export function creditCardToEntries(
       debitName: isRefund ? creditCardAccountName : expenseName,
       debitSubCode: isRefund ? (creditCardSubCode || '') : expenseSubCode,
       debitSubName: isRefund ? (creditCardSubName || '') : expenseSubName,
-      debitTaxType: isRefund ? '' : taxCategory,
+      debitTaxType: taxCategory,
       debitIndustry: '',
       debitTaxInclude: '',
       debitAmount: amount,
       debitTaxAmount: 0,
-      debitTaxCode: isRefund ? '' : taxCode,
-      debitTaxRate: !isRefund && taxCode ? '4' : '',
-      debitBusinessType: isRefund ? '' : businessType,
+      debitTaxCode: taxCode,
+      debitTaxRate: taxCode ? '4' : '',
+      debitBusinessType: businessType,
       creditCode: isRefund ? expenseCode : creditCardAccountCode,
       creditName: isRefund ? expenseName : creditCardAccountName,
       creditSubCode: isRefund ? expenseSubCode : (creditCardSubCode || ''),
