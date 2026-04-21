@@ -747,6 +747,21 @@ export default function BankStatementContent() {
             />
           }
         />
+      ) : journalEntries.length > 0 ? (
+        // ページ画像なし（CSV/Excel等）の場合は仕訳テーブルのみ全幅表示
+        <JournalEntryTable
+          entries={journalEntries}
+          accountMaster={accountMaster}
+          subAccountMaster={subAccountMaster}
+          selectedEntryId={selectedEntryId}
+          onSelect={handleEntrySelect}
+          onEntriesChange={setJournalEntries}
+          onSubAccountUpdate={handleSubAccountMasterUpdate}
+          pages={pages}
+          bankAccountCode={uploadConfig?.accountCode || ''}
+          clientTaxType={selectedClient?.taxType || 'standard'}
+          onSelectionChange={setSelectedEntryIds}
+        />
       ) : (
         <div className="flex-1 overflow-auto p-6">
           <div className="text-center text-gray-500 mb-4">
