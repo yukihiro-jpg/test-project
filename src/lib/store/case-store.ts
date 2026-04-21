@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   Case, Decedent, Heir, Assets, DivisionPlan, DivisionEntry,
-  GiftPlan, GiftPlanEntry, CaseWorkflow,
+  GiftPlan, GiftPlanEntry, CaseWorkflow, FundsMovement,
   LandAsset, BuildingAsset, CashDepositAsset, ListedStockAsset,
   UnlistedStockAsset, InsuranceAsset, OtherAsset, DebtItem,
   FuneralExpense, CompensationPayment,
@@ -90,6 +90,9 @@ interface CaseStore {
 
   // ワークフロー
   updateWorkflow: (workflow: CaseWorkflow) => void;
+
+  // 預金移動表
+  updateFundsMovement: (fundsMovement: FundsMovement) => void;
 }
 
 export const useCaseStore = create<CaseStore>((set, get) => ({
@@ -220,5 +223,9 @@ export const useCaseStore = create<CaseStore>((set, get) => ({
 
   updateWorkflow: (workflow) => {
     get().updateCurrentCase({ workflow });
+  },
+
+  updateFundsMovement: (fundsMovement) => {
+    get().updateCurrentCase({ fundsMovement });
   },
 }));

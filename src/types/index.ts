@@ -35,6 +35,7 @@ export interface Case {
   secondaryConfig?: SecondaryInheritanceConfig;
   taxSavingStrategies?: TaxSavingStrategy[];
   workflow?: CaseWorkflow;
+  fundsMovement?: FundsMovement;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,6 +79,7 @@ export interface Assets {
 export type LandCategory = '宅地' | '田' | '畑' | '山林' | '原野' | '牧場' | '池沼' | '鉱泉地' | '雑種地';
 export type EvaluationMethod = 'rosenka' | 'bairitsu';
 export type SpecialLandUseType = 'residence' | 'business' | 'rental';
+export type LandUsageType = '自用' | '貸家' | '貸家建付地' | '貸地' | '私道' | '使用貸借';
 
 export interface LandShapeCorrection {
   frontageDistance: number;
@@ -102,43 +104,115 @@ export interface SpecialLandUse {
 
 export interface LandAsset {
   id: string;
-  location: string;
-  landNumber: string;
-  landCategory: LandCategory;
-  area: number;
+  // 所在・識別
+  location: string;                  // 所在地
+  landNumber: string;                // 地番
+  referenceNote?: string;            // 参照・備考
+  // 持分
+  ownershipRatio?: string;           // 持分（例: "1/2"）
+  // 地目
+  landCategory: LandCategory;        // 登記地目
+  registeredCategory?: string;       // 登記地目（評価証明）
+  taxCategory?: string;              // 課税地目（評価証明）
+  currentStatus?: string;            // 現況確認（実地調査）
+  // 地積
+  area: number;                      // 登記地積（謄本より）
+  registeredArea?: number;           // 登記地積
+  taxArea?: number;                  // 課税地積（評証より）
+  // 評価
   evaluationMethod: EvaluationMethod;
-  rosenkaPrice: number;
+  rosenkaPrice: number;              // 路線価
   landShape: LandShapeCorrection;
-  fixedAssetTaxValue: number;
-  multiplier: number;
+  fixedAssetTaxValue: number;        // 固定資産税評価額
+  multiplier: number;                // 倍率
+  evaluationArea?: string;           // 評価地域（路・倍）
+  // 利用状況
+  usage?: LandUsageType;             // 用途（自用/貸家/貸家建付地/貸地/私道/使用貸借）
+  tenantName?: string;               // 借主
+  borrowingRightRatio?: number;      // 借地権割合
+  sideTwoRoads?: string;             // 側方・二方
+  // 都市計画
+  cityPlanningZone?: string;         // 都市計画区分
+  // 特例
   useSpecialLand: boolean;
   specialUse: SpecialLandUse;
-  usage?: string;              // 用途（自用/賃貸用等）
-  tenantName?: string;         // 賃借人・貸主名
+  // 備考
   note: string;
+  confirmationNote?: string;         // 確認すること
 }
 
 // --- 建物 ---
 export interface BuildingAsset {
   id: string;
+  name?: string;                    // 建物名
   location: string;
   structureType: string;
   usage: string;
   fixedAssetTaxValue: number;
   rentalReduction: boolean;
   borrowedHouseRatio: number;
-  tenantName?: string;         // 賃借人・貸主名
+  tenantName?: string;              // 賃借人・貸主名
+  rooms?: BuildingRoom[];           // 部屋ごとの賃貸情報
   note: string;
+}
+
+// 建物の部屋（賃貸割合計算用）
+export interface BuildingRoom {
+  id: string;
+  roomNumber: string;               // 部屋番号
+  tenantName: string;               // 借主
+  area: number;                     // 専有面積（㎡）
+  occupancy: RoomOccupancy;         // 月別の入居状況
+  note?: string;                    // 備考（賃料等）
+}
+
+export interface RoomOccupancy {
+  jan: boolean;
+  feb: boolean;
+  mar: boolean;
+  apr: boolean;
+  may: boolean;
+  jun: boolean;
+  jul: boolean;
+  aug: boolean;
+  sep: boolean;
+  oct: boolean;
+  nov: boolean;
+  dec: boolean;
 }
 
 // --- 現金預金 ---
 export interface CashDepositAsset {
   id: string;
-  institutionName: string;
-  accountType: string;
-  balance: number;
-  accruedInterest: number;
-  note: string;
+  institutionName: string;        // 銀行名
+  branchName?: string;            // 支店名
+  accountType: string;            // 種類（普通預金/定期預金等）
+  accountNumber?: string;         // 口座番号
+  balance: number;                // 金額
+  accruedInterest: number;        // 経過利息
+  hasBalanceCertificate?: boolean; // 残高証明書の有無
+  note: string;                   // 備考
+}
+
+// --- 預金移動表 ---
+export interface FundsMovement {
+  id: string;
+  caseId: string;                 // 紐づく案件ID（将来拡張用）
+  movements: FundsMovementEntry[];
+}
+
+export interface FundsMovementEntry {
+  id: string;
+  date: string;                   // 日付（YYYY-MM-DD）
+  transactions: FundsMovementTransaction[]; // 口座ごとの入出金
+  inheritanceAmount: number;      // 結論（相続財産計上額）
+  note: string;                   // 備考
+}
+
+export interface FundsMovementTransaction {
+  accountId: string;              // CashDepositAssetのID
+  deposit: number;                // 入金
+  withdrawal: number;             // 出金
 }
 
 // --- 上場株式 ---
