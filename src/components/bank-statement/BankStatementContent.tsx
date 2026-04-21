@@ -197,7 +197,26 @@ export default function BankStatementContent() {
         }, 200)
 
         if (config.documentType === 'credit-card') {
-          // クレジットカード明細処理
+          const fName = config.file.name.toLowerCase()
+          const isCsvOrExcel = fName.endsWith('.csv') || fName.endsWith('.xlsx') || fName.endsWith('.xls')
+
+          if (isCsvOrExcel) {
+            // クレジットカード CSV/Excel 処理（コード解析、Gemini不要）
+            const { parseCreditCardCsv, creditCardToEntries } = await import('@/lib/bank-statement/credit-card-mapper')
+            const ccData = await parseCreditCardCsv(config.file)
+            if (!ccData || ccData.transactions.length === 0) {
+              throw new Error('クレジットカード CSV の解析に失敗しました。ヘッダ行（ご利用日/ご利用内容/金額）が見つかりません。')
+            }
+            const entries = creditCardToEntries(ccData, config.creditCode!, config.creditName!)
+            setJournalEntries((prev) => [...prev, ...entries])
+            setInfo(`クレジットカードCSV: ${entries.length}件の取引を検出（引落総額: ¥${ccData.totalAmount.toLocaleString()}）`)
+            clearInterval(progressTimer)
+            setLoadingProgress(100)
+            setIsLoading(false)
+            return
+          }
+
+          // クレジットカード PDF 処理（Gemini OCR）
           const { renderPdfPageToImage, getPdfPageCount } = await import('@/lib/bank-statement/pdf-text-parser')
           const pageCount = await getPdfPageCount(config.file)
           const imageDataUrls: string[] = []

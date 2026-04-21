@@ -1,4 +1,4 @@
-import type { JournalEntry, CreditCardData } from './types'
+import type { JournalEntry, CreditCardData, CreditCardTransaction } from './types'
 import { findPattern, getPatterns } from './pattern-store'
 
 let idCounter = 0
@@ -100,4 +100,144 @@ export function creditCardToEntries(
     }
     return entry
   })
+}
+
+// 除外キーワード（これらを含む行は解析対象外）
+const EXCLUDE_KEYWORDS = ['前回分口座振替金額', '口座振替', '繰越残高', '前回請求額', 'ご利用可能額']
+
+/**
+ * クレジットカード CSV/Excel をパースして CreditCardData に変換
+ */
+export async function parseCreditCardCsv(file: File): Promise<CreditCardData | null> {
+  const fileName = file.name.toLowerCase()
+  let rows: string[][]
+
+  if (fileName.endsWith('.csv')) {
+    const buffer = await file.arrayBuffer()
+    const text = decodeCsvText(buffer)
+    rows = parseCsvText(text)
+  } else {
+    const XLSX = await import('xlsx')
+    const buffer = await file.arrayBuffer()
+    const wb = XLSX.read(buffer, { type: 'array' })
+    const sheet = wb.Sheets[wb.SheetNames[0]]
+    if (!sheet) return null
+    rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' })
+      .map((r) => r.map((c) => String(c).trim()))
+      .filter((r) => r.some((c) => c))
+  }
+
+  if (rows.length < 2) return null
+
+  // ヘッダ行を検出
+  let headerRow = -1
+  let dateCol = -1
+  let descCol = -1
+  let amountCol = -1
+
+  const DATE_KW = ['ご利用日', '利用日', '取引日', '日付']
+  const DESC_KW = ['ご利用内容', '利用内容', '利用先', '利用店名', '摘要', '内容']
+  const AMT_KW = ['金額', '利用金額', 'ご利用金額', '請求金額']
+
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    const r = rows[i]
+    let dCol = -1, dsCol = -1, aCol = -1
+    for (let j = 0; j < r.length; j++) {
+      const c = r[j].replace(/[\s　]/g, '')
+      if (dCol < 0 && DATE_KW.some((k) => c.includes(k))) dCol = j
+      else if (dsCol < 0 && DESC_KW.some((k) => c.includes(k))) dsCol = j
+      else if (aCol < 0 && AMT_KW.some((k) => c.includes(k))) aCol = j
+    }
+    if (dCol >= 0 && aCol >= 0) {
+      headerRow = i
+      dateCol = dCol
+      descCol = dsCol >= 0 ? dsCol : -1
+      amountCol = aCol
+      break
+    }
+  }
+
+  if (headerRow < 0 || dateCol < 0 || amountCol < 0) return null
+
+  // データ行をパース
+  const transactions: CreditCardTransaction[] = []
+  let paymentDate = ''
+
+  for (let i = headerRow + 1; i < rows.length; i++) {
+    const r = rows[i]
+    const dateText = (r[dateCol] || '').trim()
+    if (!dateText) continue
+
+    // 日付パース: 2025/4/17 → 2025-04-17
+    const dm = dateText.match(/(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})/)
+    if (!dm) continue
+    const date = `${dm[1]}-${String(dm[2]).padStart(2, '0')}-${String(dm[3]).padStart(2, '0')}`
+
+    const desc = descCol >= 0 ? (r[descCol] || '').trim() : ''
+    const amtText = (r[amountCol] || '').replace(/[¥￥,、\s]/g, '')
+    const amount = parseInt(amtText, 10)
+    if (isNaN(amount)) continue
+
+    // 除外キーワードチェック
+    if (EXCLUDE_KEYWORDS.some((kw) => desc.includes(kw))) continue
+
+    if (!paymentDate || date > paymentDate) paymentDate = date
+
+    transactions.push({
+      usageDate: date,
+      storeName: desc,
+      amount: Math.abs(amount),
+      memo: amount < 0 ? '返品・取消' : '',
+    })
+  }
+
+  if (transactions.length === 0) return null
+
+  // 引落日は最も遅い利用日の翌月27日を仮設定（後でユーザーが変更可能）
+  const totalAmount = transactions.reduce((s, t) => s + t.amount, 0)
+
+  return {
+    paymentDate: paymentDate || new Date().toISOString().slice(0, 10),
+    totalAmount,
+    cardName: '',
+    transactions,
+  }
+}
+
+// CSV テキストデコード（UTF-8 BOM / UTF-8 / Shift_JIS 自動判定）
+function decodeCsvText(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+    return new TextDecoder('utf-8').decode(bytes.slice(3))
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return new TextDecoder('shift_jis').decode(bytes)
+  }
+}
+
+// CSV パース（ダブルクォート対応）
+function parseCsvText(text: string): string[][] {
+  const rows: string[][] = []
+  let cur: string[] = []
+  let field = ''
+  let inQuote = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQuote) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++ }
+        else inQuote = false
+      } else { field += c }
+    } else {
+      if (c === '"') inQuote = true
+      else if (c === ',') { cur.push(field); field = '' }
+      else if (c === '\r') { /* skip */ }
+      else if (c === '\n') { cur.push(field); rows.push(cur); cur = []; field = '' }
+      else field += c
+    }
+  }
+  if (field.length > 0 || cur.length > 0) { cur.push(field); rows.push(cur) }
+  return rows.filter((r) => r.some((c) => c.trim().length > 0))
 }
