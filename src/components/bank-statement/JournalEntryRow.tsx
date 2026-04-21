@@ -279,19 +279,20 @@ const CB: React.CSSProperties = { borderRight: '1px solid #94a3b8', padding: '2p
 // 摘要専用の uncontrolled input: 打鍵中は React の state/再レンダを一切発生させない
 // 親への反映は blur / Enter 時のみ (628件級でも打鍵が軽い)
 function DescriptionInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const [local, setLocal] = useState(value)
   const ref = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    if (ref.current && ref.current.value !== value) ref.current.value = value
-  }, [value])
-  const commit = (raw: string) => {
-    if (raw !== value) onCommit(raw)
-  }
+  useEffect(() => { setLocal(value) }, [value])
   return (
-    <input ref={ref} type="text" defaultValue={value}
-      onBlur={(e) => commit(e.target.value)}
+    <input ref={ref} type="text" value={local}
+      onChange={(e) => {
+        if (e.target.value.length <= 25) setLocal(e.target.value)
+      }}
+      onBlur={() => { if (local !== value) onCommit(local) }}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') { commit(e.currentTarget.value); handleNav(e) }
-        else handleNav(e)
+        if (e.key === 'Enter') {
+          if (local !== value) onCommit(local)
+          handleNav(e)
+        } else handleNav(e)
       }}
       placeholder="摘要" maxLength={25}
       lang="ja"
