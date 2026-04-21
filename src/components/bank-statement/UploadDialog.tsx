@@ -30,6 +30,7 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
   const [creditCode, setCreditCode] = useState('')
   const [creditName, setCreditName] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
   const [periodFrom, setPeriodFrom] = useState('')
   const [periodTo, setPeriodTo] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -146,20 +147,49 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
                 </div>
               </div>
 
-              {/* ファイル選択 */}
+              {/* ファイル選択（クリック or ドラッグ&ドロップ） */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   ファイル ({isCreditCard ? 'PDF' : isInvoice ? 'PDF/Excel/CSV' : 'PDF/Excel/CSV'})
                 </label>
-                <div onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50">
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true) }}
+                  onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true) }}
+                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false) }}
+                  onDrop={(e) => {
+                    e.preventDefault(); e.stopPropagation()
+                    setIsDragOver(false)
+                    const file = e.dataTransfer.files?.[0]
+                    if (!file) return
+                    // 拡張子チェック
+                    const lowName = file.name.toLowerCase()
+                    const accepted = acceptFiles.split(',').map((s) => s.trim().toLowerCase())
+                    const ok = accepted.some((ext) => lowName.endsWith(ext))
+                    if (!ok) {
+                      alert(`このファイル形式はアップロードできません。\n対応: ${acceptFiles}`)
+                      return
+                    }
+                    setSelectedFile(file)
+                  }}
+                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                    isDragOver
+                      ? 'border-blue-500 bg-blue-100'
+                      : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                  }`}>
                   {selectedFile ? (
                     <div>
                       <p className="text-sm font-medium text-gray-800">{selectedFile.name}</p>
                       <p className="text-xs text-gray-500 mt-1">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                      <p className="text-xs text-gray-400 mt-2">クリックまたはドラッグして別のファイルに変更</p>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">クリックしてファイルを選択</p>
+                    <div>
+                      <p className="text-sm text-gray-600 font-medium">
+                        {isDragOver ? 'ここにドロップ' : 'クリックしてファイルを選択'}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">またはファイルをここにドラッグ&ドロップ</p>
+                    </div>
                   )}
                 </div>
                 <input ref={fileInputRef} type="file" accept={acceptFiles}
