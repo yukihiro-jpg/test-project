@@ -27,11 +27,10 @@ export function creditCardToEntries(
 
   return data.transactions.map((tx) => {
     const amount = Math.abs(tx.amount)
-    const usageDateLabel = formatUsageDate(tx.usageDate)
     const descBase = tx.storeName || ''
-    const description = usageDateLabel
-      ? `${descBase}_${usageDateLabel}`.slice(0, 25)
-      : descBase.slice(0, 25)
+    const description = descBase.slice(0, 25)
+    // 日付は利用日を使用
+    const usageDateStr = tx.usageDate.replace(/-/g, '')
 
     const pattern = findPattern(patterns, tx.storeName, amount)
 
@@ -69,7 +68,7 @@ export function creditCardToEntries(
     const entry: JournalEntry = {
       id: generateEntryId(),
       transactionId: null,
-      date: paymentDateStr,
+      date: usageDateStr,
       debitCode,
       debitName,
       debitSubCode,
