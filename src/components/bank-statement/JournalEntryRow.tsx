@@ -618,7 +618,7 @@ function TaxCodeField({
 
 function handleNav(e: React.KeyboardEvent<HTMLInputElement>) {
   const el = e.currentTarget
-  if (e.key === 'Enter') { e.preventDefault(); if (!navCell(el, 'right')) navCell(el, 'next-row') }
+  if (e.key === 'Enter') { e.preventDefault(); navCell(el, 'down') }
   else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); navCell(el, e.key === 'ArrowUp' ? 'up' : 'down') }
   else if (e.key === 'ArrowLeft' && el.selectionStart === 0) navCell(el, 'left')
   else if (e.key === 'ArrowRight' && el.selectionStart === el.value.length) navCell(el, 'right')

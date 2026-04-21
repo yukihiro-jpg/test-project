@@ -31,8 +31,10 @@ export function creditCardToEntries(
     const descBase = tx.storeName || ''
     const description = descBase.slice(0, 25)
     const usageDateStr = tx.usageDate.replace(/-/g, '')
+    // パターン学習用: 日付部分を除去（毎月変わるためパターンマッチの邪魔になる）
+    const storeNameForPattern = stripDateFromDescription(descBase)
 
-    const pattern = findPattern(patterns, tx.storeName, amount)
+    const pattern = findPattern(patterns, storeNameForPattern, amount)
 
     let expenseCode = ''
     let expenseName = ''
@@ -95,13 +97,33 @@ export function creditCardToEntries(
       creditTaxRate: '',
       creditBusinessType: '',
       description,
-      originalDescription: tx.storeName,
+      originalDescription: storeNameForPattern,
       patternId,
       isCompound: false,
       parentId: null,
     }
     return entry
   })
+}
+
+/**
+ * 利用内容から日付部分を除去してパターン学習キーを生成
+ * 例:
+ *   "Ｂｉｚ月額料金　１２月　１ＩＤ" → "Ｂｉｚ月額料金　１ＩＤ"
+ *   "東京電力 電気料金等 ０７年０３月分" → "東京電力 電気料金等"
+ *   "〇〇 2025年4月分" → "〇〇"
+ */
+function stripDateFromDescription(desc: string): string {
+  return desc
+    // "07年03月分" "2025年4月分" "０７年０３月分" 等
+    .replace(/[０-９0-9]{2,4}年[０-９0-9]{1,2}月分?/g, '')
+    // "12月" "１２月" 等（単独の月表記）
+    .replace(/[０-９0-9]{1,2}月/g, '')
+    // "2025/4" "2025/04" 等
+    .replace(/[0-9]{4}\/[0-9]{1,2}/g, '')
+    // 余分なスペースを整理
+    .replace(/[\s　]+/g, ' ')
+    .trim()
 }
 
 // 除外キーワード（これらを含む行は解析対象外）
