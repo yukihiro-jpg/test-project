@@ -187,7 +187,7 @@ export async function parseCreditCardCsv(file: File): Promise<CreditCardData | n
     transactions.push({
       usageDate: date,
       storeName: desc,
-      amount: Math.abs(amount),
+      amount: amount,
       memo: amount < 0 ? '返品・取消' : '',
     })
   }
