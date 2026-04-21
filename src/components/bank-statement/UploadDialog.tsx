@@ -30,6 +30,7 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
   const [creditCode, setCreditCode] = useState('')
   const [creditName, setCreditName] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const [periodFrom, setPeriodFrom] = useState('')
   const [periodTo, setPeriodTo] = useState('')
@@ -41,38 +42,52 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
     if (item) nameSetter(item.shortName || item.name)
   }
 
+  const allFiles = selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : []
+
   const handleSubmit = () => {
-    if (!selectedFile) return
+    if (allFiles.length === 0) return
     const period = { periodFrom: periodFrom || undefined, periodTo: periodTo || undefined }
-    if (docType === 'bank-statement' || docType === 'cash-book') {
-      if (!accountCode || !accountName) return
-      onUpload({ documentType: docType, accountCode, accountName, file: selectedFile, ...period })
-    } else if (docType === 'receipt') {
-      if (!creditCode || !creditName) return
-      onUpload({
-        documentType: docType,
-        accountCode: creditCode, accountName: creditName,
-        creditCode, creditName,
-        file: selectedFile, ...period,
-      })
-    } else {
-      if (!debitCode || !creditCode) return
-      onUpload({
-        documentType: docType,
-        accountCode: '', accountName: '',
-        debitCode, debitName, creditCode, creditName,
-        file: selectedFile, ...period,
-      })
+    // 複数ファイルを順番にアップロード（呼び出し元で追記処理）
+    for (const file of allFiles) {
+      if (docType === 'bank-statement' || docType === 'cash-book') {
+        if (!accountCode || !accountName) return
+        onUpload({ documentType: docType, accountCode, accountName, file, ...period })
+      } else if (docType === 'receipt') {
+        if (!creditCode || !creditName) return
+        onUpload({
+          documentType: docType,
+          accountCode: creditCode, accountName: creditName,
+          creditCode, creditName,
+          file, ...period,
+        })
+      } else if (docType === 'credit-card') {
+        if (!creditCode || !creditName) return
+        onUpload({
+          documentType: docType,
+          accountCode: '', accountName: '',
+          creditCode, creditName,
+          file, ...period,
+        })
+      } else {
+        if (!debitCode || !creditCode) return
+        onUpload({
+          documentType: docType,
+          accountCode: '', accountName: '',
+          debitCode, debitName, creditCode, creditName,
+          file, ...period,
+        })
+      }
     }
     setIsOpen(false)
     setSelectedFile(null)
+    setSelectedFiles([])
   }
 
   const isBankLike = docType === 'bank-statement' || docType === 'cash-book'
   const isInvoice = docType === 'sales-invoice' || docType === 'purchase-invoice'
   const isReceipt = docType === 'receipt'
   const isCreditCard = docType === 'credit-card'
-  const canSubmit = selectedFile && !isLoading && (
+  const canSubmit = allFiles.length > 0 && !isLoading && (
     isBankLike ? (accountCode && accountName)
       : isCreditCard ? (creditCode && creditName)
         : isReceipt ? (creditCode && creditName)
@@ -160,28 +175,34 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
                   onDrop={(e) => {
                     e.preventDefault(); e.stopPropagation()
                     setIsDragOver(false)
-                    const file = e.dataTransfer.files?.[0]
-                    if (!file) return
-                    // 拡張子チェック
-                    const lowName = file.name.toLowerCase()
+                    const files = Array.from(e.dataTransfer.files)
+                    if (files.length === 0) return
                     const accepted = acceptFiles.split(',').map((s) => s.trim().toLowerCase())
-                    const ok = accepted.some((ext) => lowName.endsWith(ext))
-                    if (!ok) {
-                      alert(`このファイル形式はアップロードできません。\n対応: ${acceptFiles}`)
-                      return
-                    }
-                    setSelectedFile(file)
+                    const validFiles = files.filter((f) => accepted.some((ext) => f.name.toLowerCase().endsWith(ext)))
+                    const rejected = files.length - validFiles.length
+                    if (rejected > 0) alert(`${rejected}件のファイルは非対応の形式のためスキップしました。\n対応: ${acceptFiles}`)
+                    if (validFiles.length === 0) return
+                    if (validFiles.length === 1) { setSelectedFile(validFiles[0]); setSelectedFiles([]) }
+                    else { setSelectedFiles(validFiles); setSelectedFile(null) }
                   }}
                   className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
                     isDragOver
                       ? 'border-blue-500 bg-blue-100'
                       : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
                   }`}>
-                  {selectedFile ? (
+                  {allFiles.length > 1 ? (
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{allFiles.length}件のファイルを選択中</p>
+                      <div className="text-xs text-gray-500 mt-1 max-h-20 overflow-auto">
+                        {allFiles.map((f, i) => <div key={i}>{f.name} ({(f.size / 1024).toFixed(1)} KB)</div>)}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-2">クリックまたはドラッグして変更</p>
+                    </div>
+                  ) : selectedFile ? (
                     <div>
                       <p className="text-sm font-medium text-gray-800">{selectedFile.name}</p>
                       <p className="text-xs text-gray-500 mt-1">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-                      <p className="text-xs text-gray-400 mt-2">クリックまたはドラッグして別のファイルに変更</p>
+                      <p className="text-xs text-gray-400 mt-2">クリックまたはドラッグして変更</p>
                     </div>
                   ) : (
                     <div>
@@ -192,8 +213,12 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
                     </div>
                   )}
                 </div>
-                <input ref={fileInputRef} type="file" accept={acceptFiles}
-                  onChange={(e) => { if (e.target.files?.[0]) setSelectedFile(e.target.files[0]) }}
+                <input ref={fileInputRef} type="file" accept={acceptFiles} multiple
+                  onChange={(e) => {
+                    const files = e.target.files ? Array.from(e.target.files) : []
+                    if (files.length === 1) { setSelectedFile(files[0]); setSelectedFiles([]) }
+                    else if (files.length > 1) { setSelectedFiles(files); setSelectedFile(null) }
+                  }}
                   className="hidden" />
               </div>
 
@@ -269,7 +294,7 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
                 className={`flex-1 py-2 text-sm font-medium rounded-lg ${
                   canSubmit ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}>
-                {isLoading ? '解析中...' : 'アップロード'}
+                {isLoading ? '解析中...' : allFiles.length > 1 ? `${allFiles.length}件アップロード` : 'アップロード'}
               </button>
             </div>
           </div>

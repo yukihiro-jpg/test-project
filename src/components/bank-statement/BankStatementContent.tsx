@@ -99,8 +99,7 @@ export default function BankStatementContent() {
 
   const applyParseResultFn = useCallback(
     (result: ParseResult, config: UploadConfig) => {
-      setPages(result.pages)
-      setCurrentPageIndex(0)
+      setPages((prev) => [...prev, ...result.pages])
 
       // 期間を保存（次回の「前回の期間をセット」用）
       if (config.periodFrom) setLastPeriodFrom(config.periodFrom)
@@ -176,7 +175,7 @@ export default function BankStatementContent() {
         if (to && e.date > to) return false
         return true
       })
-      setJournalEntries(filtered)
+      setJournalEntries((prev) => [...prev, ...filtered])
     },
     [accountMaster],
   )
@@ -231,9 +230,9 @@ export default function BankStatementContent() {
             balanceDifference: 0,
             imageDataUrl: url,
           }))
-          setPages(dummyPages)
+          setPages((prev) => [...prev, ...dummyPages])
 
-          setJournalEntries(entries)
+          setJournalEntries((prev) => [...prev, ...entries])
           setInfo(`クレジットカード明細: ${entries.length}件の取引を検出（引落日: ${ccData.paymentDate}、引落総額: ¥${(ccData.totalAmount || 0).toLocaleString()}）`)
           clearInterval(progressTimer)
           setLoadingProgress(100)
@@ -272,12 +271,11 @@ export default function BankStatementContent() {
             openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
             imageDataUrl: url,
           }))
-          setPages(statementPages)
-          setCurrentPageIndex(0)
+          setPages((prev) => [...prev, ...statementPages])
 
           const { receiptToEntries } = await import('@/lib/bank-statement/receipt-mapper')
           const entries = receiptToEntries(receipts, config.creditCode!, config.creditName!)
-          setJournalEntries(entries)
+          setJournalEntries((prev) => [...prev, ...entries])
           setInfo(`${receipts.length}件のレシートから${entries.length}件の仕訳を生成しました`)
           setIsLoading(false)
           setLoadingProgress(0)
@@ -351,7 +349,7 @@ export default function BankStatementContent() {
           const entries = config.documentType === 'sales-invoice'
             ? salesInvoiceToEntries(invoices, config.debitCode!, config.debitName!, config.creditCode!, config.creditName!)
             : purchaseInvoiceToEntries(invoices, config.debitCode!, config.debitName!, config.creditCode!, config.creditName!)
-          setJournalEntries(entries)
+          setJournalEntries((prev) => [...prev, ...entries])
           setInfo(`${invoices.length}件の請求書から${entries.length}件の仕訳を生成しました`)
           setIsLoading(false)
           setLoadingProgress(0)
