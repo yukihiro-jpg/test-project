@@ -210,6 +210,27 @@ export default function BankStatementContent() {
               throw new Error('クレジットカード CSV の解析に失敗しました。ヘッダ行（ご利用日/ご利用内容/金額）が見つかりません。')
             }
             const entries = creditCardToEntries(ccData, config.creditCode!, config.creditName!, config.creditSubCode, config.creditSubName)
+            // 左側表示用に仮想ページを生成（元データの一覧表示）
+            const ccPages: StatementPage[] = [{
+              pageIndex: 0,
+              transactions: ccData.transactions.map((t, i) => ({
+                id: `cc-tx-${Date.now()}-${i}`,
+                pageIndex: 0,
+                rowIndex: i,
+                date: t.usageDate,
+                description: t.storeName,
+                deposit: t.amount > 0 ? t.amount : null,
+                withdrawal: t.amount < 0 ? Math.abs(t.amount) : null,
+                balance: 0,
+              })),
+              openingBalance: 0,
+              closingBalance: ccData.totalAmount,
+              isBalanceValid: true,
+              balanceDifference: 0,
+            }]
+            setPages((prev) => [...prev, ...ccPages])
+            // accountCode にカード科目をセット（残高計算用）
+            setUploadConfig({ ...config, accountCode: config.creditCode || '', accountName: config.creditName || '' })
             setJournalEntries((prev) => [...prev, ...entries])
             setInfo(`クレジットカードCSV: ${entries.length}件の取引を検出（引落総額: ¥${ccData.totalAmount.toLocaleString()}）`)
             clearInterval(progressTimer)
