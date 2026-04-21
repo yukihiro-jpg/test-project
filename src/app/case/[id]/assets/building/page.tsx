@@ -68,29 +68,37 @@ export default function BuildingPage() {
                   </tr>
                   {expandedId === b.id && (
                     <tr><td colSpan={6} className="p-0">
-                      <div className="p-4 bg-white border-l-4 border-blue-400 space-y-4">
-                        <Input label="所在地" value={b.location}
-                          onChange={e => updateAsset('buildings', b.id, { location: e.target.value })} />
-                        <div className="grid grid-cols-2 gap-4">
+                      <div className="px-4 py-2 bg-white border-l-4 border-blue-400 space-y-2">
+                        {/* 1行目: 基本情報 */}
+                        <div className="grid grid-cols-6 gap-2 items-end">
+                          <Input label="所在地" value={b.location}
+                            onChange={e => updateAsset('buildings', b.id, { location: e.target.value })} />
                           <Input label="構造" value={b.structureType} placeholder="木造/RC等"
                             onChange={e => updateAsset('buildings', b.id, { structureType: e.target.value })} />
                           <Input label="用途" value={b.usage} placeholder="自用/貸家等"
                             onChange={e => updateAsset('buildings', b.id, { usage: e.target.value })} />
+                          <CurrencyInput label="固定資産税評価額" value={b.fixedAssetTaxValue}
+                            onChange={v => updateAsset('buildings', b.id, { fixedAssetTaxValue: v })} />
+                          <div className="flex items-end gap-2 pb-1">
+                            <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                              <input type="checkbox" checked={b.rentalReduction || false}
+                                onChange={e => updateAsset('buildings', b.id, { rentalReduction: e.target.checked })} className="w-3 h-3" />貸家
+                            </label>
+                            {b.rentalReduction && (
+                              <input type="number" value={b.borrowedHouseRatio} step="0.1"
+                                onChange={e => updateAsset('buildings', b.id, { borrowedHouseRatio: Number(e.target.value) })}
+                                className="w-16 border border-gray-300 rounded px-1 py-0.5 text-xs" />
+                            )}
+                          </div>
+                          <div className="flex items-end gap-2 pb-1">
+                            <Input label="備考" value={b.note}
+                              onChange={e => updateAsset('buildings', b.id, { note: e.target.value })} />
+                          </div>
                         </div>
-                        <CurrencyInput label="固定資産税評価額" value={b.fixedAssetTaxValue}
-                          onChange={v => updateAsset('buildings', b.id, { fixedAssetTaxValue: v })} />
-                        <Checkbox label="貸家（借家権割合30%減額）" checked={b.rentalReduction}
-                          onChange={e => updateAsset('buildings', b.id, { rentalReduction: (e.target as HTMLInputElement).checked })} />
-                        {b.rentalReduction && (
-                          <Input label="借家権割合" type="number" value={b.borrowedHouseRatio} step="0.1"
-                            onChange={e => updateAsset('buildings', b.id, { borrowedHouseRatio: Number(e.target.value) })} />
-                        )}
-                        <Input label="備考" value={b.note}
-                          onChange={e => updateAsset('buildings', b.id, { note: e.target.value })} />
+                        {/* 削除ボタン */}
                         <div className="flex justify-end">
-                          <Button variant="danger" size="sm" onClick={() => removeAsset('buildings', b.id)}>
-                            <Trash2 size={16} className="mr-1" />削除
-                          </Button>
+                          <button onClick={() => removeAsset('buildings', b.id)}
+                            className="text-red-500 hover:text-red-700 text-xs">削除</button>
                         </div>
                       </div>
                     </td></tr>

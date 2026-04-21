@@ -92,14 +92,13 @@ export default function LandPage() {
                   </tr>
                   {expandedId === land.id && (
                     <tr><td colSpan={6} className="p-0">
-                      <div className="p-4 bg-white border-l-4 border-blue-400 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="px-4 py-3 bg-white border-l-4 border-blue-400 space-y-2">
+                        {/* 1行目: 基本情報 */}
+                        <div className="grid grid-cols-6 gap-2 items-end">
                           <Input label="所在地" value={land.location}
                             onChange={e => updateAsset('lands', land.id, { location: e.target.value })} />
                           <Input label="地番" value={land.landNumber}
                             onChange={e => updateAsset('lands', land.id, { landNumber: e.target.value })} />
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <Select label="地目" value={land.landCategory}
                             onChange={e => updateAsset('lands', land.id, { landCategory: e.target.value as LandCategory })}
                             options={LAND_CATEGORIES} />
@@ -111,119 +110,76 @@ export default function LandPage() {
                               { value: 'rosenka', label: '路線価方式' },
                               { value: 'bairitsu', label: '倍率方式' },
                             ]} />
+                          <Input label="備考" value={land.note}
+                            onChange={e => updateAsset('lands', land.id, { note: e.target.value })} />
                         </div>
-
+                        {/* 2行目: 評価詳細 */}
                         {land.evaluationMethod === 'rosenka' ? (
-                          <div className="border rounded-md p-4 space-y-4 bg-gray-50">
-                            <h4 className="font-medium text-sm text-gray-700">路線価方式</h4>
-                            <CurrencyInput label="路線価（円/㎡）" value={land.rosenkaPrice}
-                              onChange={v => updateAsset('lands', land.id, { rosenkaPrice: v })} suffix="円/㎡" />
-                            <div className="grid grid-cols-2 gap-4">
-                              <Input label="間口距離" type="number" value={land.landShape?.frontageDistance || ''} suffix="m"
-                                onChange={e => updateAsset('lands', land.id, {
-                                  landShape: { ...land.landShape, frontageDistance: Number(e.target.value) }
-                                })} />
-                              <Input label="奥行距離" type="number" value={land.landShape?.depth || ''} suffix="m"
-                                onChange={e => updateAsset('lands', land.id, {
-                                  landShape: { ...land.landShape, depth: Number(e.target.value) }
-                                })} />
-                            </div>
-                            <Input label="奥行価格補正率" type="number" value={land.landShape?.depthCorrection || ''} step="0.01"
+                          <div className="grid grid-cols-8 gap-2 items-end">
+                            <CurrencyInput label="路線価(円/㎡)" value={land.rosenkaPrice}
+                              onChange={v => updateAsset('lands', land.id, { rosenkaPrice: v })} />
+                            <Input label="奥行補正率" type="number" value={land.landShape?.depthCorrection || ''} step="0.01"
                               onChange={e => updateAsset('lands', land.id, {
                                 landShape: { ...land.landShape, depthCorrection: Number(e.target.value) }
                               })} />
-                            <div className="space-y-2">
-                              <Checkbox label="不整形地" checked={land.landShape?.irregularShape}
-                                onChange={e => updateAsset('lands', land.id, {
-                                  landShape: { ...land.landShape, irregularShape: (e.target as HTMLInputElement).checked }
-                                })} />
-                              {land.landShape?.irregularShape && (
-                                <Input label="不整形地補正率" type="number" value={land.landShape.irregularCorrection || ''} step="0.01"
+                            <Input label="間口(m)" type="number" value={land.landShape?.frontageDistance || ''}
+                              onChange={e => updateAsset('lands', land.id, {
+                                landShape: { ...land.landShape, frontageDistance: Number(e.target.value) }
+                              })} />
+                            <Input label="奥行(m)" type="number" value={land.landShape?.depth || ''}
+                              onChange={e => updateAsset('lands', land.id, {
+                                landShape: { ...land.landShape, depth: Number(e.target.value) }
+                              })} />
+                            <Input label="借地権割合" type="number" value={land.landShape?.borrowedLandRatio || ''} step="0.1"
+                              onChange={e => updateAsset('lands', land.id, {
+                                landShape: { ...land.landShape, borrowedLandRatio: Number(e.target.value) }
+                              })} />
+                            <div className="flex items-end gap-2 pb-1">
+                              <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                                <input type="checkbox" checked={land.landShape?.irregularShape || false}
                                   onChange={e => updateAsset('lands', land.id, {
-                                    landShape: { ...land.landShape, irregularCorrection: Number(e.target.value) }
-                                  })} />
-                              )}
-                              <Checkbox label="側方路線" checked={land.landShape?.sideRoad}
-                                onChange={e => updateAsset('lands', land.id, {
-                                  landShape: { ...land.landShape, sideRoad: (e.target as HTMLInputElement).checked }
-                                })} />
-                              {land.landShape?.sideRoad && (
-                                <Input label="側方路線影響加算率" type="number" value={land.landShape.sideRoadCorrection || ''} step="0.01"
-                                  onChange={e => updateAsset('lands', land.id, {
-                                    landShape: { ...land.landShape, sideRoadCorrection: Number(e.target.value) }
-                                  })} />
-                              )}
-                              <Checkbox label="二方路線" checked={land.landShape?.twoRoads}
-                                onChange={e => updateAsset('lands', land.id, {
-                                  landShape: { ...land.landShape, twoRoads: (e.target as HTMLInputElement).checked }
-                                })} />
+                                    landShape: { ...land.landShape, irregularShape: e.target.checked }
+                                  })} className="w-3 h-3" />不整形
+                              </label>
+                              <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                                <input type="checkbox" checked={land.useSpecialLand || false}
+                                  onChange={e => updateAsset('lands', land.id, { useSpecialLand: e.target.checked })} className="w-3 h-3" />小規模
+                              </label>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <Input label="セットバック面積" type="number" value={land.landShape?.setback || ''} suffix="㎡"
-                                onChange={e => updateAsset('lands', land.id, {
-                                  landShape: { ...land.landShape, setback: Number(e.target.value) }
-                                })} />
-                              <Input label="借地権割合" type="number" value={land.landShape?.borrowedLandRatio || ''} step="0.1"
-                                onChange={e => updateAsset('lands', land.id, {
-                                  landShape: { ...land.landShape, borrowedLandRatio: Number(e.target.value) }
-                                })} />
-                            </div>
+                            {land.useSpecialLand && (
+                              <Select label="特例" value={land.specialUse?.type || 'residence'}
+                                onChange={e => {
+                                  const type = e.target.value as SpecialLandUseType;
+                                  const configs: Record<SpecialLandUseType, { rate: number; max: number }> = {
+                                    residence: { rate: 0.8, max: 330 }, business: { rate: 0.8, max: 400 }, rental: { rate: 0.5, max: 200 },
+                                  };
+                                  updateAsset('lands', land.id, { specialUse: { ...land.specialUse, type, reductionRate: configs[type].rate, maxArea: configs[type].max } });
+                                }}
+                                options={[
+                                  { value: 'residence', label: '居住用80%' },
+                                  { value: 'business', label: '事業用80%' },
+                                  { value: 'rental', label: '貸付用50%' },
+                                ]} />
+                            )}
+                            <button onClick={() => removeAsset('lands', land.id)}
+                              className="text-red-500 hover:text-red-700 text-xs pb-1">削除</button>
                           </div>
                         ) : (
-                          <div className="border rounded-md p-4 space-y-4 bg-gray-50">
-                            <h4 className="font-medium text-sm text-gray-700">倍率方式</h4>
+                          <div className="grid grid-cols-4 gap-2 items-end">
                             <CurrencyInput label="固定資産税評価額" value={land.fixedAssetTaxValue}
                               onChange={v => updateAsset('lands', land.id, { fixedAssetTaxValue: v })} />
                             <Input label="倍率" type="number" value={land.multiplier || ''} step="0.1"
                               onChange={e => updateAsset('lands', land.id, { multiplier: Number(e.target.value) })} />
+                            <div className="flex items-end gap-2 pb-1">
+                              <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                                <input type="checkbox" checked={land.useSpecialLand || false}
+                                  onChange={e => updateAsset('lands', land.id, { useSpecialLand: e.target.checked })} className="w-3 h-3" />小規模宅地特例
+                              </label>
+                            </div>
+                            <button onClick={() => removeAsset('lands', land.id)}
+                              className="text-red-500 hover:text-red-700 text-xs pb-1">削除</button>
                           </div>
                         )}
-
-                        {/* 小規模宅地等の特例 */}
-                        <div className="border rounded-md p-4 space-y-4 bg-yellow-50">
-                          <Checkbox label="小規模宅地等の特例を適用" checked={land.useSpecialLand}
-                            onChange={e => updateAsset('lands', land.id, { useSpecialLand: (e.target as HTMLInputElement).checked })} />
-                          {land.useSpecialLand && (
-                            <div className="space-y-3">
-                              <Select label="特例の種類" value={land.specialUse?.type || 'residence'}
-                                onChange={e => {
-                                  const type = e.target.value as SpecialLandUseType;
-                                  const configs: Record<SpecialLandUseType, { rate: number; max: number }> = {
-                                    residence: { rate: 0.8, max: 330 },
-                                    business: { rate: 0.8, max: 400 },
-                                    rental: { rate: 0.5, max: 200 },
-                                  };
-                                  updateAsset('lands', land.id, {
-                                    specialUse: {
-                                      ...land.specialUse,
-                                      type,
-                                      reductionRate: configs[type].rate,
-                                      maxArea: configs[type].max,
-                                    },
-                                  });
-                                }}
-                                options={[
-                                  { value: 'residence', label: '特定居住用宅地等（80%減額, 330㎡）' },
-                                  { value: 'business', label: '特定事業用宅地等（80%減額, 400㎡）' },
-                                  { value: 'rental', label: '貸付事業用宅地等（50%減額, 200㎡）' },
-                                ]} />
-                              <Input label="適用面積" type="number" value={land.specialUse?.applicableArea || ''} suffix="㎡"
-                                onChange={e => updateAsset('lands', land.id, {
-                                  specialUse: { ...land.specialUse, applicableArea: Number(e.target.value) },
-                                })} />
-                            </div>
-                          )}
-                        </div>
-
-                        <Input label="備考・確認論点" value={land.note}
-                          onChange={e => updateAsset('lands', land.id, { note: e.target.value })}
-                          placeholder="土地評価に関する確認事項をメモ" />
-
-                        <div className="flex justify-end">
-                          <Button variant="danger" size="sm" onClick={() => removeAsset('lands', land.id)}>
-                            <Trash2 size={16} className="mr-1" />削除
-                          </Button>
-                        </div>
                       </div>
                     </td></tr>
                   )}
