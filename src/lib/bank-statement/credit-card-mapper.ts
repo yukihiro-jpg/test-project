@@ -19,6 +19,8 @@ export function creditCardToEntries(
   data: CreditCardData,
   creditCardAccountCode: string,
   creditCardAccountName: string,
+  creditCardSubCode?: string,
+  creditCardSubName?: string,
 ): JournalEntry[] {
   const patterns = getPatterns()
   const paymentDateStr = data.paymentDate.replace(/-/g, '')
@@ -82,8 +84,8 @@ export function creditCardToEntries(
       debitBusinessType: businessType,
       creditCode: creditCardAccountCode,
       creditName: creditCardAccountName,
-      creditSubCode: '',
-      creditSubName: '',
+      creditSubCode: creditCardSubCode || '',
+      creditSubName: creditCardSubName || '',
       creditTaxType: '',
       creditIndustry: '',
       creditTaxInclude: '',

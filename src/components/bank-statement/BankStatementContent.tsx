@@ -112,6 +112,8 @@ export default function BankStatementContent() {
         config.accountName,
         patterns,
         accountMaster,
+        config.accountSubCode,
+        config.accountSubName,
       )
       // 科目別消費税CDを自動設定（パターン学習で設定済みでないもの）
       const taxMaster = loadAccountTaxMaster()
@@ -207,7 +209,7 @@ export default function BankStatementContent() {
             if (!ccData || ccData.transactions.length === 0) {
               throw new Error('クレジットカード CSV の解析に失敗しました。ヘッダ行（ご利用日/ご利用内容/金額）が見つかりません。')
             }
-            const entries = creditCardToEntries(ccData, config.creditCode!, config.creditName!)
+            const entries = creditCardToEntries(ccData, config.creditCode!, config.creditName!, config.creditSubCode, config.creditSubName)
             setJournalEntries((prev) => [...prev, ...entries])
             setInfo(`クレジットカードCSV: ${entries.length}件の取引を検出（引落総額: ¥${ccData.totalAmount.toLocaleString()}）`)
             clearInterval(progressTimer)
@@ -237,7 +239,7 @@ export default function BankStatementContent() {
 
           const ccData = await response.json()
           const { creditCardToEntries } = await import('@/lib/bank-statement/credit-card-mapper')
-          const entries = creditCardToEntries(ccData, config.creditCode!, config.creditName!)
+          const entries = creditCardToEntries(ccData, config.creditCode!, config.creditName!, config.creditSubCode, config.creditSubName)
 
           // PDFページ画像を表示用にセット
           const dummyPages = imageDataUrls.map((url, i) => ({
@@ -631,6 +633,7 @@ export default function BankStatementContent() {
           </button>
           <UploadDialog
             accountMaster={accountMaster}
+            subAccountMaster={subAccountMaster}
             onUpload={handleUpload}
             isLoading={isLoading}
             lastPeriodFrom={lastPeriodFrom}

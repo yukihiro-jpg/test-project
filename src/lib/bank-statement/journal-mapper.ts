@@ -23,6 +23,8 @@ export function mapTransactionsToJournalEntries(
   accountName: string,
   patterns: PatternEntry[],
   accountMaster: AccountItem[],
+  accountSubCode?: string,
+  accountSubName?: string,
 ): JournalEntry[] {
   const entries: JournalEntry[] = []
 
@@ -95,6 +97,12 @@ export function mapTransactionsToJournalEntries(
           taxCategory: pTaxCategory,
           businessType: pBusinessType,
         })
+      }
+
+      // アップロード時に指定された補助科目を通帳側（accountCode側）に設定
+      if (accountSubCode) {
+        if (entry.debitCode === accountCode) { entry.debitSubCode = accountSubCode; entry.debitSubName = accountSubName || '' }
+        if (entry.creditCode === accountCode) { entry.creditSubCode = accountSubCode; entry.creditSubName = accountSubName || '' }
       }
 
       // パターンの変換後摘要・patternId・補助科目を適用

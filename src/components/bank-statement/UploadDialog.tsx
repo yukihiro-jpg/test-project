@@ -1,10 +1,11 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import type { AccountItem, UploadConfig, DocumentType } from '@/lib/bank-statement/types'
+import type { AccountItem, SubAccountItem, UploadConfig, DocumentType } from '@/lib/bank-statement/types'
 
 interface Props {
   accountMaster: AccountItem[]
+  subAccountMaster: SubAccountItem[]
   onUpload: (config: UploadConfig) => void
   isLoading: boolean
   lastPeriodFrom?: string
@@ -20,15 +21,21 @@ const DOC_TYPES: { value: DocumentType; label: string }[] = [
   { value: 'receipt', label: 'レシート・領収書' },
 ]
 
-export default function UploadDialog({ accountMaster, onUpload, isLoading, lastPeriodFrom, lastPeriodTo }: Props) {
+export default function UploadDialog({ accountMaster, subAccountMaster, onUpload, isLoading, lastPeriodFrom, lastPeriodTo }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [docType, setDocType] = useState<DocumentType>('bank-statement')
   const [accountCode, setAccountCode] = useState('')
   const [accountName, setAccountName] = useState('')
+  const [accountSubCode, setAccountSubCode] = useState('')
+  const [accountSubName, setAccountSubName] = useState('')
   const [debitCode, setDebitCode] = useState('')
   const [debitName, setDebitName] = useState('')
+  const [debitSubCode, setDebitSubCode] = useState('')
+  const [debitSubName, setDebitSubName] = useState('')
   const [creditCode, setCreditCode] = useState('')
   const [creditName, setCreditName] = useState('')
+  const [creditSubCode, setCreditSubCode] = useState('')
+  const [creditSubName, setCreditSubName] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
@@ -51,13 +58,13 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
     for (const file of allFiles) {
       if (docType === 'bank-statement' || docType === 'cash-book') {
         if (!accountCode || !accountName) return
-        onUpload({ documentType: docType, accountCode, accountName, file, ...period })
+        onUpload({ documentType: docType, accountCode, accountName, accountSubCode: accountSubCode || undefined, accountSubName: accountSubName || undefined, file, ...period })
       } else if (docType === 'receipt') {
         if (!creditCode || !creditName) return
         onUpload({
           documentType: docType,
           accountCode: creditCode, accountName: creditName,
-          creditCode, creditName,
+          creditCode, creditName, creditSubCode: creditSubCode || undefined, creditSubName: creditSubName || undefined,
           file, ...period,
         })
       } else if (docType === 'credit-card') {
@@ -65,7 +72,7 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
         onUpload({
           documentType: docType,
           accountCode: '', accountName: '',
-          creditCode, creditName,
+          creditCode, creditName, creditSubCode: creditSubCode || undefined, creditSubName: creditSubName || undefined,
           file, ...period,
         })
       } else {
@@ -73,7 +80,8 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
         onUpload({
           documentType: docType,
           accountCode: '', accountName: '',
-          debitCode, debitName, creditCode, creditName,
+          debitCode, debitName, debitSubCode: debitSubCode || undefined, debitSubName: debitSubName || undefined,
+          creditCode, creditName, creditSubCode: creditSubCode || undefined, creditSubName: creditSubName || undefined,
           file, ...period,
         })
       }
@@ -96,38 +104,64 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
 
   const acceptFiles = isCreditCard ? '.pdf,.csv,.xlsx,.xls' : isReceipt ? '.pdf,.xlsx,.xls' : isInvoice ? '.pdf,.xlsx,.xls,.csv' : '.pdf,.xlsx,.xls,.csv'
 
-  const renderAccountSelector = (label: string, code: string, onCodeChange: (c: string) => void, name: string, onNameChange: (n: string) => void, filterKeywords?: string[]) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      {accountMaster.length > 0 ? (
-        <select value={code}
-          onChange={(e) => handleAccountSelect(e.target.value, onCodeChange, onNameChange)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">-- 科目を選択 --</option>
-          {filterKeywords && (
-            <optgroup label="候補">
-              {accountMaster.filter((a) => filterKeywords.some((k) => a.name.includes(k) || a.shortName.includes(k)))
-                .map((item) => (
-                  <option key={item.code} value={item.code}>{item.code} - {item.shortName || item.name}</option>
+  const renderAccountSelector = (
+    label: string, code: string, onCodeChange: (c: string) => void, name: string, onNameChange: (n: string) => void,
+    filterKeywords?: string[],
+    subCode?: string, onSubCodeChange?: (c: string) => void, subName?: string, onSubNameChange?: (n: string) => void,
+  ) => {
+    const subs = code ? subAccountMaster.filter((s) => s.parentCode === code) : []
+    return (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+        {accountMaster.length > 0 ? (
+          <div className="space-y-1">
+            <select value={code}
+              onChange={(e) => {
+                handleAccountSelect(e.target.value, onCodeChange, onNameChange)
+                if (onSubCodeChange) { onSubCodeChange(''); onSubNameChange?.('') }
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">-- 科目を選択 --</option>
+              {filterKeywords && (
+                <optgroup label="候補">
+                  {accountMaster.filter((a) => filterKeywords.some((k) => a.name.includes(k) || a.shortName.includes(k)))
+                    .map((item) => (
+                      <option key={item.code} value={item.code}>{item.code} - {item.shortName || item.name}</option>
+                    ))}
+                </optgroup>
+              )}
+              <optgroup label="全科目">
+                {accountMaster.map((item) => (
+                  <option key={`all-${item.code}`} value={item.code}>{item.code} - {item.shortName || item.name}</option>
                 ))}
-            </optgroup>
-          )}
-          <optgroup label="全科目">
-            {accountMaster.map((item) => (
-              <option key={`all-${item.code}`} value={item.code}>{item.code} - {item.shortName || item.name}</option>
-            ))}
-          </optgroup>
-        </select>
-      ) : (
-        <div className="flex gap-2">
-          <input type="text" value={code} onChange={(e) => onCodeChange(e.target.value)}
-            placeholder="コード" className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-sm" />
-          <input type="text" value={name} onChange={(e) => onNameChange(e.target.value)}
-            placeholder="科目名" className="flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm" />
-        </div>
-      )}
-    </div>
-  )
+              </optgroup>
+            </select>
+            {subs.length > 0 && onSubCodeChange && (
+              <select value={subCode || ''}
+                onChange={(e) => {
+                  const sub = subs.find((s) => s.subCode === e.target.value)
+                  onSubCodeChange(e.target.value)
+                  onSubNameChange?.(sub?.shortName || sub?.name || '')
+                }}
+                className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50">
+                <option value="">-- 補助科目（任意）--</option>
+                {subs.map((s) => (
+                  <option key={s.subCode} value={s.subCode}>{s.subCode} - {s.shortName || s.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <input type="text" value={code} onChange={(e) => onCodeChange(e.target.value)}
+              placeholder="コード" className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-sm" />
+            <input type="text" value={name} onChange={(e) => onNameChange(e.target.value)}
+              placeholder="科目名" className="flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm" />
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <>
@@ -245,17 +279,19 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
                 renderAccountSelector(
                   docType === 'cash-book' ? '現金の勘定科目' : '通帳の勘定科目',
                   accountCode, setAccountCode, accountName, setAccountName,
-                  docType === 'cash-book' ? ['現金'] : ['預金', '当座', '普通', '定期']
+                  docType === 'cash-book' ? ['現金'] : ['預金', '当座', '普通', '定期'],
+                  accountSubCode, setAccountSubCode, accountSubName, setAccountSubName,
                 )
               ) : isCreditCard ? (
                 <>
                   {renderAccountSelector(
                     'クレジットカードの勘定科目（貸方に設定されます）',
                     creditCode, setCreditCode, creditName, setCreditName,
-                    ['未払', 'クレジ', 'カード']
+                    ['未払', 'クレジ', 'カード'],
+                    creditSubCode, setCreditSubCode, creditSubName, setCreditSubName,
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    各取引の貸方に {creditName || '—'}({creditCode || '—'}) が設定されます。借方は個別に入力してください。
+                    各取引の貸方に {creditName || '—'}({creditCode || '—'}) {creditSubName ? `[${creditSubName}]` : ''} が設定されます。
                   </p>
                 </>
               ) : isReceipt ? (
@@ -263,23 +299,23 @@ export default function UploadDialog({ accountMaster, onUpload, isLoading, lastP
                   {renderAccountSelector(
                     '支払原資の勘定科目（貸方に設定されます）',
                     creditCode, setCreditCode, creditName, setCreditName,
-                    ['現金', '預金', '普通']
+                    ['現金', '預金', '普通'],
+                    creditSubCode, setCreditSubCode, creditSubName, setCreditSubName,
                   )}
-                  <p className="text-xs text-gray-500">
-                    貸方コード {creditCode || '—'}、貸方科目 {creditName || '—'} で処理します。よろしいですか？
-                  </p>
                 </>
               ) : (
                 <>
                   {renderAccountSelector(
                     docType === 'sales-invoice' ? '借方科目（売掛金等）' : '借方科目（仕入・経費等）',
                     debitCode, setDebitCode, debitName, setDebitName,
-                    docType === 'sales-invoice' ? ['売掛', '未収'] : ['仕入', '経費', '消耗', '通信', '水道']
+                    docType === 'sales-invoice' ? ['売掛', '未収'] : ['仕入', '経費', '消耗', '通信', '水道'],
+                    debitSubCode, setDebitSubCode, debitSubName, setDebitSubName,
                   )}
                   {renderAccountSelector(
                     docType === 'sales-invoice' ? '貸方科目（売上等）' : '貸方科目（買掛金等）',
                     creditCode, setCreditCode, creditName, setCreditName,
-                    docType === 'sales-invoice' ? ['売上', '収入'] : ['買掛', '未払']
+                    docType === 'sales-invoice' ? ['売上', '収入'] : ['買掛', '未払'],
+                    creditSubCode, setCreditSubCode, creditSubName, setCreditSubName,
                   )}
                 </>
               )}

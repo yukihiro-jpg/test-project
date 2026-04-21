@@ -166,11 +166,17 @@ export interface UploadConfig {
   documentType: DocumentType
   accountCode: string
   accountName: string
+  accountSubCode?: string
+  accountSubName?: string
   // 請求書用: 借方・貸方の科目コード
   debitCode?: string
   debitName?: string
+  debitSubCode?: string
+  debitSubName?: string
   creditCode?: string
   creditName?: string
+  creditSubCode?: string
+  creditSubName?: string
   file: File
   periodFrom?: string  // 処理対象期間（開始）YYYY-MM-DD
   periodTo?: string    // 処理対象期間（終了）YYYY-MM-DD
