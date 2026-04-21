@@ -313,18 +313,42 @@ export default function JournalEntryTable({
     [entries, lastClickedId, selectedRange],
   )
 
-  // 全選択/全解除
+  // 現在のフィルタで表示されている行のIDを算出
+  const getVisibleEntryIds = useCallback((): Set<string> => {
+    const visible = new Set<string>()
+    for (const entry of entriesRef.current) {
+      // 借方未処理フィルタ
+      if (filterEmptyDebit && filteredDebitIds && !filteredDebitIds.has(entry.id)) continue
+      // 貸方未処理フィルタ
+      if (filterEmptyCredit && filteredCreditIds && !filteredCreditIds.has(entry.id)) continue
+      // 未入力のみ表示フィルタ
+      if (showOnlyIncomplete) {
+        const debitAcc = accountMasterRef.current.find((a) => a.code === entry.debitCode)
+        const creditAcc = accountMasterRef.current.find((a) => a.code === entry.creditCode)
+        const isBsBoth = !!(debitAcc && creditAcc && isBS(debitAcc.bsPl) && isBS(creditAcc.bsPl))
+        const taxOk = !!entry.debitTaxCode || isBsBoth
+        if (entry.debitCode && entry.creditCode && taxOk) continue
+      }
+      visible.add(entry.id)
+    }
+    return visible
+  }, [filterEmptyDebit, filteredDebitIds, filterEmptyCredit, filteredCreditIds, showOnlyIncomplete])
+
+  // 全選択/全解除（フィルタ表示中は表示行のみを対象）
   const handleSelectAll = useCallback(() => {
     if (entries.length === 0) return
-    if (selectedRange.size === entries.length) {
-      // 既に全選択 → 解除
+    const visibleIds = getVisibleEntryIds()
+    if (visibleIds.size === 0) return
+    // 既に全表示行が選択済み → 解除
+    const allVisible = Array.from(visibleIds).every((id) => selectedRange.has(id))
+    if (allVisible && selectedRange.size > 0) {
       setSelectedRange(new Set())
       setShowBulkEdit(false)
     } else {
-      setSelectedRange(new Set(entries.map((e) => e.id)))
+      setSelectedRange(visibleIds)
       setShowBulkEdit(true)
     }
-  }, [entries, selectedRange])
+  }, [entries, selectedRange, getVisibleEntryIds])
 
   // 選択行の削除（複合仕訳の子も連鎖削除）
   const handleDeleteSelected = useCallback(() => {
