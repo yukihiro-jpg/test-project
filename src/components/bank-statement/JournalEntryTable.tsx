@@ -394,8 +394,39 @@ export default function JournalEntryTable({
       entries.map((entry) => {
         if (!selectedRange.has(entry.id)) return entry
         const u = { ...entry, [bulkField]: bulkValue }
-        if (bulkField === 'debitCode' && acc) u.debitName = acc.shortName || acc.name
-        if (bulkField === 'creditCode' && acc) u.creditName = acc.shortName || acc.name
+        if (bulkField === 'debitCode' && acc) {
+          u.debitName = acc.shortName || acc.name
+          // PL科目の場合は消費税CDも自動設定
+          if (isPL(acc.bsPl) && acc.normalBalance === '借方') {
+            const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'purchase')
+            if (tax) { u.debitTaxCode = tax.taxCode; u.debitTaxType = tax.taxName; u.debitTaxRate = '4' }
+          } else if (isPL(acc.bsPl) && acc.normalBalance === '貸方') {
+            const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'sales')
+            if (tax) { u.debitTaxCode = tax.taxCode; u.debitTaxType = tax.taxName; u.debitTaxRate = '4' }
+          } else if (isBS(acc.bsPl)) {
+            // BS科目の場合: 相手科目もBSかチェック
+            const otherAcc = accountMaster.find((a) => a.code === u.creditCode)
+            if (otherAcc && isBS(otherAcc.bsPl)) {
+              u.debitTaxCode = ''; u.debitTaxType = ''; u.debitTaxRate = ''
+            }
+          }
+        }
+        if (bulkField === 'creditCode' && acc) {
+          u.creditName = acc.shortName || acc.name
+          // PL科目の場合は消費税CDも自動設定
+          if (isPL(acc.bsPl) && acc.normalBalance === '貸方') {
+            const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'sales')
+            if (tax) { u.debitTaxCode = tax.taxCode; u.debitTaxType = tax.taxName; u.debitTaxRate = '4' }
+          } else if (isPL(acc.bsPl) && acc.normalBalance === '借方') {
+            const tax = getDefaultTaxCodeByName(acc.name || acc.shortName, 'purchase')
+            if (tax) { u.debitTaxCode = tax.taxCode; u.debitTaxType = tax.taxName; u.debitTaxRate = '4' }
+          } else if (isBS(acc.bsPl)) {
+            const otherAcc = accountMaster.find((a) => a.code === u.debitCode)
+            if (otherAcc && isBS(otherAcc.bsPl)) {
+              u.debitTaxCode = ''; u.debitTaxType = ''; u.debitTaxRate = ''
+            }
+          }
+        }
         return u
       }),
     )
