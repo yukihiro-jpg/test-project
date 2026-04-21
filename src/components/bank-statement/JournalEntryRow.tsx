@@ -19,6 +19,7 @@ interface Props {
   clientTaxType?: string
   compoundAutoAmount?: number
   isBalanceMismatch?: boolean
+  hideBalance?: boolean
   isChecked?: boolean
   onSelect: (id: string, e?: React.MouseEvent) => void
   onCheckToggle?: (id: string, e: React.MouseEvent) => void
@@ -42,7 +43,7 @@ function JournalEntryRowInner({
   entry, isSelected, accountMaster, subAccountMaster,
   isPageBoundary, pageLabel, runningBalance, rowNumber,
   isCompoundGroup, isCompoundFirst, isCompoundLast, compoundAutoAmount, clientTaxType,
-  isBalanceMismatch, isChecked,
+  isBalanceMismatch, hideBalance, isChecked,
   onSelect, onCheckToggle, onChange, onAddCompound, onDelete, onLearn, onAddBlank, onSubAccountRegister, onPatternClick,
 }: Props) {
   const amount = entry.debitAmount || entry.creditAmount || 0
@@ -195,15 +196,17 @@ function JournalEntryRowInner({
         </td>
 
         {/* 残高 */}
-        <td
-          style={CB}
-          className={`text-right px-2 py-1 ${isBalanceMismatch ? 'bg-green-100' : ''}`}
-          title={isBalanceMismatch ? 'この取引から通帳残高と計算残高が不一致です' : undefined}
-        >
-          <span className="text-sm font-medium text-gray-700 tabular-nums">
-            {runningBalance != null ? runningBalance.toLocaleString() : ''}
-          </span>
-        </td>
+        {!hideBalance && (
+          <td
+            style={CB}
+            className={`text-right px-2 py-1 ${isBalanceMismatch ? 'bg-green-100' : ''}`}
+            title={isBalanceMismatch ? 'この取引から通帳残高と計算残高が不一致です' : undefined}
+          >
+            <span className="text-sm font-medium text-gray-700 tabular-nums">
+              {runningBalance != null ? runningBalance.toLocaleString() : ''}
+            </span>
+          </td>
+        )}
 
         {/* 消費税コード */}
         <td style={CB} className={taxCellBg}>

@@ -31,13 +31,14 @@ interface Props {
   pages: StatementPage[]
   bankAccountCode: string
   clientTaxType?: string
+  hideBalance?: boolean
   onSelectionChange?: (ids: Set<string>) => void
 }
 
 export default function JournalEntryTable({
   entries, accountMaster, subAccountMaster, selectedEntryId,
   onSelect, onEntriesChange, onSubAccountUpdate, pages, bankAccountCode, clientTaxType,
-  onSelectionChange,
+  hideBalance, onSelectionChange,
 }: Props) {
   const [selectedRange, setSelectedRange] = useState<Set<string>>(new Set())
   const [lastClickedId, setLastClickedId] = useState<string | null>(null)
@@ -684,12 +685,12 @@ export default function JournalEntryTable({
       <div className="px-4 py-2 bg-gray-700 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium text-white">仕訳データ ({entries.length}件)</span>
-          {balanceMismatch.length > 0 && (
+          {!hideBalance && balanceMismatch.length > 0 && (
             <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded animate-pulse">
               残高不一致 {balanceMismatch.length}ページ
             </span>
           )}
-          {balanceMismatch.length === 0 && pages.length > 0 && entries.length > 0 && (
+          {!hideBalance && balanceMismatch.length === 0 && pages.length > 0 && entries.length > 0 && (
             <span className="px-2 py-0.5 bg-green-500 text-white text-xs font-bold rounded">
               残高一致
             </span>
@@ -758,7 +759,7 @@ export default function JournalEntryTable({
       </div>
 
       {/* 残高不一致の詳細 */}
-      {balanceMismatch.length > 0 && (
+      {!hideBalance && balanceMismatch.length > 0 && (
         <div className="px-4 py-2 bg-red-50 border-b border-red-200 shrink-0">
           <div className="text-xs font-bold text-red-700 mb-1">残高不一致の詳細</div>
           {balanceMismatch.map((m) => (
@@ -833,7 +834,9 @@ export default function JournalEntryTable({
                 </div>
               </th>
               <th className="px-2 py-2 text-center w-24 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>金額</th>
-              <th className="px-2 py-2 text-center w-28 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>残高</th>
+              {!hideBalance && (
+                <th className="px-2 py-2 text-center w-28 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>残高</th>
+              )}
               <th className="px-1 py-2 text-center w-24 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>消費税</th>
               <th className="px-1 py-2 text-center w-8 font-medium" style={{ borderRight: '1px solid #94a3b8' }} title="インボイス">iv</th>
               {clientTaxType === 'simplified' && (
@@ -881,7 +884,8 @@ export default function JournalEntryTable({
                   isCompoundFirst={ci?.isFirst}
                   isCompoundLast={ci?.isLast}
                   compoundAutoAmount={ci?.isLast ? ci.autoAmount : undefined}
-                  isBalanceMismatch={firstMismatchIndex >= 0 && idx >= firstMismatchIndex}
+                  isBalanceMismatch={!hideBalance && firstMismatchIndex >= 0 && idx >= firstMismatchIndex}
+                  hideBalance={hideBalance}
                   isChecked={selectedRange.has(entry.id)}
                   onCheckToggle={handleCheckToggle}
                   onSelect={handleRowSelect}

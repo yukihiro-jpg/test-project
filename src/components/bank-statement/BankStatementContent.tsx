@@ -764,6 +764,7 @@ export default function BankStatementContent() {
               pages={pages}
               bankAccountCode={uploadConfig?.accountCode || ''}
               clientTaxType={selectedClient?.taxType || 'standard'}
+              hideBalance={uploadConfig?.documentType === 'credit-card'}
               onSelectionChange={setSelectedEntryIds}
             />
           }
@@ -781,6 +782,7 @@ export default function BankStatementContent() {
           pages={pages}
           bankAccountCode={uploadConfig?.accountCode || ''}
           clientTaxType={selectedClient?.taxType || 'standard'}
+          hideBalance={uploadConfig?.documentType === 'credit-card'}
           onSelectionChange={setSelectedEntryIds}
         />
       ) : (
