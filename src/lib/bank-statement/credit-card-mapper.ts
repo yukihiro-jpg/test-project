@@ -27,17 +27,17 @@ export function creditCardToEntries(
 
   return data.transactions.map((tx) => {
     const amount = Math.abs(tx.amount)
+    const isRefund = tx.amount < 0
     const descBase = tx.storeName || ''
     const description = descBase.slice(0, 25)
-    // 日付は利用日を使用
     const usageDateStr = tx.usageDate.replace(/-/g, '')
 
     const pattern = findPattern(patterns, tx.storeName, amount)
 
-    let debitCode = ''
-    let debitName = ''
-    let debitSubCode = ''
-    let debitSubName = ''
+    let expenseCode = ''
+    let expenseName = ''
+    let expenseSubCode = ''
+    let expenseSubName = ''
     let taxCode = ''
     let taxCategory = ''
     let businessType = ''
@@ -46,17 +46,16 @@ export function creditCardToEntries(
     if (pattern) {
       const line = pattern.lines[0]
       if (line) {
-        // パターンからカード科目でない方（費用科目側）を借方にセット
         if (line.debitCode !== creditCardAccountCode) {
-          debitCode = line.debitCode
-          debitName = line.debitName
-          debitSubCode = line.debitSubCode || ''
-          debitSubName = line.debitSubName || ''
+          expenseCode = line.debitCode
+          expenseName = line.debitName
+          expenseSubCode = line.debitSubCode || ''
+          expenseSubName = line.debitSubName || ''
         } else if (line.creditCode !== creditCardAccountCode) {
-          debitCode = line.creditCode
-          debitName = line.creditName
-          debitSubCode = line.creditSubCode || ''
-          debitSubName = line.creditSubName || ''
+          expenseCode = line.creditCode
+          expenseName = line.creditName
+          expenseSubCode = line.creditSubCode || ''
+          expenseSubName = line.creditSubName || ''
         }
         taxCode = line.taxCode || ''
         taxCategory = line.taxCategory || ''
@@ -65,26 +64,27 @@ export function creditCardToEntries(
       patternId = pattern.id
     }
 
+    // マイナス金額（返品・キャンセル）→ 貸借逆転
     const entry: JournalEntry = {
       id: generateEntryId(),
       transactionId: null,
       date: usageDateStr,
-      debitCode,
-      debitName,
-      debitSubCode,
-      debitSubName,
-      debitTaxType: taxCategory,
+      debitCode: isRefund ? creditCardAccountCode : expenseCode,
+      debitName: isRefund ? creditCardAccountName : expenseName,
+      debitSubCode: isRefund ? (creditCardSubCode || '') : expenseSubCode,
+      debitSubName: isRefund ? (creditCardSubName || '') : expenseSubName,
+      debitTaxType: isRefund ? '' : taxCategory,
       debitIndustry: '',
       debitTaxInclude: '',
       debitAmount: amount,
       debitTaxAmount: 0,
-      debitTaxCode: taxCode,
-      debitTaxRate: taxCode ? '4' : '',
-      debitBusinessType: businessType,
-      creditCode: creditCardAccountCode,
-      creditName: creditCardAccountName,
-      creditSubCode: creditCardSubCode || '',
-      creditSubName: creditCardSubName || '',
+      debitTaxCode: isRefund ? '' : taxCode,
+      debitTaxRate: !isRefund && taxCode ? '4' : '',
+      debitBusinessType: isRefund ? '' : businessType,
+      creditCode: isRefund ? expenseCode : creditCardAccountCode,
+      creditName: isRefund ? expenseName : creditCardAccountName,
+      creditSubCode: isRefund ? expenseSubCode : (creditCardSubCode || ''),
+      creditSubName: isRefund ? expenseSubName : (creditCardSubName || ''),
       creditTaxType: '',
       creditIndustry: '',
       creditTaxInclude: '',
