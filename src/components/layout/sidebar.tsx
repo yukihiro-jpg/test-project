@@ -37,6 +37,7 @@ export function Sidebar({ caseId, onClose }: { caseId: string; onClose?: () => v
     { label: '土地', href: `${base}/assets/land`, icon: <MapPin size={18} /> },
     { label: '建物', href: `${base}/assets/building`, icon: <Building2 size={18} /> },
     { label: '現金預金', href: `${base}/assets/cash`, icon: <Banknote size={18} /> },
+    { label: '預金移動表', href: `${base}/funds-movement`, icon: <ArrowRightLeft size={18} /> },
     { label: '上場株式', href: `${base}/assets/listed-stock`, icon: <TrendingUp size={18} /> },
     { label: '非上場株式', href: `${base}/assets/unlisted-stock`, icon: <TrendingUp size={18} /> },
     { label: '保険金', href: `${base}/assets/insurance`, icon: <Shield size={18} /> },

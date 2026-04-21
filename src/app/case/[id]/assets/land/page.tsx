@@ -1,30 +1,39 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useCaseStore } from '@/lib/store/case-store';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { CurrencyInput, formatCurrency } from '@/components/common/currency-input';
+import { formatCurrency } from '@/components/common/currency-input';
 import { calculateLandValue } from '@/lib/tax/asset-valuation';
-import type { LandCategory, EvaluationMethod, SpecialLandUseType } from '@/types';
-import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import type { LandCategory, EvaluationMethod, SpecialLandUseType, LandUsageType } from '@/types';
+import { Plus, Trash2 } from 'lucide-react';
 
-const LAND_CATEGORIES = ['宅地', '田', '畑', '山林', '原野', '牧場', '池沼', '鉱泉地', '雑種地']
-  .map(v => ({ value: v, label: v }));
+const LAND_CATEGORIES: LandCategory[] = ['宅地', '田', '畑', '山林', '原野', '牧場', '池沼', '鉱泉地', '雑種地'];
+const LAND_USAGES: LandUsageType[] = ['自用', '貸家', '貸家建付地', '貸地', '私道', '使用貸借'];
+const EVALUATION_AREAS = ['路線価', '倍率'];
+
+const inputCls = 'w-full border border-gray-300 rounded px-2 py-1 text-sm';
+const inputNumCls = 'w-full border border-gray-300 rounded px-2 py-1 text-sm text-right';
 
 const defaultLandShape = () => ({
-  frontageDistance: 0, depth: 0, depthCorrection: 1,
-  irregularShape: false, irregularCorrection: 1,
-  sideRoad: false, sideRoadCorrection: 0,
-  twoRoads: false, twoRoadsCorrection: 0,
-  setback: 0, borrowedLandRatio: 0,
+  frontageDistance: 0,
+  depth: 0,
+  depthCorrection: 1,
+  irregularShape: false,
+  irregularCorrection: 1,
+  sideRoad: false,
+  sideRoadCorrection: 0,
+  twoRoads: false,
+  twoRoadsCorrection: 0,
+  setback: 0,
+  borrowedLandRatio: 0,
 });
 
 const defaultSpecialUse = () => ({
   type: 'residence' as SpecialLandUseType,
-  reductionRate: 0.8, applicableArea: 0, maxArea: 330,
+  reductionRate: 0.8,
+  applicableArea: 0,
+  maxArea: 330,
 });
 
 export default function LandPage() {
@@ -32,7 +41,6 @@ export default function LandPage() {
   const addAsset = useCaseStore(s => s.addAsset);
   const updateAsset = useCaseStore(s => s.updateAsset);
   const removeAsset = useCaseStore(s => s.removeAsset);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (!currentCase) return <p className="text-gray-500">案件を選択してください</p>;
 
@@ -40,15 +48,34 @@ export default function LandPage() {
   const total = lands.reduce((sum, land) => sum + calculateLandValue(land), 0);
 
   const handleAdd = () => {
-    const id = addAsset('lands', {
-      location: '', landNumber: '', landCategory: '宅地' as LandCategory,
-      area: 0, evaluationMethod: 'rosenka' as EvaluationMethod,
-      rosenkaPrice: 0, landShape: defaultLandShape(),
-      fixedAssetTaxValue: 0, multiplier: 1,
-      useSpecialLand: false, specialUse: defaultSpecialUse(),
+    addAsset('lands', {
+      location: '',
+      landNumber: '',
+      referenceNote: '',
+      ownershipRatio: '1/1',
+      landCategory: '宅地' as LandCategory,
+      registeredCategory: '宅地',
+      taxCategory: '宅地',
+      currentStatus: '',
+      area: 0,
+      registeredArea: 0,
+      taxArea: 0,
+      evaluationMethod: 'rosenka' as EvaluationMethod,
+      rosenkaPrice: 0,
+      landShape: defaultLandShape(),
+      fixedAssetTaxValue: 0,
+      multiplier: 1,
+      evaluationArea: '路線価',
+      usage: '自用' as LandUsageType,
+      tenantName: '',
+      borrowingRightRatio: 0,
+      sideTwoRoads: '',
+      cityPlanningZone: '',
+      useSpecialLand: false,
+      specialUse: defaultSpecialUse(),
       note: '',
+      confirmationNote: '',
     });
-    setExpandedId(id);
   };
 
   return (
@@ -61,154 +88,226 @@ export default function LandPage() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="text-sm border-collapse">
           <thead>
             <tr className="bg-gray-100 border-b">
-              <th className="p-2 text-left w-8"></th>
-              <th className="p-2 text-left w-8">No</th>
-              <th className="p-2 text-left">所在地</th>
-              <th className="p-2 text-left">地目</th>
-              <th className="p-2 text-right">地積</th>
-              <th className="p-2 text-right">評価額</th>
+              <th className="p-2 text-center w-12 border border-gray-300">No</th>
+              <th className="p-2 text-center w-16 border border-gray-300">土地家屋</th>
+              <th className="p-2 text-left min-w-[200px] border border-gray-300">地番・参照備考</th>
+              <th className="p-2 text-center w-20 border border-gray-300">持分</th>
+              <th className="p-2 text-center w-20 border border-gray-300">登記地目</th>
+              <th className="p-2 text-center w-20 border border-gray-300">課税地目</th>
+              <th className="p-2 text-left w-32 border border-gray-300">現況確認・実地調査</th>
+              <th className="p-2 text-right w-24 border border-gray-300">登記地積<br /><span className="text-xs font-normal">騰本より</span></th>
+              <th className="p-2 text-right w-24 border border-gray-300">課税地積<br /><span className="text-xs font-normal">評証より</span></th>
+              <th className="p-2 text-right w-32 border border-gray-300">固定資産税評価額</th>
+              <th className="p-2 text-center w-24 border border-gray-300">評価地域<br /><span className="text-xs font-normal">路・倍</span></th>
+              <th className="p-2 text-right w-24 border border-gray-300">倍率</th>
+              <th className="p-2 text-right w-32 border border-gray-300">路線価</th>
+              <th className="p-2 text-center w-28 border border-gray-300">自用/貸家</th>
+              <th className="p-2 text-left w-32 border border-gray-300">借主</th>
+              <th className="p-2 text-right w-24 border border-gray-300">借地権割合</th>
+              <th className="p-2 text-left w-32 border border-gray-300">側方・二方</th>
+              <th className="p-2 text-left w-32 border border-gray-300">都市計画区分</th>
+              <th className="p-2 text-left w-32 border border-gray-300">備考</th>
+              <th className="p-2 text-left w-32 border border-gray-300">確認すること</th>
+              <th className="p-2 text-center w-12 border border-gray-300"></th>
             </tr>
           </thead>
           <tbody>
-            {lands.map((land, i) => {
-              const value = calculateLandValue(land);
-              return (
-                <React.Fragment key={land.id}>
-                  <tr
-                    className={`border-b cursor-pointer hover:bg-blue-50 ${i % 2 === 0 ? '' : 'bg-gray-50'} ${expandedId === land.id ? 'bg-blue-50' : ''}`}
-                    onClick={() => setExpandedId(expandedId === land.id ? null : land.id)}
+            {lands.map((land, i) => (
+              <tr key={land.id} className={`border-b ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                <td className="p-2 text-center border border-gray-300">{i + 1}</td>
+                <td className="p-2 text-center border border-gray-300">土地</td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="text"
+                    className={inputCls}
+                    value={land.location}
+                    placeholder="所在地・地番"
+                    onChange={e => updateAsset('lands', land.id, { location: e.target.value })}
+                  />
+                  <input
+                    type="text"
+                    className={`${inputCls} mt-1`}
+                    value={land.referenceNote || ''}
+                    placeholder="参照備考"
+                    onChange={e => updateAsset('lands', land.id, { referenceNote: e.target.value })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="text"
+                    className={inputCls}
+                    value={land.ownershipRatio || ''}
+                    placeholder="1/1"
+                    onChange={e => updateAsset('lands', land.id, { ownershipRatio: e.target.value })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <select
+                    className={inputCls}
+                    value={land.registeredCategory || '宅地'}
+                    onChange={e => updateAsset('lands', land.id, { registeredCategory: e.target.value })}
                   >
-                    <td className="p-2">
-                      {expandedId === land.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                    </td>
-                    <td className="p-2">{i + 1}</td>
-                    <td className="p-2">{land.location || '（未入力）'}</td>
-                    <td className="p-2">{land.landCategory}</td>
-                    <td className="p-2 text-right">{land.area ? `${land.area}㎡` : '-'}</td>
-                    <td className="p-2 text-right font-medium">{formatCurrency(value)}</td>
-                  </tr>
-                  {expandedId === land.id && (
-                    <tr><td colSpan={6} className="p-0">
-                      <div className="px-4 py-3 bg-white border-l-4 border-blue-400 space-y-2">
-                        {/* 1行目: 基本情報 */}
-                        <div className="grid grid-cols-8 gap-2 items-end">
-                          <div className="col-span-2">
-                            <Input label="所在地" value={land.location}
-                              onChange={e => updateAsset('lands', land.id, { location: e.target.value })} />
-                          </div>
-                          <Input label="地番" value={land.landNumber}
-                            onChange={e => updateAsset('lands', land.id, { landNumber: e.target.value })} />
-                          <Select label="地目" value={land.landCategory}
-                            onChange={e => updateAsset('lands', land.id, { landCategory: e.target.value as LandCategory })}
-                            options={LAND_CATEGORIES} />
-                          <Input label="地積" type="number" value={land.area || ''} suffix="㎡"
-                            onChange={e => updateAsset('lands', land.id, { area: Number(e.target.value) })} />
-                          <Select label="評価方式" value={land.evaluationMethod}
-                            onChange={e => updateAsset('lands', land.id, { evaluationMethod: e.target.value as EvaluationMethod })}
-                            options={[
-                              { value: 'rosenka', label: '路線価方式' },
-                              { value: 'bairitsu', label: '倍率方式' },
-                            ]} />
-                          <Select label="用途" value={land.usage || '自用'}
-                            onChange={e => updateAsset('lands', land.id, { usage: e.target.value })}
-                            options={[
-                              { value: '自用', label: '自用' },
-                              { value: '賃貸用', label: '賃貸用' },
-                              { value: '貸地', label: '貸地' },
-                              { value: '使用貸借', label: '使用貸借' },
-                            ]} />
-                          <Input label={land.usage === '賃貸用' || land.usage === '貸地' ? '賃借人' : '備考'}
-                            value={land.usage === '賃貸用' || land.usage === '貸地' ? (land.tenantName || '') : land.note}
-                            onChange={e => {
-                              if (land.usage === '賃貸用' || land.usage === '貸地') {
-                                updateAsset('lands', land.id, { tenantName: e.target.value });
-                              } else {
-                                updateAsset('lands', land.id, { note: e.target.value });
-                              }
-                            }}
-                            placeholder={land.usage === '賃貸用' || land.usage === '貸地' ? '賃借人名' : '備考'} />
-                        </div>
-                        {/* 2行目: 評価詳細 */}
-                        {land.evaluationMethod === 'rosenka' ? (
-                          <div className="grid grid-cols-8 gap-2 items-end">
-                            <CurrencyInput label="路線価(円/㎡)" value={land.rosenkaPrice}
-                              onChange={v => updateAsset('lands', land.id, { rosenkaPrice: v })} />
-                            <Input label="奥行補正率" type="number" value={land.landShape?.depthCorrection || ''} step="0.01"
-                              onChange={e => updateAsset('lands', land.id, {
-                                landShape: { ...land.landShape, depthCorrection: Number(e.target.value) }
-                              })} />
-                            <Input label="間口(m)" type="number" value={land.landShape?.frontageDistance || ''}
-                              onChange={e => updateAsset('lands', land.id, {
-                                landShape: { ...land.landShape, frontageDistance: Number(e.target.value) }
-                              })} />
-                            <Input label="奥行(m)" type="number" value={land.landShape?.depth || ''}
-                              onChange={e => updateAsset('lands', land.id, {
-                                landShape: { ...land.landShape, depth: Number(e.target.value) }
-                              })} />
-                            <Input label="借地権割合" type="number" value={land.landShape?.borrowedLandRatio || ''} step="0.1"
-                              onChange={e => updateAsset('lands', land.id, {
-                                landShape: { ...land.landShape, borrowedLandRatio: Number(e.target.value) }
-                              })} />
-                            <div className="flex items-end gap-2 pb-1">
-                              <label className="flex items-center gap-1 text-xs whitespace-nowrap">
-                                <input type="checkbox" checked={land.landShape?.irregularShape || false}
-                                  onChange={e => updateAsset('lands', land.id, {
-                                    landShape: { ...land.landShape, irregularShape: e.target.checked }
-                                  })} className="w-3 h-3" />不整形
-                              </label>
-                              <label className="flex items-center gap-1 text-xs whitespace-nowrap">
-                                <input type="checkbox" checked={land.useSpecialLand || false}
-                                  onChange={e => updateAsset('lands', land.id, { useSpecialLand: e.target.checked })} className="w-3 h-3" />小規模
-                              </label>
-                            </div>
-                            {land.useSpecialLand && (
-                              <Select label="特例" value={land.specialUse?.type || 'residence'}
-                                onChange={e => {
-                                  const type = e.target.value as SpecialLandUseType;
-                                  const configs: Record<SpecialLandUseType, { rate: number; max: number }> = {
-                                    residence: { rate: 0.8, max: 330 }, business: { rate: 0.8, max: 400 }, rental: { rate: 0.5, max: 200 },
-                                  };
-                                  updateAsset('lands', land.id, { specialUse: { ...land.specialUse, type, reductionRate: configs[type].rate, maxArea: configs[type].max } });
-                                }}
-                                options={[
-                                  { value: 'residence', label: '居住用80%' },
-                                  { value: 'business', label: '事業用80%' },
-                                  { value: 'rental', label: '貸付用50%' },
-                                ]} />
-                            )}
-                            <button onClick={() => removeAsset('lands', land.id)}
-                              className="text-red-500 hover:text-red-700 text-xs pb-1">削除</button>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-4 gap-2 items-end">
-                            <CurrencyInput label="固定資産税評価額" value={land.fixedAssetTaxValue}
-                              onChange={v => updateAsset('lands', land.id, { fixedAssetTaxValue: v })} />
-                            <Input label="倍率" type="number" value={land.multiplier || ''} step="0.1"
-                              onChange={e => updateAsset('lands', land.id, { multiplier: Number(e.target.value) })} />
-                            <div className="flex items-end gap-2 pb-1">
-                              <label className="flex items-center gap-1 text-xs whitespace-nowrap">
-                                <input type="checkbox" checked={land.useSpecialLand || false}
-                                  onChange={e => updateAsset('lands', land.id, { useSpecialLand: e.target.checked })} className="w-3 h-3" />小規模宅地特例
-                              </label>
-                            </div>
-                            <button onClick={() => removeAsset('lands', land.id)}
-                              className="text-red-500 hover:text-red-700 text-xs pb-1">削除</button>
-                          </div>
-                        )}
-                      </div>
-                    </td></tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
+                    {LAND_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <select
+                    className={inputCls}
+                    value={land.taxCategory || '宅地'}
+                    onChange={e => updateAsset('lands', land.id, { taxCategory: e.target.value })}
+                  >
+                    {LAND_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="text"
+                    className={inputCls}
+                    value={land.currentStatus || ''}
+                    onChange={e => updateAsset('lands', land.id, { currentStatus: e.target.value })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="number"
+                    className={inputNumCls}
+                    value={land.registeredArea || ''}
+                    onChange={e => updateAsset('lands', land.id, { registeredArea: Number(e.target.value) })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="number"
+                    className={inputNumCls}
+                    value={land.taxArea || ''}
+                    onChange={e => updateAsset('lands', land.id, { taxArea: Number(e.target.value) })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="number"
+                    className={inputNumCls}
+                    value={land.fixedAssetTaxValue || ''}
+                    onChange={e => updateAsset('lands', land.id, { fixedAssetTaxValue: Number(e.target.value) })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <select
+                    className={inputCls}
+                    value={land.evaluationArea || '路線価'}
+                    onChange={e => {
+                      const val = e.target.value;
+                      updateAsset('lands', land.id, {
+                        evaluationArea: val,
+                        evaluationMethod: (val === '倍率' ? 'bairitsu' : 'rosenka') as EvaluationMethod,
+                      });
+                    }}
+                  >
+                    {EVALUATION_AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="number"
+                    step="0.01"
+                    className={inputNumCls}
+                    value={land.multiplier || ''}
+                    onChange={e => updateAsset('lands', land.id, { multiplier: Number(e.target.value) })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="number"
+                    className={inputNumCls}
+                    value={land.rosenkaPrice || ''}
+                    onChange={e => updateAsset('lands', land.id, { rosenkaPrice: Number(e.target.value) })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <select
+                    className={inputCls}
+                    value={land.usage || '自用'}
+                    onChange={e => updateAsset('lands', land.id, { usage: e.target.value as LandUsageType })}
+                  >
+                    {LAND_USAGES.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="text"
+                    className={inputCls}
+                    value={land.tenantName || ''}
+                    onChange={e => updateAsset('lands', land.id, { tenantName: e.target.value })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="number"
+                    step="0.01"
+                    className={inputNumCls}
+                    value={land.borrowingRightRatio || ''}
+                    onChange={e => updateAsset('lands', land.id, { borrowingRightRatio: Number(e.target.value) })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="text"
+                    className={inputCls}
+                    value={land.sideTwoRoads || ''}
+                    onChange={e => updateAsset('lands', land.id, { sideTwoRoads: e.target.value })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="text"
+                    className={inputCls}
+                    value={land.cityPlanningZone || ''}
+                    onChange={e => updateAsset('lands', land.id, { cityPlanningZone: e.target.value })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="text"
+                    className={inputCls}
+                    value={land.note}
+                    onChange={e => updateAsset('lands', land.id, { note: e.target.value })}
+                  />
+                </td>
+                <td className="p-2 border border-gray-300">
+                  <input
+                    type="text"
+                    className={inputCls}
+                    value={land.confirmationNote || ''}
+                    onChange={e => updateAsset('lands', land.id, { confirmationNote: e.target.value })}
+                  />
+                </td>
+                <td className="p-2 text-center border border-gray-300">
+                  <button
+                    onClick={() => removeAsset('lands', land.id)}
+                    className="text-red-500 hover:text-red-700"
+                    aria-label="削除"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {lands.length === 0 && (
+              <tr>
+                <td colSpan={21} className="p-6 text-center text-gray-500 border border-gray-300">
+                  土地が登録されていません。「追加」ボタンから登録してください。
+                </td>
+              </tr>
+            )}
           </tbody>
           <tfoot>
             <tr className="border-t-2 font-semibold bg-gray-100">
-              <td colSpan={5} className="p-2 text-right">合計</td>
-              <td className="p-2 text-right">{formatCurrency(total)}</td>
+              <td colSpan={9} className="p-2 text-right border border-gray-300">評価額合計</td>
+              <td className="p-2 text-right border border-gray-300" colSpan={11}>{formatCurrency(total)}</td>
+              <td className="p-2 border border-gray-300"></td>
             </tr>
           </tfoot>
         </table>
