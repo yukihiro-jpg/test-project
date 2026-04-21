@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils/cn';
 import {
   Home, User, Users, LayoutList, MapPin, Building2, Banknote,
   TrendingUp, Shield, Gift, FileText, Calculator, Download, ChevronDown, ChevronRight,
-  ArrowRightLeft, TrendingDown, ClipboardList, FileCheck, Calendar,
+  ArrowRightLeft, TrendingDown, ClipboardList, FileCheck, Calendar, X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { GoogleDrivePanel } from '@/components/google/GoogleDrivePanel';
@@ -18,7 +18,7 @@ interface NavItem {
   children?: NavItem[];
 }
 
-export function Sidebar({ caseId }: { caseId: string }) {
+export function Sidebar({ caseId, onClose }: { caseId: string; onClose?: () => void }) {
   const pathname = usePathname();
   const [assetsOpen, setAssetsOpen] = useState(true);
   const base = `/case/${caseId}`;
@@ -71,8 +71,19 @@ export function Sidebar({ caseId }: { caseId: string }) {
   );
 
   return (
-    <aside className="w-64 border-r border-gray-200 bg-white h-full overflow-y-auto">
+    <aside className="w-64 border-r border-gray-200 bg-white h-full overflow-y-auto flex-shrink-0">
       <div className="p-4 space-y-1 flex flex-col h-full">
+        {onClose && (
+          <div className="flex justify-end mb-2">
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-gray-100 rounded"
+              aria-label="サイドバーを閉じる"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
         <div className="flex-1 space-y-1">
           {navItems.map(renderNavItem)}
 

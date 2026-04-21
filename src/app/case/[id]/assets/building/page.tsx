@@ -30,7 +30,7 @@ export default function BuildingPage() {
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">建物</h1>
         <Button onClick={handleAdd}><Plus size={18} className="mr-2" />追加</Button>
@@ -70,9 +70,11 @@ export default function BuildingPage() {
                     <tr><td colSpan={6} className="p-0">
                       <div className="px-4 py-2 bg-white border-l-4 border-blue-400 space-y-2">
                         {/* 1行目: 基本情報 */}
-                        <div className="grid grid-cols-6 gap-2 items-end">
-                          <Input label="所在地" value={b.location}
-                            onChange={e => updateAsset('buildings', b.id, { location: e.target.value })} />
+                        <div className="grid grid-cols-8 gap-2 items-end">
+                          <div className="col-span-2">
+                            <Input label="所在地" value={b.location}
+                              onChange={e => updateAsset('buildings', b.id, { location: e.target.value })} />
+                          </div>
                           <Input label="構造" value={b.structureType} placeholder="木造/RC等"
                             onChange={e => updateAsset('buildings', b.id, { structureType: e.target.value })} />
                           <Input label="用途" value={b.usage} placeholder="自用/貸家等"
@@ -90,10 +92,11 @@ export default function BuildingPage() {
                                 className="w-16 border border-gray-300 rounded px-1 py-0.5 text-xs" />
                             )}
                           </div>
-                          <div className="flex items-end gap-2 pb-1">
-                            <Input label="備考" value={b.note}
-                              onChange={e => updateAsset('buildings', b.id, { note: e.target.value })} />
-                          </div>
+                          <Input label="賃借人" value={b.tenantName || ''}
+                            onChange={e => updateAsset('buildings', b.id, { tenantName: e.target.value })}
+                            placeholder="賃借人名" />
+                          <Input label="備考" value={b.note}
+                            onChange={e => updateAsset('buildings', b.id, { note: e.target.value })} />
                         </div>
                         {/* 削除ボタン */}
                         <div className="flex justify-end">

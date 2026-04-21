@@ -66,12 +66,20 @@ export default function DecedentPage() {
             onChange={v => updateDecedent({ deathDate: v })}
           />
 
-          <Input
-            label="住所"
-            value={decedent.address}
-            onChange={e => updateDecedent({ address: e.target.value })}
-            placeholder="東京都千代田区..."
-          />
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="住所"
+              value={decedent.address}
+              onChange={e => updateDecedent({ address: e.target.value })}
+              placeholder="東京都千代田区..."
+            />
+            <Input
+              label="電話番号"
+              value={decedent.phone || ''}
+              placeholder="090-xxxx-xxxx"
+              onChange={e => updateDecedent({ phone: e.target.value })}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

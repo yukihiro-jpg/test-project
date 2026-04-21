@@ -52,7 +52,7 @@ export default function LandPage() {
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">土地</h1>
         <Button onClick={handleAdd}>
@@ -94,9 +94,11 @@ export default function LandPage() {
                     <tr><td colSpan={6} className="p-0">
                       <div className="px-4 py-3 bg-white border-l-4 border-blue-400 space-y-2">
                         {/* 1行目: 基本情報 */}
-                        <div className="grid grid-cols-6 gap-2 items-end">
-                          <Input label="所在地" value={land.location}
-                            onChange={e => updateAsset('lands', land.id, { location: e.target.value })} />
+                        <div className="grid grid-cols-8 gap-2 items-end">
+                          <div className="col-span-2">
+                            <Input label="所在地" value={land.location}
+                              onChange={e => updateAsset('lands', land.id, { location: e.target.value })} />
+                          </div>
                           <Input label="地番" value={land.landNumber}
                             onChange={e => updateAsset('lands', land.id, { landNumber: e.target.value })} />
                           <Select label="地目" value={land.landCategory}
@@ -110,8 +112,24 @@ export default function LandPage() {
                               { value: 'rosenka', label: '路線価方式' },
                               { value: 'bairitsu', label: '倍率方式' },
                             ]} />
-                          <Input label="備考" value={land.note}
-                            onChange={e => updateAsset('lands', land.id, { note: e.target.value })} />
+                          <Select label="用途" value={land.usage || '自用'}
+                            onChange={e => updateAsset('lands', land.id, { usage: e.target.value })}
+                            options={[
+                              { value: '自用', label: '自用' },
+                              { value: '賃貸用', label: '賃貸用' },
+                              { value: '貸地', label: '貸地' },
+                              { value: '使用貸借', label: '使用貸借' },
+                            ]} />
+                          <Input label={land.usage === '賃貸用' || land.usage === '貸地' ? '賃借人' : '備考'}
+                            value={land.usage === '賃貸用' || land.usage === '貸地' ? (land.tenantName || '') : land.note}
+                            onChange={e => {
+                              if (land.usage === '賃貸用' || land.usage === '貸地') {
+                                updateAsset('lands', land.id, { tenantName: e.target.value });
+                              } else {
+                                updateAsset('lands', land.id, { note: e.target.value });
+                              }
+                            }}
+                            placeholder={land.usage === '賃貸用' || land.usage === '貸地' ? '賃借人名' : '備考'} />
                         </div>
                         {/* 2行目: 評価詳細 */}
                         {land.evaluationMethod === 'rosenka' ? (

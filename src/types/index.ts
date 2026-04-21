@@ -45,6 +45,7 @@ export interface Decedent {
   birthDate: string;            // YYYY-MM-DD
   deathDate?: string;           // YYYY-MM-DD（任意）
   address: string;
+  phone?: string;
 }
 
 // --- 相続人 ---
@@ -53,6 +54,7 @@ export interface Heir {
   name: string;
   birthDate: string;            // YYYY-MM-DD
   address: string;
+  phone?: string;
   relationship: RelationshipType;
   isDisabled: boolean;
   disabilityType?: 'general' | 'special';
@@ -111,6 +113,8 @@ export interface LandAsset {
   multiplier: number;
   useSpecialLand: boolean;
   specialUse: SpecialLandUse;
+  usage?: string;              // 用途（自用/賃貸用等）
+  tenantName?: string;         // 賃借人・貸主名
   note: string;
 }
 
@@ -123,6 +127,7 @@ export interface BuildingAsset {
   fixedAssetTaxValue: number;
   rentalReduction: boolean;
   borrowedHouseRatio: number;
+  tenantName?: string;         // 賃借人・貸主名
   note: string;
 }
 
