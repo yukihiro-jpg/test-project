@@ -108,7 +108,8 @@ const DATE_PATTERNS = [
 const AMOUNT_PATTERN = /^[¥￥]?\s*[\d,]+$/
 
 function parseDate(text: string, defaultYear?: number): string | null {
-  const cleaned = text.trim()
+  // スペースを除去して正規化（「2025年 4月 10日」→「2025年4月10日」）
+  const cleaned = text.trim().replace(/\s+/g, '')
 
   // 和暦略称: R6.4.1
   const m1 = cleaned.match(
@@ -206,7 +207,8 @@ function parseSignedAmount(text: string): number | null {
 }
 
 function isDateCell(text: string): boolean {
-  return DATE_PATTERNS.some((p) => p.test(text.trim()))
+  const normalized = text.trim().replace(/\s+/g, '')
+  return DATE_PATTERNS.some((p) => p.test(normalized))
 }
 
 function isAmountCell(text: string): boolean {
@@ -217,8 +219,8 @@ function isAmountCell(text: string): boolean {
 // ヘッダー行で使われる列名キーワード
 const HEADER_DATE = ['日付', '年月日', '取引日', '計算日']
 const HEADER_DESC = ['摘要', 'お取引内容', '取引内容', '内容', '記事', '備考']
-const HEADER_DEPOSIT = ['入金', '預入', '預り', 'お預入れ', 'お預入', '入金金額', '入金額', '預入金額']
-const HEADER_WITHDRAW = ['出金', '引出', '払戻', 'お引出', 'お支払い', '出金金額', '出金額', '引出金額', '支払金額']
+const HEADER_DEPOSIT = ['入金', '預入', '預り', 'お預入れ', 'お預入', '入金金額', '入金額', '預入金額', 'ご入金額', 'ご入金']
+const HEADER_WITHDRAW = ['出金', '引出', '払戻', 'お引出', 'お支払い', '出金金額', '出金額', '引出金額', '支払金額', 'お支払額', '支払額', 'お支払']
 const HEADER_BALANCE = ['残高', '差引残高', '残額', 'お預り残高']
 // 入出金が1列で符号付の場合の列名
 const HEADER_SIGNED = ['入出金', '出入金', '入出金額', '取引金額', 'お取引金額', '金額']
@@ -432,11 +434,17 @@ function extractTransactions(
   const hasTxType = typeof txTypeCol === 'number' && txTypeCol >= 0
   const hasBalanceCol = mapping.balanceColumn >= 0
   let runningBalance = 0 // 残高列がない場合のために running 集計
+  let lastDate: string | null = null // 日付空欄時の引継ぎ用
 
   for (const row of rows) {
     const dateText = row.cells[mapping.dateColumn] || ''
-    const date = parseDate(dateText)
-    if (!date) continue // 日付のない行はスキップ（ヘッダー等）
+    let date = parseDate(dateText)
+    if (!date && lastDate && row.cells.some((c, i) => i !== mapping.dateColumn && c && c.trim())) {
+      // 日付が空でも他の列にデータがある → 直前の日付を引き継ぐ
+      date = lastDate
+    }
+    if (!date) continue // 日付もデータもない行はスキップ（ヘッダー等）
+    lastDate = date
 
     const baseDesc =
       mapping.descriptionColumn >= 0
