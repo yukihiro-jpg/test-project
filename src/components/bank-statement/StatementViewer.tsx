@@ -10,7 +10,9 @@ interface Props {
   onPageChange: (index: number) => void
   entries?: JournalEntry[]
   bankAccountCode?: string
+  hideBalance?: boolean
   onBalanceOverride?: (pageIndex: number, field: 'openingBalance' | 'closingBalance', value: number) => void
+  onFileDelete?: () => void
 }
 
 const ZOOM_STEP = 10
@@ -24,7 +26,9 @@ export default function StatementViewer({
   onPageChange,
   entries,
   bankAccountCode,
+  hideBalance,
   onBalanceOverride,
+  onFileDelete,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [zoom, setZoom] = useState(100)
@@ -96,6 +100,12 @@ export default function StatementViewer({
         </div>
 
         <div className="flex items-center gap-1">
+          {onFileDelete && (
+            <button onClick={onFileDelete} title="アップロードファイルを削除"
+              className="px-2 py-1 text-xs bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 mr-1">
+              ファイル削除
+            </button>
+          )}
           <button
             onClick={handleZoomOut}
             disabled={zoom <= ZOOM_MIN}
@@ -182,7 +192,18 @@ export default function StatementViewer({
       </div>
 
       {/* 残高情報 */}
-      <BalanceInfo page={currentPage} entries={entries} bankAccountCode={bankAccountCode} onBalanceOverride={onBalanceOverride} />
+      {hideBalance ? (
+        // クレジットカード等: 金額合計のみ表示
+        <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 shrink-0 text-sm">
+          <span className="text-gray-600">金額合計: </span>
+          <span className="font-bold text-gray-800">
+            ¥{currentPage.transactions.reduce((s, t) => s + (t.deposit || 0) + (t.withdrawal || 0), 0).toLocaleString()}
+          </span>
+          <span className="text-xs text-gray-400 ml-2">({currentPage.transactions.length}件)</span>
+        </div>
+      ) : (
+        <BalanceInfo page={currentPage} entries={entries} bankAccountCode={bankAccountCode} onBalanceOverride={onBalanceOverride} />
+      )}
     </div>
   )
 }

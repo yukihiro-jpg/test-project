@@ -669,7 +669,7 @@ export default function BankStatementContent() {
     <div className="h-screen flex flex-col bg-gray-100 bank-statement-app">
       {/* ヘッダー */}
       <header className="bg-gray-800 px-4 py-2 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <h1 className="text-base font-bold text-white">会計大将インポートデータ変換</h1>
           {selectedClient && (
             <span className="text-sm text-blue-300 font-medium">{selectedClient.name}</span>
@@ -678,16 +678,17 @@ export default function BankStatementContent() {
             className="text-xs text-gray-400 hover:text-white hover:underline">
             顧問先一覧
           </button>
+          <UploadDialog
+            accountMaster={accountMaster}
+            subAccountMaster={subAccountMaster}
+            onUpload={handleUpload}
+            isLoading={isLoading}
+            lastPeriodFrom={lastPeriodFrom}
+            lastPeriodTo={lastPeriodTo}
+          />
         </div>
         <div className="flex items-center gap-2">
           <DriveSyncButton clientId={selectedClient?.id || null} clientName={selectedClient?.name || null} />
-          {selectedClient && (
-            <button onClick={handleExitApp} disabled={exitingApp}
-              title="Drive保存してブラウザを閉じる"
-              className="px-3 py-1.5 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50">
-              {exitingApp ? '保存中...' : 'アプリ終了'}
-            </button>
-          )}
           <AccountMasterUploader
             accountMaster={accountMaster}
             subAccountMaster={subAccountMaster}
@@ -704,14 +705,6 @@ export default function BankStatementContent() {
             className="px-3 py-1.5 text-xs font-medium bg-white/10 hover:bg-white/20 text-white rounded border border-white/20">
             定型仕訳
           </button>
-          <UploadDialog
-            accountMaster={accountMaster}
-            subAccountMaster={subAccountMaster}
-            onUpload={handleUpload}
-            isLoading={isLoading}
-            lastPeriodFrom={lastPeriodFrom}
-            lastPeriodTo={lastPeriodTo}
-          />
           {journalEntries.length > 0 && (
             <>
               <button onClick={handleTempSave}
@@ -742,6 +735,14 @@ export default function BankStatementContent() {
                 &times;
               </button>
             </div>
+          )}
+          {/* スペースを空けてアプリ終了ボタン */}
+          {selectedClient && (
+            <button onClick={handleExitApp} disabled={exitingApp}
+              title="Drive保存してブラウザを閉じる"
+              className="ml-4 px-3 py-1.5 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50">
+              {exitingApp ? '保存中...' : 'アプリ終了'}
+            </button>
           )}
         </div>
       </header>
@@ -821,7 +822,9 @@ export default function BankStatementContent() {
               onPageChange={setCurrentPageIndex}
               entries={journalEntries}
               bankAccountCode={uploadConfig?.accountCode || ''}
+              hideBalance={uploadConfig?.documentType === 'credit-card'}
               onBalanceOverride={handleBalanceOverride}
+              onFileDelete={() => { setPages([]); setJournalEntries([]); setUploadConfig(null); setError(null); setInfo('アップロードファイルを削除しました') }}
             />
           }
           right={

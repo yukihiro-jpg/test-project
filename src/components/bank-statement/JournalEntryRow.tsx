@@ -180,7 +180,7 @@ function JournalEntryRowInner({
               onChange={(e) => setAmountStr(e.target.value.replace(/[^0-9]/g, ''))}
               onBlur={() => handleAmountSave(amountStr)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); handleAmountSave(amountStr); navCell(e.currentTarget, 'right') }
+                if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); handleAmountSave(amountStr); navCell(e.currentTarget, 'down') }
                 else if (e.key === 'Escape') setEditingAmount(false)
                 else if (e.key === 'ArrowUp') { handleAmountSave(amountStr); navCell(e.currentTarget, 'up') }
                 else if (e.key === 'ArrowDown') { handleAmountSave(amountStr); navCell(e.currentTarget, 'down') }
@@ -402,7 +402,7 @@ function AccountField({
           }}
           onBlur={() => setTimeout(() => { if (val !== code) onCodeChange(val); setShow(false) }, 150)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); if (val !== code) onCodeChange(val); setShow(false); navCell(e.currentTarget, 'right') }
+            if (e.key === 'Enter') { e.preventDefault(); if (val !== code) onCodeChange(val); setShow(false); navCell(e.currentTarget, 'down') }
             else handleNav(e)
           }}
           style={{ imeMode: 'disabled' } as React.CSSProperties}
@@ -568,7 +568,7 @@ function TaxCodeField({
         onChange(match.code, match.name)
         setShow(false)
       }
-      navCell(e.currentTarget, 'right')
+      navCell(e.currentTarget, 'down')
     } else { handleNav(e) }
   }
 
