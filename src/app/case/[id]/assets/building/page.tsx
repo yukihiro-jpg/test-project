@@ -171,18 +171,24 @@ export default function BuildingPage() {
           <thead>
             <tr className="bg-gray-100 border-b">
               <th className="p-1 text-center w-10 border border-gray-300">No</th>
-              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '100px' }}>建物名</th>
-              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '160px' }}>所在地</th>
-              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '80px' }}>構造</th>
-              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '80px' }}>用途</th>
-              <th className="p-1 text-center border border-gray-300" style={{ width: '70px' }}>
+              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '140px' }}>所在地</th>
+              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '80px' }}>家屋番号</th>
+              <th className="p-1 text-center border border-gray-300" style={{ width: '70px' }}>登記状況</th>
+              <th className="p-1 text-center border border-gray-300" style={{ width: '65px' }}>
                 <div className="text-xs">持分</div>
-                <div className="text-xs font-normal text-gray-400">分子/分母</div>
               </th>
-              <th className="p-1 text-center border border-gray-300" style={{ width: '80px' }}>登記状況</th>
-              <th className="p-1 text-right border border-gray-300" style={{ minWidth: '130px' }}>固定資産税評価額</th>
-              <th className="p-1 text-center border border-gray-300" style={{ width: '40px' }}>貸家</th>
-              <th className="p-1 text-right border border-gray-300" style={{ minWidth: '110px' }}>評価額</th>
+              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '70px' }}>構造</th>
+              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '60px' }}>用途</th>
+              <th className="p-1 text-center border border-gray-300" style={{ minWidth: '100px' }}>
+                <div>床面積</div>
+                <div className="text-xs font-normal text-gray-400">階数・各階㎡</div>
+              </th>
+              <th className="p-1 text-right border border-gray-300" style={{ minWidth: '120px' }}>固定資産税評価額</th>
+              <th className="p-1 text-center border border-gray-300" style={{ width: '80px' }}>貸家</th>
+              <th className="p-1 text-right border border-gray-300" style={{ minWidth: '140px' }}>
+                <div>相続税評価額</div>
+                <div className="text-xs font-normal text-gray-400">貸家: ×(1-借家権割合)</div>
+              </th>
               <th className="p-1 text-center border border-gray-300 w-10"></th>
             </tr>
           </thead>
@@ -204,98 +210,119 @@ export default function BuildingPage() {
                 <React.Fragment key={b.id}>
                   {/* Main inline row */}
                   <tr className={`border-b ${i % 2 === 0 ? '' : 'bg-gray-50'}`}>
-                    {/* No */}
                     <td className="p-1 text-center border border-gray-300">{i + 1}</td>
-                    {/* 建物名 */}
-                    <td className="p-1 border border-gray-300">
-                      <input
-                        type="text"
-                        className={`${inputCls} w-full`}
-                        value={b.name || ''}
-                        placeholder="建物名"
-                        onChange={e => updateAsset('buildings', b.id, { name: e.target.value })}
-                      />
-                    </td>
                     {/* 所在地 */}
                     <td className="p-1 border border-gray-300">
-                      <input
-                        type="text"
-                        className={`${inputCls} w-full`}
-                        value={b.location}
-                        placeholder="所在地"
-                        onChange={e => updateAsset('buildings', b.id, { location: e.target.value })}
-                      />
+                      <input type="text" className={`${inputCls} w-full`} value={b.location} placeholder="所在地"
+                        onChange={e => updateAsset('buildings', b.id, { location: e.target.value })} />
                     </td>
-                    {/* 構造 */}
+                    {/* 家屋番号 */}
                     <td className="p-1 border border-gray-300">
-                      <input
-                        type="text"
-                        className={`${inputCls} w-full`}
-                        value={b.structureType}
-                        placeholder="木造/RC等"
-                        onChange={e => updateAsset('buildings', b.id, { structureType: e.target.value })}
-                      />
-                    </td>
-                    {/* 用途 */}
-                    <td className="p-1 border border-gray-300">
-                      <input
-                        type="text"
-                        className={`${inputCls} w-full`}
-                        value={b.usage}
-                        placeholder="自用/貸家等"
-                        onChange={e => updateAsset('buildings', b.id, { usage: e.target.value })}
-                      />
-                    </td>
-                    {/* 持分 分子/分母 */}
-                    <td className="p-1 border border-gray-300">
-                      <div className="flex items-center justify-center gap-0.5">
-                        <input
-                          type="text"
-                          className="border border-gray-300 rounded px-1 py-1 text-sm text-center w-8"
-                          value={numerator}
-                          onChange={e => updateAsset('buildings', b.id, { ownershipRatio: `${e.target.value}/${denominator}` })}
-                        />
-                        <span className="text-gray-400 text-xs">/</span>
-                        <input
-                          type="text"
-                          className="border border-gray-300 rounded px-1 py-1 text-sm text-center w-8"
-                          value={denominator}
-                          onChange={e => updateAsset('buildings', b.id, { ownershipRatio: `${numerator}/${e.target.value}` })}
-                        />
-                      </div>
+                      <input type="text" className={`${inputCls} w-full`} value={b.houseNumber || ''} placeholder="家屋番号"
+                        onChange={e => updateAsset('buildings', b.id, { houseNumber: e.target.value })} />
                     </td>
                     {/* 登記状況 */}
                     <td className="p-1 border border-gray-300">
-                      <select
-                        className="border border-gray-300 rounded px-0.5 py-1 text-sm w-full"
+                      <select className="border border-gray-300 rounded px-0.5 py-1 text-sm w-full"
                         value={b.registrationStatus || 'registered'}
-                        onChange={e => updateAsset('buildings', b.id, { registrationStatus: e.target.value as 'registered' | 'unregistered' })}
-                      >
+                        onChange={e => updateAsset('buildings', b.id, { registrationStatus: e.target.value as 'registered' | 'unregistered' })}>
                         <option value="registered">登記有</option>
                         <option value="unregistered">未登記</option>
                       </select>
                     </td>
+                    {/* 持分 */}
+                    <td className="p-1 border border-gray-300">
+                      <div className="flex items-center justify-center gap-0.5">
+                        <input type="text" className="border border-gray-300 rounded px-1 py-1 text-sm text-center w-8"
+                          value={numerator}
+                          onChange={e => updateAsset('buildings', b.id, { ownershipRatio: `${e.target.value}/${denominator}` })} />
+                        <span className="text-gray-400 text-xs">/</span>
+                        <input type="text" className="border border-gray-300 rounded px-1 py-1 text-sm text-center w-8"
+                          value={denominator}
+                          onChange={e => updateAsset('buildings', b.id, { ownershipRatio: `${numerator}/${e.target.value}` })} />
+                      </div>
+                    </td>
+                    {/* 構造 */}
+                    <td className="p-1 border border-gray-300">
+                      <input type="text" className={`${inputCls} w-full`} value={b.structureType} placeholder="木造/RC等"
+                        onChange={e => updateAsset('buildings', b.id, { structureType: e.target.value })} />
+                    </td>
+                    {/* 用途 */}
+                    <td className="p-1 border border-gray-300">
+                      <input type="text" className={`${inputCls} w-full`} value={b.usage} placeholder="自用/貸家等"
+                        onChange={e => updateAsset('buildings', b.id, { usage: e.target.value })} />
+                    </td>
+                    {/* 床面積（階数選択＋各階入力） */}
+                    <td className="p-1 border border-gray-300">
+                      {(() => {
+                        const fl = b.floors || 1;
+                        const areas = b.floorAreas || [];
+                        const totalFloor = areas.reduce((s, a) => s + (a || 0), 0);
+                        return (
+                          <>
+                            <div className="flex items-center gap-1">
+                              <select className="border border-gray-300 rounded px-0.5 py-0.5 text-xs w-12"
+                                value={fl}
+                                onChange={e => {
+                                  const newFloors = Number(e.target.value);
+                                  const newAreas = Array.from({ length: newFloors }, (_, i) => areas[i] || 0);
+                                  updateAsset('buildings', b.id, { floors: newFloors, floorAreas: newAreas });
+                                }}>
+                                {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}階</option>)}
+                              </select>
+                              <span className="text-xs text-gray-500 font-medium">{totalFloor > 0 ? `${totalFloor.toLocaleString('ja-JP')}㎡` : ''}</span>
+                            </div>
+                            {Array.from({ length: fl }).map((_, fi) => (
+                              <div key={fi} className="flex items-center gap-0.5 mt-0.5">
+                                <span className="text-xs text-gray-400 w-5">{fi+1}F</span>
+                                <input type="text" className={`${inputNumCls} w-16`}
+                                  value={areas[fi] ? areas[fi].toString() : ''}
+                                  placeholder="㎡"
+                                  onChange={e => {
+                                    const newAreas = [...(b.floorAreas || Array(fl).fill(0))];
+                                    newAreas[fi] = parseFloat(e.target.value) || 0;
+                                    updateAsset('buildings', b.id, { floorAreas: newAreas });
+                                  }} />
+                              </div>
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </td>
                     {/* 固定資産税評価額 */}
                     <td className="p-1 border border-gray-300">
-                      <input
-                        type="text"
-                        className={`${inputNumCls} w-full`}
+                      <input type="text" className={`${inputNumCls} w-full`}
                         value={formatNum(b.fixedAssetTaxValue)}
-                        onChange={e => updateAsset('buildings', b.id, { fixedAssetTaxValue: parseNum(e.target.value) })}
-                      />
+                        onChange={e => updateAsset('buildings', b.id, { fixedAssetTaxValue: parseNum(e.target.value) })} />
                     </td>
-                    {/* 貸家チェック */}
-                    <td className="p-1 border border-gray-300 text-center">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4"
-                        checked={b.rentalReduction || false}
-                        onChange={e => updateAsset('buildings', b.id, { rentalReduction: e.target.checked })}
-                      />
+                    {/* 貸家チェック＋建物名 */}
+                    <td className="p-1 border border-gray-300">
+                      <div className="flex items-center justify-center">
+                        <input type="checkbox" className="w-4 h-4"
+                          checked={b.rentalReduction || false}
+                          onChange={e => updateAsset('buildings', b.id, { rentalReduction: e.target.checked })} />
+                      </div>
+                      {b.rentalReduction && (
+                        <input type="text" className={`${inputCls} w-full mt-0.5`}
+                          value={b.name || ''} placeholder="建物名"
+                          onChange={e => updateAsset('buildings', b.id, { name: e.target.value })} />
+                      )}
                     </td>
-                    {/* 評価額 */}
-                    <td className="p-1 border border-gray-300 text-right font-medium">
-                      {formatCurrency(value)}
+                    {/* 相続税評価額（計算式表示） */}
+                    <td className="p-1 border border-gray-300 text-right">
+                      <div className="font-medium">{formatCurrency(value)}</div>
+                      {b.rentalReduction && (
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {formatNum(b.fixedAssetTaxValue)} × (1-
+                          <input type="text" className="w-8 border border-gray-300 rounded text-center text-xs mx-0.5"
+                            value={b.borrowedHouseRatio}
+                            onChange={e => {
+                              const v = parseFloat(e.target.value);
+                              if (!isNaN(v)) updateAsset('buildings', b.id, { borrowedHouseRatio: v });
+                            }} />
+                          )
+                        </div>
+                      )}
                     </td>
                     {/* 削除 */}
                     <td className="p-1 border border-gray-300 text-center">
