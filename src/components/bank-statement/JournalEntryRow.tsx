@@ -259,6 +259,8 @@ function JournalEntryRowInner({
           <div className="flex items-center gap-0.5" onMouseDown={(e) => e.stopPropagation()}>
             <button onClick={() => onAddCompound(entry.id)} title="複合仕訳行を追加"
               className="w-6 h-6 flex items-center justify-center text-xs text-violet-600 hover:bg-violet-100 rounded font-bold border border-violet-200">+</button>
+            <button onClick={() => onLearn(entry.id)} title="パターン学習"
+              className="w-6 h-6 flex items-center justify-center text-xs text-amber-600 hover:bg-amber-100 rounded font-bold border border-amber-200">★</button>
             <RowMenu
               onLearn={() => onLearn(entry.id)}
               onAddBlank={() => onAddBlank(entry.id)}

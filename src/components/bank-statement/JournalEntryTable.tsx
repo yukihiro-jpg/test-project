@@ -843,7 +843,7 @@ export default function JournalEntryTable({
                 <th className="px-2 py-2 text-center w-12 font-medium" style={{ borderRight: '1px solid #94a3b8' }}>業種</th>
               )}
               <th className="px-2 py-2 text-center font-medium" style={{ borderRight: '1px solid #94a3b8', minWidth: '180px' }}>摘要</th>
-              <th className="px-1 py-2 w-14 font-medium"></th>
+              <th className="px-1 py-2 w-20 font-medium"></th>
             </tr>
           </thead>
           <tbody>
