@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useCaseStore } from '@/lib/store/case-store';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/components/common/currency-input';
+import { MoneyInput } from '@/components/common/money-input';
 import { toWareki } from '@/lib/dates/wareki';
 import { Plus, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
@@ -294,15 +295,14 @@ export default function FundsMovementPage() {
                         return (
                           <React.Fragment key={account.id}>
                             <td className="p-2 border border-gray-300 align-top">
-                              <input
-                                type="number"
+                              <MoneyInput
                                 value={tx.deposit || ''}
-                                onChange={e =>
+                                onChange={v =>
                                   handleUpdateTransaction(
                                     entry.id,
                                     account.id,
                                     {
-                                      deposit: Number(e.target.value) || 0,
+                                      deposit: v,
                                     },
                                   )
                                 }
@@ -311,16 +311,14 @@ export default function FundsMovementPage() {
                               />
                             </td>
                             <td className="p-2 border border-gray-300 align-top">
-                              <input
-                                type="number"
+                              <MoneyInput
                                 value={tx.withdrawal || ''}
-                                onChange={e =>
+                                onChange={v =>
                                   handleUpdateTransaction(
                                     entry.id,
                                     account.id,
                                     {
-                                      withdrawal:
-                                        Number(e.target.value) || 0,
+                                      withdrawal: v,
                                     },
                                   )
                                 }
@@ -332,13 +330,11 @@ export default function FundsMovementPage() {
                         );
                       })}
                       <td className="p-2 border border-gray-300 align-top">
-                        <input
-                          type="number"
+                        <MoneyInput
                           value={entry.inheritanceAmount || ''}
-                          onChange={e =>
+                          onChange={v =>
                             handleUpdateEntry(entry.id, {
-                              inheritanceAmount:
-                                Number(e.target.value) || 0,
+                              inheritanceAmount: v,
                             })
                           }
                           className={`${inputClass} text-right`}
