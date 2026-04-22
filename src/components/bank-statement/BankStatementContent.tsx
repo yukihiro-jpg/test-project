@@ -586,7 +586,7 @@ export default function BankStatementContent() {
     })
     // パターン学習（上書き保存）
     const applied = applyCompoundAutoAmounts(completed)
-    learnAllFromEntries(applied)
+    learnAllFromEntries(applied, uploadConfig?.accountCode)
     // 一時保存に追記
     const totalCount = appendTempEntries(completed)
     setTempCount(totalCount)

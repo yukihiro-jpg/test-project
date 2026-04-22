@@ -23,7 +23,6 @@ export function creditCardToEntries(
   creditCardSubName?: string,
 ): JournalEntry[] {
   const patterns = getPatterns()
-  const paymentDateStr = data.paymentDate.replace(/-/g, '')
 
   return data.transactions.map((tx) => {
     const amount = Math.abs(tx.amount)
@@ -34,7 +33,7 @@ export function creditCardToEntries(
     // パターン学習用: 日付部分を除去（毎月変わるためパターンマッチの邪魔になる）
     const storeNameForPattern = stripDateFromDescription(descBase)
 
-    const pattern = findPattern(patterns, storeNameForPattern, amount)
+    const pattern = findPattern(patterns, storeNameForPattern, amount, creditCardAccountCode)
 
     let expenseCode = ''
     let expenseName = ''

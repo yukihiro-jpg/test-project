@@ -114,6 +114,7 @@ export interface PatternEntry {
   keyword: string              // 通帳の元の摘要（マッチング用）
   amountMin: number | null     // 金額下限（null=制限なし）
   amountMax: number | null     // 金額上限（null=制限なし）
+  accountCode?: string         // 処理科目コード（口座別パターン分離用）
   lines: PatternLine[]         // 仕訳行（1行 or 複合仕訳で複数行）
   useCount: number
   // 旧互換フィールド

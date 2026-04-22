@@ -56,18 +56,17 @@ export function findPattern(
   patterns: PatternEntry[],
   description: string,
   amount?: number,
+  accountCode?: string,
 ): PatternEntry | null {
   if (!description) return null
   const desc = description.toLowerCase()
 
-  // 完全一致 + 金額範囲チェック
   const matches = patterns
     .filter((p) => {
       const keyMatch = p.keyword.toLowerCase() === desc ||
         desc.includes(p.keyword.toLowerCase()) ||
         p.keyword.toLowerCase().includes(desc)
       if (!keyMatch) return false
-      // 金額範囲チェック
       if (amount != null) {
         if (p.amountMin != null && amount < p.amountMin) return false
         if (p.amountMax != null && amount > p.amountMax) return false
@@ -75,11 +74,15 @@ export function findPattern(
       return true
     })
     .sort((a, b) => {
-      // 完全一致を優先
+      // 同一科目コードのパターンを最優先
+      if (accountCode) {
+        const aMatch = a.accountCode === accountCode ? 1 : 0
+        const bMatch = b.accountCode === accountCode ? 1 : 0
+        if (aMatch !== bMatch) return bMatch - aMatch
+      }
       const aExact = a.keyword.toLowerCase() === desc ? 1 : 0
       const bExact = b.keyword.toLowerCase() === desc ? 1 : 0
       if (aExact !== bExact) return bExact - aExact
-      // 金額範囲が狭い方を優先（より具体的）
       const aRange = (a.amountMax ?? Infinity) - (a.amountMin ?? 0)
       const bRange = (b.amountMax ?? Infinity) - (b.amountMin ?? 0)
       if (aRange !== bRange) return aRange - bRange
@@ -198,7 +201,7 @@ export function learnFromEntries(
  * CSV出力/一時保存時に全仕訳を一括パターン学習
  * パターン学習済みの仕訳でもユーザーが修正した場合は上書きする
  */
-export function learnAllFromEntries(entries: JournalEntry[]): number {
+export function learnAllFromEntries(entries: JournalEntry[], accountCode?: string): number {
   let learnedCount = 0
 
   // transactionIdでグループ化（複合仕訳対応）
@@ -260,9 +263,10 @@ export function learnAllFromEntries(entries: JournalEntry[]): number {
       }
     }
 
-    // 同じキーワードで金額範囲が重なるパターンがあれば更新
+    // 同じキーワード+科目コード+金額範囲のパターンがあれば更新
     const existing = patterns.find(
       (p) => p.keyword.toLowerCase() === originalDesc.toLowerCase() &&
+        (p.accountCode || '') === (accountCode || '') &&
         isAmountInRange(amount, p.amountMin, p.amountMax),
     )
     if (existing) {
@@ -274,6 +278,7 @@ export function learnAllFromEntries(entries: JournalEntry[]): number {
         keyword: originalDesc,
         amountMin: null,
         amountMax: null,
+        accountCode: accountCode || undefined,
         lines,
         useCount: 1,
       })
