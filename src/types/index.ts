@@ -79,7 +79,7 @@ export interface Assets {
 export type LandCategory = '宅地' | '田' | '畑' | '山林' | '原野' | '牧場' | '池沼' | '鉱泉地' | '雑種地';
 export type EvaluationMethod = 'rosenka' | 'bairitsu';
 export type SpecialLandUseType = 'residence' | 'business' | 'rental';
-export type LandUsageType = '自用' | '貸家' | '貸家建付地' | '貸地' | '私道' | '使用貸借';
+export type LandUsageType = '自用' | '貸家' | '貸家建付地' | '貸地' | '借地' | '私道' | '使用貸借';
 
 export interface LandShapeCorrection {
   frontageDistance: number;
