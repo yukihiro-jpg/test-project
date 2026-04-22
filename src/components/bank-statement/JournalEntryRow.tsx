@@ -81,7 +81,7 @@ function JournalEntryRowInner({
 
   let bgClass: string
   if (isSelected) bgClass = 'bg-sky-100'
-  else if (isCompoundGroup) bgClass = 'bg-violet-50'
+  else if (isCompoundGroup) bgClass = 'bg-rose-50'
   else bgClass = rowNumber % 2 === 0 ? 'bg-white' : 'bg-gray-50'
 
   return (
@@ -91,17 +91,10 @@ function JournalEntryRowInner({
           <td colSpan={12} className="px-3 py-1 text-xs font-bold text-white">{pageLabel} ページ</td>
         </tr>
       )}
-      {isCompoundFirst && (
-        <tr>
-          <td colSpan={11} className="px-3 py-0.5 text-xs font-bold text-red-600 bg-red-50 border-t-2 border-l-2 border-r-2 border-red-400">複合仕訳</td>
-        </tr>
-      )}
       <tr
         className={`${bgClass} hover:bg-sky-50 cursor-pointer transition-colors`}
         style={{
-          borderBottom: isCompoundLast ? '2px solid #f87171' : '1px solid #cbd5e1',
-          borderLeft: isCompoundGroup ? '2px solid #f87171' : undefined,
-          borderRight: isCompoundGroup ? '2px solid #f87171' : undefined,
+          borderBottom: '1px solid #cbd5e1',
           // 画面外行のレイアウト/ペイントをブラウザにスキップさせる（大量行での打鍵遅延を緩和）
           contentVisibility: 'auto',
           containIntrinsicSize: '40px',
