@@ -197,7 +197,7 @@ export default function ExportPage() {
             <li>PDFは日本語フォント（Noto Sans JP）を使用して生成されます。</li>
             <li>遺産分割協議書は参考用です。正式な文書は専門家にご確認ください。</li>
             <li>すべてのデータはお使いのブラウザ内で処理され、外部サーバーには送信されません。</li>
-            <li>Googleドライブへのアップロードは「【削除禁止】相続税シミュレーター/documents」フォルダに保存されます。</li>
+            <li>Googleドライブへのアップロードは「【削除禁止】相続税業務管理アプリ/documents」フォルダに保存されます。</li>
           </ul>
         </CardContent>
       </Card>

@@ -10,7 +10,7 @@ export function Header() {
     <header className="h-14 border-b border-gray-200 bg-white px-6 flex items-center justify-between">
       <div className="flex items-center gap-4">
         <Link href="/" className="text-lg font-bold text-blue-700">
-          相続税シミュレーター
+          相続税業務管理アプリ
         </Link>
         {currentCase && (
           <>

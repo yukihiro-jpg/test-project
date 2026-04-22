@@ -179,7 +179,7 @@ export function GoogleDrivePanel() {
         )}
 
         <p className="text-xs text-gray-400">
-          保存先: 【削除禁止】相続税シミュレーター
+          保存先: 【削除禁止】相続税業務管理アプリ
         </p>
       </CardContent>
     </Card>

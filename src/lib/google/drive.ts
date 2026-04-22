@@ -1,11 +1,11 @@
 // Google Drive API連携モジュール
 // クライアントサイドでOAuth2フローを使用
-// データは共有ドライブの【削除禁止】相続税シミュレーターフォルダに保存
+// データは共有ドライブの【削除禁止】相続税業務管理アプリフォルダに保存
 
 'use client';
 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-const FOLDER_NAME = '【削除禁止】相続税シミュレーター';
+const FOLDER_NAME = '【削除禁止】相続税業務管理アプリ';
 const APP_DATA_FOLDER = 'souzoku-simulator-data';
 
 interface GoogleAuthState {
@@ -169,7 +169,7 @@ async function findOrCreateFolder(folderName: string, parentId?: string): Promis
 }
 
 /**
- * アプリ用フォルダIDを取得（【削除禁止】相続税シミュレーター/data）
+ * アプリ用フォルダIDを取得（【削除禁止】相続税業務管理アプリ/data）
  */
 async function getAppFolderId(): Promise<string> {
   const mainFolderId = await findOrCreateFolder(FOLDER_NAME);
@@ -178,7 +178,7 @@ async function getAppFolderId(): Promise<string> {
 }
 
 /**
- * ドキュメント用フォルダIDを取得（【削除禁止】相続税シミュレーター/documents）
+ * ドキュメント用フォルダIDを取得（【削除禁止】相続税業務管理アプリ/documents）
  */
 async function getDocumentsFolderId(): Promise<string> {
   const mainFolderId = await findOrCreateFolder(FOLDER_NAME);
