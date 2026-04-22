@@ -91,51 +91,67 @@ export default function LandPage() {
         <table className="text-sm border-collapse">
           <thead>
             <tr className="bg-gray-100 border-b">
-              <th className="p-2 text-center w-12 border border-gray-300">No</th>
-              <th className="p-2 text-center w-16 border border-gray-300">土地家屋</th>
-              <th className="p-2 text-left min-w-[200px] border border-gray-300">地番・参照備考</th>
-              <th className="p-2 text-center w-20 border border-gray-300">持分</th>
-              <th className="p-2 text-center w-20 border border-gray-300">登記地目</th>
-              <th className="p-2 text-center w-20 border border-gray-300">課税地目</th>
-              <th className="p-2 text-left w-32 border border-gray-300">現況確認・実地調査</th>
-              <th className="p-2 text-right w-24 border border-gray-300">登記地積<br /><span className="text-xs font-normal">騰本より</span></th>
-              <th className="p-2 text-right w-24 border border-gray-300">課税地積<br /><span className="text-xs font-normal">評証より</span></th>
-              <th className="p-2 text-right w-32 border border-gray-300">固定資産税評価額</th>
-              <th className="p-2 text-center w-24 border border-gray-300">評価地域<br /><span className="text-xs font-normal">路・倍</span></th>
-              <th className="p-2 text-right w-24 border border-gray-300">倍率</th>
-              <th className="p-2 text-right w-32 border border-gray-300">路線価</th>
-              <th className="p-2 text-center w-28 border border-gray-300">自用/貸家</th>
-              <th className="p-2 text-left w-32 border border-gray-300">借主</th>
-              <th className="p-2 text-right w-24 border border-gray-300">借地権割合</th>
-              <th className="p-2 text-left w-32 border border-gray-300">側方・二方</th>
-              <th className="p-2 text-left w-32 border border-gray-300">都市計画区分</th>
-              <th className="p-2 text-left w-32 border border-gray-300">備考</th>
-              <th className="p-2 text-left w-32 border border-gray-300">確認すること</th>
-              <th className="p-2 text-center w-12 border border-gray-300"></th>
+              <th className="p-1 text-center w-12 border border-gray-300">No</th>
+              <th className="p-1 text-center w-16 border border-gray-300">土地家屋</th>
+              <th className="p-1 text-left min-w-[250px] border border-gray-300">地番・参照備考</th>
+              <th className="p-1 text-center w-20 border border-gray-300">持分</th>
+              <th className="p-1 text-center min-w-[80px] border border-gray-300">
+                <div>地目</div>
+                <div className="text-xs font-normal text-gray-500">登記 / 課税</div>
+              </th>
+              <th className="p-1 text-left w-32 border border-gray-300">現況確認・実地調査</th>
+              <th className="p-1 text-center min-w-[100px] border border-gray-300">
+                <div>地積</div>
+                <div className="text-xs font-normal text-gray-500">登記 / 課税</div>
+              </th>
+              <th className="p-1 text-right min-w-[120px] border border-gray-300">固定資産税評価額</th>
+              <th className="p-1 text-center w-24 border border-gray-300">評価地域<br /><span className="text-xs font-normal">路・倍</span></th>
+              <th className="p-1 text-center min-w-[100px] border border-gray-300">
+                <div>路線価/倍率</div>
+              </th>
+              <th className="p-1 text-center w-28 border border-gray-300">自用/貸家</th>
+              <th className="p-1 text-left w-32 border border-gray-300">借主</th>
+              <th className="p-1 text-right w-24 border border-gray-300">借地権割合</th>
+              <th className="p-1 text-left w-32 border border-gray-300">側方・二方</th>
+              <th className="p-1 text-left w-32 border border-gray-300">都市計画区分</th>
+              <th className="p-1 text-left min-w-[150px] border border-gray-300">
+                <div>備考/確認</div>
+              </th>
+              <th className="p-1 text-center w-12 border border-gray-300"></th>
             </tr>
           </thead>
           <tbody>
             {lands.map((land, i) => (
               <tr key={land.id} className={`border-b ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                <td className="p-2 text-center border border-gray-300">{i + 1}</td>
-                <td className="p-2 text-center border border-gray-300">土地</td>
-                <td className="p-2 border border-gray-300">
+                <td className="p-1 text-center border border-gray-300">{i + 1}</td>
+                <td className="p-1 text-center border border-gray-300">土地</td>
+                {/* 地番・参照備考: location + landNumber on line 1, referenceNote on line 2 */}
+                <td className="p-1 border border-gray-300 min-w-[250px]">
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      className={inputCls}
+                      value={land.location}
+                      placeholder="所在地"
+                      onChange={e => updateAsset('lands', land.id, { location: e.target.value })}
+                    />
+                    <input
+                      type="text"
+                      className={`${inputCls} w-24 shrink-0`}
+                      value={land.landNumber || ''}
+                      placeholder="地番"
+                      onChange={e => updateAsset('lands', land.id, { landNumber: e.target.value })}
+                    />
+                  </div>
                   <input
                     type="text"
-                    className={inputCls}
-                    value={land.location}
-                    placeholder="所在地・地番"
-                    onChange={e => updateAsset('lands', land.id, { location: e.target.value })}
-                  />
-                  <input
-                    type="text"
-                    className={`${inputCls} mt-1`}
+                    className={`${inputCls} mt-0.5`}
                     value={land.referenceNote || ''}
                     placeholder="参照備考"
                     onChange={e => updateAsset('lands', land.id, { referenceNote: e.target.value })}
                   />
                 </td>
-                <td className="p-2 border border-gray-300">
+                <td className="p-1 border border-gray-300">
                   <input
                     type="text"
                     className={inputCls}
@@ -144,7 +160,8 @@ export default function LandPage() {
                     onChange={e => updateAsset('lands', land.id, { ownershipRatio: e.target.value })}
                   />
                 </td>
-                <td className="p-2 border border-gray-300">
+                {/* Combined 地目: 登記地目 (top) + 課税地目 (bottom) */}
+                <td className="p-1 border border-gray-300">
                   <select
                     className={inputCls}
                     value={land.registeredCategory || '宅地'}
@@ -152,17 +169,15 @@ export default function LandPage() {
                   >
                     {LAND_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
-                </td>
-                <td className="p-2 border border-gray-300">
                   <select
-                    className={inputCls}
+                    className={`${inputCls} mt-0.5`}
                     value={land.taxCategory || '宅地'}
                     onChange={e => updateAsset('lands', land.id, { taxCategory: e.target.value })}
                   >
                     {LAND_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </td>
-                <td className="p-2 border border-gray-300">
+                <td className="p-1 border border-gray-300">
                   <input
                     type="text"
                     className={inputCls}
@@ -170,23 +185,24 @@ export default function LandPage() {
                     onChange={e => updateAsset('lands', land.id, { currentStatus: e.target.value })}
                   />
                 </td>
-                <td className="p-2 border border-gray-300">
+                {/* Combined 地積: 登記地積 (top) + 課税地積 (bottom) */}
+                <td className="p-1 border border-gray-300">
                   <input
                     type="number"
                     className={inputNumCls}
                     value={land.registeredArea || ''}
+                    placeholder="登記"
                     onChange={e => updateAsset('lands', land.id, { registeredArea: Number(e.target.value) })}
                   />
-                </td>
-                <td className="p-2 border border-gray-300">
                   <input
                     type="number"
-                    className={inputNumCls}
+                    className={`${inputNumCls} mt-0.5`}
                     value={land.taxArea || ''}
+                    placeholder="課税"
                     onChange={e => updateAsset('lands', land.id, { taxArea: Number(e.target.value) })}
                   />
                 </td>
-                <td className="p-2 border border-gray-300">
+                <td className="p-1 border border-gray-300">
                   <input
                     type="number"
                     className={inputNumCls}
@@ -194,7 +210,7 @@ export default function LandPage() {
                     onChange={e => updateAsset('lands', land.id, { fixedAssetTaxValue: Number(e.target.value) })}
                   />
                 </td>
-                <td className="p-2 border border-gray-300">
+                <td className="p-1 border border-gray-300">
                   <select
                     className={inputCls}
                     value={land.evaluationArea || '路線価'}
@@ -209,24 +225,28 @@ export default function LandPage() {
                     {EVALUATION_AREAS.map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
                 </td>
-                <td className="p-2 border border-gray-300">
-                  <input
-                    type="number"
-                    step="0.01"
-                    className={inputNumCls}
-                    value={land.multiplier || ''}
-                    onChange={e => updateAsset('lands', land.id, { multiplier: Number(e.target.value) })}
-                  />
+                {/* Combined 路線価/倍率: show relevant input based on evaluationArea */}
+                <td className="p-1 border border-gray-300">
+                  {land.evaluationArea === '倍率' ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      className={inputNumCls}
+                      value={land.multiplier || ''}
+                      placeholder="倍率"
+                      onChange={e => updateAsset('lands', land.id, { multiplier: Number(e.target.value) })}
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      className={inputNumCls}
+                      value={land.rosenkaPrice || ''}
+                      placeholder="路線価"
+                      onChange={e => updateAsset('lands', land.id, { rosenkaPrice: Number(e.target.value) })}
+                    />
+                  )}
                 </td>
-                <td className="p-2 border border-gray-300">
-                  <input
-                    type="number"
-                    className={inputNumCls}
-                    value={land.rosenkaPrice || ''}
-                    onChange={e => updateAsset('lands', land.id, { rosenkaPrice: Number(e.target.value) })}
-                  />
-                </td>
-                <td className="p-2 border border-gray-300">
+                <td className="p-1 border border-gray-300">
                   <select
                     className={inputCls}
                     value={land.usage || '自用'}
@@ -235,7 +255,7 @@ export default function LandPage() {
                     {LAND_USAGES.map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
                 </td>
-                <td className="p-2 border border-gray-300">
+                <td className="p-1 border border-gray-300">
                   <input
                     type="text"
                     className={inputCls}
@@ -243,7 +263,7 @@ export default function LandPage() {
                     onChange={e => updateAsset('lands', land.id, { tenantName: e.target.value })}
                   />
                 </td>
-                <td className="p-2 border border-gray-300">
+                <td className="p-1 border border-gray-300">
                   <input
                     type="number"
                     step="0.01"
@@ -252,7 +272,7 @@ export default function LandPage() {
                     onChange={e => updateAsset('lands', land.id, { borrowingRightRatio: Number(e.target.value) })}
                   />
                 </td>
-                <td className="p-2 border border-gray-300">
+                <td className="p-1 border border-gray-300">
                   <input
                     type="text"
                     className={inputCls}
@@ -260,7 +280,7 @@ export default function LandPage() {
                     onChange={e => updateAsset('lands', land.id, { sideTwoRoads: e.target.value })}
                   />
                 </td>
-                <td className="p-2 border border-gray-300">
+                <td className="p-1 border border-gray-300">
                   <input
                     type="text"
                     className={inputCls}
@@ -268,23 +288,24 @@ export default function LandPage() {
                     onChange={e => updateAsset('lands', land.id, { cityPlanningZone: e.target.value })}
                   />
                 </td>
-                <td className="p-2 border border-gray-300">
+                {/* Combined 備考/確認: note (top) + confirmationNote (bottom) */}
+                <td className="p-1 border border-gray-300 min-w-[150px]">
                   <input
                     type="text"
                     className={inputCls}
                     value={land.note}
+                    placeholder="備考"
                     onChange={e => updateAsset('lands', land.id, { note: e.target.value })}
                   />
-                </td>
-                <td className="p-2 border border-gray-300">
                   <input
                     type="text"
-                    className={inputCls}
+                    className={`${inputCls} mt-0.5`}
                     value={land.confirmationNote || ''}
+                    placeholder="確認すること"
                     onChange={e => updateAsset('lands', land.id, { confirmationNote: e.target.value })}
                   />
                 </td>
-                <td className="p-2 text-center border border-gray-300">
+                <td className="p-1 text-center border border-gray-300">
                   <button
                     onClick={() => removeAsset('lands', land.id)}
                     className="text-red-500 hover:text-red-700"
@@ -297,7 +318,7 @@ export default function LandPage() {
             ))}
             {lands.length === 0 && (
               <tr>
-                <td colSpan={21} className="p-6 text-center text-gray-500 border border-gray-300">
+                <td colSpan={17} className="p-6 text-center text-gray-500 border border-gray-300">
                   土地が登録されていません。「追加」ボタンから登録してください。
                 </td>
               </tr>
@@ -305,8 +326,8 @@ export default function LandPage() {
           </tbody>
           <tfoot>
             <tr className="border-t-2 font-semibold bg-gray-100">
-              <td colSpan={9} className="p-2 text-right border border-gray-300">評価額合計</td>
-              <td className="p-2 text-right border border-gray-300" colSpan={11}>{formatCurrency(total)}</td>
+              <td colSpan={7} className="p-2 text-right border border-gray-300">評価額合計</td>
+              <td className="p-2 text-right border border-gray-300" colSpan={9}>{formatCurrency(total)}</td>
               <td className="p-2 border border-gray-300"></td>
             </tr>
           </tfoot>
