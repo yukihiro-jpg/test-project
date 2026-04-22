@@ -27,14 +27,12 @@ export default function DriveSyncButton({ clientId, clientName }: Props) {
       .catch(() => setConnected(false))
   }, [])
 
-  // URL パラメータで接続完了を検知
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     if (params.get('drive') === 'connected') {
       setConnected(true)
       setMessage('Google Drive に接続しました')
-      // URLパラメータをクリーン
       window.history.replaceState({}, '', window.location.pathname)
       setTimeout(() => setMessage(''), 3000)
     }
@@ -45,14 +43,22 @@ export default function DriveSyncButton({ clientId, clientName }: Props) {
     return `bank-statement-client-${clientId}-${key}`
   }
 
+  // ↑保存: 現在の顧問先データ + 顧問先一覧を Drive に保存
   const handleUpload = useCallback(async () => {
     if (!clientId) { setMessage('顧問先を選択してください'); return }
+
+    // 顧問先一覧が空の場合は警告
+    const clientListRaw = localStorage.getItem('bank-statement-clients')
+    const parsedClients = clientListRaw ? JSON.parse(clientListRaw) : []
+    if (Array.isArray(parsedClients) && parsedClients.length === 0) {
+      if (!window.confirm('顧問先が0件です。Driveの顧問先一覧が上書きされ、他のPCでも空になります。\n本当に保存しますか？')) return
+    }
+
     setSyncState('uploading')
     setMessage('Drive にアップロード中...')
     try {
       const items: { clientId: string; clientName: string | null; key: string; data: unknown }[] = []
 
-      // 顧問先固有データ
       for (const key of STORAGE_KEYS) {
         const storageKey = getClientStorageKey(key)
         const raw = localStorage.getItem(storageKey)
@@ -61,19 +67,10 @@ export default function DriveSyncButton({ clientId, clientName }: Props) {
         }
       }
 
-      // 顧問先一覧（グローバル）
-      const clientList = localStorage.getItem('bank-statement-clients')
-      if (clientList) {
-        try { items.push({ clientId: '_global', clientName: null, key: 'clients', data: JSON.parse(clientList) }) } catch { /* skip */ }
+      if (clientListRaw) {
+        try { items.push({ clientId: '_global', clientName: null, key: 'clients', data: JSON.parse(clientListRaw) }) } catch { /* skip */ }
       }
 
-      if (items.length === 0) {
-        setMessage('アップロードするデータがありません')
-        setSyncState('idle')
-        return
-      }
-
-      // 顧問先名でフォルダをリネームするため、1件以上の顧問先固有アイテムを保証
       const hasClientItem = items.some((i) => i.clientId === clientId)
       if (!hasClientItem && clientId) {
         items.push({ clientId, clientName, key: '_marker', data: { updated: new Date().toISOString() } })
@@ -94,44 +91,52 @@ export default function DriveSyncButton({ clientId, clientName }: Props) {
       setSyncState('error')
     }
     setTimeout(() => { setMessage(''); setSyncState('idle') }, 4000)
-  }, [clientId])
+  }, [clientId, clientName])
 
+  // ↓読込: 全顧問先のデータ（科目マスタ・パターン等）を一括で Drive から読込
   const handleDownload = useCallback(async () => {
-    if (!clientId) { setMessage('顧問先を選択してください'); return }
     setSyncState('downloading')
-    setMessage('Drive からダウンロード中...')
+    setMessage('Drive から全データをダウンロード中...')
     try {
       let downloaded = 0
 
-      // 顧問先固有データ
-      const nameParam = clientName ? `&clientName=${encodeURIComponent(clientName)}` : ''
-      for (const key of STORAGE_KEYS) {
-        const res = await fetch(`/api/drive?clientId=${encodeURIComponent(clientId)}${nameParam}&key=${encodeURIComponent(key)}`)
-        if (!res.ok) continue
-        const { data } = await res.json()
-        if (data != null) {
-          localStorage.setItem(getClientStorageKey(key), JSON.stringify(data))
-          downloaded++
-        }
-      }
-
-      // 顧問先一覧
-      const globalRes = await fetch(`/api/drive?clientId=_global&key=clients`)
+      // 1. 顧問先一覧を取得
+      const globalRes = await fetch('/api/drive?clientId=_global&key=clients')
+      let clients: { id: string; name: string }[] = []
       if (globalRes.ok) {
         const { data } = await globalRes.json()
-        if (data) {
+        if (data && Array.isArray(data)) {
           localStorage.setItem('bank-statement-clients', JSON.stringify(data))
+          clients = data
           downloaded++
         }
       }
 
-      setMessage(`${downloaded}件のデータを Drive からダウンロードしました。ページを再読込してください。`)
+      // 2. 全顧問先のデータを一括読込（科目マスタ・パターン・補助科目等すべて）
+      for (const client of clients) {
+        setMessage(`ダウンロード中... ${client.name}`)
+        const nameParam = client.name ? `&clientName=${encodeURIComponent(client.name)}` : ''
+        for (const key of STORAGE_KEYS) {
+          try {
+            const res = await fetch(`/api/drive?clientId=${encodeURIComponent(client.id)}${nameParam}&key=${encodeURIComponent(key)}`)
+            if (!res.ok) continue
+            const { data } = await res.json()
+            if (data != null) {
+              const storageKey = `bank-statement-client-${client.id}-${key}`
+              localStorage.setItem(storageKey, JSON.stringify(data))
+              downloaded++
+            }
+          } catch { /* skip */ }
+        }
+      }
+
+      setMessage(`${downloaded}件のデータを全顧問先分ダウンロードしました。ページを再読込(F5)してください。`)
       setSyncState('idle')
     } catch (err) {
       setMessage(`エラー: ${err instanceof Error ? err.message : 'ダウンロード失敗'}`)
       setSyncState('error')
     }
-  }, [clientId])
+  }, [])
 
   const handleDisconnect = async () => {
     await fetch('/api/drive/status', { method: 'DELETE' })
@@ -161,7 +166,7 @@ export default function DriveSyncButton({ clientId, clientName }: Props) {
         {syncState === 'uploading' ? '...' : '↑保存'}
       </button>
       <button onClick={handleDownload} disabled={syncState !== 'idle'}
-        title="Driveから現在の顧問先データをダウンロード"
+        title="Driveから全顧問先のデータを一括ダウンロード"
         className="px-2 py-1 text-xs bg-sky-600 hover:bg-sky-700 text-white rounded disabled:opacity-50">
         {syncState === 'downloading' ? '...' : '↓読込'}
       </button>
