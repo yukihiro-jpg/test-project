@@ -399,11 +399,10 @@ export default function InsurancePage() {
                       />
                     </td>
                     <td className="p-1 border border-gray-300">
-                      <input
-                        type="number"
+                      <MoneyInput
                         className={inputClassRight}
                         value={item.amount || ''}
-                        onChange={e => updateAsset('insurances', item.id, { amount: Number(e.target.value) || 0 })}
+                        onChange={v => updateAsset('insurances', item.id, { amount: v })}
                         min={0}
                         placeholder="0"
                       />
@@ -512,11 +511,10 @@ export default function InsurancePage() {
                       </select>
                     </td>
                     <td className="p-1 border border-gray-300">
-                      <input
-                        type="number"
+                      <MoneyInput
                         className={inputClassRight}
                         value={extra.monthlyPension || ''}
-                        onChange={e => updateExtra(item.id, item.note, { monthlyPension: Number(e.target.value) || 0 })}
+                        onChange={v => updateExtra(item.id, item.note, { monthlyPension: v })}
                         min={0}
                         placeholder="0"
                       />
@@ -530,11 +528,10 @@ export default function InsurancePage() {
                       />
                     </td>
                     <td className="p-1 border border-gray-300">
-                      <input
-                        type="number"
+                      <MoneyInput
                         className={inputClassRight}
                         value={item.amount || ''}
-                        onChange={e => updateAsset('insurances', item.id, { amount: Number(e.target.value) || 0 })}
+                        onChange={v => updateAsset('insurances', item.id, { amount: v })}
                         min={0}
                         placeholder="0"
                       />
