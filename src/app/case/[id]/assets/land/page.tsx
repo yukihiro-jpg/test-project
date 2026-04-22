@@ -126,12 +126,12 @@ export default function LandPage() {
                   <td className="p-1 text-center border border-gray-300 sticky z-10" style={{ left: STICKY_NO_LEFT, background: rowBg(i) }}>{i + 1}</td>
                   {/* Sticky: 地番 */}
                   <td className="p-1 border border-gray-300 sticky z-10 border-r-2 border-r-gray-400 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]" style={{ left: STICKY_CHIBAN_LEFT, background: rowBg(i) }}>
-                    <div className="flex gap-1">
-                      <input type="text" className={inputCls} value={land.location} placeholder="所在地"
-                        onChange={e => updateAsset('lands', land.id, { location: e.target.value })} />
-                      <input type="text" className={`${inputCls} w-24 shrink-0`} value={land.landNumber || ''} placeholder="地番"
-                        onChange={e => updateAsset('lands', land.id, { landNumber: e.target.value })} />
-                    </div>
+                    <input type="text" className={inputCls} value={`${land.location} ${land.landNumber || ''}`.trim()}
+                      placeholder="所在地・地番"
+                      onChange={e => {
+                        const val = e.target.value;
+                        updateAsset('lands', land.id, { location: val, landNumber: '' });
+                      }} />
                     <input type="text" className={`${inputCls} mt-0.5`} value={land.referenceNote || ''} placeholder="参照備考"
                       onChange={e => updateAsset('lands', land.id, { referenceNote: e.target.value })} />
                   </td>
@@ -218,8 +218,8 @@ export default function LandPage() {
                         placeholder="1.0"
                         onChange={e => {
                           const v = e.target.value;
-                          if (/^\d*\.?\d{0,1}$/.test(v) || v === '') {
-                            updateAsset('lands', land.id, { multiplier: Number(v) || 0 });
+                          if (/^\d*\.?\d{0,2}$/.test(v) || v === '') {
+                            updateAsset('lands', land.id, { multiplier: parseFloat(v) || 0 });
                           }
                         }} />
                     ) : (

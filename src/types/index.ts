@@ -152,6 +152,8 @@ export interface BuildingAsset {
   rentalReduction: boolean;
   borrowedHouseRatio: number;
   tenantName?: string;              // 賃借人・貸主名
+  ownershipRatio?: string;          // 持分（例: "1/2"）
+  registrationStatus?: 'registered' | 'unregistered'; // 登記有/未登記
   rooms?: BuildingRoom[];           // 部屋ごとの賃貸情報
   note: string;
 }
@@ -163,6 +165,7 @@ export interface BuildingRoom {
   tenantName: string;               // 借主
   area: number;                     // 専有面積（㎡）
   occupancy: RoomOccupancy;         // 月別の入居状況
+  deposit?: number;                 // 預り敷金
   note?: string;                    // 備考（賃料等）
 }
 
