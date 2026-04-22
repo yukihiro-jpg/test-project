@@ -144,16 +144,19 @@ export interface LandAsset {
 // --- 建物 ---
 export interface BuildingAsset {
   id: string;
-  name?: string;                    // 建物名
-  location: string;
-  structureType: string;
-  usage: string;
-  fixedAssetTaxValue: number;
-  rentalReduction: boolean;
-  borrowedHouseRatio: number;
-  tenantName?: string;              // 賃借人・貸主名
-  ownershipRatio?: string;          // 持分（例: "1/2"）
+  name?: string;                    // 建物名（貸家の場合に表示）
+  location: string;                 // 所在地
+  houseNumber?: string;             // 家屋番号
   registrationStatus?: 'registered' | 'unregistered'; // 登記有/未登記
+  ownershipRatio?: string;          // 持分（例: "1/2"）
+  structureType: string;            // 構造
+  usage: string;                    // 用途
+  floors?: number;                  // 階数
+  floorAreas?: number[];            // 各階の床面積
+  fixedAssetTaxValue: number;       // 固定資産税評価額
+  rentalReduction: boolean;         // 貸家フラグ
+  borrowedHouseRatio: number;       // 借家権割合（標準0.3）
+  tenantName?: string;
   rooms?: BuildingRoom[];           // 部屋ごとの賃貸情報
   note: string;
 }
