@@ -14,6 +14,7 @@ import { generateQuestionList, downloadQuestionExcel } from '@/lib/bank-statemen
 import QuestionListDialog from '@/components/bank-statement/QuestionListDialog'
 import TempDataDialog from '@/components/bank-statement/TempDataDialog'
 import DriveSyncButton from '@/components/bank-statement/DriveSyncButton'
+import { uploadClientToDrive, downloadClientFromDrive, getDriveConnected } from '@/lib/bank-statement/drive-sync'
 import ProcessingStatusTable from '@/components/bank-statement/ProcessingStatusTable'
 import { updateProcessingStatus } from '@/lib/bank-statement/processing-status-store'
 import { applyCompoundAutoAmounts, downloadCsv } from '@/lib/bank-statement/csv-generator'
@@ -43,6 +44,11 @@ export default function BankStatementContent() {
   // 顧問先選択
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [showClientSelector, setShowClientSelector] = useState(true)
+  // 顧問先選択直後のDrive取込確認バナー
+  const [showDriveImportBanner, setShowDriveImportBanner] = useState(false)
+  const [driveImporting, setDriveImporting] = useState(false)
+  // アプリ終了処理
+  const [exitingApp, setExitingApp] = useState(false)
 
   const [pages, setPages] = useState<StatementPage[]>([])
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([])
@@ -69,17 +75,56 @@ export default function BankStatementContent() {
   const [processingStatusVersion, setProcessingStatusVersion] = useState(0)
 
   // 顧問先選択ハンドラ
-  const handleClientSelect = useCallback((client: Client) => {
+  const handleClientSelect = useCallback(async (client: Client) => {
     setSelectedClient(client)
     setShowClientSelector(false)
-    // 顧問先別データを読み込み
     setAccountMaster(loadAccountMaster())
     setSubAccountMaster(loadSubAccountMaster())
     setAccountTaxMaster(loadAccountTaxMaster())
-    // 仕訳データをリセット
     setPages([])
     setJournalEntries([])
+    // Drive連携中なら取込確認バナーを表示
+    const driveOn = await getDriveConnected()
+    if (driveOn) setShowDriveImportBanner(true)
   }, [])
+
+  const handleDriveImport = useCallback(async () => {
+    if (!selectedClient) return
+    setDriveImporting(true)
+    try {
+      await downloadClientFromDrive(selectedClient.id, selectedClient.name)
+      // 読込後にマスタを再ロード
+      setAccountMaster(loadAccountMaster())
+      setSubAccountMaster(loadSubAccountMaster())
+      setAccountTaxMaster(loadAccountTaxMaster())
+      setInfo('Driveから最新データを取り込みました')
+    } catch (e) {
+      setError(`Drive読込エラー: ${e instanceof Error ? e.message : 'unknown'}`)
+    }
+    setDriveImporting(false)
+    setShowDriveImportBanner(false)
+  }, [selectedClient])
+
+  const handleExitApp = useCallback(async () => {
+    if (!selectedClient) {
+      window.close()
+      return
+    }
+    if (!window.confirm('アプリを終了します。現在の顧問先データを Drive に保存してからブラウザを閉じます。よろしいですか？')) return
+    setExitingApp(true)
+    try {
+      await uploadClientToDrive(selectedClient.id, selectedClient.name)
+    } catch (e) {
+      const ok = window.confirm(`Drive 保存でエラーが発生しました: ${e instanceof Error ? e.message : 'unknown'}\n\nこのまま終了しますか？`)
+      if (!ok) { setExitingApp(false); return }
+    }
+    window.close()
+    // window.close() が効かない環境用の代替メッセージ
+    setTimeout(() => {
+      setExitingApp(false)
+      alert('保存が完了しました。このブラウザタブを閉じてください。')
+    }, 500)
+  }, [selectedClient])
 
   const handleBackToClientList = useCallback(() => {
     setSelectedClientId(null)
@@ -636,6 +681,13 @@ export default function BankStatementContent() {
         </div>
         <div className="flex items-center gap-2">
           <DriveSyncButton clientId={selectedClient?.id || null} clientName={selectedClient?.name || null} />
+          {selectedClient && (
+            <button onClick={handleExitApp} disabled={exitingApp}
+              title="Drive保存してブラウザを閉じる"
+              className="px-3 py-1.5 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50">
+              {exitingApp ? '保存中...' : 'アプリ終了'}
+            </button>
+          )}
           <AccountMasterUploader
             accountMaster={accountMaster}
             subAccountMaster={subAccountMaster}
@@ -693,6 +745,26 @@ export default function BankStatementContent() {
           )}
         </div>
       </header>
+
+      {/* 顧問先選択直後の Drive 取込確認バナー */}
+      {showDriveImportBanner && selectedClient && (
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex items-center justify-between">
+          <span className="text-sm text-blue-800">
+            顧問先「{selectedClient.name}」のDrive保存データを取り込みますか？
+            <span className="text-xs text-gray-500 ml-2">（科目マスタ・パターン学習等が最新になります）</span>
+          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={handleDriveImport} disabled={driveImporting}
+              className="px-3 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50">
+              {driveImporting ? '取込中...' : '取り込む'}
+            </button>
+            <button onClick={() => setShowDriveImportBanner(false)} disabled={driveImporting}
+              className="px-3 py-1 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-100">
+              スキップ
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* エラー表示 */}
       {error && (
