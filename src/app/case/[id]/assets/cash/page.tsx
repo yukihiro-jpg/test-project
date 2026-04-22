@@ -52,14 +52,14 @@ export default function CashPage() {
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="bg-gray-100 border-b">
-              <th className="p-2 text-left border border-gray-300">銀行名</th>
-              <th className="p-2 text-left border border-gray-300">支店名</th>
-              <th className="p-2 text-left border border-gray-300">種類</th>
-              <th className="p-2 text-left border border-gray-300">口座番号</th>
-              <th className="p-2 text-right border border-gray-300">金額</th>
-              <th className="p-2 text-right border border-gray-300">経過利息</th>
+              <th className="p-2 text-center border border-gray-300">銀行名</th>
+              <th className="p-2 text-center border border-gray-300">支店名</th>
+              <th className="p-2 text-center border border-gray-300">種類</th>
+              <th className="p-2 text-center border border-gray-300">口座番号</th>
+              <th className="p-2 text-center border border-gray-300">金額</th>
+              <th className="p-2 text-center border border-gray-300">経過利息</th>
               <th className="p-2 text-center border border-gray-300">残証有無</th>
-              <th className="p-2 text-left border border-gray-300">備考</th>
+              <th className="p-2 text-center border border-gray-300">備考</th>
               <th className="p-2 text-center border border-gray-300 w-12"></th>
             </tr>
           </thead>
@@ -98,7 +98,7 @@ export default function CashPage() {
                         accountType: e.target.value,
                       })
                     }
-                    className={inputClass}
+                    className={`${inputClass} pr-6 appearance-auto`}
                   >
                     {ACCOUNT_TYPES.map(type => (
                       <option key={type} value={type}>

@@ -167,25 +167,25 @@ export default function BuildingPage() {
       </div>
 
       <div className="overflow-x-auto border border-gray-300 rounded-lg">
-        <table className="text-sm border-collapse w-full">
+        <table className="text-sm border-collapse w-max">
           <thead>
             <tr className="bg-gray-100 border-b">
-              <th className="p-1 text-center w-10 border border-gray-300">No</th>
-              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '140px' }}>所在地</th>
-              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '80px' }}>家屋番号</th>
+              <th className="p-1 text-center w-10 border border-gray-300 sticky left-0 z-10 bg-gray-100">No</th>
+              <th className="p-1 text-center border border-gray-300 sticky left-[40px] z-10 bg-gray-100 border-r-2 border-r-gray-400 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]" style={{ minWidth: '140px' }}>所在地</th>
+              <th className="p-1 text-center border border-gray-300" style={{ minWidth: '80px' }}>家屋番号</th>
               <th className="p-1 text-center border border-gray-300" style={{ width: '70px' }}>登記状況</th>
               <th className="p-1 text-center border border-gray-300" style={{ width: '65px' }}>
                 <div className="text-xs">持分</div>
               </th>
-              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '70px' }}>構造</th>
-              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '60px' }}>用途</th>
+              <th className="p-1 text-center border border-gray-300" style={{ minWidth: '70px' }}>構造</th>
+              <th className="p-1 text-center border border-gray-300" style={{ minWidth: '60px' }}>用途</th>
               <th className="p-1 text-center border border-gray-300" style={{ minWidth: '100px' }}>
                 <div>床面積</div>
                 <div className="text-xs font-normal text-gray-400">階数・各階㎡</div>
               </th>
-              <th className="p-1 text-right border border-gray-300" style={{ minWidth: '120px' }}>固定資産税評価額</th>
+              <th className="p-1 text-center border border-gray-300" style={{ minWidth: '120px' }}>固定資産税評価額</th>
               <th className="p-1 text-center border border-gray-300" style={{ width: '80px' }}>貸家</th>
-              <th className="p-1 text-right border border-gray-300" style={{ minWidth: '140px' }}>
+              <th className="p-1 text-center border border-gray-300" style={{ minWidth: '140px' }}>
                 <div>相続税評価額</div>
                 <div className="text-xs font-normal text-gray-400">貸家: ×(1-借家権割合)</div>
               </th>
@@ -210,9 +210,9 @@ export default function BuildingPage() {
                 <React.Fragment key={b.id}>
                   {/* Main inline row */}
                   <tr className={`border-b ${i % 2 === 0 ? '' : 'bg-gray-50'}`}>
-                    <td className="p-1 text-center border border-gray-300">{i + 1}</td>
+                    <td className={`p-1 text-center border border-gray-300 sticky left-0 z-10 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>{i + 1}</td>
                     {/* 所在地 */}
-                    <td className="p-1 border border-gray-300">
+                    <td className={`p-1 border border-gray-300 sticky left-[40px] z-10 border-r-2 border-r-gray-400 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                       <input type="text" className={`${inputCls} w-full`} value={b.location} placeholder="所在地"
                         onChange={e => updateAsset('buildings', b.id, { location: e.target.value })} />
                     </td>
@@ -338,7 +338,7 @@ export default function BuildingPage() {
                   {/* Rental sub-section (expandable, shown only when 貸家 is checked) */}
                   {b.rentalReduction && (
                     <tr>
-                      <td colSpan={11} className="p-0 border border-gray-300">
+                      <td colSpan={12} className="p-0 border border-gray-300">
                         {/* Toggle header */}
                         <div
                           className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 cursor-pointer hover:bg-amber-100 select-none"
@@ -362,18 +362,18 @@ export default function BuildingPage() {
                               <table className="w-full text-xs border border-gray-200">
                                 <thead>
                                   <tr className="bg-amber-100 border-b">
-                                    <th className="p-1 text-left" style={{ minWidth: '70px' }}>部屋番号</th>
-                                    <th className="p-1 text-left" style={{ minWidth: '80px' }}>借主</th>
-                                    <th className="p-1 text-right" style={{ minWidth: '80px' }}>専有面積(㎡)</th>
-                                    <th className="p-1 text-right" style={{ minWidth: '90px' }}>預り敷金</th>
+                                    <th className="p-1 text-center" style={{ minWidth: '70px' }}>部屋番号</th>
+                                    <th className="p-1 text-center" style={{ minWidth: '80px' }}>借主</th>
+                                    <th className="p-1 text-center" style={{ minWidth: '80px' }}>専有面積(㎡)</th>
+                                    <th className="p-1 text-center" style={{ minWidth: '90px' }}>預り敷金</th>
                                     {MONTH_KEYS.map(m => (
                                       <th key={m} className="p-1 text-center w-7" title={`${MONTH_LABELS[m]}月`}>
                                         {MONTH_LABELS[m]}月
                                       </th>
                                     ))}
-                                    <th className="p-1 text-right" style={{ minWidth: '70px' }}>賃貸面積</th>
-                                    <th className="p-1 text-left" style={{ minWidth: '100px' }}>備考</th>
-                                    <th className="p-1 w-8"></th>
+                                    <th className="p-1 text-center" style={{ minWidth: '70px' }}>賃貸面積</th>
+                                    <th className="p-1 text-center" style={{ minWidth: '100px' }}>備考</th>
+                                    <th className="p-1 text-center w-8"></th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -480,7 +480,7 @@ export default function BuildingPage() {
                                   })}
                                   {rooms.length === 0 && (
                                     <tr>
-                                      <td colSpan={MONTH_KEYS.length + 6} className="p-2 text-center text-gray-500">
+                                      <td colSpan={MONTH_KEYS.length + 7} className="p-2 text-center text-gray-500">
                                         部屋が登録されていません
                                       </td>
                                     </tr>
@@ -533,13 +533,13 @@ export default function BuildingPage() {
             })}
             {buildings.length === 0 && (
               <tr>
-                <td colSpan={11} className="p-4 text-center text-gray-400">建物が登録されていません</td>
+                <td colSpan={12} className="p-4 text-center text-gray-400">建物が登録されていません</td>
               </tr>
             )}
           </tbody>
           <tfoot>
             <tr className="bg-gray-100 font-semibold border-t-2">
-              <td colSpan={9} className="p-1 border border-gray-300 text-right">評価額合計</td>
+              <td colSpan={10} className="p-1 border border-gray-300 text-right">評価額合計</td>
               <td className="p-1 border border-gray-300 text-right">{formatCurrency(total)}</td>
               <td className="p-1 border border-gray-300"></td>
             </tr>

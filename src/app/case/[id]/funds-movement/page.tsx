@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useCaseStore } from '@/lib/store/case-store';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/components/common/currency-input';
@@ -17,10 +17,6 @@ import type {
 const inputClass =
   'w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500';
 
-const EXPLANATION_TEXT = `被相続人の預貯金等について調査・確認を行った結果、特筆すべき取引とその内容は以下の通りです。
-下記表以外の被相続人の預貯金等の取引については財産性があると考えられるものはありませんでした。
-被相続人については、生前において現金を随時引き出して生活費、交際費その他私的支出に充てる傾向が認められ、当該出金についても領収書その他の使途を裏付ける資料は確認できなかったものの、
-預貯金の滞留状況、親族からの聴取内容及び被相続人の金銭使用状況等を総合勘案し、相続開始時点において残存していた財産には該当しないものと判断した。`;
 
 function buildEmptyTransactions(
   accounts: CashDepositAsset[],
@@ -63,6 +59,18 @@ export default function FundsMovementPage() {
       updateFundsMovement(initial);
     }
   }, [currentCase, updateFundsMovement]);
+
+  const introKey = `funds-intro-${currentCase?.id}`;
+  const defaultIntro = `被相続人の預貯金等について調査・確認を行った結果、特筆すべき取引とその内容は以下の通りです。\n下記表以外の被相続人の預貯金等の取引については財産性があると考えられるものはありませんでした。\n被相続人については、生前において現金を随時引き出して生活費、交際費その他私的支出に充てる傾向が認められ、当該出金についても領収書その他の使途を裏付ける資料は確認できなかったものの、\n預貯金の滞留状況、親族からの聴取内容及び被相続人の金銭使用状況等を総合勘案し、相続開始時点において残存していた財産には該当しないものと判断した。`;
+  const [introText, setIntroText] = useState('');
+  useEffect(() => {
+    const saved = localStorage.getItem(introKey);
+    setIntroText(saved || defaultIntro);
+  }, [introKey]);
+  const handleIntroChange = (text: string) => {
+    setIntroText(text);
+    localStorage.setItem(introKey, text);
+  };
 
   if (!currentCase) {
     return <p className="text-gray-500">案件を選択してください</p>;
@@ -163,9 +171,12 @@ export default function FundsMovementPage() {
       </div>
 
       <div className="bg-white border border-gray-200 rounded p-4">
-        <p className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed">
-          {EXPLANATION_TEXT}
-        </p>
+        <textarea
+          className="w-full border border-gray-300 rounded p-2 text-sm"
+          rows={5}
+          value={introText}
+          onChange={e => handleIntroChange(e.target.value)}
+        />
       </div>
 
       {accounts.length === 0 ? (
