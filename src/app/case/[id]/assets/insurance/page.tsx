@@ -4,6 +4,7 @@ import React from 'react';
 import { useCaseStore } from '@/lib/store/case-store';
 import { Button } from '@/components/ui/button';
 import { formatCurrency, formatManyen } from '@/components/common/currency-input';
+import { MoneyInput } from '@/components/common/money-input';
 import { calculateInsuranceExemption } from '@/lib/tax/asset-valuation';
 import { countLegalHeirs } from '@/lib/tax/deductions';
 import { Plus, Trash2 } from 'lucide-react';
@@ -258,11 +259,10 @@ export default function InsurancePage() {
                       </select>
                     </td>
                     <td className="p-1 border border-gray-300">
-                      <input
-                        type="number"
+                      <MoneyInput
                         className={inputClassRight}
                         value={item.amount || ''}
-                        onChange={e => updateAsset('insurances', item.id, { amount: Number(e.target.value) || 0 })}
+                        onChange={v => updateAsset('insurances', item.id, { amount: v })}
                         min={0}
                         placeholder="0"
                       />

@@ -61,8 +61,9 @@ const STRATEGY_OPTIONS = [
 export default function TaxSavingPage() {
   const currentCase = useCaseStore(s => s.getCurrentCase());
   const updateGiftPlan = useCaseStore(s => s.updateGiftPlan);
+  const updateCurrentCase = useCaseStore(s => s.updateCurrentCase);
 
-  const [strategies, setStrategies] = useState<TaxStrategy[]>([]);
+  const [strategies, setStrategies] = useState<TaxStrategy[]>(currentCase?.taxSavingStrategies as any[] || []);
   const [showResult, setShowResult] = useState(false);
 
   if (!currentCase) return <p className="text-gray-500">案件を選択してください</p>;
@@ -121,6 +122,11 @@ export default function TaxSavingPage() {
   const updateStrategy = (id: string, updates: Partial<TaxStrategy>) => {
     setStrategies(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
     setShowResult(false);
+  };
+
+  const handleSave = () => {
+    updateCurrentCase({ taxSavingStrategies: strategies as any });
+    alert('節税対策を保存しました');
   };
 
   // 各対策の節税効果を計算
@@ -223,9 +229,14 @@ export default function TaxSavingPage() {
     <div className="max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">節税シミュレーション</h1>
-        <Button onClick={() => setShowResult(true)} disabled={strategies.filter(s => s.enabled).length === 0}>
-          <Calculator size={18} className="mr-2" />シミュレーション実行
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={handleSave} disabled={strategies.length === 0}>
+            保存
+          </Button>
+          <Button onClick={() => { updateCurrentCase({ taxSavingStrategies: strategies as any }); setShowResult(true); }} disabled={strategies.filter(s => s.enabled).length === 0}>
+            <Calculator size={18} className="mr-2" />シミュレーション実行
+          </Button>
+        </div>
       </div>
 
       {/* 現在の相続税 */}

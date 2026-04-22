@@ -40,6 +40,51 @@ export default function ExportPage() {
         case 'division-word':
           await exportDivisionAgreement(currentCase);
           break;
+        case 'tax-saving-xlsx': {
+          const XLSX = await import('xlsx');
+          const { saveAs } = await import('file-saver');
+          const taxResult = calculateInheritanceTax(currentCase);
+          const totalTax = taxResult.heirTaxDetails.reduce((s: number, h: any) => s + h.finalTax, 0);
+          const strategies = (currentCase as any).taxSavingStrategies || [];
+          const rows: any[][] = [
+            ['節税シミュレーション結果'],
+            [],
+            ['対策前相続税', totalTax],
+            [],
+            ['対策名', '節税額（円）', '内容'],
+          ];
+          let totalSaving = 0;
+          for (const st of strategies) {
+            const saving = st.estimatedReduction || 0;
+            totalSaving += saving;
+            rows.push([
+              st.description || st.type || '',
+              saving,
+              st.detail || '',
+            ]);
+          }
+          rows.push([]);
+          rows.push(['合計節税額', totalSaving]);
+          rows.push(['対策後相続税（推定）', Math.max(0, totalTax - totalSaving)]);
+          const wb = XLSX.utils.book_new();
+          const ws = XLSX.utils.aoa_to_sheet(rows);
+          // Set number format on numeric cells
+          const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+          for (let R = range.s.r; R <= range.e.r; R++) {
+            for (let C = range.s.c; C <= range.e.c; C++) {
+              const addr = XLSX.utils.encode_cell({ r: R, c: C });
+              const cell = ws[addr];
+              if (cell && typeof cell.v === 'number') {
+                cell.z = '#,##0';
+              }
+            }
+          }
+          XLSX.utils.book_append_sheet(wb, ws, '節税シミュレーション');
+          const name = currentCase.decedent.name || '未入力';
+          const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+          saveAs(new Blob([buf]), `節税シミュレーション_${name}.xlsx`);
+          break;
+        }
       }
     } catch (error) {
       console.error('Export error:', error);
@@ -133,6 +178,13 @@ export default function ExportPage() {
       description: '遺産分割の内容に基づいて自動作成されたWord文書',
       icon: <FileText size={24} className="text-blue-600" />,
       format: 'Word (.docx) → Googleドキュメント',
+    },
+    {
+      id: 'tax-saving-xlsx',
+      title: '節税シミュレーション結果',
+      description: '節税対策の効果一覧をExcel形式で出力',
+      icon: <FileSpreadsheet size={24} className="text-green-600" />,
+      format: 'Excel (.xlsx)',
     },
   ];
 

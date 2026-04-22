@@ -3,6 +3,7 @@
 import { useCaseStore } from '@/lib/store/case-store';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/components/common/currency-input';
+import { MoneyInput } from '@/components/common/money-input';
 import { Plus, Trash2 } from 'lucide-react';
 
 const inputClass =
@@ -120,12 +121,11 @@ export default function CashPage() {
                   />
                 </td>
                 <td className="p-2 border border-gray-300">
-                  <input
-                    type="number"
+                  <MoneyInput
                     value={item.balance || ''}
-                    onChange={e =>
+                    onChange={v =>
                       updateAsset('cashDeposits', item.id, {
-                        balance: Number(e.target.value) || 0,
+                        balance: v,
                       })
                     }
                     className={`${inputClass} text-right`}
@@ -133,12 +133,11 @@ export default function CashPage() {
                   />
                 </td>
                 <td className="p-2 border border-gray-300">
-                  <input
-                    type="number"
+                  <MoneyInput
                     value={item.accruedInterest || ''}
-                    onChange={e =>
+                    onChange={v =>
                       updateAsset('cashDeposits', item.id, {
-                        accruedInterest: Number(e.target.value) || 0,
+                        accruedInterest: v,
                       })
                     }
                     className={`${inputClass} text-right`}

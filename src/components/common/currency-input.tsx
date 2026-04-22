@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 
 interface CurrencyInputProps {
@@ -10,16 +11,47 @@ interface CurrencyInputProps {
   placeholder?: string;
 }
 
+function formatWithCommas(num: number): string {
+  if (!num) return '';
+  return num.toLocaleString('ja-JP');
+}
+
+function parseFormattedNumber(str: string): number {
+  return Number(str.replace(/,/g, '')) || 0;
+}
+
 export function CurrencyInput({ label, value, onChange, suffix = '円', placeholder }: CurrencyInputProps) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [rawValue, setRawValue] = useState('');
+
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+    setRawValue(value ? String(value) : '');
+  }, [value]);
+
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+    const parsed = parseFormattedNumber(rawValue);
+    onChange(parsed);
+  }, [rawValue, onChange]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/[^0-9]/g, '');
+    setRawValue(val);
+    onChange(Number(val) || 0);
+  }, [onChange]);
+
   return (
     <Input
-      type="number"
+      type="text"
+      inputMode="numeric"
       label={label}
-      value={value || ''}
-      onChange={e => onChange(Number(e.target.value) || 0)}
+      value={isFocused ? rawValue : formatWithCommas(value)}
+      onChange={handleChange}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
       suffix={suffix}
       placeholder={placeholder}
-      min={0}
     />
   );
 }
