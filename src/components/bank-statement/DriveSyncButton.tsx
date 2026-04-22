@@ -9,11 +9,18 @@ interface Props {
 
 type SyncState = 'idle' | 'uploading' | 'downloading' | 'error'
 
-const STORAGE_KEYS = [
-  'patterns', 'account-master', 'sub-account-master',
-  'account-tax-master', 'temp-entries', 'fixed-journals',
-  'bank-templates', 'processing-status',
-]
+// 各ストアの実際のlocalStorageキー定義（key名 → クライアントIDを差し込んだ実キーを返す関数）
+const STORAGE_KEY_MAP: Record<string, (cid: string) => string> = {
+  'patterns': (cid) => `bs-patterns-${cid}`,
+  'account-master': (cid) => `bs-accounts-${cid}`,
+  'sub-account-master': (cid) => `bs-sub-accounts-${cid}`,
+  'account-tax-master': (cid) => `bs-account-tax-${cid}`,
+  'temp-entries': (cid) => `bs-temp-csv-${cid}`,
+  'fixed-journals': (cid) => `bs-fixed-journals-${cid}`,
+  'bank-templates': (cid) => `bs-bank-templates-${cid}`,
+  'processing-status': (cid) => `bank-statement-client-${cid}-processing-status`,
+}
+const STORAGE_KEYS = Object.keys(STORAGE_KEY_MAP)
 
 export default function DriveSyncButton({ clientId, clientName }: Props) {
   const [connected, setConnected] = useState(false)
@@ -38,9 +45,10 @@ export default function DriveSyncButton({ clientId, clientName }: Props) {
     }
   }, [])
 
-  const getClientStorageKey = (key: string) => {
-    if (!clientId) return `bank-statement-${key}`
-    return `bank-statement-client-${clientId}-${key}`
+  const getClientStorageKey = (key: string, cid?: string) => {
+    const mapper = STORAGE_KEY_MAP[key]
+    if (mapper && cid) return mapper(cid)
+    return `bank-statement-${key}`
   }
 
   // ↑保存: 現在の顧問先データ + 顧問先一覧を Drive に保存
@@ -60,7 +68,7 @@ export default function DriveSyncButton({ clientId, clientName }: Props) {
       const items: { clientId: string; clientName: string | null; key: string; data: unknown }[] = []
 
       for (const key of STORAGE_KEYS) {
-        const storageKey = getClientStorageKey(key)
+        const storageKey = getClientStorageKey(key, clientId)
         const raw = localStorage.getItem(storageKey)
         if (raw) {
           try { items.push({ clientId, clientName, key, data: JSON.parse(raw) }) } catch { /* skip */ }
@@ -122,7 +130,7 @@ export default function DriveSyncButton({ clientId, clientName }: Props) {
             if (!res.ok) continue
             const { data } = await res.json()
             if (data != null) {
-              const storageKey = `bank-statement-client-${client.id}-${key}`
+              const storageKey = getClientStorageKey(key, client.id)
               localStorage.setItem(storageKey, JSON.stringify(data))
               downloaded++
             }
