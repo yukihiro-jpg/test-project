@@ -41,6 +41,7 @@ export function Sidebar({ caseId, onClose }: { caseId: string; onClose?: () => v
     { label: '上場株式', href: `${base}/assets/listed-stock`, icon: <TrendingUp size={18} /> },
     { label: '非上場株式', href: `${base}/assets/unlisted-stock`, icon: <TrendingUp size={18} /> },
     { label: '保険金', href: `${base}/assets/insurance`, icon: <Shield size={18} /> },
+    { label: '退職金', href: `${base}/assets/retirement`, icon: <Banknote size={18} /> },
     { label: 'その他財産', href: `${base}/assets/other`, icon: <Gift size={18} /> },
     { label: '債務', href: `${base}/assets/debt`, icon: <FileText size={18} /> },
     { label: '葬式費用', href: `${base}/assets/funeral`, icon: <FileText size={18} /> },

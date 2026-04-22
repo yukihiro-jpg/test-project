@@ -8,6 +8,7 @@ export type RelationshipType =
   | 'child'            // 子
   | 'adopted'          // 養子
   | 'grandchild_proxy' // 代襲相続人（孫）
+  | 'grandchild'       // 孫（通常）
   | 'parent'           // 父母
   | 'grandparent'      // 祖父母
   | 'sibling';         // 兄弟姉妹
@@ -17,6 +18,7 @@ export const RELATIONSHIP_LABELS: Record<RelationshipType, string> = {
   child: '子',
   adopted: '養子',
   grandchild_proxy: '代襲相続人（孫）',
+  grandchild: '孫',
   parent: '父母',
   grandparent: '祖父母',
   sibling: '兄弟姉妹',
@@ -57,8 +59,14 @@ export interface Heir {
   address: string;
   phone?: string;
   relationship: RelationshipType;
+  customRelationship?: string;  // 手入力の続柄（表示優先）
   isDisabled: boolean;
   disabilityType?: 'general' | 'special';
+}
+
+/** 表示用の続柄を取得（手入力があればそちらを優先） */
+export function getDisplayRelationship(heir: Heir): string {
+  return heir.customRelationship || RELATIONSHIP_LABELS[heir.relationship];
 }
 
 // --- 財産 ---
@@ -69,10 +77,20 @@ export interface Assets {
   listedStocks: ListedStockAsset[];
   unlistedStocks: UnlistedStockAsset[];
   insurances: InsuranceAsset[];
+  retirementBenefits: RetirementBenefit[];
   others: OtherAsset[];
   debts: DebtItem[];
   funeralExpenses: FuneralExpense[];
   compensationPayments: CompensationPayment[];
+}
+
+// --- 退職金 ---
+export interface RetirementBenefit {
+  id: string;
+  payerName: string;              // 支給者名
+  beneficiaryHeirId: string;      // 受取人
+  amount: number;                 // 金額
+  note: string;
 }
 
 // --- 土地 ---

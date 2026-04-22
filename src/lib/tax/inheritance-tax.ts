@@ -16,6 +16,7 @@ import {
   calculateUnlistedStockValue,
   calculateOtherAssetValue,
   calculateInsuranceExemption,
+  calculateRetirementExemption,
   calculateDeductibleFuneralExpenses,
 } from './asset-valuation';
 import {

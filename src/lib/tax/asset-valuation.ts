@@ -7,9 +7,11 @@ import type {
   ListedStockAsset,
   UnlistedStockAsset,
   InsuranceAsset,
+  RetirementBenefit,
   OtherAsset,
   FuneralExpense,
 } from '@/types';
+import { RETIREMENT_EXEMPTION_PER_HEIR } from './tax-tables';
 
 /**
  * 土地の評価額を計算
@@ -136,6 +138,22 @@ export function calculateInsuranceExemption(
     .filter(i => i.isDeathBenefit)
     .reduce((sum, i) => sum + i.amount, 0);
   const exemption = Math.min(totalAmount, 5_000_000 * legalHeirCount);
+  return {
+    totalAmount,
+    exemption,
+    taxableAmount: Math.max(0, totalAmount - exemption),
+  };
+}
+
+/**
+ * 退職金の非課税枠を計算
+ */
+export function calculateRetirementExemption(
+  benefits: RetirementBenefit[],
+  legalHeirCount: number
+): { totalAmount: number; exemption: number; taxableAmount: number } {
+  const totalAmount = benefits.reduce((sum, b) => sum + b.amount, 0);
+  const exemption = Math.min(totalAmount, RETIREMENT_EXEMPTION_PER_HEIR * legalHeirCount);
   return {
     totalAmount,
     exemption,

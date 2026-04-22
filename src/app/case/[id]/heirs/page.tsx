@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { calculateAge } from '@/lib/dates/wareki';
 import { calculateLegalShareRatios } from '@/lib/tax/deductions';
-import { RELATIONSHIP_LABELS, type RelationshipType } from '@/types';
+import { RELATIONSHIP_LABELS, type RelationshipType, getDisplayRelationship } from '@/types';
 import { Plus, Trash2 } from 'lucide-react';
 
 const RELATIONSHIP_OPTIONS = Object.entries(RELATIONSHIP_LABELS).map(([value, label]) => ({
@@ -55,6 +55,7 @@ export default function HeirsPage() {
                 <th className="p-2 text-left w-8">No</th>
                 <th className="p-2 text-left">氏名</th>
                 <th className="p-2 text-left" style={{ minWidth: '100px' }}>続柄</th>
+                <th className="p-2 text-center" style={{ minWidth: '100px' }}>続柄(手入力)</th>
                 <th className="p-2 text-left" style={{ minWidth: '140px' }}>生年月日</th>
                 <th className="p-2 text-left w-16">年齢</th>
                 <th className="p-2 text-left">住所</th>
@@ -90,6 +91,15 @@ export default function HeirsPage() {
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
+                    </td>
+                    <td className="p-1">
+                      <input
+                        type="text"
+                        value={heir.customRelationship || ''}
+                        onChange={e => updateHeir(heir.id, { customRelationship: e.target.value })}
+                        placeholder="例: 長男"
+                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
                     </td>
                     <td className="p-1">
                       <input

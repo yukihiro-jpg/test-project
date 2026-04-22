@@ -20,6 +20,7 @@ function createEmptyAssets(): Assets {
     listedStocks: [],
     unlistedStocks: [],
     insurances: [],
+    retirementBenefits: [],
     others: [],
     debts: [],
     funeralExpenses: [],
