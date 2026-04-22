@@ -162,20 +162,26 @@ export default function LandPage() {
                 </td>
                 {/* Combined 地目: 登記地目 (top) + 課税地目 (bottom) */}
                 <td className="p-1 border border-gray-300">
-                  <select
-                    className={inputCls}
-                    value={land.registeredCategory || '宅地'}
-                    onChange={e => updateAsset('lands', land.id, { registeredCategory: e.target.value })}
-                  >
-                    {LAND_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <select
-                    className={`${inputCls} mt-0.5`}
-                    value={land.taxCategory || '宅地'}
-                    onChange={e => updateAsset('lands', land.id, { taxCategory: e.target.value })}
-                  >
-                    {LAND_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-gray-400 shrink-0 w-6">登記</span>
+                    <select
+                      className={inputCls}
+                      value={land.registeredCategory || '宅地'}
+                      onChange={e => updateAsset('lands', land.id, { registeredCategory: e.target.value })}
+                    >
+                      {LAND_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="text-xs text-gray-400 shrink-0 w-6">課税</span>
+                    <select
+                      className={inputCls}
+                      value={land.taxCategory || '宅地'}
+                      onChange={e => updateAsset('lands', land.id, { taxCategory: e.target.value })}
+                    >
+                      {LAND_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
                 </td>
                 <td className="p-1 border border-gray-300">
                   <input
@@ -187,20 +193,24 @@ export default function LandPage() {
                 </td>
                 {/* Combined 地積: 登記地積 (top) + 課税地積 (bottom) */}
                 <td className="p-1 border border-gray-300">
-                  <input
-                    type="number"
-                    className={inputNumCls}
-                    value={land.registeredArea || ''}
-                    placeholder="登記"
-                    onChange={e => updateAsset('lands', land.id, { registeredArea: Number(e.target.value) })}
-                  />
-                  <input
-                    type="number"
-                    className={`${inputNumCls} mt-0.5`}
-                    value={land.taxArea || ''}
-                    placeholder="課税"
-                    onChange={e => updateAsset('lands', land.id, { taxArea: Number(e.target.value) })}
-                  />
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-gray-400 shrink-0 w-6">登記</span>
+                    <input
+                      type="number"
+                      className={inputNumCls}
+                      value={land.registeredArea || ''}
+                      onChange={e => updateAsset('lands', land.id, { registeredArea: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="text-xs text-gray-400 shrink-0 w-6">課税</span>
+                    <input
+                      type="number"
+                      className={inputNumCls}
+                      value={land.taxArea || ''}
+                      onChange={e => updateAsset('lands', land.id, { taxArea: Number(e.target.value) })}
+                    />
+                  </div>
                 </td>
                 <td className="p-1 border border-gray-300">
                   <input
