@@ -18,7 +18,16 @@ import {
 } from '@/lib/tax/asset-valuation';
 import { calculateLegalShareRatios, countLegalHeirs } from '@/lib/tax/deductions';
 import { RELATIONSHIP_LABELS } from '@/types';
-import type { DivisionEntry, Assets, Case } from '@/types';
+import type { DivisionEntry, Assets, Case, Heir } from '@/types';
+
+// ---------- Beneficiary-fixed asset descriptor ----------
+interface BeneficiaryFixedRow {
+  key: string;
+  category: string;
+  description: string;
+  beneficiaryHeirId: string;
+  amount: number;
+}
 
 // ---------- Asset row descriptor ----------
 interface AssetRow {
@@ -104,7 +113,9 @@ function buildAssetRows(c: Case): AssetRow[] {
     });
   }
 
+  // Only include non-death-benefit insurances in the division table
   for (const ins of assets.insurances) {
+    if (ins.isDeathBenefit) continue;
     rows.push({
       key: `insurances_${ins.id}`,
       assetId: ins.id,
@@ -114,6 +125,8 @@ function buildAssetRows(c: Case): AssetRow[] {
       value: ins.amount,
     });
   }
+
+  // Retirement benefits are beneficiary-fixed; excluded from division table
 
   for (const o of assets.others) {
     rows.push({
@@ -153,6 +166,37 @@ function buildAssetRows(c: Case): AssetRow[] {
   return rows;
 }
 
+// ---------- Build beneficiary-fixed asset list (not subject to division) ----------
+function buildBeneficiaryFixedRows(c: Case): BeneficiaryFixedRow[] {
+  const rows: BeneficiaryFixedRow[] = [];
+  const { assets } = c;
+
+  // Death benefit insurances go to the designated beneficiary
+  for (const ins of assets.insurances) {
+    if (!ins.isDeathBenefit) continue;
+    rows.push({
+      key: `insurances_${ins.id}`,
+      category: '死亡保険金',
+      description: `${ins.insuranceCompany}（${ins.policyNumber}）`,
+      beneficiaryHeirId: ins.beneficiaryHeirId,
+      amount: ins.amount,
+    });
+  }
+
+  // Retirement benefits go to the designated beneficiary
+  for (const rb of assets.retirementBenefits) {
+    rows.push({
+      key: `retirementBenefits_${rb.id}`,
+      category: '退職金',
+      description: rb.payerName,
+      beneficiaryHeirId: rb.beneficiaryHeirId,
+      amount: rb.amount,
+    });
+  }
+
+  return rows;
+}
+
 // Allocations: Record<assetKey, Record<heirId, amount>>
 type Allocations = Record<string, Record<string, number>>;
 
@@ -175,6 +219,11 @@ export default function DivisionPage() {
   const assetRows = useMemo(() => {
     if (!currentCase) return [];
     return buildAssetRows(currentCase);
+  }, [currentCase]);
+
+  const beneficiaryFixedRows = useMemo(() => {
+    if (!currentCase) return [];
+    return buildBeneficiaryFixedRows(currentCase);
   }, [currentCase]);
 
   const netValue = useMemo(() => {
@@ -478,6 +527,58 @@ export default function DivisionPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Beneficiary-fixed assets (not subject to division) */}
+      {beneficiaryFixedRows.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">受取人固有財産（分割対象外）</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left px-3 py-2 font-medium text-gray-600 w-24">区分</th>
+                    <th className="text-left px-3 py-2 font-medium text-gray-600">内容</th>
+                    <th className="text-left px-3 py-2 font-medium text-gray-600 w-40">受取人</th>
+                    <th className="text-right px-3 py-2 font-medium text-gray-600 w-32">金額</th>
+                    <th className="text-center px-3 py-2 font-medium text-gray-600 w-28">備考</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {beneficiaryFixedRows.map(row => {
+                    const heir = heirs.find(h => h.id === row.beneficiaryHeirId);
+                    const heirLabel = heir ? heir.name || '（未入力）' : '（未選択）';
+                    return (
+                      <tr key={row.key} className="border-t hover:bg-gray-50">
+                        <td className="px-3 py-2 text-gray-500">{row.category}</td>
+                        <td className="px-3 py-2 text-gray-900">{row.description}</td>
+                        <td className="px-3 py-2 text-gray-900">{heirLabel}</td>
+                        <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
+                          {formatCurrency(row.amount)}
+                        </td>
+                        <td className="px-3 py-2 text-center text-xs text-gray-500">受取人固定</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-400 bg-gray-100 font-bold">
+                    <td className="px-3 py-2" />
+                    <td className="px-3 py-2 text-right">合計</td>
+                    <td className="px-3 py-2" />
+                    <td className="px-3 py-2 text-right font-mono">
+                      {formatCurrency(beneficiaryFixedRows.reduce((s, r) => s + r.amount, 0))}
+                    </td>
+                    <td className="px-3 py-2" />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

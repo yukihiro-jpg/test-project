@@ -77,9 +77,10 @@ function calculateHeirAcquiredValues(
     const totalAsset = calculateTotalAssetValue(assets);
     const legalHeirCount = countLegalHeirs(heirs);
     const insurance = calculateInsuranceExemption(assets.insurances, legalHeirCount);
+    const retirement = calculateRetirementExemption(assets.retirementBenefits, legalHeirCount);
     const totalDebt = assets.debts.reduce((sum, d) => sum + d.amount, 0);
     const funeralDeductible = calculateDeductibleFuneralExpenses(assets.funeralExpenses);
-    const netValue = totalAsset + insurance.taxableAmount - totalDebt - funeralDeductible;
+    const netValue = totalAsset + insurance.taxableAmount + retirement.taxableAmount - totalDebt - funeralDeductible;
 
     const ratios = calculateLegalShareRatios(heirs);
     ratios.forEach((ratio, heirId) => {
@@ -120,6 +121,9 @@ export function calculateInheritanceTax(caseData: Case): TaxCalculationResult {
   // 2. 保険金の非課税枠
   const insurance = calculateInsuranceExemption(assets.insurances, legalHeirCount);
 
+  // 2.5. 退職金の非課税枠
+  const retirement = calculateRetirementExemption(assets.retirementBenefits, legalHeirCount);
+
   // 3. 債務・葬式費用
   const totalDebt = assets.debts.reduce((sum, d) => sum + d.amount, 0);
   const funeralDeductible = calculateDeductibleFuneralExpenses(assets.funeralExpenses);
@@ -127,7 +131,7 @@ export function calculateInheritanceTax(caseData: Case): TaxCalculationResult {
 
   // 4. 課税価格合計
   const netTaxableValue = Math.max(0,
-    totalAssetValue + insurance.taxableAmount - totalDeductions
+    totalAssetValue + insurance.taxableAmount + retirement.taxableAmount - totalDeductions
   );
 
   // 5. 基礎控除
@@ -203,9 +207,10 @@ export function calculateInheritanceTax(caseData: Case): TaxCalculationResult {
   });
 
   return {
-    totalAssetValue: totalAssetValue + insurance.totalAmount,
+    totalAssetValue: totalAssetValue + insurance.totalAmount + retirement.totalAmount,
     totalDeductions,
     insuranceExemption: insurance.exemption,
+    retirementExemption: retirement.exemption,
     netTaxableValue,
     basicDeduction,
     taxableAmount,

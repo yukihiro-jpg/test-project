@@ -343,6 +343,7 @@ export interface TaxCalculationResult {
   totalAssetValue: number;            // 財産総額
   totalDeductions: number;            // 債務・葬式費用合計
   insuranceExemption: number;         // 保険金非課税枠
+  retirementExemption: number;        // 退職金非課税枠
   netTaxableValue: number;            // 課税価格合計
   basicDeduction: number;             // 基礎控除額
   taxableAmount: number;              // 課税遺産総額
