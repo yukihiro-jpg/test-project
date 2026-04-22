@@ -3,12 +3,28 @@
 import React, { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCaseStore } from '@/lib/store/case-store';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { CurrencyInput, formatCurrency } from '@/components/common/currency-input';
+import { formatCurrency } from '@/components/common/currency-input';
 import { calculateBuildingValue } from '@/lib/tax/asset-valuation';
-import { Plus, ChevronDown, ChevronRight, Check } from 'lucide-react';
 import type { BuildingAsset, BuildingRoom, RoomOccupancy } from '@/types';
+import { Plus, Trash2, ChevronDown, ChevronRight, Check, Link2 } from 'lucide-react';
+
+// ── helpers ──────────────────────────────────────────────────
+
+function formatNum(n: number | undefined | null): string {
+  if (!n) return '';
+  return n.toLocaleString('ja-JP');
+}
+
+function parseNum(s: string): number {
+  return Number(s.replace(/,/g, '')) || 0;
+}
+
+function parseOwnershipRatio(ratio: string | undefined): { numerator: string; denominator: string } {
+  if (!ratio || !ratio.includes('/')) return { numerator: ratio || '1', denominator: '1' };
+  const [n, d] = ratio.split('/');
+  return { numerator: n.trim(), denominator: d.trim() };
+}
 
 const MONTH_KEYS = [
   'jan', 'feb', 'mar', 'apr', 'may', 'jun',
@@ -17,8 +33,8 @@ const MONTH_KEYS = [
 type MonthKey = typeof MONTH_KEYS[number];
 
 const MONTH_LABELS: Record<MonthKey, string> = {
-  jan: '1月', feb: '2月', mar: '3月', apr: '4月', may: '5月', jun: '6月',
-  jul: '7月', aug: '8月', sep: '9月', oct: '10月', nov: '11月', dec: '12月',
+  jan: '1', feb: '2', mar: '3', apr: '4', may: '5', jun: '6',
+  jul: '7', aug: '8', sep: '9', oct: '10', nov: '11', dec: '12',
 };
 
 function allMonthsOccupied(): RoomOccupancy {
@@ -28,40 +44,51 @@ function allMonthsOccupied(): RoomOccupancy {
   };
 }
 
-// Returns true if the room is rented at the reference date month (based on occupancy flags)
 function isOccupiedAtReference(occupancy: RoomOccupancy, referenceDate: string): boolean {
   const month = new Date(referenceDate).getMonth(); // 0-11
   return occupancy[MONTH_KEYS[month]];
 }
 
-// 課税時期賃貸面積: rented at reference date -> full area, else 0
 function getTaxableRentalArea(room: BuildingRoom, referenceDate: string): number {
   return isOccupiedAtReference(room.occupancy, referenceDate) ? room.area : 0;
 }
 
-function countOccupiedMonths(occupancy: RoomOccupancy): number {
-  return MONTH_KEYS.reduce((n, m) => n + (occupancy[m] ? 1 : 0), 0);
-}
+// ── style constants ──────────────────────────────────────────
+
+const inputCls = 'border border-gray-300 rounded px-1.5 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500';
+const inputNumCls = `${inputCls} text-right`;
+
+// ── component ────────────────────────────────────────────────
 
 export default function BuildingPage() {
   const currentCase = useCaseStore(s => s.getCurrentCase());
   const addAsset = useCaseStore(s => s.addAsset);
   const updateAsset = useCaseStore(s => s.updateAsset);
   const removeAsset = useCaseStore(s => s.removeAsset);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const [expandedRentalId, setExpandedRentalId] = useState<string | null>(null);
 
   if (!currentCase) return <p className="text-gray-500">案件を選択してください</p>;
+
   const buildings = currentCase.assets.buildings;
+  const debts = currentCase.assets.debts;
   const referenceDate = currentCase.referenceDate;
   const total = buildings.reduce((sum, b) => sum + calculateBuildingValue(b), 0);
 
+  // ── handlers ─────────────────────────────────────────────
+
   const handleAdd = () => {
-    const id = addAsset('buildings', {
-      location: '', structureType: '', usage: '自用',
-      fixedAssetTaxValue: 0, rentalReduction: false,
-      borrowedHouseRatio: 0.3, note: '',
+    addAsset('buildings', {
+      location: '',
+      structureType: '',
+      usage: '自用',
+      fixedAssetTaxValue: 0,
+      rentalReduction: false,
+      borrowedHouseRatio: 0.3,
+      ownershipRatio: '1/1',
+      registrationStatus: 'registered',
+      note: '',
     });
-    setExpandedId(id);
   };
 
   const addRoom = (b: BuildingAsset) => {
@@ -71,6 +98,7 @@ export default function BuildingPage() {
       tenantName: '',
       area: 0,
       occupancy: allMonthsOccupied(),
+      deposit: 0,
       note: '',
     };
     updateAsset('buildings', b.id, { rooms: [...(b.rooms ?? []), newRoom] });
@@ -91,6 +119,46 @@ export default function BuildingPage() {
     updateRoom(b, room.id, { occupancy: newOccupancy });
   };
 
+  const toggleRentalExpand = (id: string) => {
+    setExpandedRentalId(expandedRentalId === id ? null : id);
+  };
+
+  // ── deposit sync to debts ────────────────────────────────
+
+  const syncDepositToDebt = (b: BuildingAsset) => {
+    const rooms = b.rooms ?? [];
+    const totalDeposit = rooms.reduce((sum, r) => sum + (r.deposit || 0), 0);
+    if (totalDeposit === 0) return;
+
+    const buildingName = b.name || b.location || '建物';
+    const firstRoom = rooms.find(r => (r.deposit || 0) > 0);
+    const firstRoomNumber = firstRoom?.roomNumber || '?';
+    const firstTenantName = firstRoom?.tenantName || '?';
+    const creditor = `${buildingName}_${firstRoomNumber}+${firstTenantName}他`;
+    const autoNote = `[自動連動] ${buildingName}の預り敷金`;
+
+    // Find existing auto-synced debt for this building
+    const existingDebt = debts.find(d => d.note?.startsWith(`[自動連動] ${buildingName}`));
+
+    if (existingDebt) {
+      updateAsset('debts', existingDebt.id, {
+        creditor,
+        description: '預り敷金（自動連動）',
+        amount: totalDeposit,
+        note: autoNote,
+      });
+    } else {
+      addAsset('debts', {
+        creditor,
+        description: '預り敷金（自動連動）',
+        amount: totalDeposit,
+        note: autoNote,
+      });
+    }
+  };
+
+  // ── render ───────────────────────────────────────────────
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -98,16 +166,24 @@ export default function BuildingPage() {
         <Button onClick={handleAdd}><Plus size={18} className="mr-2" />追加</Button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto border border-gray-300 rounded-lg">
+        <table className="text-sm border-collapse w-full">
           <thead>
             <tr className="bg-gray-100 border-b">
-              <th className="p-2 text-left w-8"></th>
-              <th className="p-2 text-left w-8">No</th>
-              <th className="p-2 text-left">所在地</th>
-              <th className="p-2 text-left">用途</th>
-              <th className="p-2 text-right">固定資産税評価額</th>
-              <th className="p-2 text-right">評価額</th>
+              <th className="p-1 text-center w-10 border border-gray-300">No</th>
+              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '100px' }}>建物名</th>
+              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '160px' }}>所在地</th>
+              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '80px' }}>構造</th>
+              <th className="p-1 text-left border border-gray-300" style={{ minWidth: '80px' }}>用途</th>
+              <th className="p-1 text-center border border-gray-300" style={{ width: '70px' }}>
+                <div className="text-xs">持分</div>
+                <div className="text-xs font-normal text-gray-400">分子/分母</div>
+              </th>
+              <th className="p-1 text-center border border-gray-300" style={{ width: '80px' }}>登記状況</th>
+              <th className="p-1 text-right border border-gray-300" style={{ minWidth: '130px' }}>固定資産税評価額</th>
+              <th className="p-1 text-center border border-gray-300" style={{ width: '40px' }}>貸家</th>
+              <th className="p-1 text-right border border-gray-300" style={{ minWidth: '110px' }}>評価額</th>
+              <th className="p-1 text-center border border-gray-300 w-10"></th>
             </tr>
           </thead>
           <tbody>
@@ -120,91 +196,165 @@ export default function BuildingPage() {
                 0,
               );
               const rentalRatio = totalArea > 0 ? (totalTaxableRental / totalArea) * 100 : 0;
+              const totalDeposit = rooms.reduce((s, r) => s + (r.deposit || 0), 0);
+              const { numerator, denominator } = parseOwnershipRatio(b.ownershipRatio);
+              const isRentalExpanded = expandedRentalId === b.id;
 
               return (
                 <React.Fragment key={b.id}>
-                  <tr
-                    className={`border-b cursor-pointer hover:bg-blue-50 ${i % 2 === 0 ? '' : 'bg-gray-50'} ${expandedId === b.id ? 'bg-blue-50' : ''}`}
-                    onClick={() => setExpandedId(expandedId === b.id ? null : b.id)}
-                  >
-                    <td className="p-2">
-                      {expandedId === b.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  {/* Main inline row */}
+                  <tr className={`border-b ${i % 2 === 0 ? '' : 'bg-gray-50'}`}>
+                    {/* No */}
+                    <td className="p-1 text-center border border-gray-300">{i + 1}</td>
+                    {/* 建物名 */}
+                    <td className="p-1 border border-gray-300">
+                      <input
+                        type="text"
+                        className={`${inputCls} w-full`}
+                        value={b.name || ''}
+                        placeholder="建物名"
+                        onChange={e => updateAsset('buildings', b.id, { name: e.target.value })}
+                      />
                     </td>
-                    <td className="p-2">{i + 1}</td>
-                    <td className="p-2">{b.location || '（未入力）'}</td>
-                    <td className="p-2">{b.usage || '-'}</td>
-                    <td className="p-2 text-right">{formatCurrency(b.fixedAssetTaxValue)}</td>
-                    <td className="p-2 text-right font-medium">{formatCurrency(value)}</td>
+                    {/* 所在地 */}
+                    <td className="p-1 border border-gray-300">
+                      <input
+                        type="text"
+                        className={`${inputCls} w-full`}
+                        value={b.location}
+                        placeholder="所在地"
+                        onChange={e => updateAsset('buildings', b.id, { location: e.target.value })}
+                      />
+                    </td>
+                    {/* 構造 */}
+                    <td className="p-1 border border-gray-300">
+                      <input
+                        type="text"
+                        className={`${inputCls} w-full`}
+                        value={b.structureType}
+                        placeholder="木造/RC等"
+                        onChange={e => updateAsset('buildings', b.id, { structureType: e.target.value })}
+                      />
+                    </td>
+                    {/* 用途 */}
+                    <td className="p-1 border border-gray-300">
+                      <input
+                        type="text"
+                        className={`${inputCls} w-full`}
+                        value={b.usage}
+                        placeholder="自用/貸家等"
+                        onChange={e => updateAsset('buildings', b.id, { usage: e.target.value })}
+                      />
+                    </td>
+                    {/* 持分 分子/分母 */}
+                    <td className="p-1 border border-gray-300">
+                      <div className="flex items-center justify-center gap-0.5">
+                        <input
+                          type="text"
+                          className="border border-gray-300 rounded px-1 py-1 text-sm text-center w-8"
+                          value={numerator}
+                          onChange={e => updateAsset('buildings', b.id, { ownershipRatio: `${e.target.value}/${denominator}` })}
+                        />
+                        <span className="text-gray-400 text-xs">/</span>
+                        <input
+                          type="text"
+                          className="border border-gray-300 rounded px-1 py-1 text-sm text-center w-8"
+                          value={denominator}
+                          onChange={e => updateAsset('buildings', b.id, { ownershipRatio: `${numerator}/${e.target.value}` })}
+                        />
+                      </div>
+                    </td>
+                    {/* 登記状況 */}
+                    <td className="p-1 border border-gray-300">
+                      <select
+                        className="border border-gray-300 rounded px-0.5 py-1 text-sm w-full"
+                        value={b.registrationStatus || 'registered'}
+                        onChange={e => updateAsset('buildings', b.id, { registrationStatus: e.target.value as 'registered' | 'unregistered' })}
+                      >
+                        <option value="registered">登記有</option>
+                        <option value="unregistered">未登記</option>
+                      </select>
+                    </td>
+                    {/* 固定資産税評価額 */}
+                    <td className="p-1 border border-gray-300">
+                      <input
+                        type="text"
+                        className={`${inputNumCls} w-full`}
+                        value={formatNum(b.fixedAssetTaxValue)}
+                        onChange={e => updateAsset('buildings', b.id, { fixedAssetTaxValue: parseNum(e.target.value) })}
+                      />
+                    </td>
+                    {/* 貸家チェック */}
+                    <td className="p-1 border border-gray-300 text-center">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4"
+                        checked={b.rentalReduction || false}
+                        onChange={e => updateAsset('buildings', b.id, { rentalReduction: e.target.checked })}
+                      />
+                    </td>
+                    {/* 評価額 */}
+                    <td className="p-1 border border-gray-300 text-right font-medium">
+                      {formatCurrency(value)}
+                    </td>
+                    {/* 削除 */}
+                    <td className="p-1 border border-gray-300 text-center">
+                      <button
+                        onClick={() => removeAsset('buildings', b.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
                   </tr>
-                  {expandedId === b.id && (
-                    <tr><td colSpan={6} className="p-0">
-                      <div className="px-4 py-2 bg-white border-l-4 border-blue-400 space-y-2">
-                        {/* 1行目: 基本情報 */}
-                        <div className="grid grid-cols-8 gap-2 items-end">
-                          <Input label="建物名" value={b.name || ''}
-                            onChange={e => updateAsset('buildings', b.id, { name: e.target.value })}
-                            placeholder="建物名" />
-                          <div className="col-span-2">
-                            <Input label="所在地" value={b.location}
-                              onChange={e => updateAsset('buildings', b.id, { location: e.target.value })} />
-                          </div>
-                          <Input label="構造" value={b.structureType} placeholder="木造/RC等"
-                            onChange={e => updateAsset('buildings', b.id, { structureType: e.target.value })} />
-                          <Input label="用途" value={b.usage} placeholder="自用/貸家等"
-                            onChange={e => updateAsset('buildings', b.id, { usage: e.target.value })} />
-                          <CurrencyInput label="固定資産税評価額" value={b.fixedAssetTaxValue}
-                            onChange={v => updateAsset('buildings', b.id, { fixedAssetTaxValue: v })} />
-                          <div className="flex items-end gap-2 pb-1">
-                            <label className="flex items-center gap-1 text-xs whitespace-nowrap">
-                              <input type="checkbox" checked={b.rentalReduction || false}
-                                onChange={e => updateAsset('buildings', b.id, { rentalReduction: e.target.checked })} className="w-3 h-3" />貸家
-                            </label>
-                            {b.rentalReduction && (
-                              <input type="number" value={b.borrowedHouseRatio} step="0.1"
-                                onChange={e => updateAsset('buildings', b.id, { borrowedHouseRatio: Number(e.target.value) })}
-                                className="w-16 border border-gray-300 rounded px-1 py-0.5 text-xs" />
-                            )}
-                          </div>
-                          <Input label="賃借人" value={b.tenantName || ''}
-                            onChange={e => updateAsset('buildings', b.id, { tenantName: e.target.value })}
-                            placeholder="賃借人名" />
-                          <Input label="備考" value={b.note}
-                            onChange={e => updateAsset('buildings', b.id, { note: e.target.value })} />
+
+                  {/* Rental sub-section (expandable, shown only when 貸家 is checked) */}
+                  {b.rentalReduction && (
+                    <tr>
+                      <td colSpan={11} className="p-0 border border-gray-300">
+                        {/* Toggle header */}
+                        <div
+                          className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 cursor-pointer hover:bg-amber-100 select-none"
+                          onClick={() => toggleRentalExpand(b.id)}
+                        >
+                          {isRentalExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          <span className="text-sm font-semibold text-amber-800">賃貸割合（部屋管理）</span>
+                          <span className="text-xs text-gray-600 ml-2">
+                            賃貸割合: <span className="font-bold text-amber-800">{rentalRatio.toFixed(2)}%</span>
+                          </span>
+                          {totalDeposit > 0 && (
+                            <span className="text-xs text-gray-600 ml-2">
+                              敷金合計: <span className="font-bold">{formatNum(totalDeposit)}円</span>
+                            </span>
+                          )}
                         </div>
 
-                        {/* 賃貸割合計算（貸家のみ） */}
-                        {b.rentalReduction && (
-                          <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded space-y-2">
-                            <div className="flex items-center justify-between">
-                              <h3 className="text-sm font-semibold text-gray-800">賃貸割合（部屋ごとの入居状況）</h3>
-                              <div className="text-sm">
-                                <span className="text-gray-600">賃貸割合: </span>
-                                <span className="font-bold text-amber-800">{rentalRatio.toFixed(2)}%</span>
-                              </div>
-                            </div>
+                        {isRentalExpanded && (
+                          <div className="px-4 py-2 bg-white border-t border-amber-200 space-y-2">
                             <div className="overflow-x-auto">
                               <table className="w-full text-xs border border-gray-200">
                                 <thead>
                                   <tr className="bg-amber-100 border-b">
-                                    <th className="p-1 text-left">部屋番号</th>
-                                    <th className="p-1 text-left">借主</th>
-                                    <th className="p-1 text-right">専有面積(㎡)</th>
+                                    <th className="p-1 text-left" style={{ minWidth: '70px' }}>部屋番号</th>
+                                    <th className="p-1 text-left" style={{ minWidth: '80px' }}>借主</th>
+                                    <th className="p-1 text-right" style={{ minWidth: '80px' }}>専有面積(㎡)</th>
+                                    <th className="p-1 text-right" style={{ minWidth: '90px' }}>預り敷金</th>
                                     {MONTH_KEYS.map(m => (
-                                      <th key={m} className="p-1 text-center w-7" title={MONTH_LABELS[m]}>
-                                        {MONTH_LABELS[m]}
+                                      <th key={m} className="p-1 text-center w-7" title={`${MONTH_LABELS[m]}月`}>
+                                        {MONTH_LABELS[m]}月
                                       </th>
                                     ))}
-                                    <th className="p-1 text-right">課税時期<br />賃貸面積</th>
-                                    <th className="p-1 text-left">備考</th>
+                                    <th className="p-1 text-right" style={{ minWidth: '70px' }}>賃貸面積</th>
+                                    <th className="p-1 text-left" style={{ minWidth: '100px' }}>備考</th>
                                     <th className="p-1 w-8"></th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {rooms.map(room => {
                                     const taxableArea = getTaxableRentalArea(room, referenceDate);
-                                    const occupiedMonths = countOccupiedMonths(room.occupancy);
                                     return (
                                       <tr key={room.id} className="border-b hover:bg-amber-50/40">
+                                        {/* 部屋番号 */}
                                         <td className="p-1">
                                           <input
                                             type="text"
@@ -213,23 +363,45 @@ export default function BuildingPage() {
                                             className="w-16 border border-gray-300 rounded px-1 py-0.5"
                                           />
                                         </td>
+                                        {/* 借主 */}
                                         <td className="p-1">
                                           <input
                                             type="text"
                                             value={room.tenantName}
                                             onChange={e => updateRoom(b, room.id, { tenantName: e.target.value })}
-                                            className="w-24 border border-gray-300 rounded px-1 py-0.5"
+                                            className="w-20 border border-gray-300 rounded px-1 py-0.5"
                                           />
                                         </td>
+                                        {/* 専有面積 - text input, empty string when 0 */}
                                         <td className="p-1 text-right">
                                           <input
-                                            type="number"
-                                            value={room.area}
-                                            step="0.01"
-                                            onChange={e => updateRoom(b, room.id, { area: Number(e.target.value) })}
+                                            type="text"
+                                            value={room.area ? String(room.area) : ''}
+                                            placeholder=""
+                                            onChange={e => {
+                                              const val = e.target.value;
+                                              if (val === '') {
+                                                updateRoom(b, room.id, { area: 0 });
+                                              } else {
+                                                const parsed = parseFloat(val);
+                                                if (!isNaN(parsed)) {
+                                                  updateRoom(b, room.id, { area: parsed });
+                                                }
+                                              }
+                                            }}
                                             className="w-20 border border-gray-300 rounded px-1 py-0.5 text-right"
                                           />
                                         </td>
+                                        {/* 預り敷金 */}
+                                        <td className="p-1 text-right">
+                                          <input
+                                            type="text"
+                                            value={formatNum(room.deposit)}
+                                            onChange={e => updateRoom(b, room.id, { deposit: parseNum(e.target.value) })}
+                                            className="w-24 border border-gray-300 rounded px-1 py-0.5 text-right"
+                                          />
+                                        </td>
+                                        {/* 月別入居 1-12月 */}
                                         {MONTH_KEYS.map(m => {
                                           const checked = room.occupancy[m];
                                           return (
@@ -242,35 +414,38 @@ export default function BuildingPage() {
                                                     ? 'bg-amber-500 border-amber-600 text-white'
                                                     : 'bg-white border-gray-300 text-transparent hover:border-amber-400'
                                                 }`}
-                                                aria-label={`${MONTH_LABELS[m]}の入居状況`}
+                                                aria-label={`${MONTH_LABELS[m]}月の入居状況`}
                                                 aria-pressed={checked}
-                                                title={`${MONTH_LABELS[m]}: ${checked ? '入居中' : '空室'}`}
+                                                title={`${MONTH_LABELS[m]}月: ${checked ? '入居中' : '空室'}`}
                                               >
                                                 <Check size={12} />
                                               </button>
                                             </td>
                                           );
                                         })}
-                                        <td className="p-1 text-right" title={`入居月数: ${occupiedMonths}/12`}>
-                                          {taxableArea.toFixed(2)}
+                                        {/* 賃貸面積 */}
+                                        <td className="p-1 text-right">
+                                          {taxableArea ? taxableArea.toFixed(2) : ''}
                                         </td>
+                                        {/* 備考 */}
                                         <td className="p-1">
                                           <input
                                             type="text"
                                             value={room.note || ''}
                                             onChange={e => updateRoom(b, room.id, { note: e.target.value })}
-                                            placeholder="賃料等"
+                                            placeholder="備考"
                                             className="w-28 border border-gray-300 rounded px-1 py-0.5"
                                           />
                                         </td>
+                                        {/* 削除 */}
                                         <td className="p-1 text-center">
                                           <button
                                             type="button"
                                             onClick={() => removeRoom(b, room.id)}
-                                            className="text-red-500 hover:text-red-700 text-xs"
+                                            className="text-red-500 hover:text-red-700"
                                             aria-label="部屋を削除"
                                           >
-                                            削除
+                                            <Trash2 size={12} />
                                           </button>
                                         </td>
                                       </tr>
@@ -287,45 +462,59 @@ export default function BuildingPage() {
                                 <tfoot>
                                   <tr className="bg-amber-50 font-semibold border-t">
                                     <td className="p-1 text-right" colSpan={2}>計</td>
-                                    <td className="p-1 text-right">{totalArea.toFixed(2)}</td>
-                                    <td className="p-1 text-right" colSpan={MONTH_KEYS.length}></td>
-                                    <td className="p-1 text-right">{totalTaxableRental.toFixed(2)}</td>
+                                    <td className="p-1 text-right">{totalArea ? totalArea.toFixed(2) : ''}</td>
+                                    <td className="p-1 text-right">{formatNum(totalDeposit)}</td>
+                                    <td className="p-1" colSpan={MONTH_KEYS.length}></td>
+                                    <td className="p-1 text-right">{totalTaxableRental ? totalTaxableRental.toFixed(2) : ''}</td>
                                     <td className="p-1" colSpan={2}></td>
                                   </tr>
                                 </tfoot>
                               </table>
                             </div>
-                            <div className="flex items-center justify-between">
-                              <button
-                                type="button"
-                                onClick={() => addRoom(b)}
-                                className="text-xs text-amber-700 hover:text-amber-900 border border-amber-300 rounded px-2 py-1 bg-white hover:bg-amber-50"
-                              >
-                                <Plus size={12} className="inline mr-1" />部屋追加
-                              </button>
+
+                            {/* Bottom controls: add room, deposit sync, stats */}
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => addRoom(b)}
+                                  className="text-xs text-amber-700 hover:text-amber-900 border border-amber-300 rounded px-2 py-1 bg-white hover:bg-amber-50 inline-flex items-center"
+                                >
+                                  <Plus size={12} className="mr-1" />部屋追加
+                                </button>
+                                {totalDeposit > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => syncDepositToDebt(b)}
+                                    className="text-xs text-blue-700 hover:text-blue-900 border border-blue-300 rounded px-2 py-1 bg-white hover:bg-blue-50 inline-flex items-center"
+                                  >
+                                    <Link2 size={12} className="mr-1" />敷金を債務に連動
+                                  </button>
+                                )}
+                              </div>
                               <div className="text-xs text-gray-600">
-                                基準日: {referenceDate} / 課税時期賃貸面積合計: {totalTaxableRental.toFixed(2)}㎡ ÷ 専有面積合計: {totalArea.toFixed(2)}㎡
+                                基準日: {referenceDate} / 課税時期賃貸面積合計: {totalTaxableRental.toFixed(2)}㎡ &divide; 専有面積合計: {totalArea.toFixed(2)}㎡ = <span className="font-bold text-amber-800">{rentalRatio.toFixed(2)}%</span>
                               </div>
                             </div>
                           </div>
                         )}
-
-                        {/* 削除ボタン */}
-                        <div className="flex justify-end">
-                          <button onClick={() => removeAsset('buildings', b.id)}
-                            className="text-red-500 hover:text-red-700 text-xs">削除</button>
-                        </div>
-                      </div>
-                    </td></tr>
+                      </td>
+                    </tr>
                   )}
                 </React.Fragment>
               );
             })}
+            {buildings.length === 0 && (
+              <tr>
+                <td colSpan={11} className="p-4 text-center text-gray-400">建物が登録されていません</td>
+              </tr>
+            )}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 font-semibold bg-gray-100">
-              <td colSpan={5} className="p-2 text-right">合計</td>
-              <td className="p-2 text-right">{formatCurrency(total)}</td>
+            <tr className="bg-gray-100 font-semibold border-t-2">
+              <td colSpan={9} className="p-1 border border-gray-300 text-right">評価額合計</td>
+              <td className="p-1 border border-gray-300 text-right">{formatCurrency(total)}</td>
+              <td className="p-1 border border-gray-300"></td>
             </tr>
           </tfoot>
         </table>
