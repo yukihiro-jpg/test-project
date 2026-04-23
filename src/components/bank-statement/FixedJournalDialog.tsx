@@ -24,6 +24,11 @@ export default function FixedJournalDialog({ open, onClose, accountMaster, onTem
   const [formDesc, setFormDesc] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDate, setBulkDate] = useState('')
+  // 一括生成用: 範囲年月 + 日付
+  const [rangeMode, setRangeMode] = useState(false)
+  const [rangeFrom, setRangeFrom] = useState('')  // YYYY-MM
+  const [rangeTo, setRangeTo] = useState('')      // YYYY-MM
+  const [rangeDay, setRangeDay] = useState('末日') // 1〜28,末日
   const [showPreview, setShowPreview] = useState(false)
   const [previewEntries, setPreviewEntries] = useState<JournalEntry[]>([])
 
@@ -71,9 +76,38 @@ export default function FixedJournalDialog({ open, onClose, accountMaster, onTem
     setSelectedIds(next)
   }
 
-  const handleCreateEntries = () => {
-    if (selectedIds.size === 0 || !bulkDate) { alert('日付と対象を選択してください'); return }
-    const date = bulkDate.replace(/-/g, '')
+  // 指定年月+日で YYYYMMDD を生成（末日は自動判定）
+  const getDateStr = (yearMonth: string, day: string): string => {
+    const [y, m] = yearMonth.split('-').map(Number)
+    if (!y || !m) return ''
+    let d: number
+    if (day === '末日') {
+      d = new Date(y, m, 0).getDate() // 翌月0日 = 当月末日
+    } else {
+      d = parseInt(day)
+      const maxDay = new Date(y, m, 0).getDate()
+      if (d > maxDay) d = maxDay
+    }
+    return `${y}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}`
+  }
+
+  // 範囲年月からすべての年月を列挙
+  const getMonthsInRange = (): string[] => {
+    if (!rangeFrom || !rangeTo) return []
+    const [fy, fm] = rangeFrom.split('-').map(Number)
+    const [ty, tm] = rangeTo.split('-').map(Number)
+    if (!fy || !fm || !ty || !tm) return []
+    const months: string[] = []
+    let cy = fy, cm = fm
+    while (cy < ty || (cy === ty && cm <= tm)) {
+      months.push(`${cy}-${String(cm).padStart(2, '0')}`)
+      cm++
+      if (cm > 12) { cm = 1; cy++ }
+    }
+    return months
+  }
+
+  const createEntriesForDate = (date: string): JournalEntry[] => {
     const entries: JournalEntry[] = []
     for (const item of items) {
       if (!selectedIds.has(item.id)) continue
@@ -86,7 +120,6 @@ export default function FixedJournalDialog({ open, onClose, accountMaster, onTem
         e.debitTaxType = l.taxType; e.description = item.description; e.originalDescription = item.description
         entries.push(e)
       } else {
-        // 複合仕訳
         const first = item.lines[0]
         const parent = createBlankEntry()
         parent.date = date; parent.debitCode = first.debitCode; parent.debitName = first.debitName
@@ -105,8 +138,30 @@ export default function FixedJournalDialog({ open, onClose, accountMaster, onTem
         }
       }
     }
-    setPreviewEntries(entries)
-    setShowPreview(true)
+    return entries
+  }
+
+  const handleCreateEntries = () => {
+    if (selectedIds.size === 0) { alert('対象を選択してください'); return }
+
+    if (rangeMode) {
+      // 範囲年月モード
+      const months = getMonthsInRange()
+      if (months.length === 0) { alert('開始年月と終了年月を選択してください'); return }
+      const allEntries: JournalEntry[] = []
+      for (const ym of months) {
+        const dateStr = getDateStr(ym, rangeDay)
+        if (dateStr) allEntries.push(...createEntriesForDate(dateStr))
+      }
+      setPreviewEntries(allEntries)
+      setShowPreview(true)
+    } else {
+      // 単一日付モード（従来）
+      if (!bulkDate) { alert('日付を選択してください'); return }
+      const date = bulkDate.replace(/-/g, '')
+      setPreviewEntries(createEntriesForDate(date))
+      setShowPreview(true)
+    }
   }
 
   const handleConfirmSave = () => {
@@ -157,16 +212,51 @@ export default function FixedJournalDialog({ open, onClose, accountMaster, onTem
 
         {/* 一括日付入力 + 作成ボタン */}
         {items.length > 0 && (
-          <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-3">
-            <button onClick={() => setSelectedIds(selectedIds.size === items.length ? new Set() : new Set(items.map((i) => i.id)))}
-              className="text-xs text-blue-600 hover:underline">
-              {selectedIds.size === items.length ? '全解除' : '全選択'}
-            </button>
-            <span className="text-xs text-gray-500">{selectedIds.size}件選択</span>
-            <input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)}
-              className="px-2 py-1 text-sm border border-gray-300 rounded" />
-            <button onClick={handleCreateEntries} disabled={selectedIds.size === 0 || !bulkDate}
-              className="px-4 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-40">仕訳作成</button>
+          <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 space-y-2">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setSelectedIds(selectedIds.size === items.length ? new Set() : new Set(items.map((i) => i.id)))}
+                className="text-xs text-blue-600 hover:underline">
+                {selectedIds.size === items.length ? '全解除' : '全選択'}
+              </button>
+              <span className="text-xs text-gray-500">{selectedIds.size}件選択</span>
+              <label className="flex items-center gap-1 text-xs cursor-pointer">
+                <input type="checkbox" checked={rangeMode} onChange={() => setRangeMode((v) => !v)}
+                  className="w-3.5 h-3.5 accent-blue-600" />
+                <span className={rangeMode ? 'text-blue-600 font-bold' : 'text-gray-500'}>範囲年月で一括生成</span>
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              {rangeMode ? (
+                <>
+                  <input type="month" value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded" />
+                  <span className="text-xs text-gray-500">〜</span>
+                  <input type="month" value={rangeTo} onChange={(e) => setRangeTo(e.target.value)}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded" />
+                  <select value={rangeDay} onChange={(e) => setRangeDay(e.target.value)}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded">
+                    {Array.from({ length: 28 }, (_, i) => (
+                      <option key={i + 1} value={String(i + 1)}>{i + 1}日</option>
+                    ))}
+                    <option value="末日">末日</option>
+                  </select>
+                  <span className="text-xs text-gray-400">
+                    {(() => {
+                      const months = getMonthsInRange()
+                      return months.length > 0 ? `${months.length}ヶ月分` : ''
+                    })()}
+                  </span>
+                </>
+              ) : (
+                <input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)}
+                  className="px-2 py-1 text-sm border border-gray-300 rounded" />
+              )}
+              <button onClick={handleCreateEntries}
+                disabled={selectedIds.size === 0 || (rangeMode ? !rangeFrom || !rangeTo : !bulkDate)}
+                className="px-4 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-40">
+                {rangeMode ? '一括仕訳作成' : '仕訳作成'}
+              </button>
+            </div>
           </div>
         )}
 
