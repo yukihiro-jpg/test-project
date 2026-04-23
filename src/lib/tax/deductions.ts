@@ -12,18 +12,47 @@ import {
 } from './tax-tables';
 
 /**
- * 法定相続人の数を計算（養子の数の制限を適用）
+ * 法定相続人の数を計算
+ *
+ * 法定相続人は相続順位に基づいて決定される：
+ * - 配偶者は常に法定相続人
+ * - 第1順位: 子・養子・代襲相続人（孫）→ いれば親・兄弟は法定相続人にならない
+ * - 第2順位: 父母・祖父母 → 第1順位がいない場合のみ
+ * - 第3順位: 兄弟姉妹 → 第1・第2順位がいない場合のみ
+ * - 単純な孫（grandchild）は法定相続人ではない（代襲相続人でない限り）
+ * - 養子の数の制限: 実子がいる場合1人、いない場合2人まで
  */
 export function countLegalHeirs(heirs: Heir[]): number {
-  const hasRealChild = heirs.some(h => h.relationship === 'child' || h.relationship === 'grandchild_proxy');
-  const adoptedCount = heirs.filter(h => h.relationship === 'adopted').length;
+  const hasSpouse = heirs.some(h => h.relationship === 'spouse');
 
-  // 養子の数の制限：実子がいる場合1人、いない場合2人まで
+  // 第1順位: 子・代襲相続人（孫）
+  const realChildren = heirs.filter(h => h.relationship === 'child' || h.relationship === 'grandchild_proxy');
+  const adoptedCount = heirs.filter(h => h.relationship === 'adopted').length;
+  const hasRealChild = realChildren.length > 0;
+
+  // 養子の数の制限
   const maxAdopted = hasRealChild ? 1 : 2;
   const countedAdopted = Math.min(adoptedCount, maxAdopted);
+  const firstOrderCount = realChildren.length + countedAdopted;
 
-  const otherHeirs = heirs.filter(h => h.relationship !== 'adopted').length;
-  return otherHeirs + countedAdopted;
+  if (firstOrderCount > 0) {
+    return (hasSpouse ? 1 : 0) + firstOrderCount;
+  }
+
+  // 第2順位: 父母・祖父母
+  const parents = heirs.filter(h => h.relationship === 'parent' || h.relationship === 'grandparent');
+  if (parents.length > 0) {
+    return (hasSpouse ? 1 : 0) + parents.length;
+  }
+
+  // 第3順位: 兄弟姉妹
+  const siblings = heirs.filter(h => h.relationship === 'sibling');
+  if (siblings.length > 0) {
+    return (hasSpouse ? 1 : 0) + siblings.length;
+  }
+
+  // 配偶者のみ
+  return hasSpouse ? 1 : 0;
 }
 
 /**
