@@ -21,6 +21,7 @@ export default function PatternListDialog({ open, onClose }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editData, setEditData] = useState<EditState | null>(null)
   const [filterDuplicates, setFilterDuplicates] = useState(false)
+  const [searchText, setSearchText] = useState('')
 
   useEffect(() => {
     if (open) { setPatterns(getPatterns()); setEditingId(null); setEditData(null) }
@@ -37,9 +38,26 @@ export default function PatternListDialog({ open, onClose }: Props) {
   }, [patterns])
 
   const visiblePatterns = useMemo(() => {
-    if (!filterDuplicates) return patterns
-    return patterns.filter((p) => duplicateKeywords.has(p.keyword.toLowerCase()))
-  }, [patterns, filterDuplicates, duplicateKeywords])
+    let list = patterns
+    if (filterDuplicates) {
+      list = list.filter((p) => duplicateKeywords.has(p.keyword.toLowerCase()))
+    }
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase()
+      list = list.filter((p) =>
+        p.keyword.toLowerCase().includes(q) ||
+        p.lines.some((l) =>
+          l.debitCode.includes(q) || l.debitName.toLowerCase().includes(q) ||
+          l.creditCode.includes(q) || l.creditName.toLowerCase().includes(q) ||
+          (l.debitSubName || '').toLowerCase().includes(q) ||
+          (l.creditSubName || '').toLowerCase().includes(q) ||
+          (l.description || '').toLowerCase().includes(q)
+        ) ||
+        (p.accountCode || '').includes(q)
+      )
+    }
+    return list
+  }, [patterns, filterDuplicates, duplicateKeywords, searchText])
 
   if (!open) return null
 
@@ -155,6 +173,24 @@ export default function PatternListDialog({ open, onClose }: Props) {
             <button onClick={handleExport} className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">エクスポート</button>
             <button onClick={handleClear} className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200">全削除</button>
           </div>
+        </div>
+        {/* 検索バー */}
+        <div className="px-6 py-2 border-b border-gray-100 flex items-center gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <input type="text" value={searchText} onChange={(e) => setSearchText(e.target.value)}
+              placeholder="摘要・科目CD・科目名・補助科目で検索..."
+              className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+            {searchText && (
+              <button onClick={() => setSearchText('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">✕</button>
+            )}
+          </div>
+          <span className="text-xs text-gray-500">
+            {visiblePatterns.length !== patterns.length
+              ? `${visiblePatterns.length} / ${patterns.length}件`
+              : `${patterns.length}件`}
+          </span>
         </div>
 
         <div className="flex-1 overflow-auto">
