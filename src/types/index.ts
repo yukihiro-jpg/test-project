@@ -151,6 +151,8 @@ export interface LandAsset {
   sideTwoRoads?: string;             // 側方・二方
   // 都市計画
   cityPlanningZone?: string;         // 都市計画区分
+  // 建物紐づけ（貸家建付地評価用）
+  linkedBuildingId?: string;         // 紐づく建物のID
   // 特例
   useSpecialLand: boolean;
   specialUse: SpecialLandUse;
@@ -284,10 +286,18 @@ export interface OtherAsset {
 }
 
 // --- 債務 ---
+export type DebtCategory = '公租公課' | '未払金' | '借入金' | '預り敷金' | 'その他';
+
 export interface DebtItem {
   id: string;
-  creditor: string;
-  description: string;
+  category?: DebtCategory;          // 種類
+  subCategory?: string;             // 細目（例: 固定資産税、市民税、医療費）
+  creditor: string;                 // 債権者名
+  creditorAddress?: string;         // 債権者住所
+  description: string;              // 内容
+  debtDate?: string;                // 債務発生年月日（YYYY-MM-DD）
+  dueDate?: string;                 // 弁済期日（YYYY-MM-DD）
+  payerHeirId?: string;             // 支払者（相続人ID）
   amount: number;
   note: string;
 }
