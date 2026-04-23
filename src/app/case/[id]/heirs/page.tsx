@@ -61,6 +61,7 @@ export default function HeirsPage() {
                 <th className="p-2 text-left w-16">年齢</th>
                 <th className="p-2 text-left">住所</th>
                 <th className="p-2 text-left">電話番号</th>
+                <th className="p-2 text-left">職業</th>
                 <th className="p-2 text-center w-16">障害者</th>
                 <th className="p-2 text-right w-20">法定相続分</th>
                 <th className="p-2 text-center w-10"></th>
@@ -132,6 +133,15 @@ export default function HeirsPage() {
                         value={heir.phone || ''}
                         onChange={e => updateHeir(heir.id, { phone: e.target.value })}
                         placeholder="電話番号"
+                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="p-1">
+                      <input
+                        type="text"
+                        value={heir.occupation || ''}
+                        onChange={e => updateHeir(heir.id, { occupation: e.target.value })}
+                        placeholder="職業"
                         className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </td>

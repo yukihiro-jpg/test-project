@@ -184,7 +184,7 @@ function buildBeneficiaryFixedRows(c: Case): BeneficiaryFixedRow[] {
   }
 
   // Retirement benefits go to the designated beneficiary
-  for (const rb of assets.retirementBenefits) {
+  for (const rb of (assets.retirementBenefits || [])) {
     rows.push({
       key: `retirementBenefits_${rb.id}`,
       category: '退職金',

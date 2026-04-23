@@ -96,6 +96,17 @@ export default function DecedentPage() {
                 onChange={e => updateDecedent({ phone: e.target.value })}
               />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">職業</label>
+              <input
+                type="text"
+                className={inputCls}
+                value={decedent.occupation || ''}
+                placeholder="会社員、無職等"
+                onChange={e => updateDecedent({ occupation: e.target.value })}
+              />
+            </div>
           </div>
         </div>
       </div>

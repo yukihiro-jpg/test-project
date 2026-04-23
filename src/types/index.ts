@@ -49,6 +49,7 @@ export interface Decedent {
   deathDate?: string;           // YYYY-MM-DD（任意）
   address: string;
   phone?: string;
+  occupation?: string;          // 職業
 }
 
 // --- 相続人 ---
@@ -60,6 +61,7 @@ export interface Heir {
   phone?: string;
   relationship: RelationshipType;
   customRelationship?: string;  // 手入力の続柄（表示優先）
+  occupation?: string;          // 職業
   isDisabled: boolean;
   disabilityType?: 'general' | 'special';
 }
