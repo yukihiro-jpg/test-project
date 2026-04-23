@@ -559,11 +559,15 @@ function extractTransactions(
       }
       if (ex.length > 0) extras = ex
     }
-    // 備考列 → 摘要に連結
-    let finalDesc = description
+    // 備考列 → 別フィールドに保持（パターン適用後にも摘要に連結するため）
+    let memoText: string | undefined
+    let descWithMemo = description
     if (typeof mapping.memoColumn === 'number' && mapping.memoColumn >= 0) {
       const memo = (row.cells[mapping.memoColumn] || '').trim()
-      if (memo) finalDesc = `${description}_${memo}`.slice(0, 25)
+      if (memo) {
+        memoText = memo
+        descWithMemo = `${description}_${memo}`.slice(0, 25)
+      }
     }
 
     transactions.push({
@@ -571,12 +575,13 @@ function extractTransactions(
       pageIndex,
       rowIndex: row.rowIndex,
       date,
-      description: finalDesc,
+      description: descWithMemo,
       deposit: deposit ?? null,
       withdrawal: withdrawal ?? null,
       balance: balance!,
       boundingBox: row.boundingBox,
       extras,
+      memoText,
     })
   }
 

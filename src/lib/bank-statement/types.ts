@@ -11,6 +11,8 @@ export interface BankTransaction {
   boundingBox?: { x: number; y: number; width: number; height: number }
   // 追加列（複合仕訳用: 家賃収入、預り敷金等の内訳列）
   extras?: { name: string; amount: number; direction: 'credit' | 'debit'; memo?: string }[]
+  // 備考列（パターン適用後も摘要に連結）
+  memoText?: string
 }
 
 // ページ情報

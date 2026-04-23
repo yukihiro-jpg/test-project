@@ -113,6 +113,10 @@ export function mapTransactionsToJournalEntries(
         } else if (pattern.convertedDescription) {
           entry.description = pattern.convertedDescription
         }
+        // 備考列がある場合はパターン摘要の後に連結
+        if (tx.memoText) {
+          entry.description = `${entry.description}_${tx.memoText}`.slice(0, 25)
+        }
         // 補助科目コードの反映
         if (pDebitSubCode) { entry.debitSubCode = pDebitSubCode; entry.debitSubName = pDebitSubName }
         if (pCreditSubCode) { entry.creditSubCode = pCreditSubCode; entry.creditSubName = pCreditSubName }
