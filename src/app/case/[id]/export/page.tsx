@@ -40,6 +40,12 @@ export default function ExportPage() {
         case 'division-word':
           await exportDivisionAgreement(currentCase);
           break;
+        case 'division-report': {
+          const { exportDivisionReport } = await import('@/lib/export/division-report');
+          const result = calculateInheritanceTax(currentCase);
+          exportDivisionReport(currentCase, result);
+          break;
+        }
         case 'tax-saving-xlsx': {
           const XLSX = await import('xlsx');
           const { saveAs } = await import('file-saver');
@@ -178,6 +184,13 @@ export default function ExportPage() {
       description: '遺産分割の内容に基づいて自動作成されたWord文書',
       icon: <FileText size={24} className="text-blue-600" />,
       format: 'Word (.docx) → Googleドキュメント',
+    },
+    {
+      id: 'division-report',
+      title: '財産分割案＆相続税概算',
+      description: '財産診断書形式の詳細Excel（全財産＋相続税計算＋各相続人配分）',
+      icon: <FileSpreadsheet size={24} className="text-green-600" />,
+      format: 'Excel (.xlsx)',
     },
     {
       id: 'tax-saving-xlsx',
