@@ -288,6 +288,12 @@ export interface OtherAsset {
 // --- 債務 ---
 export type DebtCategory = '公租公課' | '未払金' | '借入金' | '預り敷金' | 'その他';
 
+/** 複数負担者の割合情報 */
+export interface PayerShare {
+  heirId: string;
+  ratio: number;                    // 負担割合（0〜1）
+}
+
 export interface DebtItem {
   id: string;
   category?: DebtCategory;          // 種類
@@ -297,7 +303,8 @@ export interface DebtItem {
   description: string;              // 内容
   debtDate?: string;                // 債務発生年月日（YYYY-MM-DD）
   dueDate?: string;                 // 弁済期日（YYYY-MM-DD）
-  payerHeirId?: string;             // 支払者（相続人ID）
+  payerHeirId?: string;             // 支払者（旧: 単一）※後方互換
+  payers?: PayerShare[];            // 支払者（複数対応）
   amount: number;
   note: string;
 }
@@ -305,9 +312,14 @@ export interface DebtItem {
 // --- 葬式費用 ---
 export interface FuneralExpense {
   id: string;
-  description: string;
-  amount: number;
-  isDeductible: boolean;
+  description: string;              // 内容
+  payee?: string;                   // 支払先名称
+  payeeAddress?: string;            // 支払先住所
+  paymentDate?: string;             // 支払年月日
+  amount: number;                   // 請求金額（実際支払額）
+  nonDeductibleAmount?: number;     // 葬式費用にならない金額
+  bearers?: PayerShare[];           // 負担者（複数対応）
+  isDeductible: boolean;            // 控除対象フラグ（旧機能、互換維持）
   note: string;
 }
 

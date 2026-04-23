@@ -3,8 +3,8 @@
 import { useCaseStore } from '@/lib/store/case-store';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/components/common/currency-input';
-import { getDisplayRelationship } from '@/types';
-import { Plus, Trash2, Link } from 'lucide-react';
+import type { PayerShare } from '@/types';
+import { Plus, Trash2, Link, Users } from 'lucide-react';
 import { useState, useCallback } from 'react';
 
 type DebtCategory = '公租公課' | '未払金' | '借入金' | '預り敷金' | 'その他';
@@ -49,6 +49,90 @@ function MoneyCell({ value, onChange }: { value: number; onChange: (v: number) =
   );
 }
 
+function PayersEditor({
+  payers, heirs, onChange,
+}: {
+  payers: PayerShare[];
+  heirs: { id: string; name: string }[];
+  onChange: (p: PayerShare[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const toggleHeir = (heirId: string) => {
+    const exists = payers.find(p => p.heirId === heirId);
+    if (exists) {
+      onChange(payers.filter(p => p.heirId !== heirId));
+    } else {
+      const newPayers = [...payers, { heirId, ratio: 0 }];
+      const eq = 1 / newPayers.length;
+      onChange(newPayers.map(p => ({ ...p, ratio: eq })));
+    }
+  };
+
+  const updateRatio = (heirId: string, ratio: number) => {
+    onChange(payers.map(p => p.heirId === heirId ? { ...p, ratio } : p));
+  };
+
+  const totalRatio = payers.reduce((s, p) => s + p.ratio, 0);
+  const summary = payers.length === 0 ? '未指定' :
+    payers.length === 1 ? (heirs.find(h => h.id === payers[0].heirId)?.name || '?') :
+    `${payers.length}名`;
+
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(!open)}
+        className={`${inputClass} flex items-center justify-between gap-1 text-left ${payers.length > 1 ? 'text-blue-700' : ''}`}>
+        <span className="truncate">{summary}</span>
+        <Users size={12} className="shrink-0" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 top-full left-0 mt-1 w-72 bg-white border border-gray-300 rounded shadow-lg p-2">
+            <div className="text-xs font-medium text-gray-700 mb-1">支払者（複数選択可）</div>
+            <div className="space-y-1 max-h-56 overflow-y-auto">
+              {heirs.map(h => {
+                const payer = payers.find(p => p.heirId === h.id);
+                return (
+                  <div key={h.id} className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={!!payer}
+                      onChange={() => toggleHeir(h.id)} className="w-3 h-3" />
+                    <span className="flex-1 truncate">{h.name || '（未入力）'}</span>
+                    {payer && (
+                      <input type="number" step="0.01" min="0" max="1"
+                        value={payer.ratio.toFixed(2)}
+                        onChange={e => updateRatio(h.id, parseFloat(e.target.value) || 0)}
+                        className="w-16 border border-gray-300 rounded px-1 py-0.5 text-xs text-right" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {payers.length > 0 && (
+              <div className={`text-xs mt-2 pt-2 border-t ${Math.abs(totalRatio - 1) < 0.01 ? 'text-green-700' : 'text-red-600'}`}>
+                合計割合: {(totalRatio * 100).toFixed(0)}%{Math.abs(totalRatio - 1) > 0.01 && '（100%にしてください）'}
+              </div>
+            )}
+            <div className="flex gap-1 mt-2">
+              <button type="button"
+                onClick={() => {
+                  const n = payers.length;
+                  if (n > 0) {
+                    const eq = 1 / n;
+                    onChange(payers.map(p => ({ ...p, ratio: eq })));
+                  }
+                }}
+                className="text-xs bg-gray-100 hover:bg-gray-200 rounded px-2 py-1">均等割</button>
+              <button type="button" onClick={() => setOpen(false)}
+                className="text-xs bg-blue-500 hover:bg-blue-600 text-white rounded px-2 py-1 ml-auto">閉じる</button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function DebtPage() {
   const currentCase = useCaseStore(s => s.getCurrentCase());
   const addAsset = useCaseStore(s => s.addAsset);
@@ -70,7 +154,7 @@ export default function DebtPage() {
       description: '',
       debtDate: '',
       dueDate: '',
-      payerHeirId: '',
+      payers: [],
       amount: 0,
       note: '',
     });
@@ -146,16 +230,11 @@ export default function DebtPage() {
                     className={inputClass} />
                 </td>
                 <td className="p-1 border border-gray-300">
-                  <select value={item.payerHeirId || ''}
-                    onChange={e => updateAsset('debts', item.id, { payerHeirId: e.target.value })}
-                    className={`${inputClass} pr-6`}>
-                    <option value="">未指定</option>
-                    {heirs.map(h => (
-                      <option key={h.id} value={h.id}>
-                        {h.name || '（未入力）'}（{getDisplayRelationship(h)}）
-                      </option>
-                    ))}
-                  </select>
+                  <PayersEditor
+                    payers={item.payers || (item.payerHeirId ? [{ heirId: item.payerHeirId, ratio: 1 }] : [])}
+                    heirs={heirs}
+                    onChange={p => updateAsset('debts', item.id, { payers: p })}
+                  />
                 </td>
                 <td className="p-1 border border-gray-300">
                   <input type="text" value={item.description}
