@@ -145,6 +145,34 @@ export function mapTransactionsToJournalEntries(
           entries.push(compoundEntry)
         }
       }
+
+      // 追加列から複合仕訳を生成（家賃収入/預り敷金等の内訳列）
+      if (tx.extras && tx.extras.length > 0 && !pattern?.lines?.length) {
+        for (const extra of tx.extras) {
+          const compEntry = createCompoundEntry(entry)
+          compEntry.description = entry.description
+          compEntry.originalDescription = entry.originalDescription
+          // 科目マスタから名前で検索
+          const matchedAcc = accountMaster.find((a) =>
+            a.name.includes(extra.name) || a.shortName.includes(extra.name) ||
+            extra.name.includes(a.name) || extra.name.includes(a.shortName)
+          )
+          if (extra.direction === 'credit') {
+            compEntry.creditCode = matchedAcc?.code || ''
+            compEntry.creditName = matchedAcc?.shortName || matchedAcc?.name || extra.name
+            compEntry.debitCode = accountCode
+            compEntry.debitName = accountName
+          } else {
+            compEntry.debitCode = matchedAcc?.code || ''
+            compEntry.debitName = matchedAcc?.shortName || matchedAcc?.name || extra.name
+            compEntry.creditCode = accountCode
+            compEntry.creditName = accountName
+          }
+          compEntry.debitAmount = extra.amount
+          compEntry.creditAmount = extra.amount
+          entries.push(compEntry)
+        }
+      }
     }
   }
 

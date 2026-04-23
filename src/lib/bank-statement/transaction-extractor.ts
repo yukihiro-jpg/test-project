@@ -310,13 +310,40 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
     }
     // 通常モード: 日付 + 残高 + (入金 or 出金)
     if (dateCol >= 0 && balanceCol >= 0 && (depositCol >= 0 || withdrawCol >= 0)) {
-      return {
+      const mapping: ColumnMapping = {
         dateColumn: dateCol,
         descriptionColumn: descCol,
         depositColumn: depositCol >= 0 ? depositCol : withdrawCol,
         withdrawalColumn: withdrawCol >= 0 ? withdrawCol : depositCol,
         balanceColumn: balanceCol,
       }
+      // 追加列の検出: 標準列以外で「入金」「出金」方向が指定されている列
+      const usedCols = new Set([dateCol, descCol, depositCol, withdrawCol, balanceCol, signedCol].filter((c) => c >= 0))
+      const extraCols: { col: number; name: string; direction: 'credit' | 'debit' }[] = []
+      let memoCol = -1
+      // 1つ上の行で「入金」「出金」のカテゴリ行があるか探す
+      const rowIdx = rows.indexOf(row)
+      const dirRow = rowIdx > 0 ? rows[rowIdx - 1] : null
+      for (let i = 0; i < row.cells.length; i++) {
+        if (usedCols.has(i)) continue
+        const cellName = (row.cells[i] || '').replace(/[\s　]/g, '').trim()
+        if (!cellName) continue
+        // 備考列
+        if (cellName === '備考' || cellName === '備考欄') { memoCol = i; continue }
+        // 方向判定: 上の行に「入金」or「出金」があればそれで判定
+        let dir: 'credit' | 'debit' | null = null
+        if (dirRow) {
+          const dirCell = (dirRow.cells[i] || '').replace(/[\s　]/g, '')
+          if (dirCell.includes('入金') || dirCell.includes('入') || dirCell.includes('貸方')) dir = 'credit'
+          else if (dirCell.includes('出金') || dirCell.includes('出') || dirCell.includes('借方')) dir = 'debit'
+        }
+        if (dir) {
+          extraCols.push({ col: i, name: cellName, direction: dir })
+        }
+      }
+      if (extraCols.length > 0) mapping.extraColumns = extraCols
+      if (memoCol >= 0) mapping.memoColumn = memoCol
+      return mapping
     }
   }
   return null
@@ -507,16 +534,37 @@ function extractTransactions(
       balance = runningBalance
     }
 
+    // 追加列（複合仕訳用の内訳列）
+    let extras: { name: string; amount: number; direction: 'credit' | 'debit'; memo?: string }[] | undefined
+    if (mapping.extraColumns && mapping.extraColumns.length > 0) {
+      const ex: typeof extras = []
+      for (const ec of mapping.extraColumns) {
+        const amtText = row.cells[ec.col] || ''
+        const amt = parseAmount(amtText)
+        if (amt != null && amt > 0) {
+          ex.push({ name: ec.name, amount: amt, direction: ec.direction })
+        }
+      }
+      if (ex.length > 0) extras = ex
+    }
+    // 備考列 → 摘要に連結
+    let finalDesc = description
+    if (typeof mapping.memoColumn === 'number' && mapping.memoColumn >= 0) {
+      const memo = (row.cells[mapping.memoColumn] || '').trim()
+      if (memo) finalDesc = `${description}_${memo}`.slice(0, 25)
+    }
+
     transactions.push({
       id: generateId(),
       pageIndex,
       rowIndex: row.rowIndex,
       date,
-      description,
+      description: finalDesc,
       deposit: deposit ?? null,
       withdrawal: withdrawal ?? null,
       balance: balance!,
       boundingBox: row.boundingBox,
+      extras,
     })
   }
 

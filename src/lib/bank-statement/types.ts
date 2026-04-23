@@ -9,6 +9,8 @@ export interface BankTransaction {
   withdrawal: number | null
   balance: number
   boundingBox?: { x: number; y: number; width: number; height: number }
+  // 追加列（複合仕訳用: 家賃収入、預り敷金等の内訳列）
+  extras?: { name: string; amount: number; direction: 'credit' | 'debit'; memo?: string }[]
 }
 
 // ページ情報
@@ -145,6 +147,8 @@ export interface ColumnMapping {
   transactionTypeColumn?: number // 取引区分列（摘要と別列で存在する場合）
   signedAmountColumn?: number    // 入出金を1列で表す場合(正=入金,負=出金)
   directionColumn?: number       // 受払区分列（受入/払出で入出金を判別）
+  extraColumns?: { col: number; name: string; direction: 'credit' | 'debit' }[]
+  memoColumn?: number            // 備考列（摘要に連結）
 }
 
 // パース結果
