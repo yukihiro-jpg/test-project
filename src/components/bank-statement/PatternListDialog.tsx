@@ -77,6 +77,22 @@ export default function PatternListDialog({ open, onClose }: Props) {
     })
   }
 
+  const addEditLine = () => {
+    if (!editData) return
+    setEditData({
+      ...editData,
+      lines: [...editData.lines, { debitCode: '', debitName: '', creditCode: '', creditName: '', taxCode: '', taxCategory: '', businessType: '', description: '', amount: 0 }],
+    })
+  }
+
+  const removeEditLine = (lineIdx: number) => {
+    if (!editData || editData.lines.length <= 1) return
+    setEditData({
+      ...editData,
+      lines: editData.lines.filter((_, i) => i !== lineIdx),
+    })
+  }
+
   const handleDelete = (id: string) => {
     if (!confirm('このパターンを削除しますか？')) return
     deletePattern(id)
@@ -160,18 +176,19 @@ export default function PatternListDialog({ open, onClose }: Props) {
               {visiblePatterns.map((p) => {
                 const isEditing = editingId === p.id
                 const dup = isDuplicate(p)
-                return p.lines.map((line, li) => (
+                const displayLines = isEditing && editData ? editData.lines : p.lines
+                return displayLines.map((line, li) => (
                   <tr key={`${p.id}-${li}`}
                     className={`border-b border-gray-100 hover:bg-gray-50 ${dup ? 'bg-amber-50' : ''}`}>
                     {li === 0 && (
-                      <td className="px-3 py-2 align-top" rowSpan={p.lines.length}>
+                      <td className="px-3 py-2 align-top" rowSpan={displayLines.length}>
                         <div className="flex flex-col gap-1">
                           <span className="font-medium text-gray-800 text-xs break-all">{p.keyword}</span>
                           {dup && (
                             <span className="text-xs text-amber-600 font-bold">* 重複あり</span>
                           )}
-                          {p.lines.length > 1 && (
-                            <span className="text-xs text-violet-600 font-medium">複合{p.lines.length}行</span>
+                          {displayLines.length > 1 && (
+                            <span className="text-xs text-violet-600 font-medium">複合{displayLines.length}行</span>
                           )}
                         </div>
                       </td>
@@ -180,10 +197,18 @@ export default function PatternListDialog({ open, onClose }: Props) {
                     <td className="px-2 py-1">
                       {isEditing && editData ? (
                         <div className="flex flex-col gap-0.5">
-                          <input type="text" value={editData.lines[li]?.debitCode || ''} onChange={(e) => updateLine(li, 'debitCode', e.target.value)}
-                            className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded" placeholder="CD" />
-                          <input type="text" value={editData.lines[li]?.debitSubCode || ''} onChange={(e) => updateLine(li, 'debitSubCode', e.target.value)}
-                            className="w-full px-1 py-0.5 text-xs border border-gray-200 rounded" placeholder="補助CD" />
+                          <div className="flex gap-0.5">
+                            <input type="text" value={editData.lines[li]?.debitCode || ''} onChange={(e) => updateLine(li, 'debitCode', e.target.value)}
+                              className="w-14 px-1 py-0.5 text-xs border border-gray-300 rounded" placeholder="CD" />
+                            <input type="text" value={editData.lines[li]?.debitName || ''} onChange={(e) => updateLine(li, 'debitName', e.target.value)}
+                              className="flex-1 px-1 py-0.5 text-xs border border-gray-200 rounded" placeholder="科目名" />
+                          </div>
+                          <div className="flex gap-0.5">
+                            <input type="text" value={editData.lines[li]?.debitSubCode || ''} onChange={(e) => updateLine(li, 'debitSubCode', e.target.value)}
+                              className="w-14 px-1 py-0.5 text-xs border border-gray-200 rounded" placeholder="補助CD" />
+                            <input type="text" value={editData.lines[li]?.debitSubName || ''} onChange={(e) => updateLine(li, 'debitSubName', e.target.value)}
+                              className="flex-1 px-1 py-0.5 text-xs border border-gray-200 rounded" placeholder="補助名" />
+                          </div>
                         </div>
                       ) : (
                         <div className="text-xs">
@@ -199,10 +224,18 @@ export default function PatternListDialog({ open, onClose }: Props) {
                     <td className="px-2 py-1">
                       {isEditing && editData ? (
                         <div className="flex flex-col gap-0.5">
-                          <input type="text" value={editData.lines[li]?.creditCode || ''} onChange={(e) => updateLine(li, 'creditCode', e.target.value)}
-                            className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded" placeholder="CD" />
-                          <input type="text" value={editData.lines[li]?.creditSubCode || ''} onChange={(e) => updateLine(li, 'creditSubCode', e.target.value)}
-                            className="w-full px-1 py-0.5 text-xs border border-gray-200 rounded" placeholder="補助CD" />
+                          <div className="flex gap-0.5">
+                            <input type="text" value={editData.lines[li]?.creditCode || ''} onChange={(e) => updateLine(li, 'creditCode', e.target.value)}
+                              className="w-14 px-1 py-0.5 text-xs border border-gray-300 rounded" placeholder="CD" />
+                            <input type="text" value={editData.lines[li]?.creditName || ''} onChange={(e) => updateLine(li, 'creditName', e.target.value)}
+                              className="flex-1 px-1 py-0.5 text-xs border border-gray-200 rounded" placeholder="科目名" />
+                          </div>
+                          <div className="flex gap-0.5">
+                            <input type="text" value={editData.lines[li]?.creditSubCode || ''} onChange={(e) => updateLine(li, 'creditSubCode', e.target.value)}
+                              className="w-14 px-1 py-0.5 text-xs border border-gray-200 rounded" placeholder="補助CD" />
+                            <input type="text" value={editData.lines[li]?.creditSubName || ''} onChange={(e) => updateLine(li, 'creditSubName', e.target.value)}
+                              className="flex-1 px-1 py-0.5 text-xs border border-gray-200 rounded" placeholder="補助名" />
+                          </div>
                         </div>
                       ) : (
                         <div className="text-xs">
@@ -214,11 +247,17 @@ export default function PatternListDialog({ open, onClose }: Props) {
                         </div>
                       )}
                     </td>
-                    {/* 税CD */}
+                    {/* 税CD + 行削除 */}
                     <td className="px-2 py-1">
                       {isEditing && editData ? (
-                        <input type="text" value={editData.lines[li]?.taxCode || ''} onChange={(e) => updateLine(li, 'taxCode', e.target.value)}
-                          className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded" placeholder="税CD" />
+                        <div className="flex items-center gap-0.5">
+                          <input type="text" value={editData.lines[li]?.taxCode || ''} onChange={(e) => updateLine(li, 'taxCode', e.target.value)}
+                            className="flex-1 px-1 py-0.5 text-xs border border-gray-300 rounded" placeholder="税CD" />
+                          {editData.lines.length > 1 && (
+                            <button onClick={() => removeEditLine(li)} title="この行を削除"
+                              className="w-5 h-5 text-xs text-red-500 hover:bg-red-50 rounded flex items-center justify-center shrink-0">×</button>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-xs text-gray-600">{line.taxCode} {line.taxCategory ? `(${line.taxCategory})` : ''}</span>
                       )}
@@ -235,7 +274,7 @@ export default function PatternListDialog({ open, onClose }: Props) {
                     {/* 金額範囲・回数・操作 (最初の行のみ) */}
                     {li === 0 && (
                       <>
-                        <td className="px-2 py-1 text-center align-top" rowSpan={p.lines.length}>
+                        <td className="px-2 py-1 text-center align-top" rowSpan={displayLines.length}>
                           {isEditing && editData ? (
                             <input type="text" value={editData.amountMin} onChange={(e) => setEditData({ ...editData, amountMin: e.target.value })}
                               className="w-16 px-1 py-0.5 text-xs border border-gray-300 rounded text-right" placeholder="なし" />
@@ -243,7 +282,7 @@ export default function PatternListDialog({ open, onClose }: Props) {
                             <span className="text-xs text-gray-600">{p.amountMin != null ? p.amountMin.toLocaleString() : '—'}</span>
                           )}
                         </td>
-                        <td className="px-2 py-1 text-center align-top" rowSpan={p.lines.length}>
+                        <td className="px-2 py-1 text-center align-top" rowSpan={displayLines.length}>
                           {isEditing && editData ? (
                             <input type="text" value={editData.amountMax} onChange={(e) => setEditData({ ...editData, amountMax: e.target.value })}
                               className="w-16 px-1 py-0.5 text-xs border border-gray-300 rounded text-right" placeholder="なし" />
@@ -251,11 +290,12 @@ export default function PatternListDialog({ open, onClose }: Props) {
                             <span className="text-xs text-gray-600">{p.amountMax != null ? p.amountMax.toLocaleString() : '—'}</span>
                           )}
                         </td>
-                        <td className="px-2 py-1 text-center text-xs text-gray-500 align-top" rowSpan={p.lines.length}>{p.useCount}</td>
-                        <td className="px-2 py-1 text-center align-top" rowSpan={p.lines.length}>
+                        <td className="px-2 py-1 text-center text-xs text-gray-500 align-top" rowSpan={displayLines.length}>{p.useCount}</td>
+                        <td className="px-2 py-1 text-center align-top" rowSpan={isEditing ? (editData?.lines.length || p.lines.length) : p.lines.length}>
                           {isEditing ? (
                             <div className="flex flex-col gap-1">
                               <button onClick={() => handleSave(p.id)} className="text-xs text-blue-600 hover:underline font-bold">保存</button>
+                              <button onClick={addEditLine} className="text-xs text-violet-600 hover:underline">+行追加</button>
                               <button onClick={() => { setEditingId(null); setEditData(null) }} className="text-xs text-gray-500 hover:underline">取消</button>
                             </div>
                           ) : (
