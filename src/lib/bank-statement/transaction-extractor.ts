@@ -324,19 +324,28 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
       // 1つ上の行で「入金」「出金」のカテゴリ行があるか探す
       const rowIdx = rows.indexOf(row)
       const dirRow = rowIdx > 0 ? rows[rowIdx - 1] : null
+      // 方向行を解析: 結合セル対応（空セルは直前の方向を引き継ぐ）
+      const colDirections: Record<number, 'credit' | 'debit'> = {}
+      if (dirRow) {
+        let lastDir: 'credit' | 'debit' | null = null
+        for (let i = 0; i < dirRow.cells.length; i++) {
+          const dirCell = (dirRow.cells[i] || '').replace(/[\s　]/g, '')
+          if (dirCell.includes('入金') || dirCell.includes('入') || dirCell.includes('貸方')) {
+            lastDir = 'credit'
+          } else if (dirCell.includes('出金') || dirCell.includes('出') || dirCell.includes('借方')) {
+            lastDir = 'debit'
+          } else if (dirCell) {
+            lastDir = null
+          }
+          if (lastDir && i >= 0) colDirections[i] = lastDir
+        }
+      }
       for (let i = 0; i < row.cells.length; i++) {
         if (usedCols.has(i)) continue
         const cellName = (row.cells[i] || '').replace(/[\s　]/g, '').trim()
         if (!cellName) continue
-        // 備考列
         if (cellName === '備考' || cellName === '備考欄') { memoCol = i; continue }
-        // 方向判定: 上の行に「入金」or「出金」があればそれで判定
-        let dir: 'credit' | 'debit' | null = null
-        if (dirRow) {
-          const dirCell = (dirRow.cells[i] || '').replace(/[\s　]/g, '')
-          if (dirCell.includes('入金') || dirCell.includes('入') || dirCell.includes('貸方')) dir = 'credit'
-          else if (dirCell.includes('出金') || dirCell.includes('出') || dirCell.includes('借方')) dir = 'debit'
-        }
+        const dir = colDirections[i]
         if (dir) {
           extraCols.push({ col: i, name: cellName, direction: dir })
         }
