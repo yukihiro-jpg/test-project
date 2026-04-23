@@ -5,7 +5,7 @@ import { useCaseStore } from '@/lib/store/case-store';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/components/common/currency-input';
 import { calculateLandValue } from '@/lib/tax/asset-valuation';
-import type { LandCategory, EvaluationMethod, SpecialLandUseType, LandUsageType } from '@/types';
+import type { LandCategory, EvaluationMethod, SpecialLandUseType, LandUsageType, BuildingAsset, LandAsset } from '@/types';
 import { Plus, Trash2 } from 'lucide-react';
 
 const LAND_CATEGORIES: LandCategory[] = ['宅地', '田', '畑', '山林', '原野', '牧場', '池沼', '鉱泉地', '雑種地'];
@@ -46,6 +46,32 @@ function parseOwnershipRatio(ratio: string | undefined): { numerator: string; de
   return { numerator: n.trim(), denominator: d.trim() };
 }
 
+function calculateRentalLandReduction(land: LandAsset, buildings: BuildingAsset[], referenceDate: string): { reducedValue: number; formula: string } | null {
+  if (!land.linkedBuildingId) return null;
+  const building = buildings.find(b => b.id === land.linkedBuildingId);
+  if (!building || !building.rentalReduction) return null;
+
+  const baseValue = calculateLandValue(land);
+  const borrowingRight = land.borrowingRightRatio || 0.6; // default 60%
+  const tenantRight = building.borrowedHouseRatio || 0.3; // default 30%
+
+  // Calculate rental ratio from rooms
+  const rooms = building.rooms || [];
+  const totalArea = rooms.reduce((s, r) => s + (r.area || 0), 0);
+  const month = new Date(referenceDate).getMonth();
+  const MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'] as const;
+  const taxableArea = rooms.reduce((s, r) => {
+    return s + (r.occupancy?.[MONTHS[month]] ? r.area : 0);
+  }, 0);
+  const rentalRatio = totalArea > 0 ? taxableArea / totalArea : 1;
+
+  const reduction = borrowingRight * tenantRight * rentalRatio;
+  const reducedValue = Math.floor(baseValue * (1 - reduction));
+  const formula = `${baseValue.toLocaleString()} × (1 - ${borrowingRight} × ${tenantRight} × ${(rentalRatio * 100).toFixed(0)}%) = ${reducedValue.toLocaleString()}`;
+
+  return { reducedValue, formula };
+}
+
 export default function LandPage() {
   const currentCase = useCaseStore(s => s.getCurrentCase());
   const addAsset = useCaseStore(s => s.addAsset);
@@ -55,6 +81,8 @@ export default function LandPage() {
   if (!currentCase) return <p className="text-gray-500">案件を選択してください</p>;
 
   const lands = currentCase.assets.lands;
+  const buildings = currentCase.assets.buildings || [];
+  const referenceDate = currentCase.referenceDate;
   const total = lands.reduce((sum, land) => sum + calculateLandValue(land), 0);
 
   const handleAdd = () => {
@@ -112,6 +140,7 @@ export default function LandPage() {
               <th className="p-1 text-right border border-gray-300" style={{ width: '80px' }}>借地権割合</th>
               <th className="p-1 text-left border border-gray-300" style={{ width: '120px' }}>側方・二方</th>
               <th className="p-1 text-left border border-gray-300" style={{ width: '120px' }}>都市計画区分</th>
+              <th className="p-1 text-center border border-gray-300" style={{ width: '130px' }}>紐づけ建物</th>
               <th className="p-1 text-left border border-gray-300" style={{ width: '180px' }}>備考/確認</th>
               <th className="p-1 text-center w-10 border border-gray-300"></th>
             </tr>
@@ -267,6 +296,36 @@ export default function LandPage() {
                     <input type="text" className={inputCls} value={land.cityPlanningZone || ''}
                       onChange={e => updateAsset('lands', land.id, { cityPlanningZone: e.target.value })} />
                   </td>
+                  {/* 紐づけ建物 */}
+                  <td className="p-1 border border-gray-300">
+                    <select className="border border-gray-300 rounded px-0.5 py-1 text-sm w-full"
+                      value={land.linkedBuildingId || ''}
+                      onChange={e => {
+                        const selectedId = e.target.value || undefined;
+                        const updates: Record<string, unknown> = { linkedBuildingId: selectedId };
+                        if (selectedId) {
+                          const selectedBuilding = buildings.find(b => b.id === selectedId);
+                          if (selectedBuilding?.rentalReduction) {
+                            updates.usage = '貸家建付地';
+                          }
+                        }
+                        updateAsset('lands', land.id, updates);
+                      }}>
+                      <option value="">なし</option>
+                      {buildings.map(b => (
+                        <option key={b.id} value={b.id}>{b.name || b.location || '建物'}</option>
+                      ))}
+                    </select>
+                    {(() => {
+                      const reduction = calculateRentalLandReduction(land, buildings, referenceDate);
+                      if (!reduction) return null;
+                      return (
+                        <div className="mt-0.5 text-xs text-blue-700 leading-tight">
+                          貸家建付地: {reduction.formula}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   {/* 備考/確認 */}
                   <td className="p-1 border border-gray-300">
                     <input type="text" className={inputCls} value={land.note} placeholder="備考"
@@ -284,14 +343,14 @@ export default function LandPage() {
               );
             })}
             {lands.length === 0 && (
-              <tr><td colSpan={16} className="p-4 text-center text-gray-400">土地が登録されていません</td></tr>
+              <tr><td colSpan={17} className="p-4 text-center text-gray-400">土地が登録されていません</td></tr>
             )}
           </tbody>
           <tfoot>
             <tr className="bg-gray-100 font-semibold border-t-2">
               <td className="p-1 border border-gray-300 sticky z-10 bg-gray-100" style={{ left: STICKY_NO_LEFT }}></td>
               <td className="p-1 border border-gray-300 text-right sticky z-10 bg-gray-100 border-r-2 border-r-gray-400" style={{ left: STICKY_CHIBAN_LEFT }}>評価額合計</td>
-              <td colSpan={13} className="p-1 border border-gray-300"></td>
+              <td colSpan={14} className="p-1 border border-gray-300"></td>
               <td className="p-1 border border-gray-300 text-right">{formatCurrency(total)}</td>
             </tr>
           </tfoot>
