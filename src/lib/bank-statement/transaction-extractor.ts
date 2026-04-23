@@ -350,7 +350,10 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
           extraCols.push({ col: i, name: cellName, direction: dir })
         }
       }
-      if (extraCols.length > 0) mapping.extraColumns = extraCols
+      if (extraCols.length > 0) {
+        mapping.extraColumns = extraCols
+        console.log(`[ExtraCols] ${extraCols.length}列の追加列を検出:`, extraCols.map((c) => `${c.name}(${c.direction})`).join(', '))
+      }
       if (memoCol >= 0) mapping.memoColumn = memoCol
       return mapping
     }

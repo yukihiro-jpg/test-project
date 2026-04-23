@@ -147,7 +147,8 @@ export function mapTransactionsToJournalEntries(
       }
 
       // 追加列から複合仕訳を生成（家賃収入/預り敷金等の内訳列）
-      if (tx.extras && tx.extras.length > 0 && !pattern?.lines?.length) {
+      // パターンが複合仕訳（複数行）の場合はパターン側で処理済みなのでスキップ
+      if (tx.extras && tx.extras.length > 0 && !(pattern?.lines && pattern.lines.length > 1)) {
         for (const extra of tx.extras) {
           const compEntry = createCompoundEntry(entry)
           compEntry.description = entry.description
