@@ -330,9 +330,9 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
         let lastDir: 'credit' | 'debit' | null = null
         for (let i = 0; i < dirRow.cells.length; i++) {
           const dirCell = (dirRow.cells[i] || '').replace(/[\s　]/g, '')
-          if (dirCell.includes('入金') || dirCell.includes('入') || dirCell.includes('貸方')) {
+          if (dirCell.includes('入金') || dirCell === '入' || dirCell.includes('貸方')) {
             lastDir = 'credit'
-          } else if (dirCell.includes('出金') || dirCell.includes('出') || dirCell.includes('借方')) {
+          } else if (dirCell.includes('出金') || dirCell === '出' || dirCell.includes('借方')) {
             lastDir = 'debit'
           } else if (dirCell) {
             lastDir = null
