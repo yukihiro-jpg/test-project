@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { WarekiInput } from '@/components/common/wareki-input';
 import { calculateAge } from '@/lib/dates/wareki';
 import { calculateLegalShareRatios } from '@/lib/tax/deductions';
 import { RELATIONSHIP_LABELS, type RelationshipType, getDisplayRelationship } from '@/types';
@@ -56,7 +57,7 @@ export default function HeirsPage() {
                 <th className="p-2 text-left">氏名</th>
                 <th className="p-2 text-left" style={{ minWidth: '100px' }}>続柄</th>
                 <th className="p-2 text-center" style={{ minWidth: '100px' }}>続柄(手入力)</th>
-                <th className="p-2 text-left" style={{ minWidth: '140px' }}>生年月日</th>
+                <th className="p-2 text-left" style={{ minWidth: '200px' }}>生年月日</th>
                 <th className="p-2 text-left w-16">年齢</th>
                 <th className="p-2 text-left">住所</th>
                 <th className="p-2 text-left">電話番号</th>
@@ -102,11 +103,11 @@ export default function HeirsPage() {
                       />
                     </td>
                     <td className="p-1">
-                      <input
-                        type="date"
+                      <WarekiInput
                         value={heir.birthDate}
-                        onChange={e => updateHeir(heir.id, { birthDate: e.target.value })}
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        onChange={v => updateHeir(heir.id, { birthDate: v })}
+                        showWareki={false}
+                        compact
                       />
                     </td>
                     <td className="p-1 text-center">
