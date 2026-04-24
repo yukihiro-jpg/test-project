@@ -1,30 +1,7 @@
 // 上場株式 相続税評価額 自動計算クライアント
-// Flask バックエンド（app.py）と通信して株価データを取得・計算
+// Next.js内蔵API Route（/api/stock）を使用
 
 'use client';
-
-const DEFAULT_API_URL = 'http://localhost:5000';
-
-function getApiUrl(): string {
-  if (typeof window === 'undefined') return DEFAULT_API_URL;
-  return localStorage.getItem('stock-api-url') || DEFAULT_API_URL;
-}
-
-export function setApiUrl(url: string) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('stock-api-url', url);
-}
-
-export function getStoredApiUrl(): string {
-  if (typeof window === 'undefined') return DEFAULT_API_URL;
-  return localStorage.getItem('stock-api-url') || DEFAULT_API_URL;
-}
-
-export interface StockLookupResult {
-  name: string;
-  ticker: string;
-  error?: string;
-}
 
 export interface StockCalcResult {
   ticker: string;
@@ -33,19 +10,13 @@ export interface StockCalcResult {
   actual_date: string;
   shares: number;
   close_on_date: number;
-  avg2: number;
-  avg3: number;
-  avg4: number;
-  days2: number;
-  days3: number;
-  days4: number;
+  avg2: number; avg3: number; avg4: number;
+  days2: number; days3: number; days4: number;
+  month2: string; month3: string; month4: string;
   candidates: Record<string, number>;
   adopted_label: string;
   adopted_price: number;
   tax_value: number;
-  month2: string;
-  month3: string;
-  month4: string;
   div_rights: DividendRights;
 }
 
@@ -59,25 +30,13 @@ export interface DividendRights {
 }
 
 export interface DividendItem {
-  ex_date: string;
-  kenri_tsuki_saigo: string;
-  kenri_kakutei: string;
-  payment_date: string;
-  payment_estimated: boolean;
-  div_per_share: number;
   status: string;
-  gross: number | null;
-  tax: number | null;
-  net: number | null;
-}
-
-export async function lookupStock(code: string): Promise<StockLookupResult> {
-  const res = await fetch(`${getApiUrl()}/lookup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code }),
-  });
-  return res.json();
+  ex_date: string;
+  div_per_share: number;
+  gross: number;
+  tax: number;
+  net: number;
+  payment_estimated: boolean;
 }
 
 export async function calculateStock(
@@ -85,7 +44,7 @@ export async function calculateStock(
   date: string,
   shares: number
 ): Promise<StockCalcResult> {
-  const res = await fetch(`${getApiUrl()}/calculate`, {
+  const res = await fetch('/api/stock', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code, date, shares }),
@@ -98,21 +57,19 @@ export async function calculateStock(
 export async function calculateStockBatch(
   items: Array<{ code: string; date: string; shares: number }>
 ): Promise<{ results: StockCalcResult[]; errors: Array<{ index: number; code: string; error: string }> }> {
-  const res = await fetch(`${getApiUrl()}/calculate_batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(items),
-  });
-  const json = await res.json();
-  if (json.error) throw new Error(json.error);
-  return json;
-}
+  const results: StockCalcResult[] = [];
+  const errors: Array<{ index: number; code: string; error: string }> = [];
 
-export async function checkApiAvailable(): Promise<boolean> {
-  try {
-    const res = await fetch(`${getApiUrl()}/`, { method: 'GET', signal: AbortSignal.timeout(3000) });
-    return res.ok;
-  } catch {
-    return false;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    try {
+      const result = await calculateStock(item.code, item.date, item.shares);
+      (result as any)._row_index = i;
+      results.push(result);
+    } catch (e: any) {
+      errors.push({ index: i, code: item.code, error: e.message });
+    }
   }
+
+  return { results, errors };
 }

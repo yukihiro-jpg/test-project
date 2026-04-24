@@ -20,6 +20,7 @@
     "tailwind-merge": "^3.5.0",
     "uuid": "^13.0.0",
     "xlsx": "^0.18.5",
+    "yahoo-finance2": "^3.14.0",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

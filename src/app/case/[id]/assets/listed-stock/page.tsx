@@ -6,11 +6,10 @@ import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/components/common/currency-input';
 import { calculateListedStockValue } from '@/lib/tax/asset-valuation';
 import {
-  lookupStock, calculateStock, calculateStockBatch,
-  checkApiAvailable, getStoredApiUrl, setApiUrl,
+  calculateStock, calculateStockBatch,
   type StockCalcResult, type DividendRights,
 } from '@/lib/stock/stock-api';
-import { Plus, Trash2, Zap, Settings, Check, AlertCircle, Link2 } from 'lucide-react';
+import { Plus, Trash2, Zap, Check, AlertCircle, Link2 } from 'lucide-react';
 
 const inputClass =
   'w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500';
@@ -49,11 +48,6 @@ export default function ListedStockPage() {
   const updateAsset = useCaseStore(s => s.updateAsset);
   const removeAsset = useCaseStore(s => s.removeAsset);
 
-  // API connection state
-  const [apiConnected, setApiConnected] = useState<boolean | null>(null);
-  const [apiUrl, setApiUrlState] = useState(getStoredApiUrl());
-  const [showApiSettings, setShowApiSettings] = useState(false);
-
   // Per-stock calculation state
   const [divResults, setDivResults] = useState<Record<string, DividendRights>>({});
   const [linkedDivIds, setLinkedDivIds] = useState<Set<string>>(new Set());
@@ -78,19 +72,6 @@ export default function ListedStockPage() {
 
   const items = currentCase.assets.listedStocks;
   const total = items.reduce((sum, item) => sum + calculateListedStockValue(item).totalValue, 0);
-
-  // --- API connection ---
-  const handleTestConnection = async () => {
-    setApiConnected(null);
-    const ok = await checkApiAvailable();
-    setApiConnected(ok);
-  };
-
-  const handleSaveApiUrl = () => {
-    setApiUrl(apiUrl);
-    setShowApiSettings(false);
-    handleTestConnection();
-  };
 
   // --- Add row ---
   const handleAdd = () => {
@@ -214,14 +195,6 @@ export default function ListedStockPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="secondary"
-            size="sm"
-            onClick={() => setShowApiSettings(!showApiSettings)}
-          >
-            <Settings size={16} className="mr-1" />
-            API設定
-          </Button>
-          <Button
-            variant="secondary"
             onClick={handleBatchCalc}
             disabled={batchLoading || items.length === 0}
           >
@@ -233,39 +206,6 @@ export default function ListedStockPage() {
           </Button>
         </div>
       </div>
-
-      {/* API Settings Bar */}
-      {showApiSettings && (
-        <div className="flex items-center gap-3 p-3 bg-gray-50 border rounded-lg text-sm">
-          <label className="text-gray-600 whitespace-nowrap">API URL:</label>
-          <input
-            type="text"
-            value={apiUrl}
-            onChange={e => setApiUrlState(e.target.value)}
-            className={`${inputClass} max-w-xs`}
-            placeholder="http://localhost:5000"
-          />
-          <Button variant="secondary" size="sm" onClick={handleSaveApiUrl}>
-            保存
-          </Button>
-          <Button variant="secondary" size="sm" onClick={handleTestConnection}>
-            接続テスト
-          </Button>
-          {apiConnected === true && (
-            <span className="flex items-center gap-1 text-green-600">
-              <Check size={14} /> 接続済み
-            </span>
-          )}
-          {apiConnected === false && (
-            <span className="flex items-center gap-1 text-red-600">
-              <AlertCircle size={14} /> 未接続
-            </span>
-          )}
-          {apiConnected === null && (
-            <span className="text-gray-400">未確認</span>
-          )}
-        </div>
-      )}
 
       {/* Table */}
       <div className="overflow-x-auto">
