@@ -149,10 +149,11 @@ export function calculateInsuranceExemption(
  * 退職金の非課税枠を計算
  */
 export function calculateRetirementExemption(
-  benefits: RetirementBenefit[],
+  benefits: RetirementBenefit[] | undefined,
   legalHeirCount: number
 ): { totalAmount: number; exemption: number; taxableAmount: number } {
-  const totalAmount = benefits.reduce((sum, b) => sum + b.amount, 0);
+  const safeBenefits = benefits || [];
+  const totalAmount = safeBenefits.reduce((sum, b) => sum + b.amount, 0);
   const exemption = Math.min(totalAmount, RETIREMENT_EXEMPTION_PER_HEIR * legalHeirCount);
   return {
     totalAmount,

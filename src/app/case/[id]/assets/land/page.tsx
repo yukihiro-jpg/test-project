@@ -153,6 +153,7 @@ export default function LandPage() {
               <th className="p-1 text-center border border-gray-300" style={{ width: '120px' }}>都市計画区分</th>
               <th className="p-1 text-center border border-gray-300" style={{ width: '130px' }}>用途地域</th>
               <th className="p-1 text-center border border-gray-300" style={{ width: '130px' }}>紐づけ建物</th>
+              <th className="p-1 text-right border border-gray-300" style={{ width: '130px' }}>相続税評価額</th>
               <th className="p-1 text-left border border-gray-300" style={{ width: '180px' }}>備考/確認</th>
               <th className="p-1 text-center w-10 border border-gray-300"></th>
             </tr>
@@ -298,8 +299,12 @@ export default function LandPage() {
                   {/* 借地権割合 */}
                   <td className="p-1 border border-gray-300">
                     <input type="text" className={inputNumCls}
-                      value={land.borrowingRightRatio || ''}
-                      onChange={e => updateAsset('lands', land.id, { borrowingRightRatio: Number(e.target.value) || 0 })} />
+                      value={land.borrowingRightRatio ?? ''}
+                      onChange={e => updateAsset('lands', land.id, { borrowingRightRatio: e.target.value as any })}
+                      onBlur={e => {
+                        const v = parseFloat(e.target.value);
+                        updateAsset('lands', land.id, { borrowingRightRatio: isNaN(v) ? 0 : v });
+                      }} />
                   </td>
                   {/* 側方・二方 */}
                   <td className="p-1 border border-gray-300">
@@ -350,6 +355,10 @@ export default function LandPage() {
                       );
                     })()}
                   </td>
+                  {/* 相続税評価額 */}
+                  <td className="p-1 border border-gray-300 text-right font-medium text-blue-700">
+                    {formatCurrency(calculateLandValue(land))}
+                  </td>
                   {/* 備考/確認 */}
                   <td className="p-1 border border-gray-300">
                     <input type="text" className={inputCls} value={land.note} placeholder="備考"
@@ -367,14 +376,14 @@ export default function LandPage() {
               );
             })}
             {lands.length === 0 && (
-              <tr><td colSpan={18} className="p-4 text-center text-gray-400">土地が登録されていません</td></tr>
+              <tr><td colSpan={19} className="p-4 text-center text-gray-400">土地が登録されていません</td></tr>
             )}
           </tbody>
           <tfoot>
             <tr className="bg-gray-100 font-semibold border-t-2">
               <td className="p-1 border border-gray-300 sticky z-10 bg-gray-100" style={{ left: STICKY_NO_LEFT }}></td>
               <td className="p-1 border border-gray-300 text-right sticky z-10 bg-gray-100 border-r-2 border-r-gray-400" style={{ left: STICKY_CHIBAN_LEFT }}>評価額合計</td>
-              <td colSpan={15} className="p-1 border border-gray-300"></td>
+              <td colSpan={16} className="p-1 border border-gray-300"></td>
               <td className="p-1 border border-gray-300 text-right">{formatCurrency(total)}</td>
             </tr>
           </tfoot>
