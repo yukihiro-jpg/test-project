@@ -153,6 +153,7 @@ export interface LandAsset {
   sideTwoRoads?: string;             // 側方・二方
   // 都市計画
   cityPlanningZone?: string;         // 都市計画区分
+  usageZone?: string;                // 用途地域
   // 建物紐づけ（貸家建付地評価用）
   linkedBuildingId?: string;         // 紐づく建物のID
   // 特例

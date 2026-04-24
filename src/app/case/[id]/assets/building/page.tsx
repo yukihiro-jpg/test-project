@@ -314,11 +314,12 @@ export default function BuildingPage() {
                       {b.rentalReduction && (
                         <div className="text-xs text-gray-500 mt-0.5">
                           {formatNum(b.fixedAssetTaxValue)} × (1-
-                          <input type="text" className="w-8 border border-gray-300 rounded text-center text-xs mx-0.5"
-                            value={b.borrowedHouseRatio}
-                            onChange={e => {
+                          <input type="text" className="w-10 border border-gray-300 rounded text-center text-xs mx-0.5"
+                            value={b.borrowedHouseRatio ?? '0.3'}
+                            onChange={e => updateAsset('buildings', b.id, { borrowedHouseRatio: e.target.value as any })}
+                            onBlur={e => {
                               const v = parseFloat(e.target.value);
-                              if (!isNaN(v)) updateAsset('buildings', b.id, { borrowedHouseRatio: v });
+                              updateAsset('buildings', b.id, { borrowedHouseRatio: isNaN(v) ? 0.3 : v });
                             }} />
                           )
                         </div>
