@@ -82,15 +82,22 @@ export default function ListedStockPage() {
     });
   };
 
+  // --- 評価基準日（死亡日優先、なければ基準日） ---
+  const valuationDate = currentCase.decedent?.deathDate || currentCase.referenceDate;
+
   // --- Auto calculate single stock ---
   const handleAutoCalc = async (stockId: string) => {
     const stock = currentCase.assets.listedStocks.find(s => s.id === stockId);
     if (!stock || !stock.stockCode) return;
+    if (!valuationDate) {
+      alert('被相続人の死亡日または基準日を設定してください');
+      return;
+    }
     setCalcStatus(prev => ({ ...prev, [stockId]: 'loading' }));
     try {
       const result = await calculateStock(
         stock.stockCode,
-        currentCase.referenceDate,
+        valuationDate,
         stock.shares || 1,
       );
       updateAsset('listedStocks', stockId, {
@@ -104,7 +111,9 @@ export default function ListedStockPage() {
         setDivResults(prev => ({ ...prev, [stockId]: result.div_rights }));
       }
       setCalcStatus(prev => ({ ...prev, [stockId]: 'done' }));
-    } catch {
+    } catch (e: any) {
+      console.error('計算エラー:', e);
+      alert('計算に失敗しました: ' + (e.message || '不明なエラー'));
       setCalcStatus(prev => ({ ...prev, [stockId]: 'error' }));
     }
   };
@@ -121,7 +130,7 @@ export default function ListedStockPage() {
     try {
       const batchInput = validItems.map(s => ({
         code: s.stockCode,
-        date: currentCase.referenceDate,
+        date: valuationDate,
         shares: s.shares || 1,
       }));
       const response = await calculateStockBatch(batchInput);
@@ -205,6 +214,22 @@ export default function ListedStockPage() {
             <Plus size={18} className="mr-2" />追加
           </Button>
         </div>
+      </div>
+
+      {/* 評価基準日表示 */}
+      <div className="bg-blue-50 border border-blue-200 rounded-md px-4 py-2 text-sm">
+        <span className="text-gray-600">評価基準日: </span>
+        <span className="font-semibold text-blue-700">
+          {valuationDate || '未設定'}
+        </span>
+        <span className="text-gray-500 text-xs ml-2">
+          （{currentCase.decedent?.deathDate ? '被相続人の死亡日' : '案件の基準日'}を使用）
+        </span>
+        {!valuationDate && (
+          <span className="text-red-600 text-xs ml-2">
+            ⚠ 被相続人情報で死亡日を設定してください
+          </span>
+        )}
       </div>
 
       {/* Table */}
