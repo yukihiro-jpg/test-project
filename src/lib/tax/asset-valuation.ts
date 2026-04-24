@@ -3,6 +3,8 @@
 import type {
   LandAsset,
   BuildingAsset,
+  BuildingRoom,
+  RoomOccupancy,
   CashDepositAsset,
   ListedStockAsset,
   UnlistedStockAsset,
@@ -15,8 +17,14 @@ import { RETIREMENT_EXEMPTION_PER_HEIR } from './tax-tables';
 
 /**
  * 土地の評価額を計算
+ * linkedBuilding: 紐づく建物（貸家建付地の減額計算用）
+ * referenceDate: 基準日（賃貸割合計算用）
  */
-export function calculateLandValue(land: LandAsset): number {
+export function calculateLandValue(
+  land: LandAsset,
+  linkedBuilding?: BuildingAsset,
+  referenceDate?: string
+): number {
   let baseValue: number;
 
   if (land.evaluationMethod === 'rosenka') {
@@ -71,7 +79,34 @@ export function calculateLandValue(land: LandAsset): number {
     baseValue -= reduction;
   }
 
+  // 貸家建付地の減額（紐づく建物が貸家の場合）
+  if (linkedBuilding && linkedBuilding.rentalReduction &&
+      (land.usage === '貸家建付地' || land.usage === '貸家')) {
+    const borrowingRight = land.borrowingRightRatio || 0.6;
+    const borrowedHouseRatio = linkedBuilding.borrowedHouseRatio || 0.3;
+    const rentalRatio = calculateBuildingRentalRatio(linkedBuilding, referenceDate);
+    const reduction = baseValue * borrowingRight * borrowedHouseRatio * rentalRatio;
+    baseValue = Math.floor(baseValue - reduction);
+  }
+
   return Math.max(0, baseValue);
+}
+
+/** 建物の賃貸割合を計算（基準日月の入居率） */
+function calculateBuildingRentalRatio(building: BuildingAsset, referenceDate?: string): number {
+  const rooms = building.rooms || [];
+  if (rooms.length === 0) return 1;
+  const totalArea = rooms.reduce((s, r) => s + (r.area || 0), 0);
+  if (totalArea === 0) return 1;
+
+  const refMonth = referenceDate ? new Date(referenceDate).getMonth() : new Date().getMonth();
+  const monthKeys = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'] as const;
+  const key = monthKeys[refMonth];
+
+  const rentedArea = rooms.reduce((s, r) => {
+    return s + (r.occupancy?.[key] ? (r.area || 0) : 0);
+  }, 0);
+  return rentedArea / totalArea;
 }
 
 /**

@@ -64,12 +64,16 @@ export function exportDivisionReport(caseData: Case, result: TaxCalculationResul
   rows.push(['土地', null, '【所在場所】', null, '【利用状況】', '【面積】']);
   const lands = assets.lands;
   lands.forEach((l, i) => {
-    const val = calculateLandValue(l);
+    const linkedBld = l.linkedBuildingId ? assets.buildings.find(b => b.id === l.linkedBuildingId) : undefined;
+    const val = calculateLandValue(l, linkedBld, referenceDate);
     const key = `lands_${l.id}`;
     const heirAmounts = heirs.map(h => n(getAlloc(key, h.id)));
     rows.push([null, i + 1, l.location, null, l.usage || '自用地', `${l.area || l.registeredArea || 0}㎡`, null, val, ...heirAmounts]);
   });
-  const landTotal = lands.reduce((s, l) => s + calculateLandValue(l), 0);
+  const landTotal = lands.reduce((s, l) => {
+    const lb = l.linkedBuildingId ? assets.buildings.find(b => b.id === l.linkedBuildingId) : undefined;
+    return s + calculateLandValue(l, lb, referenceDate);
+  }, 0);
   rows.push([null, null, null, null, null, null, '小計（土地評価額）', landTotal, ...heirs.map(() => null)]);
   rows.push([null, null, null, null, null, null, '差引 ★', landTotal, ...heirs.map((h) => {
     const t = lands.reduce((s, l) => s + getAlloc(`lands_${l.id}`, h.id), 0);

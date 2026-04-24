@@ -94,7 +94,8 @@ export default function LandPage() {
   const lands = currentCase.assets.lands;
   const buildings = currentCase.assets.buildings || [];
   const referenceDate = currentCase.referenceDate;
-  const total = lands.reduce((sum, land) => sum + calculateLandValue(land), 0);
+  const getLinkedBuilding = (land: any) => land.linkedBuildingId ? buildings.find((b: any) => b.id === land.linkedBuildingId) : undefined;
+  const total = lands.reduce((sum, land) => sum + calculateLandValue(land, getLinkedBuilding(land), referenceDate), 0);
 
   const handleAdd = () => {
     addAsset('lands', {
@@ -357,7 +358,7 @@ export default function LandPage() {
                   </td>
                   {/* 相続税評価額 */}
                   <td className="p-1 border border-gray-300 text-right font-medium text-blue-700">
-                    {formatCurrency(calculateLandValue(land))}
+                    {formatCurrency(calculateLandValue(land, getLinkedBuilding(land), referenceDate))}
                   </td>
                   {/* 備考/確認 */}
                   <td className="p-1 border border-gray-300">

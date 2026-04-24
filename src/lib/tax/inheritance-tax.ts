@@ -39,8 +39,11 @@ import {
 export function calculateTotalAssetValue(assets: Assets): number {
   let total = 0;
 
-  // 土地
-  total += assets.lands.reduce((sum, l) => sum + calculateLandValue(l), 0);
+  // 土地（紐づく建物がある場合は貸家建付地の減額を適用）
+  total += assets.lands.reduce((sum, l) => {
+    const linkedBld = l.linkedBuildingId ? assets.buildings.find(b => b.id === l.linkedBuildingId) : undefined;
+    return sum + calculateLandValue(l, linkedBld);
+  }, 0);
 
   // 建物
   total += assets.buildings.reduce((sum, b) => sum + calculateBuildingValue(b), 0);

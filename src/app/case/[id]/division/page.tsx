@@ -64,7 +64,7 @@ function buildAssetRows(c: Case): AssetRow[] {
       assetType: 'lands',
       category: '土地',
       description: `${land.location} ${land.landNumber}（${land.landCategory}）`,
-      value: calculateLandValue(land),
+      value: calculateLandValue(land, land.linkedBuildingId ? assets.buildings.find(b => b.id === land.linkedBuildingId) : undefined),
     });
   }
 
