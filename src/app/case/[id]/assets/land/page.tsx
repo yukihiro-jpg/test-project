@@ -4,9 +4,10 @@ import React from 'react';
 import { useCaseStore } from '@/lib/store/case-store';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/components/common/currency-input';
-import { calculateLandValue } from '@/lib/tax/asset-valuation';
+import { calculateLandValue, calculateLandValueBeforeSpecial, calculateSmallLandReduction } from '@/lib/tax/asset-valuation';
 import type { LandCategory, EvaluationMethod, SpecialLandUseType, LandUsageType, BuildingAsset, LandAsset } from '@/types';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Check } from 'lucide-react';
+import { useState } from 'react';
 
 const LAND_CATEGORIES: LandCategory[] = ['宅地', '田', '畑', '山林', '原野', '牧場', '池沼', '鉱泉地', '雑種地'];
 const LAND_USAGES: LandUsageType[] = ['自用', '貸家建付地', '貸地', '借地', '私道', '使用貸借'];
@@ -83,11 +84,44 @@ function calculateRentalLandReduction(land: LandAsset, buildings: BuildingAsset[
   return { reducedValue, formula };
 }
 
+// 小規模宅地等の区分設定
+const SPECIAL_LAND_CONFIGS: Record<SpecialLandUseType, { label: string; rate: number; maxArea: number; desc: string; requirements: string[] }> = {
+  residence: {
+    label: '特定居住用宅地等',
+    rate: 0.8, maxArea: 330,
+    desc: '被相続人の自宅の敷地（80%減額、330㎡まで）',
+    requirements: [
+      '配偶者が取得 → 無条件で適用可',
+      '同居親族が取得 → 相続開始前から同居＋申告期限まで居住・保有',
+      '別居親族が取得 → 家なき子特例（条件厳格）',
+    ],
+  },
+  business: {
+    label: '特定事業用宅地等',
+    rate: 0.8, maxArea: 400,
+    desc: '被相続人の事業用の敷地（80%減額、400㎡まで）',
+    requirements: [
+      '親族が事業を承継し、申告期限まで事業継続＋保有',
+      '不動産貸付業は対象外（貸付事業用宅地に該当）',
+    ],
+  },
+  rental: {
+    label: '貸付事業用宅地等',
+    rate: 0.5, maxArea: 200,
+    desc: '被相続人の賃貸不動産の敷地（50%減額、200㎡まで）',
+    requirements: [
+      '親族が貸付事業を承継し、申告期限まで事業継続＋保有',
+      '相続開始前3年以内に新たに貸付開始した場合は対象外（例外あり）',
+    ],
+  },
+};
+
 export default function LandPage() {
   const currentCase = useCaseStore(s => s.getCurrentCase());
   const addAsset = useCaseStore(s => s.addAsset);
   const updateAsset = useCaseStore(s => s.updateAsset);
   const removeAsset = useCaseStore(s => s.removeAsset);
+  const [expandedSpecialId, setExpandedSpecialId] = useState<string | null>(null);
 
   if (!currentCase) return <p className="text-gray-500">案件を選択してください</p>;
 
@@ -154,7 +188,11 @@ export default function LandPage() {
               <th className="p-1 text-center border border-gray-300" style={{ width: '120px' }}>都市計画区分</th>
               <th className="p-1 text-center border border-gray-300" style={{ width: '130px' }}>用途地域</th>
               <th className="p-1 text-center border border-gray-300" style={{ width: '130px' }}>紐づけ建物</th>
-              <th className="p-1 text-right border border-gray-300" style={{ width: '130px' }}>相続税評価額</th>
+              <th className="p-1 text-center border border-gray-300" style={{ width: '130px' }}>相続税評価額</th>
+              <th className="p-1 text-center border border-gray-300" style={{ width: '160px' }}>
+                <div>小規模宅地等</div>
+                <div className="text-xs font-normal text-gray-500">適用後評価額</div>
+              </th>
               <th className="p-1 text-left border border-gray-300" style={{ width: '180px' }}>備考/確認</th>
               <th className="p-1 text-center w-10 border border-gray-300"></th>
             </tr>
@@ -163,8 +201,10 @@ export default function LandPage() {
             {lands.map((land, i) => {
               const { numerator, denominator } = parseOwnershipRatio(land.ownershipRatio);
               const isBorrowed = land.usage === '借地';
+              const isSpecialExpanded = expandedSpecialId === land.id;
               return (
-                <tr key={land.id} className="border-b">
+                <React.Fragment key={land.id}>
+                <tr className="border-b">
                   {/* Sticky: No */}
                   <td className="p-1 text-center border border-gray-300 sticky z-10" style={{ left: STICKY_NO_LEFT, background: rowBg(i) }}>{i + 1}</td>
                   {/* Sticky: 地番 */}
@@ -363,10 +403,44 @@ export default function LandPage() {
                       );
                     })()}
                   </td>
-                  {/* 相続税評価額 */}
-                  <td className="p-1 border border-gray-300 text-right font-medium text-blue-700">
-                    {formatCurrency(calculateLandValue(land, getLinkedBuilding(land), referenceDate))}
-                  </td>
+                  {/* 相続税評価額（小規模宅地適用前） */}
+                  {(() => {
+                    const lb = getLinkedBuilding(land);
+                    const before = calculateLandValueBeforeSpecial(land, lb, referenceDate);
+                    const reduction = calculateSmallLandReduction(land, before);
+                    const after = Math.max(0, before - reduction);
+                    const isExpanded = expandedSpecialId === land.id;
+                    return (
+                      <>
+                        <td className="p-1 border border-gray-300 text-right font-medium">
+                          {formatCurrency(before)}
+                        </td>
+                        <td className="p-1 border border-gray-300">
+                          <div className="flex flex-col items-end gap-0.5">
+                            {land.useSpecialLand ? (
+                              <>
+                                <span className="text-right font-bold text-green-700">{formatCurrency(after)}</span>
+                                <span className="text-xs text-red-600">▲{formatCurrency(reduction)}</span>
+                                <span className="text-xs text-gray-500">
+                                  {SPECIAL_LAND_CONFIGS[land.specialUse?.type || 'residence']?.label}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-xs text-gray-400">未適用</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setExpandedSpecialId(isExpanded ? null : land.id)}
+                              className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-0.5"
+                            >
+                              {isExpanded ? <ChevronDown size={10}/> : <ChevronRight size={10}/>}
+                              {land.useSpecialLand ? '設定変更' : '特例を適用'}
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    );
+                  })()}
                   {/* 備考/確認 */}
                   <td className="p-1 border border-gray-300">
                     <input type="text" className={inputCls} value={land.note} placeholder="備考"
@@ -381,17 +455,99 @@ export default function LandPage() {
                     </button>
                   </td>
                 </tr>
+                {/* 小規模宅地等の設定パネル */}
+                {isSpecialExpanded && (
+                  <tr>
+                    <td colSpan={20} className="p-0">
+                      <div className="px-4 py-3 bg-yellow-50 border-l-4 border-yellow-400 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <input type="checkbox" checked={land.useSpecialLand || false}
+                            onChange={e => updateAsset('lands', land.id, { useSpecialLand: e.target.checked })}
+                            className="w-4 h-4" />
+                          <span className="font-medium text-sm">小規模宅地等の特例を適用する</span>
+                        </div>
+                        {land.useSpecialLand && (
+                          <div className="space-y-3">
+                            {/* 区分選択 */}
+                            <div className="grid grid-cols-3 gap-2">
+                              {(Object.entries(SPECIAL_LAND_CONFIGS) as [SpecialLandUseType, typeof SPECIAL_LAND_CONFIGS['residence']][]).map(([key, cfg]) => {
+                                const selected = (land.specialUse?.type || 'residence') === key;
+                                return (
+                                  <button key={key} type="button"
+                                    onClick={() => updateAsset('lands', land.id, {
+                                      specialUse: { ...land.specialUse, type: key, reductionRate: cfg.rate, maxArea: cfg.maxArea, applicableArea: land.specialUse?.applicableArea || land.area || 0 },
+                                    })}
+                                    className={`p-2 rounded border text-left text-xs ${selected ? 'border-yellow-500 bg-yellow-100' : 'border-gray-300 bg-white hover:bg-gray-50'}`}
+                                  >
+                                    <div className="font-bold">{cfg.label}</div>
+                                    <div className="text-gray-600">{cfg.desc}</div>
+                                    <div className="mt-1 text-blue-700 font-medium">{cfg.rate * 100}%減額 / 上限{cfg.maxArea}㎡</div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {/* 適用面積 */}
+                            {(() => {
+                              const cfg = SPECIAL_LAND_CONFIGS[land.specialUse?.type || 'residence'];
+                              const area = land.area || land.registeredArea || 0;
+                              const applicableArea = land.specialUse?.applicableArea || area;
+                              const maxArea = cfg.maxArea;
+                              const isOverMax = applicableArea > maxArea;
+                              return (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-3 text-sm">
+                                    <span className="text-gray-700">適用面積:</span>
+                                    <input type="text" className="w-20 border border-gray-300 rounded px-2 py-1 text-sm text-right"
+                                      value={land.specialUse?.applicableArea ?? area}
+                                      onChange={e => updateAsset('lands', land.id, {
+                                        specialUse: { ...land.specialUse, applicableArea: e.target.value as any },
+                                      })}
+                                      onBlur={e => {
+                                        const v = parseFloat(e.target.value);
+                                        updateAsset('lands', land.id, {
+                                          specialUse: { ...land.specialUse, applicableArea: isNaN(v) ? area : v },
+                                        });
+                                      }}
+                                    />
+                                    <span className="text-gray-500">㎡</span>
+                                    <span className="text-gray-500">/ 上限 {maxArea}㎡</span>
+                                    {isOverMax && (
+                                      <span className="text-red-600 text-xs flex items-center gap-1">
+                                        <AlertTriangle size={12} />上限超過（{maxArea}㎡まで適用）
+                                      </span>
+                                    )}
+                                  </div>
+                                  {/* 要件チェックリスト */}
+                                  <div className="bg-white rounded border border-gray-200 p-2">
+                                    <div className="text-xs font-medium text-gray-700 mb-1">適用要件（確認用）:</div>
+                                    {cfg.requirements.map((req, ri) => (
+                                      <div key={ri} className="text-xs text-gray-600 flex items-start gap-1 py-0.5">
+                                        <Check size={10} className="mt-0.5 text-green-600 shrink-0" />
+                                        {req}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
             {lands.length === 0 && (
-              <tr><td colSpan={19} className="p-4 text-center text-gray-400">土地が登録されていません</td></tr>
+              <tr><td colSpan={20} className="p-4 text-center text-gray-400">土地が登録されていません</td></tr>
             )}
           </tbody>
           <tfoot>
             <tr className="bg-gray-100 font-semibold border-t-2">
               <td className="p-1 border border-gray-300 sticky z-10 bg-gray-100" style={{ left: STICKY_NO_LEFT }}></td>
               <td className="p-1 border border-gray-300 text-right sticky z-10 bg-gray-100 border-r-2 border-r-gray-400" style={{ left: STICKY_CHIBAN_LEFT }}>評価額合計</td>
-              <td colSpan={16} className="p-1 border border-gray-300"></td>
+              <td colSpan={17} className="p-1 border border-gray-300"></td>
               <td className="p-1 border border-gray-300 text-right">{formatCurrency(total)}</td>
             </tr>
           </tfoot>

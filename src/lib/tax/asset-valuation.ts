@@ -16,11 +16,9 @@ import type {
 import { RETIREMENT_EXEMPTION_PER_HEIR } from './tax-tables';
 
 /**
- * 土地の評価額を計算
- * linkedBuilding: 紐づく建物（貸家建付地の減額計算用）
- * referenceDate: 基準日（賃貸割合計算用）
+ * 土地の評価額を計算（小規模宅地等の特例適用前）
  */
-export function calculateLandValue(
+export function calculateLandValueBeforeSpecial(
   land: LandAsset,
   linkedBuilding?: BuildingAsset,
   referenceDate?: string
@@ -28,58 +26,23 @@ export function calculateLandValue(
   let baseValue: number;
 
   if (land.evaluationMethod === 'rosenka') {
-    // 路線価方式: 路線価 × 各種補正率 × 地積
     let correctedPrice = land.rosenkaPrice;
     const shape = land.landShape;
-
     if (shape) {
-      // 奥行価格補正
       correctedPrice *= shape.depthCorrection || 1;
-
-      // 不整形地補正
-      if (shape.irregularShape && shape.irregularCorrection) {
-        correctedPrice *= shape.irregularCorrection;
-      }
-
-      // 側方路線影響加算
-      if (shape.sideRoad && shape.sideRoadCorrection) {
-        correctedPrice *= (1 + shape.sideRoadCorrection);
-      }
-
-      // 二方路線影響加算
-      if (shape.twoRoads && shape.twoRoadsCorrection) {
-        correctedPrice *= (1 + shape.twoRoadsCorrection);
-      }
+      if (shape.irregularShape && shape.irregularCorrection) correctedPrice *= shape.irregularCorrection;
+      if (shape.sideRoad && shape.sideRoadCorrection) correctedPrice *= (1 + shape.sideRoadCorrection);
+      if (shape.twoRoads && shape.twoRoadsCorrection) correctedPrice *= (1 + shape.twoRoadsCorrection);
     }
-
     let effectiveArea = land.area;
-
-    // セットバック部分の控除
-    if (land.landShape?.setback) {
-      effectiveArea -= land.landShape.setback;
-    }
-
+    if (land.landShape?.setback) effectiveArea -= land.landShape.setback;
     baseValue = Math.floor(correctedPrice * effectiveArea);
-
-    // 借地権割合の適用
-    if (land.landShape?.borrowedLandRatio) {
-      baseValue = Math.floor(baseValue * land.landShape.borrowedLandRatio);
-    }
+    if (land.landShape?.borrowedLandRatio) baseValue = Math.floor(baseValue * land.landShape.borrowedLandRatio);
   } else {
-    // 倍率方式: 固定資産税評価額 × 倍率
-    baseValue = Math.floor(land.fixedAssetTaxValue * land.multiplier);
+    baseValue = Math.floor(land.fixedAssetTaxValue * (typeof land.multiplier === 'number' ? land.multiplier : 1));
   }
 
-  // 小規模宅地等の特例
-  if (land.useSpecialLand && land.specialUse) {
-    const { reductionRate, applicableArea, maxArea } = land.specialUse;
-    const actualApplicableArea = Math.min(applicableArea, maxArea, land.area);
-    const reductionRatio = actualApplicableArea / land.area;
-    const reduction = Math.floor(baseValue * reductionRatio * reductionRate);
-    baseValue -= reduction;
-  }
-
-  // 貸家建付地の減額（紐づく建物が貸家の場合）
+  // 貸家建付地の減額
   if (linkedBuilding && linkedBuilding.rentalReduction &&
       (land.usage === '貸家建付地' || land.usage === '貸家')) {
     const borrowingRight = land.borrowingRightRatio || 0.6;
@@ -90,6 +53,32 @@ export function calculateLandValue(
   }
 
   return Math.max(0, baseValue);
+}
+
+/**
+ * 小規模宅地等の減額を計算
+ */
+export function calculateSmallLandReduction(land: LandAsset, valueBeforeSpecial: number): number {
+  if (!land.useSpecialLand || !land.specialUse) return 0;
+  const { reductionRate, applicableArea, maxArea } = land.specialUse;
+  const area = land.area || land.registeredArea || 0;
+  if (area <= 0) return 0;
+  const actualApplicableArea = Math.min(applicableArea || area, maxArea, area);
+  const reductionRatio = actualApplicableArea / area;
+  return Math.floor(valueBeforeSpecial * reductionRatio * reductionRate);
+}
+
+/**
+ * 土地の評価額を計算（小規模宅地等の特例適用後）
+ */
+export function calculateLandValue(
+  land: LandAsset,
+  linkedBuilding?: BuildingAsset,
+  referenceDate?: string
+): number {
+  const before = calculateLandValueBeforeSpecial(land, linkedBuilding, referenceDate);
+  const reduction = calculateSmallLandReduction(land, before);
+  return Math.max(0, before - reduction);
 }
 
 /** 建物の賃貸割合を計算（基準日月の入居率） */
