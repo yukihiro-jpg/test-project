@@ -3,67 +3,48 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36';
 
-interface CloseData { date: string; close: number; }
+interface QuoteData { date: string; close: number; }
 
-/** Yahoo Finance Japanから日次終値を取得（スクレイピング） */
-async function fetchHistoricalPrices(code: string, startDate: Date, endDate: Date): Promise<CloseData[]> {
-  const codeOnly = code.replace('.T', '');
-  const results: CloseData[] = [];
+/** Yahoo Finance API (US)から株価データを取得 - yfinanceと同じデータソース */
+async function fetchYahooChart(ticker: string, period1: Date, period2: Date): Promise<QuoteData[]> {
+  const p1 = Math.floor(period1.getTime() / 1000);
+  const p2 = Math.floor(period2.getTime() / 1000);
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?period1=${p1}&period2=${p2}&interval=1d&events=div`;
 
-  // Yahoo Finance Japanの履歴ページ（月ごとに複数ページ）
-  const startYear = startDate.getFullYear();
-  const startMonth = startDate.getMonth() + 1;
-  const endYear = endDate.getFullYear();
-  const endMonth = endDate.getMonth() + 1;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'application/json',
+      },
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    if (!result) return [];
 
-  // 全ページを取得（1ページ50件程度）
-  for (let page = 1; page <= 5; page++) {
-    const url = `https://finance.yahoo.co.jp/quote/${codeOnly}.T/history?from=${startYear}${String(startMonth).padStart(2, '0')}01&to=${endYear}${String(endMonth).padStart(2, '0')}31&timeFrame=d&page=${page}`;
-    try {
-      const res = await fetch(url, { headers: { 'User-Agent': UA } });
-      if (!res.ok) break;
-      const html = await res.text();
+    const timestamps: number[] = result.timestamp || [];
+    const closes: number[] = result.indicators?.quote?.[0]?.close || [];
+    const data: QuoteData[] = [];
 
-      // 履歴テーブルを抽出（gsフラグの代わりにdotAllを使う）
-      const rowRegex = new RegExp('<tr[^>]*>([\\s\\S]*?)<\\/tr>', 'g');
-      const cellRegex = new RegExp('<td[^>]*>([\\s\\S]*?)<\\/td>', 'g');
-      const matches = html.matchAll(rowRegex);
-      let found = false;
-
-      for (const rowMatch of matches) {
-        const rowHtml = rowMatch[1];
-        const cells = [...rowHtml.matchAll(cellRegex)].map(c => c[1].replace(/<[^>]+>/g, '').trim());
-        if (cells.length < 5) continue;
-
-        // 日付: "2024年12月30日" 形式
-        const dateMatch = cells[0].match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-        if (!dateMatch) continue;
-
-        const close = parseFloat(cells[4].replace(/,/g, ''));
-        if (isNaN(close) || close <= 0) continue;
-
-        const dateStr = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
-        const d = new Date(dateStr);
-        if (d >= startDate && d <= endDate) {
-          results.push({ date: dateStr, close });
-          found = true;
-        }
-      }
-      if (!found) break;
-    } catch (e) {
-      break;
+    for (let i = 0; i < timestamps.length; i++) {
+      const close = closes[i];
+      if (close == null || isNaN(close)) continue;
+      const d = new Date(timestamps[i] * 1000);
+      data.push({
+        date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+        close: Math.round(close * 10) / 10,
+      });
     }
+    return data;
+  } catch {
+    return [];
   }
-
-  // 重複除去＆ソート
-  const uniqueMap = new Map<string, CloseData>();
-  results.forEach(r => uniqueMap.set(r.date, r));
-  return Array.from(uniqueMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** 銘柄名取得 */
+/** 銘柄名取得 - Yahoo Finance Japan */
 async function fetchCompanyName(code: string): Promise<string> {
   const codeOnly = code.replace('.T', '');
   try {
@@ -77,12 +58,24 @@ async function fetchCompanyName(code: string): Promise<string> {
       const title = titleMatch[1];
       const m = title.match(/^(.+?)【\d+】/);
       if (m) return m[1].trim();
-      if (title.includes('：')) return title.split('：')[0].trim();
-      if (title.includes(' - ')) return title.split(' - ')[0].trim();
     }
     return code;
   } catch {
     return code;
+  }
+}
+
+/** 銘柄名取得 - Yahoo Finance US (フォールバック) */
+async function fetchCompanyNameUS(ticker: string): Promise<string> {
+  try {
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`;
+    const res = await fetch(url, { headers: { 'User-Agent': UA } });
+    if (!res.ok) return ticker;
+    const json = await res.json();
+    const meta = json?.chart?.result?.[0]?.meta;
+    return meta?.longName || meta?.shortName || ticker;
+  } catch {
+    return ticker;
   }
 }
 
@@ -98,14 +91,19 @@ export async function POST(req: NextRequest) {
     const y = inheritDate.getFullYear();
     const m = inheritDate.getMonth();
 
-    // 銘柄名と履歴データを並列取得
-    const rangeStart = new Date(y, m - 3, 1);
-    const rangeEnd = new Date(y, m + 1, 0);
+    // 3ヶ月前から当月末までのデータを一括取得
+    const rangeStart = new Date(y, m - 2, 1);
+    const rangeEnd = new Date(y, m + 1, 1);
 
-    const [companyName, allPrices] = await Promise.all([
+    // 銘柄名とチャートデータを並列取得
+    const [nameJP, nameUS, allPrices] = await Promise.all([
       fetchCompanyName(ticker),
-      fetchHistoricalPrices(ticker, rangeStart, rangeEnd),
+      fetchCompanyNameUS(ticker),
+      fetchYahooChart(ticker, rangeStart, rangeEnd),
     ]);
+
+    // 日本語名があればそちらを優先
+    const companyName = (nameJP && nameJP !== ticker) ? nameJP : nameUS;
 
     if (allPrices.length === 0) {
       return NextResponse.json({
@@ -113,8 +111,8 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
 
-    // ① 課税時期の終値（その日以前で最新の終値）
-    const beforeInherit = allPrices.filter(p => new Date(p.date) <= inheritDate);
+    // ① 課税時期の終値
+    const beforeInherit = allPrices.filter(p => p.date <= date);
     const closeOnDate = beforeInherit.length > 0 ? beforeInherit[beforeInherit.length - 1] : { date: '', close: 0 };
 
     // ② 課税時期の月
@@ -133,10 +131,10 @@ export async function POST(req: NextRequest) {
     const avg3 = month3Data.length > 0 ? Math.floor(month3Data.reduce((s, p) => s + p.close, 0) / month3Data.length) : 0;
 
     // ④ 前々月
-    const pm2m = pm.m === 0 ? { y: pm.y - 1, m: 11 } : { y: pm.y, m: pm.m - 1 };
+    const pm2 = pm.m === 0 ? { y: pm.y - 1, m: 11 } : { y: pm.y, m: pm.m - 1 };
     const month4Data = allPrices.filter(p => {
       const d = new Date(p.date);
-      return d.getFullYear() === pm2m.y && d.getMonth() === pm2m.m;
+      return d.getFullYear() === pm2.y && d.getMonth() === pm2.m;
     });
     const avg4 = month4Data.length > 0 ? Math.floor(month4Data.reduce((s, p) => s + p.close, 0) / month4Data.length) : 0;
 
@@ -168,7 +166,7 @@ export async function POST(req: NextRequest) {
         avg4, days4: month4Data.length,
         month2: `${y}年${m + 1}月`,
         month3: `${pm.y}年${pm.m + 1}月`,
-        month4: `${pm2m.y}年${pm2m.m + 1}月`,
+        month4: `${pm2.y}年${pm2.m + 1}月`,
         candidates,
         adopted_label: adoptedLabel,
         adopted_price: adoptedPrice,
