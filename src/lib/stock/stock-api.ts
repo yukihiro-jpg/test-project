@@ -17,6 +17,10 @@ export interface StockCalcResult {
   adopted_label: string;
   adopted_price: number;
   tax_value: number;
+  // 月別終値データ
+  dates2?: string[]; closes2?: number[];
+  dates3?: string[]; closes3?: number[];
+  dates4?: string[]; closes4?: number[];
   div_rights: DividendRights;
 }
 

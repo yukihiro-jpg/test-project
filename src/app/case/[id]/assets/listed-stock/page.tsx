@@ -57,6 +57,7 @@ export default function ListedStockPage() {
   const [calcStatus, setCalcStatus] = useState<Record<string, 'idle' | 'loading' | 'done' | 'error'>>({});
   const [batchLoading, setBatchLoading] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [activeMonthTab, setActiveMonthTab] = useState<Record<string, number>>({});
 
   // Check which dividends are already linked on mount / case change
   useEffect(() => {

@@ -171,6 +171,10 @@ export async function POST(req: NextRequest) {
         adopted_label: adoptedLabel,
         adopted_price: adoptedPrice,
         tax_value: taxValue,
+        // 月別終値データ（Flask版と同等）
+        dates2: month2Data.map(p => p.date), closes2: month2Data.map(p => p.close),
+        dates3: month3Data.map(p => p.date), closes3: month3Data.map(p => p.close),
+        dates4: month4Data.map(p => p.date), closes4: month4Data.map(p => p.close),
         div_rights: { status: 'none', items: [], total_gross: 0, total_tax: 0, total_net: 0, error: null },
       },
     });
