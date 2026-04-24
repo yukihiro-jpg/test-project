@@ -315,7 +315,14 @@ export default function LandPage() {
                   {/* 都市計画区分 */}
                   <td className="p-1 border border-gray-300">
                     <select className={inputCls} value={land.cityPlanningZone || ''}
-                      onChange={e => updateAsset('lands', land.id, { cityPlanningZone: e.target.value })}>
+                      onChange={e => {
+                        const zone = e.target.value;
+                        const updates: any = { cityPlanningZone: zone };
+                        if (zone === '市街化調整区域') {
+                          updates.usageZone = '調整区域';
+                        }
+                        updateAsset('lands', land.id, updates);
+                      }}>
                       {CITY_PLANNING_ZONES.map(z => <option key={z} value={z}>{z || '選択'}</option>)}
                     </select>
                   </td>

@@ -9,7 +9,9 @@ import {
   calculateStock, calculateStockBatch,
   type StockCalcResult, type DividendRights,
 } from '@/lib/stock/stock-api';
-import { Plus, Trash2, Zap, Check, AlertCircle, Link2 } from 'lucide-react';
+import { Plus, Trash2, Zap, Check, AlertCircle, Link2, ChevronDown, ChevronRight, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 const inputClass =
   'w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500';
@@ -50,9 +52,11 @@ export default function ListedStockPage() {
 
   // Per-stock calculation state
   const [divResults, setDivResults] = useState<Record<string, DividendRights>>({});
+  const [calcResults, setCalcResults] = useState<Record<string, StockCalcResult>>({});
   const [linkedDivIds, setLinkedDivIds] = useState<Set<string>>(new Set());
   const [calcStatus, setCalcStatus] = useState<Record<string, 'idle' | 'loading' | 'done' | 'error'>>({});
   const [batchLoading, setBatchLoading] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   // Check which dividends are already linked on mount / case change
   useEffect(() => {
@@ -107,6 +111,7 @@ export default function ListedStockPage() {
         monthlyAvgPrev1: result.avg3,
         monthlyAvgPrev2: result.avg4,
       });
+      setCalcResults(prev => ({ ...prev, [stockId]: result }));
       if (result.div_rights) {
         setDivResults(prev => ({ ...prev, [stockId]: result.div_rights }));
       }
@@ -118,27 +123,16 @@ export default function ListedStockPage() {
     }
   };
 
-  // --- Batch calculate all ---
+  // --- Batch calculate all (sequential per-stock to avoid index mismatch) ---
   const handleBatchCalc = async () => {
     const validItems = items.filter(s => s.stockCode);
     if (validItems.length === 0) return;
     setBatchLoading(true);
-    const statusUpdate: Record<string, 'idle' | 'loading' | 'done' | 'error'> = {};
-    validItems.forEach(s => { statusUpdate[s.id] = 'loading'; });
-    setCalcStatus(prev => ({ ...prev, ...statusUpdate }));
 
-    try {
-      const batchInput = validItems.map(s => ({
-        code: s.stockCode,
-        date: valuationDate,
-        shares: s.shares || 1,
-      }));
-      const response = await calculateStockBatch(batchInput);
-
-      // Process successes
-      response.results.forEach((result) => {
-        const stock = validItems.find(s => s.stockCode === result.ticker);
-        if (!stock) return;
+    for (const stock of validItems) {
+      setCalcStatus(prev => ({ ...prev, [stock.id]: 'loading' }));
+      try {
+        const result = await calculateStock(stock.stockCode, valuationDate, stock.shares || 1);
         updateAsset('listedStocks', stock.id, {
           companyName: result.company_name,
           deathDatePrice: result.close_on_date,
@@ -146,28 +140,16 @@ export default function ListedStockPage() {
           monthlyAvgPrev1: result.avg3,
           monthlyAvgPrev2: result.avg4,
         });
+        setCalcResults(prev => ({ ...prev, [stock.id]: result }));
         if (result.div_rights) {
           setDivResults(prev => ({ ...prev, [stock.id]: result.div_rights }));
         }
         setCalcStatus(prev => ({ ...prev, [stock.id]: 'done' }));
-      });
-
-      // Process errors
-      if (response.errors) {
-        response.errors.forEach(err => {
-          const stock = validItems[err.index];
-          if (stock) {
-            setCalcStatus(prev => ({ ...prev, [stock.id]: 'error' }));
-          }
-        });
+      } catch {
+        setCalcStatus(prev => ({ ...prev, [stock.id]: 'error' }));
       }
-    } catch {
-      validItems.forEach(s => {
-        setCalcStatus(prev => ({ ...prev, [s.id]: 'error' }));
-      });
-    } finally {
-      setBatchLoading(false);
     }
+    setBatchLoading(false);
   };
 
   // --- Link dividend to others ---
