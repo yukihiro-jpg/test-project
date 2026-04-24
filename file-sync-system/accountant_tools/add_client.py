@@ -66,22 +66,26 @@ def create_drive_folders(drive, root_folder_name, client_name, shared_drive_id=N
 
 
 def generate_client_config(client_name, device_name, device_type, shared_drive_id=None):
+    # 数字プレフィックス（例: "608_"）を除去して会社名だけ取得
+    import re
+    display_name = re.sub(r'^\d+_', '', client_name)
+
     if device_type == "boss":
         sync_pairs = [
-            {"local_folder": "税理士への提出物", "drive_folder": "顧問先からの受取物（社長用）", "direction": "upload"},
-            {"local_folder": "税理士からの受取物", "drive_folder": "顧問先への送付物（社長用）", "direction": "download"},
-            {"local_folder": "税理士への提出物（スタッフ用）", "drive_folder": "顧問先からの受取物（スタッフ用）", "direction": "download"},
-            {"local_folder": "税理士からの受取物（スタッフ用）", "drive_folder": "顧問先への送付物（スタッフ用）", "direction": "download"},
+            {"local_folder": f"{display_name}→税理士", "drive_folder": "顧問先からの受取物（社長用）", "direction": "upload"},
+            {"local_folder": f"税理士→{display_name}", "drive_folder": "顧問先への送付物（社長用）", "direction": "download"},
+            {"local_folder": f"{display_name}→税理士（スタッフ用）", "drive_folder": "顧問先からの受取物（スタッフ用）", "direction": "download"},
+            {"local_folder": f"税理士→{display_name}（スタッフ用）", "drive_folder": "顧問先への送付物（スタッフ用）", "direction": "download"},
         ]
     elif device_type == "staff":
         sync_pairs = [
-            {"local_folder": "税理士への提出物（スタッフ用）", "drive_folder": "顧問先からの受取物（スタッフ用）", "direction": "upload"},
-            {"local_folder": "税理士からの受取物（スタッフ用）", "drive_folder": "顧問先への送付物（スタッフ用）", "direction": "download"},
+            {"local_folder": f"{display_name}→税理士（スタッフ用）", "drive_folder": "顧問先からの受取物（スタッフ用）", "direction": "upload"},
+            {"local_folder": f"税理士→{display_name}（スタッフ用）", "drive_folder": "顧問先への送付物（スタッフ用）", "direction": "download"},
         ]
     else:
         sync_pairs = [
-            {"local_folder": "税理士への提出物", "drive_folder": "顧問先からの受取物", "direction": "upload"},
-            {"local_folder": "税理士からの受取物", "drive_folder": "顧問先への送付物", "direction": "download"},
+            {"local_folder": f"{display_name}→税理士", "drive_folder": "顧問先からの受取物", "direction": "upload"},
+            {"local_folder": f"税理士→{display_name}", "drive_folder": "顧問先への送付物", "direction": "download"},
         ]
 
     return {
