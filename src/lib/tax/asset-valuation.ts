@@ -42,7 +42,19 @@ export function calculateLandValueBeforeSpecial(
     baseValue = Math.floor(land.fixedAssetTaxValue * (typeof land.multiplier === 'number' ? land.multiplier : 1));
   }
 
-  // 貸家建付地の減額
+  // 貸宅地の減額（貸地の場合）: 自用地評価額 × (1 - 借地権割合)
+  if (land.usage === '貸地') {
+    const borrowingRight = land.borrowingRightRatio || 0.6;
+    baseValue = Math.floor(baseValue * (1 - borrowingRight));
+  }
+
+  // 借地の場合: 自用地評価額 × 借地権割合
+  if (land.usage === '借地') {
+    const borrowingRight = land.borrowingRightRatio || 0.6;
+    baseValue = Math.floor(baseValue * borrowingRight);
+  }
+
+  // 貸家建付地の減額（紐づく建物が貸家の場合）
   if (linkedBuilding && linkedBuilding.rentalReduction &&
       (land.usage === '貸家建付地' || land.usage === '貸家')) {
     const borrowingRight = land.borrowingRightRatio || 0.6;
