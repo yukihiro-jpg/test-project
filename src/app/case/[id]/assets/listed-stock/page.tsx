@@ -183,15 +183,18 @@ export default function ListedStockPage() {
     });
   };
 
-  // --- Excel export ---
+  // --- Excel export (multi-sheet) ---
   const handleExcelExport = () => {
-    const headers = [
+    const wb = XLSX.utils.book_new();
+
+    // ===== Sheet 1: 一覧 (Summary) =====
+    const summaryHeaders = [
       '銘柄コード', '銘柄名', '株数',
       '①終値', '②当月平均', '③前月平均', '④前々月平均',
       '採用単価', '採用区分', '評価額', '配当判定', '配当評価額',
     ];
 
-    const rows = items.map(item => {
+    const summaryRows = items.map(item => {
       const { selectedPrice, totalValue } = calculateListedStockValue(item);
       const dr = divResults[item.id];
       const divLabel = dr
@@ -219,28 +222,150 @@ export default function ListedStockPage() {
       ];
     });
 
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-
-    // Apply number format to numeric columns
-    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    for (let r = range.s.r + 1; r <= range.e.r; r++) {
+    const wsSummary = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]);
+    const summaryRange = XLSX.utils.decode_range(wsSummary['!ref'] || 'A1');
+    for (let r = summaryRange.s.r + 1; r <= summaryRange.e.r; r++) {
       for (let c = 2; c <= 11; c++) {
         const ref = XLSX.utils.encode_cell({ r, c });
-        if (ws[ref] && typeof ws[ref].v === 'number') {
-          ws[ref].z = '#,##0';
+        if (wsSummary[ref] && typeof wsSummary[ref].v === 'number') {
+          wsSummary[ref].z = '#,##0';
         }
       }
     }
-
-    // Column widths
-    ws['!cols'] = [
+    wsSummary['!cols'] = [
       { wch: 12 }, { wch: 20 }, { wch: 10 },
       { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
       { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
     ];
+    XLSX.utils.book_append_sheet(wb, wsSummary, '一覧');
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '上場株式算定結果');
+    // ===== Per-stock sheets =====
+    for (const item of items) {
+      const result = calcResults[item.id];
+      if (!result) continue;
+
+      const { selectedPrice, totalValue } = calculateListedStockValue(item);
+      const dr = divResults[item.id];
+      const codePrefix = (item.stockCode || 'unknown').slice(0, 20);
+
+      // --- Sheet: {code}_評価額計算書 ---
+      const evalRows: (string | number | null)[][] = [];
+      evalRows.push(['上場株式 評価額計算書']);
+      evalRows.push([]);
+      evalRows.push(['銘柄コード', item.stockCode]);
+      evalRows.push(['銘柄名', result.company_name || item.companyName]);
+      evalRows.push(['課税時期', result.inherit_date || valuationDate || '']);
+      evalRows.push(['実際取得日', result.actual_date || '']);
+      evalRows.push(['株数', item.shares]);
+      evalRows.push([]);
+      evalRows.push(['【4指標比較】']);
+      evalRows.push(['区分', '価格（円）', '採用']);
+      const prices: [string, number][] = [
+        ['①課税時期の終値', item.deathDatePrice],
+        ['②課税時期の月の月平均', item.monthlyAvgDeath],
+        ['③前月の月平均', item.monthlyAvgPrev1],
+        ['④前々月の月平均', item.monthlyAvgPrev2],
+      ];
+      const validPrices = prices.filter(([, v]) => v > 0);
+      const minPrice = validPrices.length > 0 ? Math.min(...validPrices.map(([, v]) => v)) : 0;
+      for (const [label, price] of prices) {
+        evalRows.push([
+          label,
+          price > 0 ? price : null,
+          price > 0 && price === minPrice ? '○' : '',
+        ]);
+      }
+      evalRows.push([]);
+      evalRows.push(['採用単価', selectedPrice || null]);
+      evalRows.push(['採用区分', getAdoptedLabel(item)]);
+      evalRows.push(['株数', item.shares]);
+      evalRows.push(['評価額', totalValue || null]);
+      evalRows.push([]);
+
+      // Dividend info
+      if (dr && dr.status !== 'none' && dr.status !== 'unknown') {
+        evalRows.push(['【配当期待権・未収配当金】']);
+        const divStatusLabel = dr.status === 'kitai_ken' ? '配当期待権あり' : '未収配当金あり';
+        evalRows.push(['判定', divStatusLabel]);
+        if (dr.items && dr.items.length > 0) {
+          evalRows.push(['区分', '権利落日', '1株配当', '税引前', '源泉税', '税引後']);
+          for (const di of dr.items) {
+            evalRows.push([
+              di.status, di.ex_date, di.div_per_share,
+              Math.round(di.gross), Math.round(di.tax), Math.round(di.net),
+            ]);
+          }
+          evalRows.push(['合計', '', '', Math.round(dr.total_gross), Math.round(dr.total_tax), Math.round(dr.total_net)]);
+        }
+      }
+
+      const wsEval = XLSX.utils.aoa_to_sheet(evalRows);
+      // Number format for numeric cells
+      const evalRange = XLSX.utils.decode_range(wsEval['!ref'] || 'A1');
+      for (let r = evalRange.s.r; r <= evalRange.e.r; r++) {
+        for (let c = evalRange.s.c; c <= evalRange.e.c; c++) {
+          const ref = XLSX.utils.encode_cell({ r, c });
+          if (wsEval[ref] && typeof wsEval[ref].v === 'number') {
+            wsEval[ref].z = '#,##0';
+          }
+        }
+      }
+      wsEval['!cols'] = [
+        { wch: 24 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+      ];
+
+      const evalSheetName = `${codePrefix}_評価額計算書`.slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, wsEval, evalSheetName);
+
+      // --- Sheet: {code}_終値データ ---
+      const monthlyData = [
+        { label: result.month4, dates: result.dates4, closes: result.closes4, days: result.days4, avg: result.avg4 },
+        { label: result.month3, dates: result.dates3, closes: result.closes3, days: result.days3, avg: result.avg3 },
+        { label: result.month2, dates: result.dates2, closes: result.closes2, days: result.days2, avg: result.avg2 },
+      ];
+
+      const closingRows: (string | number | null)[][] = [];
+      closingRows.push([`${result.company_name || item.companyName}（${item.stockCode}）月別終値データ`]);
+      closingRows.push([]);
+
+      for (const md of monthlyData) {
+        if (!md.dates || !md.closes) continue;
+        closingRows.push([`【${md.label}】`]);
+        closingRows.push(['日付', '終値（円）']);
+        const total = md.closes.reduce((s, v) => s + v, 0);
+        for (let i = 0; i < md.dates.length; i++) {
+          const dateStr = md.dates[i];
+          const isValDate = dateStr === (result.actual_date || result.inherit_date);
+          closingRows.push([
+            isValDate ? `${dateStr} ★` : dateStr,
+            md.closes[i],
+          ]);
+        }
+        closingRows.push([]);
+        closingRows.push(['終値合計', total]);
+        closingRows.push(['営業日数', md.days]);
+        closingRows.push(['月平均額（円未満切捨）', md.avg]);
+        closingRows.push([]);
+      }
+
+      const wsClosing = XLSX.utils.aoa_to_sheet(closingRows);
+      const closingRange = XLSX.utils.decode_range(wsClosing['!ref'] || 'A1');
+      for (let r = closingRange.s.r; r <= closingRange.e.r; r++) {
+        for (let c = closingRange.s.c; c <= closingRange.e.c; c++) {
+          const ref = XLSX.utils.encode_cell({ r, c });
+          if (wsClosing[ref] && typeof wsClosing[ref].v === 'number') {
+            wsClosing[ref].z = '#,##0';
+          }
+        }
+      }
+      wsClosing['!cols'] = [
+        { wch: 18 }, { wch: 14 },
+      ];
+
+      const closingSheetName = `${codePrefix}_終値データ`.slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, wsClosing, closingSheetName);
+    }
+
     const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     saveAs(new Blob([buf], { type: 'application/octet-stream' }), '上場株式_算定結果.xlsx');
   };
@@ -511,7 +636,7 @@ export default function ListedStockPage() {
                     <tr className="bg-blue-50">
                       <td colSpan={14} className="p-4 border border-gray-300">
                         <div className="space-y-4">
-                          {/* 算定根拠: Price comparison table */}
+                          {/* a) 算定根拠: 4指標比較テーブル */}
                           <div>
                             <h4 className="text-sm font-semibold text-gray-800 mb-2">算定根拠</h4>
                             <table className="text-sm border-collapse">
@@ -551,10 +676,90 @@ export default function ListedStockPage() {
                             </table>
                           </div>
 
-                          {/* 配当期待権 */}
+                          {/* b) 月別終値データ（タブ切替式） */}
+                          {cr && cr.dates2 && cr.closes2 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-800 mb-2">月別終値データ</h4>
+                              {(() => {
+                                const monthData = [
+                                  { dates: cr.dates4, closes: cr.closes4, label: cr.month4, days: cr.days4, avg: cr.avg4 },
+                                  { dates: cr.dates3, closes: cr.closes3, label: cr.month3, days: cr.days3, avg: cr.avg3 },
+                                  { dates: cr.dates2, closes: cr.closes2, label: cr.month2, days: cr.days2, avg: cr.avg2 },
+                                ];
+                                const tab = activeMonthTab[item.id] ?? 2;
+                                const active = monthData[tab];
+                                const valDate = cr.actual_date || cr.inherit_date;
+
+                                return (
+                                  <div>
+                                    <div className="flex gap-1">
+                                      {[cr.month4, cr.month3, cr.month2].map((label, idx) => (
+                                        <button
+                                          key={idx}
+                                          onClick={() => setActiveMonthTab(prev => ({ ...prev, [item.id]: idx }))}
+                                          className={`px-3 py-1 text-xs rounded-t border ${tab === idx ? 'bg-white border-b-white font-bold text-blue-700' : 'bg-gray-100 text-gray-600'}`}
+                                        >
+                                          {label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    {active && active.dates && active.closes && (
+                                      <div className="border border-gray-300 border-t-0 rounded-b bg-white p-2">
+                                        <table className="text-xs border-collapse w-auto">
+                                          <thead>
+                                            <tr className="bg-gray-100">
+                                              <th className="px-3 py-1 border border-gray-300 text-left">日付</th>
+                                              <th className="px-3 py-1 border border-gray-300 text-right">終値（円）</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {active.dates.map((d, idx) => {
+                                              const isValDate = d === valDate;
+                                              return (
+                                                <tr key={idx} className={isValDate ? 'bg-yellow-100' : ''}>
+                                                  <td className="px-3 py-1 border border-gray-300">
+                                                    {isValDate ? `${d} ★` : d}
+                                                  </td>
+                                                  <td className="px-3 py-1 border border-gray-300 text-right">
+                                                    {formatNum(active.closes![idx])}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                          <tfoot>
+                                            <tr className="bg-gray-50 font-medium">
+                                              <td className="px-3 py-1 border border-gray-300 text-right">終値合計</td>
+                                              <td className="px-3 py-1 border border-gray-300 text-right">
+                                                {formatNum(active.closes.reduce((s, v) => s + v, 0))}
+                                              </td>
+                                            </tr>
+                                            <tr className="bg-gray-50 font-medium">
+                                              <td className="px-3 py-1 border border-gray-300 text-right">営業日数</td>
+                                              <td className="px-3 py-1 border border-gray-300 text-right">
+                                                {active.days}
+                                              </td>
+                                            </tr>
+                                            <tr className="bg-gray-50 font-medium">
+                                              <td className="px-3 py-1 border border-gray-300 text-right">月平均額（円未満切捨）</td>
+                                              <td className="px-3 py-1 border border-gray-300 text-right">
+                                                {formatNum(active.avg)}円
+                                              </td>
+                                            </tr>
+                                          </tfoot>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
+
+                          {/* c) 配当期待権・未収配当金の判定ロジック表示 */}
                           {dr && (
                             <div>
-                              <h4 className="text-sm font-semibold text-gray-800 mb-2">配当期待権</h4>
+                              <h4 className="text-sm font-semibold text-gray-800 mb-2">配当期待権・未収配当金</h4>
                               <p className="text-sm mb-2">
                                 <span className="text-gray-600">判定: </span>
                                 <span className={`font-medium ${
@@ -568,6 +773,16 @@ export default function ListedStockPage() {
                                     : 'なし'}
                                 </span>
                               </p>
+
+                              {/* 判定ロジック説明 */}
+                              <div className="bg-gray-50 border border-gray-200 rounded p-3 mb-3 text-xs text-gray-700 font-mono whitespace-pre-line leading-5">
+{`■ 配当期待権（財産評価基本通達 193-2）
+  判定条件：権利付最終日 ＜ 課税時期 ＜ 支払日
+  評価額 ＝ 1株当たり配当金額 × (1 − 20.315%) × 株数
+
+■ 源泉徴収税率: 所得税15% + 復興特別所得税0.315% + 住民税5% = 20.315%`}
+                              </div>
+
                               {dr.items && dr.items.length > 0 && (
                                 <div>
                                   <p className="text-xs text-gray-500 mb-1">配当明細:</p>
