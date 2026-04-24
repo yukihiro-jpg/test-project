@@ -169,6 +169,81 @@ export default function ListedStockPage() {
     setLinkedDivIds(prev => new Set([...prev, stockId]));
   };
 
+  // --- Toggle detail row ---
+  const toggleDetail = (stockId: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(stockId)) {
+        next.delete(stockId);
+      } else {
+        next.add(stockId);
+      }
+      return next;
+    });
+  };
+
+  // --- Excel export ---
+  const handleExcelExport = () => {
+    const headers = [
+      '銘柄コード', '銘柄名', '株数',
+      '①終値', '②当月平均', '③前月平均', '④前々月平均',
+      '採用単価', '採用区分', '評価額', '配当判定', '配当評価額',
+    ];
+
+    const rows = items.map(item => {
+      const { selectedPrice, totalValue } = calculateListedStockValue(item);
+      const dr = divResults[item.id];
+      const divLabel = dr
+        ? dr.status === 'kitai_ken' ? '配当期待権あり'
+          : dr.status === 'mishuu' ? '未収配当金あり'
+          : 'なし'
+        : '';
+      const divValue = dr && dr.status !== 'none' && dr.status !== 'unknown'
+        ? Math.round(dr.total_net)
+        : '';
+
+      return [
+        item.stockCode,
+        item.companyName,
+        item.shares,
+        item.deathDatePrice || '',
+        item.monthlyAvgDeath || '',
+        item.monthlyAvgPrev1 || '',
+        item.monthlyAvgPrev2 || '',
+        selectedPrice || '',
+        getAdoptedLabel(item),
+        totalValue || '',
+        divLabel,
+        divValue,
+      ];
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+    // Apply number format to numeric columns
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    for (let r = range.s.r + 1; r <= range.e.r; r++) {
+      for (let c = 2; c <= 11; c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        if (ws[ref] && typeof ws[ref].v === 'number') {
+          ws[ref].z = '#,##0';
+        }
+      }
+    }
+
+    // Column widths
+    ws['!cols'] = [
+      { wch: 12 }, { wch: 20 }, { wch: 10 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+      { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '上場株式算定結果');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    saveAs(new Blob([buf], { type: 'application/octet-stream' }), '上場株式_算定結果.xlsx');
+  };
+
   // --- Dividend badge label ---
   const getDivBadge = (stockId: string): { label: string; color: string } | null => {
     const dr = divResults[stockId];
@@ -184,6 +259,14 @@ export default function ListedStockPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">上場株式</h1>
         <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleExcelExport}
+            disabled={items.length === 0}
+          >
+            <Download size={18} className="mr-2" />
+            算定結果Excel出力
+          </Button>
           <Button
             variant="secondary"
             onClick={handleBatchCalc}
