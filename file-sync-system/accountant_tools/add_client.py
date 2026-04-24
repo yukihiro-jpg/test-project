@@ -33,10 +33,14 @@ def create_drive_folders(drive, root_folder_name, client_name, shared_drive_id=N
         client_id = drive.create_folder(client_name, root_id)
         print(f"顧問先フォルダを作成: {client_name}")
 
+    # 数字プレフィックスを除去して会社名を取得
+    import re
+    display_name = re.sub(r'^\d+_', '', client_name)
+
     # ファイル同期用サブフォルダ作成
     for subfolder in [
-        "顧問先からの受取物（社長用）", "顧問先への送付物（社長用）",
-        "顧問先からの受取物（スタッフ用）", "顧問先への送付物（スタッフ用）",
+        f"{display_name}→税理士（社長用）", f"税理士→{display_name}（社長用）",
+        f"{display_name}→税理士（スタッフ用）", f"税理士→{display_name}（スタッフ用）",
         "_sync_logs",
     ]:
         existing_sub = drive.find_folder_by_name(subfolder, parent_id=client_id)
@@ -72,20 +76,18 @@ def generate_client_config(client_name, device_name, device_type, shared_drive_i
 
     if device_type == "boss":
         sync_pairs = [
-            {"local_folder": f"{display_name}→税理士", "drive_folder": "顧問先からの受取物（社長用）", "direction": "upload"},
-            {"local_folder": f"税理士→{display_name}", "drive_folder": "顧問先への送付物（社長用）", "direction": "download"},
-            {"local_folder": f"{display_name}→税理士（スタッフ用）", "drive_folder": "顧問先からの受取物（スタッフ用）", "direction": "download"},
-            {"local_folder": f"税理士→{display_name}（スタッフ用）", "drive_folder": "顧問先への送付物（スタッフ用）", "direction": "download"},
+            {"local_folder": f"{display_name}→税理士", "drive_folder": f"{display_name}→税理士（社長用）", "direction": "upload"},
+            {"local_folder": f"税理士→{display_name}", "drive_folder": f"税理士→{display_name}（社長用）", "direction": "download"},
         ]
     elif device_type == "staff":
         sync_pairs = [
-            {"local_folder": f"{display_name}→税理士（スタッフ用）", "drive_folder": "顧問先からの受取物（スタッフ用）", "direction": "upload"},
-            {"local_folder": f"税理士→{display_name}（スタッフ用）", "drive_folder": "顧問先への送付物（スタッフ用）", "direction": "download"},
+            {"local_folder": f"{display_name}→税理士（スタッフ用）", "drive_folder": f"{display_name}→税理士（スタッフ用）", "direction": "upload"},
+            {"local_folder": f"税理士→{display_name}（スタッフ用）", "drive_folder": f"税理士→{display_name}（スタッフ用）", "direction": "download"},
         ]
     else:
         sync_pairs = [
-            {"local_folder": f"{display_name}→税理士", "drive_folder": "顧問先からの受取物", "direction": "upload"},
-            {"local_folder": f"税理士→{display_name}", "drive_folder": "顧問先への送付物", "direction": "download"},
+            {"local_folder": f"{display_name}→税理士", "drive_folder": f"{display_name}→税理士", "direction": "upload"},
+            {"local_folder": f"税理士→{display_name}", "drive_folder": f"税理士→{display_name}", "direction": "download"},
         ]
 
     return {

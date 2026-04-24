@@ -463,10 +463,11 @@ function registerClient() {
   getOrCreateFolder(scanFolder, '処理済み');
 
   // 顧問先共有フォルダ（ファイル同期システムと共通）
-  getOrCreateFolder(clientFolder, '顧問先からの受取物（社長用）');
-  getOrCreateFolder(clientFolder, '顧問先への送付物（社長用）');
-  getOrCreateFolder(clientFolder, '顧問先からの受取物（スタッフ用）');
-  getOrCreateFolder(clientFolder, '顧問先への送付物（スタッフ用）');
+  const displayName = clientName.replace(/^\d+_/, '');
+  getOrCreateFolder(clientFolder, `${displayName}→税理士（社長用）`);
+  getOrCreateFolder(clientFolder, `税理士→${displayName}（社長用）`);
+  getOrCreateFolder(clientFolder, `${displayName}→税理士（スタッフ用）`);
+  getOrCreateFolder(clientFolder, `税理士→${displayName}（スタッフ用）`);
   getOrCreateFolder(clientFolder, '_sync_logs');
 
   // URL生成
@@ -542,10 +543,11 @@ function autoRegisterClients() {
       const scanFolder = getOrCreateFolder(clientFolder, 'スマホ撮影');
       getOrCreateFolder(scanFolder, '未整理');
       getOrCreateFolder(scanFolder, '処理済み');
-      getOrCreateFolder(clientFolder, '顧問先からの受取物（社長用）');
-      getOrCreateFolder(clientFolder, '顧問先への送付物（社長用）');
-      getOrCreateFolder(clientFolder, '顧問先からの受取物（スタッフ用）');
-      getOrCreateFolder(clientFolder, '顧問先への送付物（スタッフ用）');
+      const dn = clientName.replace(/^\d+_/, '');
+      getOrCreateFolder(clientFolder, `${dn}→税理士（社長用）`);
+      getOrCreateFolder(clientFolder, `税理士→${dn}（社長用）`);
+      getOrCreateFolder(clientFolder, `${dn}→税理士（スタッフ用）`);
+      getOrCreateFolder(clientFolder, `税理士→${dn}（スタッフ用）`);
       getOrCreateFolder(clientFolder, '_sync_logs');
 
       // URL生成

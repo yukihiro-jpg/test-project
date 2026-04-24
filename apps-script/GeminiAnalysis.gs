@@ -546,7 +546,6 @@ function analyzeSyncedFiles() {
   }
 
   const resultSummary = [];
-  const targetFolders = ['顧問先からの受取物（社長用）', '顧問先からの受取物（スタッフ用）'];
 
   // 各顧問先フォルダを走査
   const clientFolders = rootFolder.getFolders();
@@ -557,10 +556,20 @@ function analyzeSyncedFiles() {
     // _で始まるフォルダはスキップ
     if (clientName.startsWith('_')) continue;
 
-    for (const targetFolderName of targetFolders) {
-      const folders = clientFolder.getFoldersByName(targetFolderName);
-      if (!folders.hasNext()) continue;
-      const targetFolder = folders.next();
+    // 「→税理士」を含むサブフォルダを検索（会社名→税理士（社長用）等）
+    const allSubFolders = clientFolder.getFolders();
+    const targetFolderList = [];
+    while (allSubFolders.hasNext()) {
+      const sf = allSubFolders.next();
+      const sfName = sf.getName();
+      if (sfName.indexOf('→税理士') >= 0 || sfName === '顧問先からの受取物（社長用）' || sfName === '顧問先からの受取物（スタッフ用）') {
+        targetFolderList.push({ name: sfName, folder: sf });
+      }
+    }
+
+    for (const targetItem of targetFolderList) {
+      const targetFolderName = targetItem.name;
+      const targetFolder = targetItem.folder;
 
       // フォルダ内のファイルを取得
       const files = targetFolder.getFiles();
