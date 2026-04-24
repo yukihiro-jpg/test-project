@@ -40,8 +40,10 @@ export default function ExportPage() {
       excelAction: async () => {
         exportPropertyList(currentCase);
       },
-      // PDF not yet implemented
-      pdfAction: undefined,
+      pdfAction: async () => {
+        const { exportPropertyListPdf } = await import('@/lib/export/pdf-property-list');
+        await exportPropertyListPdf(currentCase);
+      },
       uploadAction: async () => {
         const { generatePropertyListWorkbook } = await import('@/lib/export/spreadsheet-blob');
         const buf = generatePropertyListWorkbook(currentCase);
@@ -147,8 +149,10 @@ export default function ExportPage() {
         const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
         saveAs(new Blob([buf]), `節税シミュレーション_${name}.xlsx`);
       },
-      // PDF not yet implemented
-      pdfAction: undefined,
+      pdfAction: async () => {
+        const { exportTaxSavingPdf } = await import('@/lib/export/pdf-tax-saving');
+        await exportTaxSavingPdf(currentCase);
+      },
       uploadAction: undefined,
     },
     {
