@@ -325,167 +325,306 @@ export default function ListedStockPage() {
               const divBadge = getDivBadge(item.id);
               const isLinked = linkedDivIds.has(item.id);
 
+              const isExpanded = expandedIds.has(item.id);
+              const cr = calcResults[item.id];
+              const dr = divResults[item.id];
+
               return (
-                <tr key={item.id} className={i % 2 === 0 ? '' : 'bg-gray-50'}>
-                  {/* No */}
-                  <td className="p-2 border border-gray-300 text-center">{i + 1}</td>
+                <React.Fragment key={item.id}>
+                  <tr className={i % 2 === 0 ? '' : 'bg-gray-50'}>
+                    {/* No */}
+                    <td className="p-2 border border-gray-300 text-center">{i + 1}</td>
 
-                  {/* 銘柄コード */}
-                  <td className="p-2 border border-gray-300">
-                    <input
-                      type="text"
-                      value={item.stockCode}
-                      onChange={e => updateAsset('listedStocks', item.id, { stockCode: e.target.value })}
-                      className={`${inputClass} w-24`}
-                      placeholder="例: 7203"
-                    />
-                  </td>
+                    {/* 銘柄コード */}
+                    <td className="p-2 border border-gray-300">
+                      <input
+                        type="text"
+                        value={item.stockCode}
+                        onChange={e => updateAsset('listedStocks', item.id, { stockCode: e.target.value })}
+                        className={`${inputClass} w-24`}
+                        placeholder="例: 7203"
+                      />
+                    </td>
 
-                  {/* 銘柄名 */}
-                  <td className="p-2 border border-gray-300">
-                    <input
-                      type="text"
-                      value={item.companyName}
-                      onChange={e => updateAsset('listedStocks', item.id, { companyName: e.target.value })}
-                      className={inputClass}
-                      placeholder="会社名"
-                    />
-                  </td>
+                    {/* 銘柄名 */}
+                    <td className="p-2 border border-gray-300">
+                      <input
+                        type="text"
+                        value={item.companyName}
+                        onChange={e => updateAsset('listedStocks', item.id, { companyName: e.target.value })}
+                        className={inputClass}
+                        placeholder="会社名"
+                      />
+                    </td>
 
-                  {/* 株数 */}
-                  <td className="p-2 border border-gray-300">
-                    <input
-                      type="text"
-                      value={formatNum(item.shares)}
-                      onChange={e => updateAsset('listedStocks', item.id, { shares: parseNum(e.target.value) })}
-                      className={`${inputClass} text-right w-24`}
-                    />
-                  </td>
+                    {/* 株数 */}
+                    <td className="p-2 border border-gray-300">
+                      <input
+                        type="text"
+                        value={formatNum(item.shares)}
+                        onChange={e => updateAsset('listedStocks', item.id, { shares: parseNum(e.target.value) })}
+                        className={`${inputClass} text-right w-24`}
+                      />
+                    </td>
 
-                  {/* 終値 */}
-                  <td className="p-2 border border-gray-300">
-                    <input
-                      type="text"
-                      value={formatNum(item.deathDatePrice)}
-                      onChange={e => updateAsset('listedStocks', item.id, { deathDatePrice: parseNum(e.target.value) })}
-                      className={`${inputClass} text-right`}
-                    />
-                  </td>
+                    {/* 終値 */}
+                    <td className="p-2 border border-gray-300">
+                      <input
+                        type="text"
+                        value={formatNum(item.deathDatePrice)}
+                        onChange={e => updateAsset('listedStocks', item.id, { deathDatePrice: parseNum(e.target.value) })}
+                        className={`${inputClass} text-right`}
+                      />
+                    </td>
 
-                  {/* 月平均(当月) */}
-                  <td className="p-2 border border-gray-300">
-                    <input
-                      type="text"
-                      value={formatNum(item.monthlyAvgDeath)}
-                      onChange={e => updateAsset('listedStocks', item.id, { monthlyAvgDeath: parseNum(e.target.value) })}
-                      className={`${inputClass} text-right`}
-                    />
-                  </td>
+                    {/* 月平均(当月) */}
+                    <td className="p-2 border border-gray-300">
+                      <input
+                        type="text"
+                        value={formatNum(item.monthlyAvgDeath)}
+                        onChange={e => updateAsset('listedStocks', item.id, { monthlyAvgDeath: parseNum(e.target.value) })}
+                        className={`${inputClass} text-right`}
+                      />
+                    </td>
 
-                  {/* 月平均(前月) */}
-                  <td className="p-2 border border-gray-300">
-                    <input
-                      type="text"
-                      value={formatNum(item.monthlyAvgPrev1)}
-                      onChange={e => updateAsset('listedStocks', item.id, { monthlyAvgPrev1: parseNum(e.target.value) })}
-                      className={`${inputClass} text-right`}
-                    />
-                  </td>
+                    {/* 月平均(前月) */}
+                    <td className="p-2 border border-gray-300">
+                      <input
+                        type="text"
+                        value={formatNum(item.monthlyAvgPrev1)}
+                        onChange={e => updateAsset('listedStocks', item.id, { monthlyAvgPrev1: parseNum(e.target.value) })}
+                        className={`${inputClass} text-right`}
+                      />
+                    </td>
 
-                  {/* 月平均(前々月) */}
-                  <td className="p-2 border border-gray-300">
-                    <input
-                      type="text"
-                      value={formatNum(item.monthlyAvgPrev2)}
-                      onChange={e => updateAsset('listedStocks', item.id, { monthlyAvgPrev2: parseNum(e.target.value) })}
-                      className={`${inputClass} text-right`}
-                    />
-                  </td>
+                    {/* 月平均(前々月) */}
+                    <td className="p-2 border border-gray-300">
+                      <input
+                        type="text"
+                        value={formatNum(item.monthlyAvgPrev2)}
+                        onChange={e => updateAsset('listedStocks', item.id, { monthlyAvgPrev2: parseNum(e.target.value) })}
+                        className={`${inputClass} text-right`}
+                      />
+                    </td>
 
-                  {/* 採用単価 */}
-                  <td className="p-2 border border-gray-300 text-right">
-                    {formatNum(selectedPrice)}
-                  </td>
+                    {/* 採用単価 */}
+                    <td className="p-2 border border-gray-300 text-right">
+                      {formatNum(selectedPrice)}
+                    </td>
 
-                  {/* 評価額 */}
-                  <td className="p-2 border border-gray-300 text-right font-medium">
-                    {formatNum(totalValue)}
-                  </td>
+                    {/* 評価額 */}
+                    <td className="p-2 border border-gray-300 text-right font-medium">
+                      {formatNum(totalValue)}
+                    </td>
 
-                  {/* 採用区分 */}
-                  <td className="p-2 border border-gray-300 text-center text-xs text-gray-600">
-                    {getAdoptedLabel(item)}
-                  </td>
+                    {/* 採用区分 */}
+                    <td className="p-2 border border-gray-300 text-center text-xs text-gray-600">
+                      {getAdoptedLabel(item)}
+                    </td>
 
-                  {/* 配当 */}
-                  <td className="p-2 border border-gray-300 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      {divBadge && (
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${divBadge.color}`}>
-                          {divBadge.label}
-                        </span>
-                      )}
-                      {divBadge && !isLinked && (
+                    {/* 配当 */}
+                    <td className="p-2 border border-gray-300 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        {divBadge && (
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${divBadge.color}`}>
+                            {divBadge.label}
+                          </span>
+                        )}
+                        {divBadge && !isLinked && (
+                          <button
+                            type="button"
+                            onClick={() => handleLinkDividend(item.id)}
+                            className="flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-800 whitespace-nowrap"
+                            title="配当を財産に反映"
+                          >
+                            <Link2 size={12} />
+                            反映
+                          </button>
+                        )}
+                        {isLinked && (
+                          <span className="flex items-center gap-0.5 text-xs text-green-600">
+                            <Check size={12} />
+                            連動済
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* 操作 (自動計算 + 詳細) */}
+                    <td className="p-2 border border-gray-300 text-center">
+                      <div className="flex items-center justify-center gap-1">
                         <button
                           type="button"
-                          onClick={() => handleLinkDividend(item.id)}
-                          className="flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-800 whitespace-nowrap"
-                          title="配当を財産に反映"
+                          onClick={() => handleAutoCalc(item.id)}
+                          disabled={status === 'loading' || !item.stockCode}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors
+                            ${status === 'loading'
+                              ? 'bg-gray-200 text-gray-500 cursor-wait'
+                              : status === 'done'
+                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                : status === 'error'
+                                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                  : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                            }
+                            disabled:opacity-50`}
                         >
-                          <Link2 size={12} />
-                          反映
+                          {status === 'loading' ? (
+                            <>計算中...</>
+                          ) : status === 'done' ? (
+                            <><Check size={12} /> 完了</>
+                          ) : status === 'error' ? (
+                            <><AlertCircle size={12} /> 再試行</>
+                          ) : (
+                            <><Zap size={12} /> 自動計算</>
+                          )}
                         </button>
-                      )}
-                      {isLinked && (
-                        <span className="flex items-center gap-0.5 text-xs text-green-600">
-                          <Check size={12} />
-                          連動済
-                        </span>
-                      )}
-                    </div>
-                  </td>
+                        {status === 'done' && (
+                          <button
+                            type="button"
+                            onClick={() => toggleDetail(item.id)}
+                            className="inline-flex items-center gap-0.5 px-1.5 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                            title="算定詳細を表示"
+                          >
+                            {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                            詳細
+                          </button>
+                        )}
+                      </div>
+                    </td>
 
-                  {/* 操作 (自動計算) */}
-                  <td className="p-2 border border-gray-300 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleAutoCalc(item.id)}
-                      disabled={status === 'loading' || !item.stockCode}
-                      className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors
-                        ${status === 'loading'
-                          ? 'bg-gray-200 text-gray-500 cursor-wait'
-                          : status === 'done'
-                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                            : status === 'error'
-                              ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                        }
-                        disabled:opacity-50`}
-                    >
-                      {status === 'loading' ? (
-                        <>計算中...</>
-                      ) : status === 'done' ? (
-                        <><Check size={12} /> 完了</>
-                      ) : status === 'error' ? (
-                        <><AlertCircle size={12} /> 再試行</>
-                      ) : (
-                        <><Zap size={12} /> 自動計算</>
-                      )}
-                    </button>
-                  </td>
+                    {/* 削除 */}
+                    <td className="p-2 border border-gray-300 text-center">
+                      <button
+                        type="button"
+                        onClick={() => removeAsset('listedStocks', item.id)}
+                        className="text-red-600 hover:text-red-800"
+                        aria-label="削除"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
 
-                  {/* 削除 */}
-                  <td className="p-2 border border-gray-300 text-center">
-                    <button
-                      type="button"
-                      onClick={() => removeAsset('listedStocks', item.id)}
-                      className="text-red-600 hover:text-red-800"
-                      aria-label="削除"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
+                  {/* Expandable detail row */}
+                  {isExpanded && status === 'done' && (
+                    <tr className="bg-blue-50">
+                      <td colSpan={14} className="p-4 border border-gray-300">
+                        <div className="space-y-4">
+                          {/* 算定根拠: Price comparison table */}
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-800 mb-2">算定根拠</h4>
+                            <table className="text-sm border-collapse">
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  <th className="px-3 py-1 border border-gray-300 text-left">区分</th>
+                                  <th className="px-3 py-1 border border-gray-300 text-right">価格</th>
+                                  <th className="px-3 py-1 border border-gray-300 text-center">採用</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(() => {
+                                  const prices: [string, number][] = [
+                                    ['①課税時期の終値', item.deathDatePrice],
+                                    ['②課税時期の月の月平均', item.monthlyAvgDeath],
+                                    ['③前月の月平均', item.monthlyAvgPrev1],
+                                    ['④前々月の月平均', item.monthlyAvgPrev2],
+                                  ];
+                                  const validPrices = prices.filter(([, v]) => v > 0);
+                                  const minPrice = validPrices.length > 0
+                                    ? Math.min(...validPrices.map(([, v]) => v))
+                                    : 0;
+
+                                  return prices.map(([label, price]) => (
+                                    <tr key={label} className={price > 0 && price === minPrice ? 'bg-green-50' : ''}>
+                                      <td className="px-3 py-1 border border-gray-300">{label}</td>
+                                      <td className="px-3 py-1 border border-gray-300 text-right">
+                                        {price > 0 ? `${formatNum(price)}円` : '-'}
+                                      </td>
+                                      <td className="px-3 py-1 border border-gray-300 text-center">
+                                        {price > 0 && price === minPrice ? '✅' : ''}
+                                      </td>
+                                    </tr>
+                                  ));
+                                })()}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {/* 配当期待権 */}
+                          {dr && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-800 mb-2">配当期待権</h4>
+                              <p className="text-sm mb-2">
+                                <span className="text-gray-600">判定: </span>
+                                <span className={`font-medium ${
+                                  dr.status === 'kitai_ken' ? 'text-amber-700'
+                                    : dr.status === 'mishuu' ? 'text-blue-700'
+                                    : 'text-gray-600'
+                                }`}>
+                                  {dr.status === 'kitai_ken' ? '配当期待権あり'
+                                    : dr.status === 'mishuu' ? '未収配当金あり'
+                                    : dr.status === 'unknown' ? '判定不可'
+                                    : 'なし'}
+                                </span>
+                              </p>
+                              {dr.items && dr.items.length > 0 && (
+                                <div>
+                                  <p className="text-xs text-gray-500 mb-1">配当明細:</p>
+                                  <table className="text-xs border-collapse">
+                                    <thead>
+                                      <tr className="bg-gray-100">
+                                        <th className="px-2 py-1 border border-gray-300">区分</th>
+                                        <th className="px-2 py-1 border border-gray-300">権利落日</th>
+                                        <th className="px-2 py-1 border border-gray-300 text-right">1株配当</th>
+                                        <th className="px-2 py-1 border border-gray-300 text-right">税引前</th>
+                                        <th className="px-2 py-1 border border-gray-300 text-right">源泉税</th>
+                                        <th className="px-2 py-1 border border-gray-300 text-right">税引後</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {dr.items.map((di, idx) => (
+                                        <tr key={idx}>
+                                          <td className="px-2 py-1 border border-gray-300">{di.status}</td>
+                                          <td className="px-2 py-1 border border-gray-300">{di.ex_date}</td>
+                                          <td className="px-2 py-1 border border-gray-300 text-right">
+                                            {formatNum(di.div_per_share)}
+                                          </td>
+                                          <td className="px-2 py-1 border border-gray-300 text-right">
+                                            {formatNum(Math.round(di.gross))}
+                                          </td>
+                                          <td className="px-2 py-1 border border-gray-300 text-right">
+                                            {formatNum(Math.round(di.tax))}
+                                          </td>
+                                          <td className="px-2 py-1 border border-gray-300 text-right">
+                                            {formatNum(Math.round(di.net))}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                    <tfoot>
+                                      <tr className="bg-gray-50 font-medium">
+                                        <td colSpan={3} className="px-2 py-1 border border-gray-300 text-right">合計</td>
+                                        <td className="px-2 py-1 border border-gray-300 text-right">
+                                          {formatNum(Math.round(dr.total_gross))}
+                                        </td>
+                                        <td className="px-2 py-1 border border-gray-300 text-right">
+                                          {formatNum(Math.round(dr.total_tax))}
+                                        </td>
+                                        <td className="px-2 py-1 border border-gray-300 text-right">
+                                          {formatNum(Math.round(dr.total_net))}
+                                        </td>
+                                      </tr>
+                                    </tfoot>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>
