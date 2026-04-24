@@ -35,3 +35,7 @@ next-env.d.ts
 # credentials
 credentials/
 service-account.json
+
+# groupware local data store (JSON)
+/data/
+

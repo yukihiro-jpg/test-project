@@ -2,13 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-canvas: #fbfbfd;
+  --bg-surface: #ffffff;
+  --bg-surface-muted: #f5f5f7;
+  --text-primary: #1d1d1f;
+  --text-secondary: #515154;
+  --text-tertiary: #86868b;
+  --line: rgba(0, 0, 0, 0.08);
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
+  --danger: #ff3b30;
+  --warning: #ff9500;
+  --success: #30d158;
+}
+
 html, body {
-  /* プルツーリフレッシュ無効化（iOS含む全モバイル対応） */
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic", "Meiryo", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
   overscroll-behavior-y: contain;
   overscroll-behavior: contain;
 }
 
-/* iOS Safari でプルツーリフレッシュを完全に防ぐためのレイアウト */
 html.no-pull-refresh,
 html.no-pull-refresh body {
   position: fixed;
@@ -27,4 +49,55 @@ html.no-pull-refresh body > div {
   bottom: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+@layer components {
+  .gw-card {
+    @apply bg-white rounded-2xl border border-black/5 shadow-sm;
+  }
+  .gw-card-hover {
+    @apply transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+  }
+  .gw-btn {
+    @apply inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium transition-colors duration-150;
+  }
+  .gw-btn-primary {
+    @apply gw-btn bg-[#0071e3] text-white hover:bg-[#0077ed] active:bg-[#006edb];
+  }
+  .gw-btn-secondary {
+    @apply gw-btn bg-[#f5f5f7] text-[#1d1d1f] hover:bg-[#e8e8ed] active:bg-[#dcdce0];
+  }
+  .gw-btn-ghost {
+    @apply gw-btn text-[#0071e3] hover:bg-[#f0f6ff];
+  }
+  .gw-btn-danger {
+    @apply gw-btn bg-[#ff3b30] text-white hover:bg-[#ff4a40];
+  }
+  .gw-label {
+    @apply text-xs font-medium uppercase tracking-wider text-[#86868b];
+  }
+  .gw-input {
+    @apply w-full rounded-xl border border-black/10 bg-white px-3.5 py-2.5 text-[15px] text-[#1d1d1f] placeholder:text-[#86868b] focus:border-[#0071e3] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20;
+  }
+  .gw-select {
+    @apply gw-input appearance-none bg-no-repeat pr-10;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2386868b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-position: right 0.75rem center;
+    background-size: 1rem;
+  }
+  .gw-chip {
+    @apply inline-flex items-center gap-1 rounded-full bg-[#f5f5f7] px-3 py-1 text-xs font-medium text-[#1d1d1f];
+  }
+  .gw-chip-danger {
+    @apply gw-chip bg-[#ffecea] text-[#ff3b30];
+  }
+  .gw-chip-warning {
+    @apply gw-chip bg-[#fff3e0] text-[#ff9500];
+  }
+  .gw-chip-success {
+    @apply gw-chip bg-[#e3fbe7] text-[#1c8433];
+  }
+  .gw-chip-info {
+    @apply gw-chip bg-[#e6f0ff] text-[#0071e3];
+  }
 }
