@@ -99,7 +99,7 @@ export async function buildExcelWorkbook(
   introRow.alignment = { horizontal: 'left' }
 
   const noteRow = movement.addRow([
-    '50万円以上の取引を抽出。資金移動と思われるものは同一行に統合。ATM出金等は「不明金」、その他は摘要を備考に転記。'
+    'ATM出金（不明金）と利用者が手動で追加した取引を抽出。資金移動と思われるものは同一行に統合。'
   ])
   movement.mergeCells(noteRow.number, 1, noteRow.number, colCount)
   noteRow.font = { italic: true, color: { argb: 'FF555555' } }
@@ -108,6 +108,7 @@ export async function buildExcelWorkbook(
 
   const bankNameRow = movement.addRow([''])
   const accountRow = movement.addRow([''])
+  const purposeRow = movement.addRow([''])
   const subColRow = movement.addRow([''])
 
   for (let i = 0; i < passbookCount; i++) {
@@ -117,26 +118,28 @@ export async function buildExcelWorkbook(
     movement.mergeCells(bankNameRow.number, startCol, bankNameRow.number, startCol + 1)
     accountRow.getCell(startCol).value = `口座番号: ${pb?.accountNumber || ''}`
     movement.mergeCells(accountRow.number, startCol, accountRow.number, startCol + 1)
+    purposeRow.getCell(startCol).value = `用途: ${pb?.purpose || '-'}`
+    movement.mergeCells(purposeRow.number, startCol, purposeRow.number, startCol + 1)
     subColRow.getCell(startCol).value = '入金'
     subColRow.getCell(startCol + 1).value = '出金'
   }
   const conclusionCol = 2 + passbookCount * 2
   const remarksCol = conclusionCol + 1
   bankNameRow.getCell(conclusionCol).value = '結論'
-  movement.mergeCells(bankNameRow.number, conclusionCol, accountRow.number, conclusionCol)
+  movement.mergeCells(bankNameRow.number, conclusionCol, purposeRow.number, conclusionCol)
   bankNameRow.getCell(remarksCol).value = '備考'
-  movement.mergeCells(bankNameRow.number, remarksCol, accountRow.number, remarksCol)
+  movement.mergeCells(bankNameRow.number, remarksCol, subColRow.number, remarksCol)
   subColRow.getCell(conclusionCol).value = '相続財産計上額の算出'
-  subColRow.getCell(remarksCol).value = ''
 
   bankNameRow.getCell(1).value = '日付'
   movement.mergeCells(bankNameRow.number, 1, subColRow.number, 1)
 
-  ;[bankNameRow, accountRow, subColRow].forEach((r) => {
+  ;[bankNameRow, accountRow, purposeRow, subColRow].forEach((r) => {
     r.eachCell({ includeEmpty: true }, (c) => applyHeaderStyle(c, SUBHEADER_FILL))
     r.height = 22
   })
 
+  let conclusionTotal = 0
   for (const row of assetTable.rows) {
     const values: (string | number)[] = [toWareki(row.date)]
     for (const id of assetTable.passbookOrder) {
@@ -144,6 +147,7 @@ export async function buildExcelWorkbook(
       values.push(entry.deposit || 0, entry.withdrawal ? -entry.withdrawal : 0)
     }
     values.push(row.conclusionAmount, row.remarks)
+    conclusionTotal += row.conclusionAmount || 0
 
     const xRow = movement.addRow(values)
     xRow.eachCell({ includeEmpty: true }, (c, colNumber) => {
@@ -155,6 +159,33 @@ export async function buildExcelWorkbook(
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF3FB' } }
       })
     }
+  }
+
+  if (assetTable.rows.length > 0) {
+    const totalLabelCols = 1 + passbookCount * 2
+    const totalRow = movement.addRow([])
+    totalRow.getCell(1).value = '合計'
+    movement.mergeCells(totalRow.number, 1, totalRow.number, totalLabelCols)
+    totalRow.getCell(conclusionCol).value = conclusionTotal
+    totalRow.eachCell({ includeEmpty: true }, (c, colNumber) => {
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }
+      c.font = { bold: true }
+      c.border = {
+        top: { style: 'medium', color: { argb: 'FF333333' } },
+        left: { style: 'thin', color: { argb: 'FF666666' } },
+        right: { style: 'thin', color: { argb: 'FF666666' } },
+        bottom: { style: 'medium', color: { argb: 'FF333333' } }
+      }
+      if (colNumber === conclusionCol) {
+        c.numFmt = NUMBER_FORMAT
+        c.alignment = { horizontal: 'right', vertical: 'middle' }
+      } else if (colNumber === 1) {
+        c.alignment = { horizontal: 'right', vertical: 'middle' }
+      } else {
+        c.alignment = { horizontal: 'center', vertical: 'middle' }
+      }
+    })
+    totalRow.height = 24
   }
 
   movement.views = [{ state: 'frozen', ySplit: subColRow.number }]

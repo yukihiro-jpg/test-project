@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import type { AssetMovementTable, ParsedPassbook } from '@/types'
 import { toWareki } from '@/lib/wareki'
 
@@ -8,6 +9,7 @@ type Props = {
   passbooks: ParsedPassbook[]
   onConclusionChange: (rowId: string, value: number) => void
   onRemarksChange: (rowId: string, value: string) => void
+  onRemoveRow?: (rowId: string) => void
 }
 
 const fmt = (n: number) => {
@@ -15,15 +17,61 @@ const fmt = (n: number) => {
   return n < 0 ? `△${Math.abs(n).toLocaleString()}` : n.toLocaleString()
 }
 
-export function AssetMovementView({ table, passbooks, onConclusionChange, onRemarksChange }: Props) {
+function ConclusionInput({
+  value,
+  onChange
+}: {
+  value: number
+  onChange: (v: number) => void
+}) {
+  const [focused, setFocused] = useState(false)
+  const [draft, setDraft] = useState<string>('')
+  const display = focused
+    ? draft
+    : value
+    ? value < 0
+      ? `△${Math.abs(value).toLocaleString()}`
+      : value.toLocaleString()
+    : ''
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={display}
+      onFocus={() => {
+        setFocused(true)
+        setDraft(value ? String(value) : '')
+      }}
+      onBlur={() => {
+        setFocused(false)
+        const cleaned = draft.replace(/[,，]/g, '').replace(/△/g, '-')
+        const n = Number(cleaned)
+        onChange(isNaN(n) ? 0 : n)
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      className="w-32 border border-slate-200 rounded px-1 py-0.5 text-right"
+    />
+  )
+}
+
+export function AssetMovementView({
+  table,
+  passbooks,
+  onConclusionChange,
+  onRemarksChange,
+  onRemoveRow
+}: Props) {
   const map = new Map(passbooks.map((p) => [p.passbookId, p]))
+
+  const conclusionTotal = table.rows.reduce((acc, r) => acc + (r.conclusionAmount || 0), 0)
+  const colspanLeft = 1 + table.passbookOrder.length * 2
 
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full text-sm border">
         <thead>
           <tr className="bg-slate-800 text-white">
-            <th rowSpan={3} className="px-2 py-1 border align-bottom">日付</th>
+            <th rowSpan={4} className="px-2 py-1 border align-bottom">日付</th>
             {table.passbookOrder.map((id) => {
               const pb = map.get(id)
               return (
@@ -32,8 +80,9 @@ export function AssetMovementView({ table, passbooks, onConclusionChange, onRema
                 </th>
               )
             })}
-            <th rowSpan={2} className="px-2 py-1 border align-middle">結論</th>
-            <th rowSpan={3} className="px-2 py-1 border align-bottom">備考</th>
+            <th rowSpan={3} className="px-2 py-1 border align-middle">結論</th>
+            <th rowSpan={4} className="px-2 py-1 border align-bottom">備考</th>
+            <th rowSpan={4} className="px-2 py-1 border align-bottom w-16">操作</th>
           </tr>
           <tr className="bg-slate-700 text-white">
             {table.passbookOrder.map((id) => {
@@ -41,6 +90,16 @@ export function AssetMovementView({ table, passbooks, onConclusionChange, onRema
               return (
                 <th key={`acc-${id}`} colSpan={2} className="px-2 py-1 border text-center text-xs">
                   口座番号: {pb?.accountNumber || ''}
+                </th>
+              )
+            })}
+          </tr>
+          <tr className="bg-slate-600 text-white">
+            {table.passbookOrder.map((id) => {
+              const pb = map.get(id)
+              return (
+                <th key={`purpose-${id}`} colSpan={2} className="px-2 py-1 border text-center text-xs">
+                  用途: {pb?.purpose || '-'}
                 </th>
               )
             })}
@@ -56,8 +115,8 @@ export function AssetMovementView({ table, passbooks, onConclusionChange, onRema
         <tbody>
           {table.rows.length === 0 && (
             <tr>
-              <td colSpan={3 + table.passbookOrder.length * 2} className="px-2 py-4 text-center text-slate-500 border">
-                50万円以上の取引がありません
+              <td colSpan={4 + table.passbookOrder.length * 2} className="px-2 py-4 text-center text-slate-500 border">
+                計上対象の取引がありません
               </td>
             </tr>
           )}
@@ -76,11 +135,9 @@ export function AssetMovementView({ table, passbooks, onConclusionChange, onRema
                 ]
               })}
               <td className="px-1 py-0.5 border">
-                <input
-                  type="number"
-                  value={row.conclusionAmount || ''}
-                  onChange={(e) => onConclusionChange(row.id, Number(e.target.value) || 0)}
-                  className="w-28 border border-slate-200 rounded px-1 py-0.5 text-right"
+                <ConclusionInput
+                  value={row.conclusionAmount || 0}
+                  onChange={(v) => onConclusionChange(row.id, v)}
                 />
               </td>
               <td className="px-1 py-0.5 border">
@@ -91,9 +148,32 @@ export function AssetMovementView({ table, passbooks, onConclusionChange, onRema
                   className="w-full min-w-[16rem] border border-slate-200 rounded px-1 py-0.5"
                 />
               </td>
+              <td className="px-1 py-0.5 border text-center">
+                <button
+                  type="button"
+                  onClick={() => onRemoveRow?.(row.id)}
+                  disabled={!onRemoveRow}
+                  className="px-2 py-0.5 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-slate-300"
+                  title="この行を一覧表から削除"
+                >
+                  ✕削除
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
+        {table.rows.length > 0 && (
+          <tfoot>
+            <tr className="bg-slate-100 font-bold">
+              <td colSpan={colspanLeft} className="px-2 py-2 border text-right">
+                合計
+              </td>
+              <td className="px-2 py-2 border text-right">{fmt(conclusionTotal)}</td>
+              <td className="px-2 py-2 border" />
+              <td className="px-2 py-2 border" />
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   )

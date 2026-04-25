@@ -267,6 +267,7 @@ JSONのみを返してください。`
     branchName: analysis.支店名 || branchName || '',
     accountNumber: analysis.口座番号 || accountNumber || '',
     label,
+    purpose: '',
     startBalance: startBalance,
     endBalance: parseNumber(analysis.終了残高),
     transactions: rowsToTransactions(rows, passbookId, { startDate, endDate }),

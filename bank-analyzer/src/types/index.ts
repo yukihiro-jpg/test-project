@@ -15,6 +15,7 @@ export type ParsedPassbook = {
   branchName: string
   accountNumber: string
   label: string
+  purpose: string
   startBalance: number | null
   endBalance: number | null
   transactions: Transaction[]

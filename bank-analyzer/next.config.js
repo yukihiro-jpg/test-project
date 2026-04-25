@@ -4,6 +4,14 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '50mb'
     }
+  },
+  async headers() {
+    return [
+      {
+        source: '/pdf.worker.min.mjs',
+        headers: [{ key: 'Content-Type', value: 'application/javascript; charset=utf-8' }]
+      }
+    ]
   }
 }
 

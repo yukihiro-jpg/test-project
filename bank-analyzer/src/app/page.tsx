@@ -36,6 +36,8 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<string>('movement')
   const [atmKeywords, setAtmKeywords] = useState<string[]>(DEFAULT_ATM_KEYWORDS)
   const [overrides, setOverrides] = useState<Record<string, Partial<AssetMovementRow>>>({})
+  const [manualIncludes, setManualIncludes] = useState<string[]>([])
+  const [manualExcludes, setManualExcludes] = useState<string[]>([])
   const [pdfUrls, setPdfUrls] = useState<Record<string, string>>({})
   const pdfUrlsRef = useRef<Record<string, string>>({})
 
@@ -53,15 +55,46 @@ export default function HomePage() {
     saveAtmKeywords(atmKeywords)
   }, [atmKeywords])
 
+  const includesSet = useMemo(() => new Set(manualIncludes), [manualIncludes])
+  const excludesSet = useMemo(() => new Set(manualExcludes), [manualExcludes])
+
   const assetTable = useMemo(
-    () => buildAssetMovementTable(passbooks, atmKeywords, overrides),
-    [passbooks, atmKeywords, overrides]
+    () =>
+      buildAssetMovementTable(passbooks, atmKeywords, {
+        manualOverrides: overrides,
+        manualIncludes: includesSet,
+        manualExcludes: excludesSet
+      }),
+    [passbooks, atmKeywords, overrides, includesSet, excludesSet]
   )
+
+  const includedTxIds = useMemo(() => {
+    const s = new Set<string>()
+    for (const row of assetTable.rows) {
+      for (const id of row.sourceTransactionIds) s.add(id)
+    }
+    return s
+  }, [assetTable])
+
+  const handleAddTx = (txId: string) => {
+    setManualExcludes((prev) => prev.filter((id) => id !== txId))
+    setManualIncludes((prev) => (prev.includes(txId) ? prev : [...prev, txId]))
+  }
+
+  const handleRemoveRow = (rowId: string) => {
+    const row = assetTable.rows.find((r) => r.id === rowId)
+    if (!row) return
+    const txIds = row.sourceTransactionIds
+    setManualIncludes((prev) => prev.filter((id) => !txIds.includes(id)))
+    setManualExcludes((prev) => Array.from(new Set([...prev, ...txIds])))
+  }
 
   const handleAnalyze = async () => {
     setAnalyzing(true)
     setPassbooks([])
     setOverrides({})
+    setManualIncludes([])
+    setManualExcludes([])
     for (const url of Object.values(pdfUrlsRef.current)) URL.revokeObjectURL(url)
     pdfUrlsRef.current = {}
     setPdfUrls({})
@@ -222,12 +255,19 @@ export default function HomePage() {
               onRemarksChange={(rowId, value) =>
                 setOverrides((prev) => ({ ...prev, [rowId]: { ...prev[rowId], remarks: value } }))
               }
+              onRemoveRow={handleRemoveRow}
             />
           ) : (
             (() => {
               const pb = passbooks.find((p) => p.passbookId === activeTab)
               return pb ? (
-                <PassbookEditor passbook={pb} pdfUrl={pdfUrls[pb.passbookId]} onChange={updatePassbook} />
+                <PassbookEditor
+                  passbook={pb}
+                  pdfUrl={pdfUrls[pb.passbookId]}
+                  includedTxIds={includedTxIds}
+                  onChange={updatePassbook}
+                  onAddTx={handleAddTx}
+                />
               ) : null
             })()
           )}

@@ -7,17 +7,22 @@ import { PdfViewer } from './PdfViewer'
 type Props = {
   passbook: ParsedPassbook
   pdfUrl?: string
+  includedTxIds?: Set<string>
   onChange: (next: ParsedPassbook) => void
+  onAddTx?: (txId: string) => void
 }
 
 const fmt = (n: number) => (n ? n.toLocaleString() : '')
 
-export function PassbookEditor({ passbook, pdfUrl, onChange }: Props) {
+export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAddTx }: Props) {
   const updateTx = (id: string, patch: Partial<Transaction>) => {
     onChange({
       ...passbook,
       transactions: passbook.transactions.map((tx) => (tx.id === id ? { ...tx, ...patch } : tx))
     })
+  }
+  const updatePurpose = (purpose: string) => {
+    onChange({ ...passbook, purpose })
   }
 
   const computedEnd = passbook.transactions.reduce(
@@ -48,6 +53,17 @@ export function PassbookEditor({ passbook, pdfUrl, onChange }: Props) {
         </div>
       </div>
 
+      <label className="block text-sm">
+        <span className="text-slate-500">用途（金融資産異動一覧表のヘッダに表示）</span>
+        <input
+          type="text"
+          value={passbook.purpose || ''}
+          onChange={(e) => updatePurpose(e.target.value)}
+          placeholder="例: 生活費、事業資金"
+          className="mt-1 w-full border border-slate-300 rounded px-2 py-1"
+        />
+      </label>
+
       <div className={`p-3 rounded text-sm ${balanceOk ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>
         <div>開始残高: {fmt(passbook.startBalance ?? 0)} 円</div>
         <div>終了残高（申告）: {fmt(declaredEnd)} 円</div>
@@ -68,8 +84,9 @@ export function PassbookEditor({ passbook, pdfUrl, onChange }: Props) {
       <div className="mb-3 flex-shrink-0">{meta}</div>
       <div className="flex-1 min-h-0 overflow-auto border rounded">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-700 text-white">
+          <thead className="bg-slate-700 text-white sticky top-0 z-10">
             <tr>
+              <th className="px-2 py-1 text-center" title="金融資産異動一覧表への計上">計上</th>
               <th className="px-2 py-1 text-left">日付</th>
               <th className="px-2 py-1 text-left">摘要</th>
               <th className="px-2 py-1 text-right">入金</th>
@@ -79,8 +96,30 @@ export function PassbookEditor({ passbook, pdfUrl, onChange }: Props) {
             </tr>
           </thead>
           <tbody>
-            {passbook.transactions.map((tx) => (
-              <tr key={tx.id} className="border-t hover:bg-slate-50">
+            {passbook.transactions.map((tx) => {
+              const isIncluded = includedTxIds?.has(tx.id) ?? false
+              return (
+              <tr key={tx.id} className={`border-t ${isIncluded ? 'bg-amber-50' : 'hover:bg-slate-50'}`}>
+                <td className="px-1 py-0.5 text-center">
+                  {isIncluded ? (
+                    <span
+                      className="inline-flex items-center justify-center w-7 h-6 rounded bg-amber-200 text-amber-900 font-bold text-xs"
+                      title="一覧表に計上中（一覧表側で削除できます）"
+                    >
+                      ✓
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onAddTx?.(tx.id)}
+                      disabled={!onAddTx}
+                      className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-slate-300"
+                      title="金融資産異動一覧表に追加"
+                    >
+                      ＋追加
+                    </button>
+                  )}
+                </td>
                 <td className="px-1 py-0.5">
                   <input
                     type="date"
@@ -131,7 +170,8 @@ export function PassbookEditor({ passbook, pdfUrl, onChange }: Props) {
                   />
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -139,8 +179,8 @@ export function PassbookEditor({ passbook, pdfUrl, onChange }: Props) {
   )
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[calc(100vh-220px)] min-h-[600px]">
-      <div className="min-h-0 h-full">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ height: '80vh', minHeight: 600 }}>
+      <div className="h-full min-h-0">
         {pdfUrl ? (
           <PdfViewer pdfUrl={pdfUrl} />
         ) : (
@@ -149,7 +189,7 @@ export function PassbookEditor({ passbook, pdfUrl, onChange }: Props) {
           </div>
         )}
       </div>
-      <div className="min-h-0 h-full">{dataPanel}</div>
+      <div className="h-full min-h-0">{dataPanel}</div>
     </div>
   )
 }
