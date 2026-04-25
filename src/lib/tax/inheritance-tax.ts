@@ -171,6 +171,13 @@ export function calculateInheritanceTax(caseData: Case): TaxCalculationResult {
       ? Math.floor(totalInheritanceTax * (taxablePrice / totalAcquired))
       : 0;
 
+    // 2割加算判定
+    // 配偶者・一親等の血族（子・親）以外は2割加算
+    // 代襲相続人（孫）は加算なし、養子は原則加算なし
+    const isFirstDegree = ['spouse', 'child', 'adopted', 'grandchild_proxy', 'parent'].includes(heir.relationship);
+    const surchargeRate = isFirstDegree ? 0 : 0.2;
+    const surchargeAmount = Math.floor(allocatedTax * surchargeRate);
+
     // 配偶者控除
     const spouseDeduction = heir.relationship === 'spouse'
       ? calculateSpouseDeduction(
@@ -188,9 +195,12 @@ export function calculateInheritanceTax(caseData: Case): TaxCalculationResult {
     // 障害者控除
     const disabilityDeduction = calculateDisabilityDeduction(heir, referenceDate);
 
-    // 最終税額
+    // 暦年課税の贈与税額控除（将来実装用、現在は0）
+    const giftTaxCredit = 0;
+
+    // 最終税額 = 按分税額 + 2割加算 - 各種控除
     const finalTax = Math.max(0,
-      allocatedTax - spouseDeduction - minorDeduction - disabilityDeduction
+      allocatedTax + surchargeAmount - spouseDeduction - minorDeduction - disabilityDeduction - giftTaxCredit
     );
 
     return {
@@ -202,9 +212,12 @@ export function calculateInheritanceTax(caseData: Case): TaxCalculationResult {
       legalShareAmount: legalData.amount,
       taxOnLegalShare: legalData.tax,
       allocatedTax,
+      surchargeRate,
+      surchargeAmount,
       spouseDeduction,
       minorDeduction,
       disabilityDeduction,
+      giftTaxCredit,
       finalTax,
     };
   });

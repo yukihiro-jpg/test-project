@@ -385,9 +385,12 @@ export interface HeirTaxDetail {
   legalShareAmount: number;           // 法定相続分による取得金額
   taxOnLegalShare: number;            // 法定相続分に対する税額
   allocatedTax: number;               // 按分税額
+  surchargeRate: number;              // 2割加算率（0 or 0.2）
+  surchargeAmount: number;            // 2割加算額
   spouseDeduction: number;            // 配偶者控除
   minorDeduction: number;             // 未成年者控除
   disabilityDeduction: number;        // 障害者控除
+  giftTaxCredit: number;              // 暦年課税の贈与税額控除
   finalTax: number;                   // 最終税額
 }
 

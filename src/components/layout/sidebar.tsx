@@ -96,6 +96,7 @@ export function Sidebar({ caseId, onClose }: { caseId: string; onClose?: () => v
     { label: '相続税シミュレーション', href: `${base}/simulation`, icon: <Calculator size={18} /> },
     { label: '二次相続シミュレーション', href: `${base}/secondary-inheritance`, icon: <ArrowRightLeft size={18} /> },
     { label: '節税シミュレーション', href: `${base}/tax-saving`, icon: <TrendingDown size={18} /> },
+    { label: '報告書プレビュー', href: `${base}/report`, icon: <FileText size={18} /> },
     { label: '書類出力', href: `${base}/export`, icon: <Download size={18} /> },
   ];
 

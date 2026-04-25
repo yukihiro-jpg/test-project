@@ -5,7 +5,7 @@ import { useCaseStore } from '@/lib/store/case-store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CurrencyInput, formatCurrency, formatManyen } from '@/components/common/currency-input';
-import { calculateTotalAssetValue } from '@/lib/tax/inheritance-tax';
+import { calculateTotalAssetValue, calculateInheritanceTax } from '@/lib/tax/inheritance-tax';
 import {
   calculateLandValue,
   calculateBuildingValue,
@@ -426,6 +426,37 @@ export default function DivisionPage() {
               );
             })}
           </div>
+
+          {/* 相続税額の自動表示 */}
+          {(() => {
+            try {
+              const taxResult = calculateInheritanceTax(currentCase);
+              const totalTax = taxResult.heirTaxDetails.reduce((s, d) => s + d.finalTax, 0);
+              return (
+                <div className="mt-4 pt-4 border-t border-blue-300">
+                  <div className="flex flex-wrap gap-6 text-sm">
+                    <div>
+                      <p className="text-gray-600">相続税の総額</p>
+                      <p className="font-bold text-lg text-blue-800">{formatManyen(taxResult.totalInheritanceTax)}</p>
+                    </div>
+                    {taxResult.heirTaxDetails.map(d => (
+                      <div key={d.heirId} className="border-l border-blue-300 pl-4">
+                        <p className="text-gray-600 text-xs">{d.heirName} 納付税額</p>
+                        <p className="font-semibold text-blue-700">
+                          {formatManyen(d.finalTax)}
+                          {d.surchargeAmount > 0 && <span className="text-xs text-red-600 ml-1">（2割加算含）</span>}
+                        </p>
+                      </div>
+                    ))}
+                    <div className="border-l border-blue-300 pl-4">
+                      <p className="text-gray-600 text-xs">合計納付税額</p>
+                      <p className="font-bold text-lg text-red-700">{formatManyen(totalTax)}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            } catch { return null; }
+          })()}
         </CardContent>
       </Card>
 
