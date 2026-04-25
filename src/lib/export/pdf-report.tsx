@@ -9,10 +9,10 @@ import { RELATIONSHIP_LABELS } from '@/types';
 import { toWareki } from '@/lib/dates/wareki';
 
 // 日本語フォント登録
-Font.register({
+try { Font.register({
   family: 'NotoSansJP',
   src: '/fonts/NotoSansJP-Regular.ttf',
-});
+}); } catch(e) { console.warn('Font registration failed:', e); }
 
 // ─── Design tokens ───────────────────────────────────────────
 const NAVY = '#1F4E79';
