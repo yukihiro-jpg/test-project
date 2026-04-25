@@ -39,8 +39,24 @@ function buildPrompt(opts: { startDate: string; endDate: string; bankName?: stri
 【抽出対象列】取引日、摘要、出金額、入金額、残高 の5項目のみ。
 それ以外（内訳、区分、振り金、預り金等）は無視してください。
 
+【列名のバリエーション】通帳によって列名が異なります。以下を同義として扱ってください。
+- 入金 = お預り金額 = お預入額 = 預入金額 = 受入金額 = 振込・入金 = 預入
+- 出金 = お支払金額 = お引出額 = 引出金額 = 支払金額 = 振替・出金 = 引出
+- 残高 = 差引残高 = 現在高 = 残額
+- 列の左右の並び順は通帳によって異なります。必ず**列ヘッダの文字**で入金/出金を判別し、位置で判断しないでください。
+
 【期間フィルタ】${startDate} 〜 ${endDate} の範囲に含まれる取引のみを抽出してください。範囲外は除外。
 ただし、開始残高（${startDate}直前または当日の残高）と終了残高（${endDate}時点または最終取引後の残高）はトップレベルに含めてください。
+
+【日付の解釈ルール（極めて重要）】
+- 通帳の日付は「YY-MM-DD」「YY.MM.DD」「YY/MM/DD」のように**2桁の年**で印字されることが頻繁にあります（例: 07-12-29）。これは西暦ではなく**和暦の年**です。
+- 2桁年は次の優先順位で和暦に解決してください:
+  1. **令和**（令和元年 = 2019年5月1日以降）として解釈し、指定期間 ${startDate} 〜 ${endDate} に収まるか確認
+  2. 収まらなければ**平成**（平成元年 = 1989年1月8日〜2019年4月30日）
+  3. それでも収まらなければ**昭和**
+- 解決した結果は必ず西暦4桁の "YYYY/MM/DD" 形式で出力してください。
+- 例: 期間が 2025-01-01〜2026-04-30 で「07-12-29」と印字されている → 令和7年12月29日 → "2025/12/29"
+- 例: 期間が 1995-01-01〜1996-12-31 で「07-12-29」と印字されている → 平成7年12月29日 → "1995/12/29"
 
 【出力形式】以下のJSONのみを返してください。説明文・コードブロックは不要です。
 
@@ -66,9 +82,9 @@ function buildPrompt(opts: { startDate: string; endDate: string; bankName?: stri
 - 残高は「前の行の残高 + 入金額 - 出金額」と一致するはずです。一致しない場合は画像をよく確認し、正確な数値を読み取ってください。
 - それでも不一致の場合は備考に「読取不確実」と記載してください。
 - 金額のカンマ・全角数字・△記号（マイナス）・▲記号（マイナス）に注意してください。
+- 残高欄に印字される「*」「＊」「¥」「￥」「\\」「※」などの**記号は除去**して、純粋な数値だけを返してください（例: "*15,896,267" → 15896267）。
 - 数値は半角数字で、カンマなしで返してください。
-- 年が省略されている場合は他の情報から推測してください（指定期間内に収まるよう推測）。
-- ヘッダー行・タイトル行・小計行は含めないでください。
+- ヘッダー行・タイトル行・小計行・ページ番号行は含めないでください。
 - 取引が0件であっても "取引": [] を返してください。`
 }
 
@@ -77,15 +93,17 @@ function parseNumber(value: number | string | undefined): number {
   if (!value) return 0
   const cleaned = String(value)
     .replace(/[,，]/g, '')
-    .replace(/[△▲−]/g, '-')
+    .replace(/[△▲−ー―]/g, '-')
     .replace(/[０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
+    .replace(/[*＊¥￥\\※\s　]/g, '')
+    .replace(/円/g, '')
     .trim()
   const num = Number(cleaned)
   return isNaN(num) ? 0 : num
 }
 
 function isInRange(date: string, start: string, end: string): boolean {
-  const d = parseLooseDate(date)
+  const d = parseLooseDate(date, { rangeStart: start, rangeEnd: end })
   const s = parseLooseDate(start)
   const e = parseLooseDate(end)
   if (!d || !s || !e) return true
@@ -136,16 +154,24 @@ async function callGemini(pdfBase64: string, prompt: string): Promise<RawAnalysi
   return JSON.parse(text) as RawAnalysis
 }
 
-function rowsToTransactions(rows: RawRow[], passbookId: string): Transaction[] {
-  return rows.map((r, idx) => ({
-    id: `${passbookId}-tx-${idx}`,
-    date: toIsoDate(r.年月日 || '') || (r.年月日 || ''),
-    description: (r.摘要 || '').trim(),
-    deposit: parseNumber(r.入金額),
-    withdrawal: parseNumber(r.出金額),
-    balance: parseNumber(r.残高),
-    remarks: (r.備考 || '').trim()
-  }))
+function rowsToTransactions(
+  rows: RawRow[],
+  passbookId: string,
+  range: { startDate: string; endDate: string }
+): Transaction[] {
+  return rows.map((r, idx) => {
+    const parsed = parseLooseDate(r.年月日 || '', { rangeStart: range.startDate, rangeEnd: range.endDate })
+    const iso = parsed ? toIsoDate(parsed) : ''
+    return {
+      id: `${passbookId}-tx-${idx}`,
+      date: iso || (r.年月日 || ''),
+      description: (r.摘要 || '').trim(),
+      deposit: parseNumber(r.入金額),
+      withdrawal: parseNumber(r.出金額),
+      balance: parseNumber(r.残高),
+      remarks: (r.備考 || '').trim()
+    }
+  })
 }
 
 export async function analyzePassbook(opts: {
@@ -243,7 +269,7 @@ JSONのみを返してください。`
     label,
     startBalance: startBalance,
     endBalance: parseNumber(analysis.終了残高),
-    transactions: rowsToTransactions(rows, passbookId),
+    transactions: rowsToTransactions(rows, passbookId, { startDate, endDate }),
     warnings
   }
 }

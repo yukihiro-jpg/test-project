@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { UploadForm, type UploadItem } from '@/components/UploadForm'
 import { PassbookEditor } from '@/components/PassbookEditor'
 import { AssetMovementView } from '@/components/AssetMovementView'
@@ -36,9 +36,17 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<string>('movement')
   const [atmKeywords, setAtmKeywords] = useState<string[]>(DEFAULT_ATM_KEYWORDS)
   const [overrides, setOverrides] = useState<Record<string, Partial<AssetMovementRow>>>({})
+  const [pdfUrls, setPdfUrls] = useState<Record<string, string>>({})
+  const pdfUrlsRef = useRef<Record<string, string>>({})
 
   useEffect(() => {
     setAtmKeywords(loadAtmKeywords())
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      for (const url of Object.values(pdfUrlsRef.current)) URL.revokeObjectURL(url)
+    }
   }, [])
 
   useEffect(() => {
@@ -54,9 +62,13 @@ export default function HomePage() {
     setAnalyzing(true)
     setPassbooks([])
     setOverrides({})
+    for (const url of Object.values(pdfUrlsRef.current)) URL.revokeObjectURL(url)
+    pdfUrlsRef.current = {}
+    setPdfUrls({})
     setProgress(items.map((it) => ({ fileName: it.file.name, status: 'pending' })))
 
     const results: ParsedPassbook[] = []
+    const newUrls: Record<string, string> = {}
     for (let i = 0; i < items.length; i++) {
       const it = items[i]
       setProgress((p) => p.map((e, idx) => (idx === i ? { ...e, status: 'analyzing' } : e)))
@@ -83,6 +95,8 @@ export default function HomePage() {
         }
         const data = await res.json()
         results.push(data.passbook)
+        const url = URL.createObjectURL(it.file)
+        newUrls[data.passbook.passbookId] = url
         setProgress((p) => p.map((e, idx) => (idx === i ? { ...e, status: 'done' } : e)))
       } catch (err) {
         setProgress((p) =>
@@ -92,6 +106,8 @@ export default function HomePage() {
     }
 
     setPassbooks(results)
+    pdfUrlsRef.current = newUrls
+    setPdfUrls(newUrls)
     if (results.length > 0) setActiveTab('movement')
     setAnalyzing(false)
   }
@@ -210,7 +226,9 @@ export default function HomePage() {
           ) : (
             (() => {
               const pb = passbooks.find((p) => p.passbookId === activeTab)
-              return pb ? <PassbookEditor passbook={pb} onChange={updatePassbook} /> : null
+              return pb ? (
+                <PassbookEditor passbook={pb} pdfUrl={pdfUrls[pb.passbookId]} onChange={updatePassbook} />
+              ) : null
             })()
           )}
         </section>

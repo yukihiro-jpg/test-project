@@ -2,15 +2,17 @@
 
 import type { ParsedPassbook, Transaction } from '@/types'
 import { toWarekiShort } from '@/lib/wareki'
+import { PdfViewer } from './PdfViewer'
 
 type Props = {
   passbook: ParsedPassbook
+  pdfUrl?: string
   onChange: (next: ParsedPassbook) => void
 }
 
 const fmt = (n: number) => (n ? n.toLocaleString() : '')
 
-export function PassbookEditor({ passbook, onChange }: Props) {
+export function PassbookEditor({ passbook, pdfUrl, onChange }: Props) {
   const updateTx = (id: string, patch: Partial<Transaction>) => {
     onChange({
       ...passbook,
@@ -25,9 +27,9 @@ export function PassbookEditor({ passbook, onChange }: Props) {
   const declaredEnd = passbook.endBalance ?? 0
   const balanceOk = Math.abs(computedEnd - declaredEnd) < 0.5
 
-  return (
+  const meta = (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+      <div className="grid grid-cols-2 gap-2 text-sm">
         <div>
           <span className="text-slate-500">銀行名</span>
           <div className="font-medium">{passbook.bankName || '-'}</div>
@@ -58,9 +60,14 @@ export function PassbookEditor({ passbook, onChange }: Props) {
           </ul>
         )}
       </div>
+    </div>
+  )
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm border">
+  const dataPanel = (
+    <div className="flex flex-col h-full min-h-0">
+      <div className="mb-3 flex-shrink-0">{meta}</div>
+      <div className="flex-1 min-h-0 overflow-auto border rounded">
+        <table className="min-w-full text-sm">
           <thead className="bg-slate-700 text-white">
             <tr>
               <th className="px-2 py-1 text-left">日付</th>
@@ -128,6 +135,21 @@ export function PassbookEditor({ passbook, onChange }: Props) {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[calc(100vh-220px)] min-h-[600px]">
+      <div className="min-h-0 h-full">
+        {pdfUrl ? (
+          <PdfViewer pdfUrl={pdfUrl} />
+        ) : (
+          <div className="h-full flex items-center justify-center text-slate-400 border rounded bg-slate-50">
+            PDFが読み込まれていません
+          </div>
+        )}
+      </div>
+      <div className="min-h-0 h-full">{dataPanel}</div>
     </div>
   )
 }

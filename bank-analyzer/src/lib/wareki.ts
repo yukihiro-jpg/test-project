@@ -38,7 +38,7 @@ export function toWarekiShort(input: string | Date): string {
   return date.toLocaleDateString('ja-JP')
 }
 
-export function parseLooseDate(input: string): Date | null {
+export function parseLooseDate(input: string, opts?: { rangeStart?: string; rangeEnd?: string }): Date | null {
   if (!input) return null
   const trimmed = input.trim()
 
@@ -60,6 +60,31 @@ export function parseLooseDate(input: string): Date | null {
   const isoMatch = trimmed.match(/^(\d{4})[\-/.年]\s*(\d{1,2})[\-/.月]\s*(\d{1,2})/)
   if (isoMatch) {
     return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]))
+  }
+
+  const twoDigitMatch = trimmed.match(/^(\d{1,2})[\-/.年]\s*(\d{1,2})[\-/.月]\s*(\d{1,2})/)
+  if (twoDigitMatch) {
+    const yy = Number(twoDigitMatch[1])
+    const mm = Number(twoDigitMatch[2]) - 1
+    const dd = Number(twoDigitMatch[3])
+    const rangeStart = opts?.rangeStart ? new Date(opts.rangeStart) : null
+    const rangeEnd = opts?.rangeEnd ? new Date(opts.rangeEnd) : null
+
+    const candidates: Date[] = []
+    for (const era of ERAS) {
+      const year = era.start.getFullYear() + yy - 1
+      const cand = new Date(year, mm, dd)
+      if (cand.getTime() >= era.start.getTime()) candidates.push(cand)
+    }
+
+    if (rangeStart && rangeEnd && !isNaN(rangeStart.getTime()) && !isNaN(rangeEnd.getTime())) {
+      const inRange = candidates.find(
+        (c) => c.getTime() >= rangeStart.getTime() && c.getTime() <= rangeEnd.getTime()
+      )
+      if (inRange) return inRange
+    }
+
+    return candidates[0] || null
   }
 
   const fallback = new Date(trimmed)
