@@ -144,8 +144,11 @@ async function callGemini(pdfBase64: string, prompt: string, label = ''): Promis
     temperature: 0.1,
     responseMimeType: 'application/json'
   }
-  // gemini-2.5-flash の思考プロセスを無効化して高速化（対応モデルのみ）
-  if (process.env.GEMINI_DISABLE_THINKING !== 'false') {
+  // 注意: gemini-2.5-flash は OCR にも thinking を使うため、
+  // thinkingBudget=0 にすると PDF を読まずにテンプレを返してくる。
+  // 既定では thinking 有効のまま。明示的に OFF にしたい場合のみ
+  // .env.local に GEMINI_DISABLE_THINKING=true を設定する。
+  if (process.env.GEMINI_DISABLE_THINKING === 'true') {
     generationConfig.thinkingConfig = { thinkingBudget: 0 }
   }
   const model = genAI.getGenerativeModel({
