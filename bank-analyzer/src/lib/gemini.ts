@@ -1,8 +1,10 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { PDFDocument } from 'pdf-lib'
 import type { ParsedPassbook, Transaction } from '@/types'
 import { parseLooseDate, toIsoDate } from './wareki'
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+const PAGE_PARALLELISM = Number(process.env.GEMINI_PAGE_PARALLELISM || '5')
 
 type RawRow = {
   銀行名?: string
@@ -31,10 +33,20 @@ function getClient() {
   return new GoogleGenerativeAI(apiKey)
 }
 
-function buildPrompt(opts: { startDate: string; endDate: string; bankName?: string; branchName?: string; accountNumber?: string }) {
-  const { startDate, endDate, bankName, branchName, accountNumber } = opts
+function buildPrompt(opts: {
+  startDate: string
+  endDate: string
+  bankName?: string
+  branchName?: string
+  accountNumber?: string
+  pageInfo?: { current: number; total: number }
+}) {
+  const { startDate, endDate, bankName, branchName, accountNumber, pageInfo } = opts
+  const pageHeader = pageInfo
+    ? `※このPDFは元の通帳の **${pageInfo.current} / ${pageInfo.total} ページ目** だけを抜き出したものです。このページに記載されている取引のみを抽出してください。\n`
+    : ''
   return `あなたは日本の銀行通帳・取引明細PDFを正確に読み取るOCRアシスタントです。
-以下のPDFから取引明細を抽出してください${bankName ? `（${bankName}${branchName ? ' ' + branchName : ''}）` : ''}。
+${pageHeader}以下のPDFから取引明細を抽出してください${bankName ? `（${bankName}${branchName ? ' ' + branchName : ''}）` : ''}。
 
 【抽出対象列】取引日、摘要、出金額、入金額、残高 の5項目のみ。
 それ以外（内訳、区分、振り金、預り金等）は無視してください。
@@ -55,8 +67,6 @@ function buildPrompt(opts: { startDate: string; endDate: string; bankName?: stri
   2. 収まらなければ**平成**（平成元年 = 1989年1月8日〜2019年4月30日）
   3. それでも収まらなければ**昭和**
 - 解決した結果は必ず西暦4桁の "YYYY/MM/DD" 形式で出力してください。
-- 例: 期間が 2025-01-01〜2026-04-30 で「07-12-29」と印字されている → 令和7年12月29日 → "2025/12/29"
-- 例: 期間が 1995-01-01〜1996-12-31 で「07-12-29」と印字されている → 平成7年12月29日 → "1995/12/29"
 
 【出力形式】以下のJSONのみを返してください。説明文・コードブロックは不要です。
 
@@ -64,8 +74,8 @@ function buildPrompt(opts: { startDate: string; endDate: string; bankName?: stri
   "銀行名": "${bankName || ''}",
   "支店名": "${branchName || ''}",
   "口座番号": "${accountNumber || ''}",
-  "開始残高": <number, 期間開始時点の残高>,
-  "終了残高": <number, 期間終了時点の残高>,
+  "開始残高": <number, このページの最初の取引の直前の残高>,
+  "終了残高": <number, このページの最後の取引後の残高>,
   "取引": [
     {
       "年月日": "YYYY/MM/DD",
@@ -122,9 +132,7 @@ function verifyBalances(
     const wd = parseNumber(r.出金額)
     const bal = parseNumber(r.残高)
     const expected = prev + dep - wd
-    if (Math.abs(expected - bal) > 0.5) {
-      mismatches.push(i)
-    }
+    if (Math.abs(expected - bal) > 0.5) mismatches.push(i)
     prev = bal
   }
   return { ok: mismatches.length === 0, mismatches, expectedFinalBalance: prev }
@@ -136,7 +144,11 @@ async function callGemini(pdfBase64: string, prompt: string): Promise<RawAnalysi
     model: MODEL,
     generationConfig: {
       temperature: 0.1,
-      responseMimeType: 'application/json'
+      responseMimeType: 'application/json',
+      // gemini-2.5-flash の思考プロセスを無効化して高速化
+      // （構造抽出タスクには思考は不要）
+      // @ts-expect-error thinkingConfig は SDK 型定義に未追加
+      thinkingConfig: { thinkingBudget: 0 }
     }
   })
 
@@ -157,21 +169,99 @@ async function callGemini(pdfBase64: string, prompt: string): Promise<RawAnalysi
 function rowsToTransactions(
   rows: RawRow[],
   passbookId: string,
-  range: { startDate: string; endDate: string }
+  range: { startDate: string; endDate: string },
+  pageNumber?: number
 ): Transaction[] {
   return rows.map((r, idx) => {
     const parsed = parseLooseDate(r.年月日 || '', { rangeStart: range.startDate, rangeEnd: range.endDate })
     const iso = parsed ? toIsoDate(parsed) : ''
     return {
-      id: `${passbookId}-tx-${idx}`,
+      id: `${passbookId}-p${pageNumber ?? 0}-tx-${idx}`,
       date: iso || (r.年月日 || ''),
       description: (r.摘要 || '').trim(),
       deposit: parseNumber(r.入金額),
       withdrawal: parseNumber(r.出金額),
       balance: parseNumber(r.残高),
-      remarks: (r.備考 || '').trim()
+      remarks: (r.備考 || '').trim(),
+      pageNumber
     }
   })
+}
+
+async function splitPdfPerPage(pdfBuf: Buffer): Promise<{ index: number; base64: string }[]> {
+  const src = await PDFDocument.load(pdfBuf, { ignoreEncryption: true })
+  const total = src.getPageCount()
+  const out: { index: number; base64: string }[] = []
+  for (let i = 0; i < total; i++) {
+    const dest = await PDFDocument.create()
+    const [page] = await dest.copyPages(src, [i])
+    dest.addPage(page)
+    const bytes = await dest.save()
+    out.push({ index: i + 1, base64: Buffer.from(bytes).toString('base64') })
+  }
+  return out
+}
+
+async function analyzePage(
+  pdfBase64: string,
+  pageInfo: { current: number; total: number },
+  opts: {
+    startDate: string
+    endDate: string
+    bankName?: string
+    branchName?: string
+    accountNumber?: string
+  }
+): Promise<{ analysis: RawAnalysis; warnings: string[] }> {
+  const prompt = buildPrompt({ ...opts, pageInfo })
+  const warnings: string[] = []
+
+  let analysis: RawAnalysis
+  try {
+    analysis = await callGemini(pdfBase64, prompt)
+  } catch (err) {
+    throw new Error(`Gemini API 呼び出しエラー（${pageInfo.current}p）: ${(err as Error).message}`)
+  }
+
+  const rows = analysis.取引 || []
+  const startBalance = parseNumber(analysis.開始残高)
+  const declaredEnd = parseNumber(analysis.終了残高)
+  const verification = verifyBalances(startBalance, rows)
+
+  if (!verification.ok || (rows.length > 0 && Math.abs(verification.expectedFinalBalance - declaredEnd) > 0.5)) {
+    const retryPrompt = `${prompt}
+
+【再解析の指示】
+前回の読み取り結果は残高の整合性が取れていません（不一致行: ${verification.mismatches.length}件）。
+PDFを再度確認して正しい数値で出力し直してください。
+前回結果: ${JSON.stringify(analysis).slice(0, 4000)}
+
+JSONのみを返してください。`
+    try {
+      const retry = await callGemini(pdfBase64, retryPrompt)
+      const retryRows = retry.取引 || []
+      const retryVerification = verifyBalances(parseNumber(retry.開始残高), retryRows)
+      if (retryVerification.ok) {
+        return { analysis: retry, warnings }
+      }
+      warnings.push(
+        `${pageInfo.current}ページ目: 残高不一致が${retryVerification.mismatches.length}行残っています。`
+      )
+      for (const idx of retryVerification.mismatches) {
+        if (retryRows[idx]) {
+          retryRows[idx].備考 = ((retryRows[idx].備考 || '') + ' 残高不一致').trim()
+        }
+      }
+      return { analysis: retry, warnings }
+    } catch (err) {
+      warnings.push(`${pageInfo.current}ページ目 再解析失敗: ${(err as Error).message}`)
+      for (const idx of verification.mismatches) {
+        if (rows[idx]) rows[idx].備考 = ((rows[idx].備考 || '') + ' 残高不一致').trim()
+      }
+    }
+  }
+
+  return { analysis, warnings }
 }
 
 export async function analyzePassbook(opts: {
@@ -185,92 +275,138 @@ export async function analyzePassbook(opts: {
   endDate: string
   pdfBase64: string
 }): Promise<ParsedPassbook> {
-  const { passbookId, fileName, label, bankName, branchName, accountNumber, startDate, endDate, pdfBase64 } = opts
+  const {
+    passbookId,
+    fileName,
+    label,
+    bankName,
+    branchName,
+    accountNumber,
+    startDate,
+    endDate,
+    pdfBase64
+  } = opts
 
-  const prompt = buildPrompt({ startDate, endDate, bankName, branchName, accountNumber })
   const warnings: string[] = []
 
-  let analysis: RawAnalysis
+  const pdfBuf = Buffer.from(pdfBase64, 'base64')
+  let pages: { index: number; base64: string }[] = []
   try {
-    analysis = await callGemini(pdfBase64, prompt)
+    pages = await splitPdfPerPage(pdfBuf)
   } catch (err) {
-    throw new Error(`Gemini API 呼び出しエラー: ${(err as Error).message}`)
+    warnings.push(`PDF分割失敗、単一処理にフォールバック: ${(err as Error).message}`)
   }
 
-  let rows = (analysis.取引 || []).filter((r) => isInRange(r.年月日 || '', startDate, endDate))
-  let startBalance = parseNumber(analysis.開始残高)
-  const declaredEnd = parseNumber(analysis.終了残高)
-
-  let verification = verifyBalances(startBalance, rows)
-
-  if (!verification.ok || Math.abs(verification.expectedFinalBalance - declaredEnd) > 0.5) {
-    const retryPrompt = `${prompt}
-
-【再解析の指示】
-前回の読み取り結果は以下です。残高の整合性が取れていません（不一致行: ${verification.mismatches.length}件、計算上の終了残高: ${verification.expectedFinalBalance}, 申告された終了残高: ${declaredEnd}）。
-前回の結果を踏まえ、PDFを再度確認して正しい数値で出力し直してください。
-不一致行のインデックス: ${JSON.stringify(verification.mismatches)}
-前回結果: ${JSON.stringify(analysis).slice(0, 6000)}
-
-JSONのみを返してください。`
-
-    try {
-      const retry = await callGemini(pdfBase64, retryPrompt)
-      const retryRows = (retry.取引 || []).filter((r) => isInRange(r.年月日 || '', startDate, endDate))
-      const retryStart = parseNumber(retry.開始残高)
-      const retryVerification = verifyBalances(retryStart, retryRows)
-      const retryDeclaredEnd = parseNumber(retry.終了残高)
-
-      if (
-        retryVerification.ok &&
-        Math.abs(retryVerification.expectedFinalBalance - retryDeclaredEnd) <= 0.5
-      ) {
-        analysis = retry
-        rows = retryRows
-        startBalance = retryStart
-        verification = retryVerification
-      } else {
-        warnings.push(
-          `残高不一致が残っています（${retryVerification.mismatches.length}行）。手動で確認してください。`
-        )
-        for (const idx of retryVerification.mismatches) {
-          if (retryRows[idx]) {
-            retryRows[idx].備考 = ((retryRows[idx].備考 || '') + ' 残高不一致').trim()
-          }
-        }
-        analysis = retry
-        rows = retryRows
-        startBalance = retryStart
-        verification = retryVerification
-      }
-    } catch (err) {
-      warnings.push(`再解析失敗: ${(err as Error).message}`)
-      for (const idx of verification.mismatches) {
-        if (rows[idx]) {
-          rows[idx].備考 = ((rows[idx].備考 || '') + ' 残高不一致').trim()
-        }
-      }
+  // ページ分割できない/1ページしかない場合は丸ごと1回呼ぶ
+  if (pages.length <= 1) {
+    const { analysis, warnings: w } = await analyzePage(
+      pdfBase64,
+      { current: 1, total: 1 },
+      { startDate, endDate, bankName, branchName, accountNumber }
+    )
+    warnings.push(...w)
+    const rows = (analysis.取引 || []).filter((r) => isInRange(r.年月日 || '', startDate, endDate))
+    return {
+      passbookId,
+      fileName,
+      bankName: analysis.銀行名 || bankName || '',
+      branchName: analysis.支店名 || branchName || '',
+      accountNumber: analysis.口座番号 || accountNumber || '',
+      label,
+      purpose: '',
+      startBalance: parseNumber(analysis.開始残高),
+      endBalance: parseNumber(analysis.終了残高),
+      transactions: rowsToTransactions(rows, passbookId, { startDate, endDate }, 1),
+      warnings
     }
   }
 
-  const finalDeclaredEnd = parseNumber(analysis.終了残高)
-  if (Math.abs(verification.expectedFinalBalance - finalDeclaredEnd) > 0.5) {
-    warnings.push(
-      `期間全体の終了残高が一致しません（計算上: ${verification.expectedFinalBalance.toLocaleString()}, 申告: ${finalDeclaredEnd.toLocaleString()}）`
-    )
+  // ページ並列処理
+  const total = pages.length
+  type PageResult = {
+    page: number
+    analysis: RawAnalysis
+    warnings: string[]
   }
+  const results: PageResult[] = new Array(total)
+  let cursor = 0
+  const workers = Array.from({ length: Math.min(PAGE_PARALLELISM, total) }, async () => {
+    while (cursor < pages.length) {
+      const my = cursor++
+      const p = pages[my]
+      try {
+        const r = await analyzePage(
+          p.base64,
+          { current: p.index, total },
+          { startDate, endDate, bankName, branchName, accountNumber }
+        )
+        results[my] = { page: p.index, analysis: r.analysis, warnings: r.warnings }
+      } catch (err) {
+        warnings.push(`${p.index}ページ目の解析失敗: ${(err as Error).message}`)
+        results[my] = { page: p.index, analysis: { 取引: [] }, warnings: [] }
+      }
+    }
+  })
+  await Promise.all(workers)
+
+  // ページ間で銀行名・口座番号を補完（最初に値があったページから）
+  const inferredBank = results.find((r) => r.analysis.銀行名)?.analysis.銀行名 || bankName || ''
+  const inferredBranch = results.find((r) => r.analysis.支店名)?.analysis.支店名 || branchName || ''
+  const inferredAccount = results.find((r) => r.analysis.口座番号)?.analysis.口座番号 || accountNumber || ''
+
+  // 全ページの取引を結合（ページ番号付き）
+  const allTransactions: Transaction[] = []
+  let firstStart: number | null = null
+  let lastEnd: number | null = null
+  let lastPageEnd: number | null = null
+
+  for (const r of results) {
+    if (!r) continue
+    warnings.push(...r.warnings)
+    const pageRows = (r.analysis.取引 || []).filter((row) =>
+      isInRange(row.年月日 || '', startDate, endDate)
+    )
+    const pageStart = parseNumber(r.analysis.開始残高)
+    const pageEnd = parseNumber(r.analysis.終了残高)
+
+    if (firstStart === null && pageStart) firstStart = pageStart
+    if (pageRows.length > 0) lastEnd = pageEnd
+
+    // ページ境界の残高接続チェック
+    if (lastPageEnd !== null && pageStart && Math.abs(lastPageEnd - pageStart) > 0.5) {
+      warnings.push(
+        `${r.page}ページ目の開始残高(${pageStart.toLocaleString()})が前ページ終了残高(${lastPageEnd.toLocaleString()})と一致しません`
+      )
+    }
+    if (pageEnd) lastPageEnd = pageEnd
+
+    allTransactions.push(...rowsToTransactions(pageRows, passbookId, { startDate, endDate }, r.page))
+  }
+
+  // 取引を日付順に整列（ページ並列で順番が乱れないよう保険）
+  allTransactions.sort((a, b) => {
+    const da = parseLooseDate(a.date)?.getTime() ?? 0
+    const db = parseLooseDate(b.date)?.getTime() ?? 0
+    if (da !== db) return da - db
+    return (a.pageNumber ?? 0) - (b.pageNumber ?? 0)
+  })
+
+  // ID重複しないよう振り直し
+  allTransactions.forEach((tx, i) => {
+    tx.id = `${passbookId}-tx-${i}`
+  })
 
   return {
     passbookId,
     fileName,
-    bankName: analysis.銀行名 || bankName || '',
-    branchName: analysis.支店名 || branchName || '',
-    accountNumber: analysis.口座番号 || accountNumber || '',
+    bankName: inferredBank,
+    branchName: inferredBranch,
+    accountNumber: inferredAccount,
     label,
     purpose: '',
-    startBalance: startBalance,
-    endBalance: parseNumber(analysis.終了残高),
-    transactions: rowsToTransactions(rows, passbookId, { startDate, endDate }),
+    startBalance: firstStart,
+    endBalance: lastEnd,
+    transactions: allTransactions,
     warnings
   }
 }

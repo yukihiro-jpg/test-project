@@ -6,6 +6,7 @@ export type Transaction = {
   withdrawal: number
   balance: number
   remarks?: string
+  pageNumber?: number
 }
 
 export type ParsedPassbook = {
