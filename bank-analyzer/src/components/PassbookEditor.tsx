@@ -1,7 +1,8 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import type { ParsedPassbook, Transaction } from '@/types'
-import { PdfViewer } from './PdfViewer'
+import { PdfViewer, type PdfViewerHandle } from './PdfViewer'
 import { NumberInput, WarekiInput } from './FormattedInputs'
 
 type Props = {
@@ -14,7 +15,64 @@ type Props = {
 
 const fmt = (n: number) => (n ? n.toLocaleString() : '')
 
+const COL_KEYS = ['mark', 'date', 'desc', 'deposit', 'withdrawal', 'balance', 'remarks'] as const
+type ColKey = (typeof COL_KEYS)[number]
+
+const DEFAULT_WIDTHS: Record<ColKey, number> = {
+  mark: 64,
+  date: 160,
+  desc: 280,
+  deposit: 110,
+  withdrawal: 110,
+  balance: 130,
+  remarks: 200
+}
+
+const COL_LABELS: Record<ColKey, string> = {
+  mark: '計上',
+  date: '日付',
+  desc: '摘要',
+  deposit: '入金',
+  withdrawal: '出金',
+  balance: '残高',
+  remarks: '備考'
+}
+
+const COL_ALIGN: Record<ColKey, 'left' | 'center' | 'right'> = {
+  mark: 'center',
+  date: 'left',
+  desc: 'left',
+  deposit: 'right',
+  withdrawal: 'right',
+  balance: 'right',
+  remarks: 'left'
+}
+
+const STORAGE_KEY = 'bank-analyzer-passbook-col-widths'
+
 export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAddTx }: Props) {
+  const pdfRef = useRef<PdfViewerHandle>(null)
+  const [selectedTxId, setSelectedTxId] = useState<string | null>(null)
+  const [widths, setWidths] = useState<Record<ColKey, number>>(DEFAULT_WIDTHS)
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object') {
+          setWidths({ ...DEFAULT_WIDTHS, ...parsed })
+        }
+      }
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(widths))
+    } catch {}
+  }, [widths])
+
   const updateTx = (id: string, patch: Partial<Transaction>) => {
     onChange({
       ...passbook,
@@ -25,6 +83,32 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
     onChange({ ...passbook, purpose })
   }
 
+  const handleRowClick = (tx: Transaction) => {
+    setSelectedTxId(tx.id)
+    if (tx.pageNumber && pdfRef.current) {
+      pdfRef.current.goToPage(tx.pageNumber)
+    }
+  }
+
+  const startResize = (col: ColKey, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startW = widths[col]
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.max(40, startW + (ev.clientX - startX))
+      setWidths((w) => ({ ...w, [col]: next }))
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    document.body.style.cursor = 'col-resize'
+  }
+
   const computedEnd = passbook.transactions.reduce(
     (acc, tx) => acc + tx.deposit - tx.withdrawal,
     passbook.startBalance ?? 0
@@ -32,11 +116,13 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
   const declaredEnd = passbook.endBalance ?? 0
   const balanceOk = Math.abs(computedEnd - declaredEnd) < 0.5
 
+  const totalWidth = COL_KEYS.reduce((sum, k) => sum + widths[k], 0)
+
   const leftPanel = (
     <div className="flex flex-col h-full min-h-0 gap-2">
       <div className="flex-1 min-h-0">
         {pdfUrl ? (
-          <PdfViewer pdfUrl={pdfUrl} />
+          <PdfViewer ref={pdfRef} pdfUrl={pdfUrl} />
         ) : (
           <div className="h-full flex items-center justify-center text-slate-400 border rounded bg-slate-50">
             PDFが読み込まれていません
@@ -72,13 +158,19 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
             className="flex-1 border border-slate-300 rounded px-2 py-1"
           />
         </label>
-        <div className={`p-2 rounded text-xs flex flex-wrap gap-x-4 gap-y-0.5 ${balanceOk ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>
+        <div
+          className={`p-2 rounded text-xs flex flex-wrap gap-x-4 gap-y-0.5 ${
+            balanceOk ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'
+          }`}
+        >
           <span>開始残高: {fmt(passbook.startBalance ?? 0)} 円</span>
           <span>終了残高（申告）: {fmt(declaredEnd)} 円</span>
-          <span>終了残高（計算上）: {fmt(computedEnd)} 円 {balanceOk ? '✓ 一致' : '⚠ 不一致'}</span>
+          <span>
+            終了残高（計算上）: {fmt(computedEnd)} 円 {balanceOk ? '✓ 一致' : '⚠ 不一致'}
+          </span>
         </div>
         {passbook.warnings.length > 0 && (
-          <ul className="text-xs text-amber-900 list-disc list-inside">
+          <ul className="text-xs text-amber-900 list-disc list-inside max-h-24 overflow-auto">
             {passbook.warnings.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
@@ -88,26 +180,48 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
     </div>
   )
 
+  const renderHeaderCell = (col: ColKey) => (
+    <th
+      key={col}
+      style={{ width: widths[col], minWidth: widths[col] }}
+      className={`relative px-2 py-1 select-none text-${COL_ALIGN[col]} border-r border-slate-600 last:border-r-0`}
+    >
+      {COL_LABELS[col]}
+      <span
+        onMouseDown={(e) => startResize(col, e)}
+        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-blue-400/50"
+        title="ドラッグで列幅を変更"
+      />
+    </th>
+  )
+
   const dataPanel = (
     <div className="h-full min-h-0 overflow-auto border rounded">
-      <table className="min-w-full text-sm">
+      <table className="text-sm" style={{ width: totalWidth, tableLayout: 'fixed' }}>
+        <colgroup>
+          {COL_KEYS.map((c) => (
+            <col key={c} style={{ width: widths[c] }} />
+          ))}
+        </colgroup>
         <thead className="bg-slate-700 text-white sticky top-0 z-10">
-          <tr>
-            <th className="px-2 py-1 text-center w-16" title="金融資産異動一覧表への計上">計上</th>
-            <th className="px-2 py-1 text-left w-36">日付</th>
-            <th className="px-2 py-1 text-left">摘要</th>
-            <th className="px-2 py-1 text-right w-28">入金</th>
-            <th className="px-2 py-1 text-right w-28">出金</th>
-            <th className="px-2 py-1 text-right w-32">残高</th>
-            <th className="px-2 py-1 text-left w-40">備考</th>
-          </tr>
+          <tr>{COL_KEYS.map(renderHeaderCell)}</tr>
         </thead>
         <tbody>
           {passbook.transactions.map((tx) => {
             const isIncluded = includedTxIds?.has(tx.id) ?? false
+            const isSelected = selectedTxId === tx.id
+            const rowClass = isSelected
+              ? 'bg-blue-100'
+              : isIncluded
+              ? 'bg-amber-50'
+              : 'hover:bg-slate-50'
             return (
-              <tr key={tx.id} className={`border-t ${isIncluded ? 'bg-amber-50' : 'hover:bg-slate-50'}`}>
-                <td className="px-1 py-0.5 text-center">
+              <tr
+                key={tx.id}
+                className={`border-t cursor-pointer ${rowClass}`}
+                onClick={() => handleRowClick(tx)}
+              >
+                <td className="px-1 py-0.5 text-center" onClick={(e) => e.stopPropagation()}>
                   {isIncluded ? (
                     <span
                       className="inline-flex items-center justify-center w-7 h-6 rounded bg-amber-200 text-amber-900 font-bold text-xs"
@@ -127,13 +241,15 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                     </button>
                   )}
                 </td>
-                <td className="px-1 py-0.5">
-                  <WarekiInput
-                    value={tx.date}
-                    onChange={(v) => updateTx(tx.id, { date: v })}
-                  />
+                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
+                  <WarekiInput value={tx.date} onChange={(v) => updateTx(tx.id, { date: v })} />
+                  {tx.pageNumber && (
+                    <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">
+                      p.{tx.pageNumber}
+                    </div>
+                  )}
                 </td>
-                <td className="px-1 py-0.5">
+                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="text"
                     value={tx.description}
@@ -141,25 +257,25 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                     className="w-full border border-slate-200 rounded px-1 py-0.5"
                   />
                 </td>
-                <td className="px-1 py-0.5">
+                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
                   <NumberInput
                     value={tx.deposit || 0}
                     onChange={(v) => updateTx(tx.id, { deposit: v })}
                   />
                 </td>
-                <td className="px-1 py-0.5">
+                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
                   <NumberInput
                     value={tx.withdrawal || 0}
                     onChange={(v) => updateTx(tx.id, { withdrawal: v })}
                   />
                 </td>
-                <td className="px-1 py-0.5">
+                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
                   <NumberInput
                     value={tx.balance || 0}
                     onChange={(v) => updateTx(tx.id, { balance: v })}
                   />
                 </td>
-                <td className="px-1 py-0.5">
+                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="text"
                     value={tx.remarks || ''}
@@ -178,7 +294,12 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ height: '85vh', minHeight: 600 }}>
       {leftPanel}
-      {dataPanel}
+      <div className="flex flex-col h-full min-h-0">
+        <div className="text-xs text-slate-500 mb-1">
+          ヒント: 行をクリックすると左のPDFが該当ページにジャンプします。列ヘッダ右端をドラッグで列幅変更。
+        </div>
+        <div className="flex-1 min-h-0">{dataPanel}</div>
+      </div>
     </div>
   )
 }

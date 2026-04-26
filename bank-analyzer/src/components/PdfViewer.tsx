@@ -1,25 +1,61 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 
 type Props = {
   pdfUrl: string
+}
+
+export type PdfViewerHandle = {
+  goToPage: (page: number) => void
 }
 
 const MIN_SCALE = 0.4
 const MAX_SCALE = 4.0
 const SCALE_STEP = 0.2
 const RENDER_BASE_SCALE = 1.5
+const HIGHLIGHT_DURATION_MS = 1500
 
-export function PdfViewer({ pdfUrl }: Props) {
+export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer({ pdfUrl }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const pagesRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1.0)
+  const scaleRef = useRef(1.0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [numPages, setNumPages] = useState(0)
   const dragState = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null)
   const [dragging, setDragging] = useState(false)
+
+  useEffect(() => {
+    scaleRef.current = scale
+  }, [scale])
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      goToPage(page: number) {
+        const host = pagesRef.current
+        const c = containerRef.current
+        if (!host || !c) return
+        const target = host.querySelector<HTMLCanvasElement>(`canvas[data-page="${page}"]`)
+        if (!target) return
+        // canvas は親要素に scale() がかかっているので、レイアウト上の位置を計算
+        const s = scaleRef.current
+        const top = target.offsetTop * s
+        c.scrollTo({ top: Math.max(0, top - 8), behavior: 'smooth' })
+
+        // ハイライト
+        target.style.outline = '4px solid #fbbf24'
+        target.style.outlineOffset = '0px'
+        window.setTimeout(() => {
+          target.style.outline = ''
+          target.style.outlineOffset = ''
+        }, HIGHLIGHT_DURATION_MS)
+      }
+    }),
+    []
+  )
 
   useEffect(() => {
     if (!pdfUrl) return
@@ -51,10 +87,12 @@ export function PdfViewer({ pdfUrl }: Props) {
           const canvas = document.createElement('canvas')
           canvas.width = viewport.width
           canvas.height = viewport.height
+          canvas.dataset.page = String(i)
           canvas.style.display = 'block'
           canvas.style.marginBottom = '8px'
           canvas.style.boxShadow = '0 1px 3px rgba(0,0,0,0.2)'
           canvas.style.background = 'white'
+          canvas.style.transition = 'outline 0.15s ease'
           const ctx = canvas.getContext('2d')
           if (!ctx) continue
           await page.render({ canvasContext: ctx, viewport }).promise
@@ -163,7 +201,7 @@ export function PdfViewer({ pdfUrl }: Props) {
       </div>
     </div>
   )
-}
+})
 
 function clamp(v: number) {
   return Math.max(MIN_SCALE, Math.min(MAX_SCALE, v))
