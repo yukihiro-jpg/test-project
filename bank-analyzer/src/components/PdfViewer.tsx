@@ -40,10 +40,13 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer({
         if (!host || !c) return
         const target = host.querySelector<HTMLCanvasElement>(`canvas[data-page="${page}"]`)
         if (!target) return
-        // canvas は親要素に scale() がかかっているので、レイアウト上の位置を計算
-        const s = scaleRef.current
-        const top = target.offsetTop * s
-        c.scrollTo({ top: Math.max(0, top - 8), behavior: 'smooth' })
+
+        // transform: scale を考慮して、コンテナの実座標系で位置を計算
+        // getBoundingClientRect は変形後の視覚的座標を返すので最も信頼できる
+        const targetRect = target.getBoundingClientRect()
+        const containerRect = c.getBoundingClientRect()
+        const offsetWithinContainer = targetRect.top - containerRect.top + c.scrollTop
+        c.scrollTo({ top: Math.max(0, offsetWithinContainer - 8), behavior: 'smooth' })
 
         // ハイライト
         target.style.outline = '4px solid #fbbf24'

@@ -16,6 +16,7 @@ type RawRow = {
   出金額?: number | string
   残高?: number | string
   備考?: string
+  page_no?: number | string
 }
 
 type RawAnalysis = {
@@ -83,7 +84,8 @@ ${pageHeader}以下のPDFから取引明細を抽出してください${bankName
       "入金額": <number, 入金でなければ0>,
       "出金額": <number, 出金でなければ0>,
       "残高": <number, その取引後の残高>,
-      "備考": "<読み取りが不確実な箇所があれば記載、なければ空文字>"
+      "備考": "<読み取りが不確実な箇所があれば記載、なければ空文字>",
+      "page_no": <number, この取引が記載されているPDFの物理ページ番号（1始まり）>
     }
   ]
 }
@@ -183,15 +185,22 @@ function rowsToTransactions(
   return rows.map((r, idx) => {
     const parsed = parseLooseDate(r.年月日 || '', { rangeStart: range.startDate, rangeEnd: range.endDate })
     const iso = parsed ? toIsoDate(parsed) : ''
+    // 明示的な pageNumber（ページ分割モード）を優先し、
+    // なければ Gemini が返した page_no を採用（単一PDFモード/フォールバック用）
+    const reportedPage =
+      r.page_no !== undefined && r.page_no !== null && r.page_no !== ''
+        ? Number(r.page_no)
+        : undefined
+    const pn = pageNumber ?? (reportedPage && !isNaN(reportedPage) ? reportedPage : undefined)
     return {
-      id: `${passbookId}-p${pageNumber ?? 0}-tx-${idx}`,
+      id: `${passbookId}-p${pn ?? 0}-tx-${idx}`,
       date: iso || (r.年月日 || ''),
       description: (r.摘要 || '').trim(),
       deposit: parseNumber(r.入金額),
       withdrawal: parseNumber(r.出金額),
       balance: parseNumber(r.残高),
       remarks: (r.備考 || '').trim(),
-      pageNumber
+      pageNumber: pn
     }
   })
 }

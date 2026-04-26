@@ -51,6 +51,7 @@ export default function HomePage() {
   const [progress, setProgress] = useState<ProgressEntry[]>([])
   const [passbooks, setPassbooks] = useState<ParsedPassbook[]>([])
   const [activeTab, setActiveTab] = useState<string>('movement')
+  const [screen, setScreen] = useState<'upload' | 'results'>('upload')
   const [atmKeywords, setAtmKeywords] = useState<string[]>(DEFAULT_ATM_KEYWORDS)
   const [atmModalOpen, setAtmModalOpen] = useState(false)
   const [overrides, setOverrides] = useState<Record<string, Partial<AssetMovementRow>>>({})
@@ -210,7 +211,10 @@ export default function HomePage() {
     setPassbooks(results)
     pdfUrlsRef.current = newUrls
     setPdfUrls(newUrls)
-    if (results.length > 0) setActiveTab('movement')
+    if (results.length > 0) {
+      setActiveTab('movement')
+      setScreen('results')
+    }
     setAnalyzing(false)
   }
 
@@ -239,7 +243,39 @@ export default function HomePage() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3" style={{ height: 'calc(100vh - 180px)', minHeight: 480 }}>
+      <div className="bg-white rounded-lg shadow flex">
+        <button
+          type="button"
+          onClick={() => setScreen('upload')}
+          className={`px-5 py-2.5 text-sm font-bold border-b-2 transition ${
+            screen === 'upload'
+              ? 'border-blue-600 text-blue-700'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          ① アップロード・期間指定・通帳登録
+        </button>
+        <button
+          type="button"
+          onClick={() => setScreen('results')}
+          disabled={passbooks.length === 0}
+          className={`px-5 py-2.5 text-sm font-bold border-b-2 transition ${
+            screen === 'results'
+              ? 'border-blue-600 text-blue-700'
+              : 'border-transparent text-slate-500 hover:text-slate-700 disabled:text-slate-300 disabled:cursor-not-allowed'
+          }`}
+        >
+          ② 解析結果
+          {passbooks.length > 0 && (
+            <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+              {passbooks.length}件
+            </span>
+          )}
+        </button>
+      </div>
+
+      {screen === 'upload' && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3" style={{ height: 'calc(100vh - 220px)', minHeight: 480 }}>
         <div className="grid grid-rows-[auto_1fr] gap-3 min-h-0">
           <section className="bg-white rounded-lg shadow p-3">
             <div className="flex items-center justify-between mb-2">
@@ -428,8 +464,9 @@ export default function HomePage() {
           </div>
         </section>
       </div>
+      )}
 
-      {passbooks.length > 0 && (
+      {screen === 'results' && passbooks.length > 0 && (
         <section className="bg-white rounded-lg shadow p-4 space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex flex-wrap gap-1 border-b">

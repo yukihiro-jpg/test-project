@@ -22,7 +22,7 @@ type ColKey = (typeof COL_KEYS)[number]
 const DEFAULT_WIDTHS: Record<ColKey, number> = {
   mark: 64,
   date: 160,
-  desc: 280,
+  desc: 196,
   deposit: 110,
   withdrawal: 110,
   balance: 130,
@@ -49,7 +49,7 @@ const COL_ALIGN: Record<ColKey, 'left' | 'center' | 'right'> = {
   remarks: 'left'
 }
 
-const STORAGE_KEY = 'bank-analyzer-passbook-col-widths'
+const STORAGE_KEY = 'bank-analyzer-passbook-col-widths-v2'
 
 export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAddTx }: Props) {
   const pdfRef = useRef<PdfViewerHandle>(null)
