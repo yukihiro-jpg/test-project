@@ -208,6 +208,51 @@ async function callGemini(pdfBase64: string, prompt: string, label = ''): Promis
   }
 }
 
+// 500/503/429 など一時エラーの判定
+function isTransientError(err: unknown): boolean {
+  if (!err) return false
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  return (
+    msg.includes('500') ||
+    msg.includes('503') ||
+    msg.includes('429') ||
+    msg.includes('internal error') ||
+    msg.includes('unavailable') ||
+    msg.includes('overloaded') ||
+    msg.includes('deadline') ||
+    msg.includes('timeout') ||
+    msg.includes('econnreset') ||
+    msg.includes('etimedout') ||
+    msg.includes('fetch failed')
+  )
+}
+
+async function callGeminiWithRetry(
+  pdfBase64: string,
+  prompt: string,
+  label = '',
+  maxAttempts = 3
+): Promise<RawAnalysis> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await callGemini(pdfBase64, prompt, label)
+    } catch (err) {
+      lastError = err
+      const transient = isTransientError(err)
+      if (!transient || attempt === maxAttempts) throw err
+      // 指数バックオフ: 1s, 2s, 4s + 0〜500ms のジッタ
+      const delayMs = 1000 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 500)
+      const msg = (err instanceof Error ? err.message : String(err)).slice(0, 120)
+      console.warn(
+        `[gemini] ${label} 一時エラー、${delayMs}ms後にリトライ (${attempt}/${maxAttempts}): ${msg}`
+      )
+      await new Promise((r) => setTimeout(r, delayMs))
+    }
+  }
+  throw lastError
+}
+
 function rowsToTransactions(
   rows: RawRow[],
   passbookId: string,
@@ -267,7 +312,7 @@ async function analyzePage(
 
   let analysis: RawAnalysis
   try {
-    analysis = await callGemini(pdfBase64, prompt, `page ${pageInfo.current}/${pageInfo.total}`)
+    analysis = await callGeminiWithRetry(pdfBase64, prompt, `page ${pageInfo.current}/${pageInfo.total}`)
   } catch (err) {
     throw new Error(`Gemini API 呼び出しエラー（${pageInfo.current}p）: ${(err as Error).message}`)
   }
