@@ -113,11 +113,11 @@ def package_installer(output_dir, client_name, device_name, config, service_acco
     pkg_dir = output_dir / pkg_name
     pkg_dir.mkdir(parents=True, exist_ok=True)
 
-    exe_file = Path(__file__).resolve().parent.parent / "dist" / "sync_agent.exe"
-    if exe_file.exists():
-        shutil.copy2(exe_file, pkg_dir / "sync_agent.exe")
+    ps1_file = INSTALLER_TEMPLATE_DIR / "sync_agent.ps1"
+    if ps1_file.exists():
+        shutil.copy2(ps1_file, pkg_dir / "sync_agent.ps1")
     else:
-        print(f"エラー: sync_agent.exe が見つかりません: {exe_file}")
+        print(f"エラー: sync_agent.ps1 が見つかりません: {ps1_file}")
         sys.exit(1)
 
     config_path = pkg_dir / "config.json"
