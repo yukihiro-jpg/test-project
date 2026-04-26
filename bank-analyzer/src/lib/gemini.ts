@@ -120,24 +120,6 @@ function isInRange(date: string, start: string, end: string): boolean {
   return d.getTime() >= s.getTime() && d.getTime() <= e.getTime()
 }
 
-function verifyBalances(
-  startBalance: number,
-  rows: RawRow[]
-): { ok: boolean; mismatches: number[]; expectedFinalBalance: number } {
-  let prev = startBalance
-  const mismatches: number[] = []
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i]
-    const dep = parseNumber(r.入金額)
-    const wd = parseNumber(r.出金額)
-    const bal = parseNumber(r.残高)
-    const expected = prev + dep - wd
-    if (Math.abs(expected - bal) > 0.5) mismatches.push(i)
-    prev = bal
-  }
-  return { ok: mismatches.length === 0, mismatches, expectedFinalBalance: prev }
-}
-
 async function callGemini(pdfBase64: string, prompt: string, label = ''): Promise<RawAnalysis> {
   const genAI = getClient()
   const generationConfig: Record<string, unknown> = {
@@ -249,44 +231,8 @@ async function analyzePage(
     throw new Error(`Gemini API 呼び出しエラー（${pageInfo.current}p）: ${(err as Error).message}`)
   }
 
-  const rows = analysis.取引 || []
-  const startBalance = parseNumber(analysis.開始残高)
-  const declaredEnd = parseNumber(analysis.終了残高)
-  const verification = verifyBalances(startBalance, rows)
-
-  if (!verification.ok || (rows.length > 0 && Math.abs(verification.expectedFinalBalance - declaredEnd) > 0.5)) {
-    const retryPrompt = `${prompt}
-
-【再解析の指示】
-前回の読み取り結果は残高の整合性が取れていません（不一致行: ${verification.mismatches.length}件）。
-PDFを再度確認して正しい数値で出力し直してください。
-前回結果: ${JSON.stringify(analysis).slice(0, 4000)}
-
-JSONのみを返してください。`
-    try {
-      const retry = await callGemini(pdfBase64, retryPrompt, `page ${pageInfo.current}/${pageInfo.total} retry`)
-      const retryRows = retry.取引 || []
-      const retryVerification = verifyBalances(parseNumber(retry.開始残高), retryRows)
-      if (retryVerification.ok) {
-        return { analysis: retry, warnings }
-      }
-      warnings.push(
-        `${pageInfo.current}ページ目: 残高不一致が${retryVerification.mismatches.length}行残っています。`
-      )
-      for (const idx of retryVerification.mismatches) {
-        if (retryRows[idx]) {
-          retryRows[idx].備考 = ((retryRows[idx].備考 || '') + ' 残高不一致').trim()
-        }
-      }
-      return { analysis: retry, warnings }
-    } catch (err) {
-      warnings.push(`${pageInfo.current}ページ目 再解析失敗: ${(err as Error).message}`)
-      for (const idx of verification.mismatches) {
-        if (rows[idx]) rows[idx].備考 = ((rows[idx].備考 || '') + ' 残高不一致').trim()
-      }
-    }
-  }
-
+  // 残高不一致の自動リトライは廃止。
+  // 不一致はクライアント側で赤ハイライトしてユーザーに修正してもらう方針。
   return { analysis, warnings }
 }
 
