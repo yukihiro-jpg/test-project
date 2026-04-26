@@ -121,7 +121,8 @@ def package_installer(output_dir, client_name, device_name, config, service_acco
         sys.exit(1)
 
     config_path = pkg_dir / "config.json"
-    with open(config_path, "w", encoding="utf-8") as f:
+    # PowerShell 5.1 が config.json を正しく読むため UTF-8 BOM 付きで書き出す
+    with open(config_path, "w", encoding="utf-8-sig") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
 
     if service_account_key_path.exists():
