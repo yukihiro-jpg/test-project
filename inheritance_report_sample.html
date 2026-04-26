@@ -280,6 +280,391 @@
             color: rgba(184, 153, 104, 0.4);
         }
 
+        /* ============ CONTENT PAGE BASE ============ */
+        .page-content {
+            background: var(--paper);
+            padding: 60px 70px 50px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Page header */
+        .ph {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 50px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .ph-left { display: flex; align-items: center; gap: 16px; }
+
+        .ph-mark {
+            width: 30px;
+            height: 30px;
+            border: 1px solid var(--gold);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 14px;
+            color: var(--gold);
+        }
+
+        .ph-brand {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 11px;
+            letter-spacing: 4px;
+            color: var(--text-light);
+        }
+
+        .ph-right {
+            text-align: right;
+        }
+
+        .ph-section-no {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 11px;
+            letter-spacing: 3px;
+            color: var(--gold);
+        }
+
+        .ph-section-name {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: var(--text-light);
+            margin-top: 4px;
+        }
+
+        /* Section title block */
+        .section-head {
+            margin-bottom: 50px;
+        }
+
+        .section-eyebrow {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 10px;
+            letter-spacing: 4px;
+            color: var(--gold);
+            margin-bottom: 14px;
+            text-transform: uppercase;
+        }
+
+        .section-title {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 28px;
+            font-weight: 300;
+            color: var(--navy);
+            letter-spacing: 8px;
+            line-height: 1.5;
+        }
+
+        .section-divider {
+            width: 36px;
+            height: 1px;
+            background: var(--gold);
+            margin-top: 22px;
+        }
+
+        /* Lead paragraph */
+        .lead {
+            background: var(--cream);
+            padding: 28px 36px;
+            border-left: 2px solid var(--gold);
+            margin-bottom: 60px;
+        }
+
+        .lead p {
+            font-size: 13px;
+            line-height: 2.1;
+            color: var(--text-mid);
+            letter-spacing: 1px;
+            font-weight: 300;
+        }
+
+        .lead strong {
+            color: var(--navy);
+            font-weight: 500;
+        }
+
+        /* ============ FAMILY TREE ============ */
+        .tree {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0 auto;
+            padding: 20px 0 30px;
+        }
+
+        .tree-deceased {
+            background: var(--navy);
+            color: white;
+            padding: 24px 50px;
+            text-align: center;
+            position: relative;
+            min-width: 240px;
+        }
+
+        .tree-deceased::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: -1px;
+            right: -1px;
+            bottom: -1px;
+            border: 1px solid var(--gold);
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .tree-role {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 9px;
+            letter-spacing: 4px;
+            color: var(--gold);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .tree-name {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 22px;
+            font-weight: 300;
+            letter-spacing: 8px;
+            padding-left: 8px;
+        }
+
+        .tree-kana {
+            font-size: 9px;
+            letter-spacing: 3px;
+            color: rgba(255, 255, 255, 0.55);
+            margin-top: 8px;
+        }
+
+        .tree-meta {
+            font-family: 'Noto Sans JP', sans-serif;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.65);
+            margin-top: 14px;
+            letter-spacing: 1px;
+        }
+
+        /* Connectors */
+        .tree-line-v {
+            width: 1px;
+            height: 36px;
+            background: var(--border);
+        }
+
+        .tree-line-h-wrap {
+            position: relative;
+            width: 80%;
+            max-width: 540px;
+            height: 1px;
+        }
+
+        .tree-line-h {
+            position: absolute;
+            top: 0;
+            left: 16.66%;
+            right: 16.66%;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .tree-tick {
+            position: absolute;
+            top: 0;
+            width: 1px;
+            height: 36px;
+            background: var(--border);
+        }
+
+        .tree-tick.t-left { left: 16.66%; }
+        .tree-tick.t-mid { left: 50%; }
+        .tree-tick.t-right { right: 16.66%; }
+
+        /* Heirs row */
+        .heirs-row {
+            display: flex;
+            justify-content: space-between;
+            width: 80%;
+            max-width: 540px;
+            margin-top: 36px;
+            gap: 0;
+        }
+
+        .heir {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .heir-card {
+            width: 100%;
+            max-width: 160px;
+            background: white;
+            border: 1px solid var(--border);
+            padding: 22px 18px;
+            text-align: center;
+            position: relative;
+        }
+
+        .heir-card.spouse {
+            background: var(--cream);
+            border-color: var(--gold);
+        }
+
+        .heir-tag {
+            display: inline-block;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 9px;
+            letter-spacing: 3px;
+            padding: 3px 10px;
+            margin-bottom: 14px;
+        }
+
+        .heir.spouse .heir-tag {
+            background: var(--gold);
+            color: white;
+        }
+
+        .heir.child .heir-tag {
+            background: var(--navy);
+            color: var(--gold-light);
+        }
+
+        .heir-name {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 15px;
+            font-weight: 400;
+            color: var(--navy);
+            letter-spacing: 3px;
+            margin-bottom: 4px;
+        }
+
+        .heir-kana {
+            font-size: 9px;
+            color: var(--text-light);
+            letter-spacing: 2px;
+            margin-bottom: 14px;
+        }
+
+        .heir-meta {
+            font-size: 10px;
+            color: var(--text-mid);
+            line-height: 1.7;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+            font-weight: 300;
+        }
+
+        .heir-share {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed var(--border);
+        }
+
+        .heir-share-label {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 8px;
+            letter-spacing: 2px;
+            color: var(--text-light);
+        }
+
+        .heir-share-value {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 17px;
+            color: var(--navy);
+            font-weight: 400;
+            margin-top: 2px;
+            letter-spacing: 1px;
+        }
+
+        .heir-share-value .frac-num {
+            font-size: 12px;
+            vertical-align: super;
+        }
+
+        .heir-share-value .frac-bar {
+            font-size: 14px;
+            margin: 0 1px;
+            color: var(--gold);
+        }
+
+        .heir-share-value .frac-den {
+            font-size: 12px;
+            vertical-align: sub;
+        }
+
+        /* Notes */
+        .notes {
+            margin-top: auto;
+            padding: 22px 28px;
+            background: var(--cream);
+            border-top: 2px solid var(--gold);
+        }
+
+        .notes-title {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 10px;
+            letter-spacing: 3px;
+            color: var(--gold);
+            margin-bottom: 10px;
+        }
+
+        .notes p {
+            font-size: 11px;
+            color: var(--text-mid);
+            line-height: 1.9;
+            letter-spacing: 0.5px;
+            font-weight: 300;
+        }
+
+        .notes p + p {
+            margin-top: 6px;
+        }
+
+        /* Page footer */
+        .pf {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .pf-left {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 9px;
+            letter-spacing: 3px;
+            color: var(--text-light);
+        }
+
+        .pf-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .pf-num {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 18px;
+            font-weight: 400;
+            color: var(--navy);
+        }
+
+        .pf-total {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 10px;
+            color: var(--text-light);
+            letter-spacing: 2px;
+        }
+
         @media print {
             body {
                 background: white;
@@ -353,6 +738,142 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- ====================== PAGE 2 : FAMILY ====================== -->
+    <div class="page page-content">
+
+        <!-- Page header -->
+        <div class="ph">
+            <div class="ph-left">
+                <div class="ph-mark">S</div>
+                <div class="ph-brand">SOUZOKU&nbsp;ADVISORY</div>
+            </div>
+            <div class="ph-right">
+                <div class="ph-section-no">SECTION&nbsp;01</div>
+                <div class="ph-section-name">FAMILY&nbsp;&amp;&nbsp;HEIRS</div>
+            </div>
+        </div>
+
+        <!-- Section title -->
+        <div class="section-head">
+            <div class="section-eyebrow">Family Structure</div>
+            <h1 class="section-title">家族構成・相続人関係図</h1>
+            <div class="section-divider"></div>
+        </div>
+
+        <!-- Lead -->
+        <div class="lead">
+            <p>
+                被相続人 <strong>市毛　哲　様</strong> のご相続にあたり、以下の<strong>３名様</strong>が相続人となられます。<br>
+                民法に定める法定相続分は、<strong>配偶者が２分の１</strong>、<strong>お子様お二人がそれぞれ４分の１</strong>ずつでございます。
+            </p>
+        </div>
+
+        <!-- Family Tree -->
+        <div class="tree">
+
+            <!-- Deceased -->
+            <div class="tree-deceased">
+                <div class="tree-role">The Deceased</div>
+                <div class="tree-name">市毛　哲</div>
+                <div class="tree-kana">ICHIGE　TETSU</div>
+                <div class="tree-meta">令和6年　ご逝去</div>
+            </div>
+
+            <!-- Vertical line -->
+            <div class="tree-line-v"></div>
+
+            <!-- Horizontal connector -->
+            <div class="tree-line-h-wrap">
+                <div class="tree-line-h"></div>
+                <div class="tree-tick t-left"></div>
+                <div class="tree-tick t-mid"></div>
+                <div class="tree-tick t-right"></div>
+            </div>
+
+            <!-- Heirs -->
+            <div class="heirs-row">
+
+                <!-- Spouse -->
+                <div class="heir spouse">
+                    <div class="heir-card spouse">
+                        <div class="heir-tag">SPOUSE</div>
+                        <div class="heir-name">市毛　有子</div>
+                        <div class="heir-kana">ICHIGE　YUKO</div>
+                        <div class="heir-meta">
+                            配偶者　ご様<br>
+                            昭和36年5月29日生<br>
+                            <span style="color: var(--text-light); font-size: 9px;">62 歳</span>
+                        </div>
+                        <div class="heir-share">
+                            <div class="heir-share-label">LEGAL SHARE</div>
+                            <div class="heir-share-value">
+                                <span class="frac-num">1</span><span class="frac-bar">／</span><span class="frac-den">2</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Eldest son -->
+                <div class="heir child">
+                    <div class="heir-card">
+                        <div class="heir-tag">SON</div>
+                        <div class="heir-name">市毛　哲太郎</div>
+                        <div class="heir-kana">ICHIGE　TETSUTARO</div>
+                        <div class="heir-meta">
+                            長男　ご様<br>
+                            昭和61年11月12日生<br>
+                            <span style="color: var(--text-light); font-size: 9px;">37 歳</span>
+                        </div>
+                        <div class="heir-share">
+                            <div class="heir-share-label">LEGAL SHARE</div>
+                            <div class="heir-share-value">
+                                <span class="frac-num">1</span><span class="frac-bar">／</span><span class="frac-den">4</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Daughter -->
+                <div class="heir child">
+                    <div class="heir-card">
+                        <div class="heir-tag">DAUGHTER</div>
+                        <div class="heir-name">田中　奈々子</div>
+                        <div class="heir-kana">TANAKA　NANAKO</div>
+                        <div class="heir-meta">
+                            長女　ご様<br>
+                            平成元年2月11日生<br>
+                            <span style="color: var(--text-light); font-size: 9px;">35 歳</span>
+                        </div>
+                        <div class="heir-share">
+                            <div class="heir-share-label">LEGAL SHARE</div>
+                            <div class="heir-share-value">
+                                <span class="frac-num">1</span><span class="frac-bar">／</span><span class="frac-den">4</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="notes">
+            <div class="notes-title">NOTES</div>
+            <p>※ 田中 奈々子 様は、ご結婚に伴い旧姓（市毛）から改姓されておられます。</p>
+            <p>※ 本ご相続におけるお取りまとめは、<strong>代償分割</strong>の方式により行うものでございます。</p>
+        </div>
+
+        <!-- Footer -->
+        <div class="pf">
+            <div class="pf-left">INHERITANCE&nbsp;TAX&nbsp;REPORT&nbsp;—&nbsp;CONFIDENTIAL</div>
+            <div class="pf-right">
+                <div class="pf-num">02</div>
+                <div class="pf-total">/&nbsp;06</div>
+            </div>
+        </div>
+
     </div>
 
 </body>
