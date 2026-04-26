@@ -6,6 +6,12 @@ import { AssetMovementView } from '@/components/AssetMovementView'
 import { AtmKeywordsModal } from '@/components/AtmKeywordsModal'
 import { DEFAULT_ATM_KEYWORDS, loadAtmKeywords, saveAtmKeywords } from '@/lib/atm-keywords'
 import { buildAssetMovementTable } from '@/lib/asset-movement'
+import {
+  DEFAULT_SUMMARY_PATTERN_ID,
+  findSummaryPattern,
+  loadSummaryPatternId,
+  saveSummaryPatternId
+} from '@/lib/summary-patterns'
 import type { AssetMovementRow, ParsedPassbook, UploadItem } from '@/types'
 
 type ProgressEntry = {
@@ -54,6 +60,7 @@ export default function HomePage() {
   const [screen, setScreen] = useState<'upload' | 'results'>('upload')
   const [atmKeywords, setAtmKeywords] = useState<string[]>(DEFAULT_ATM_KEYWORDS)
   const [atmModalOpen, setAtmModalOpen] = useState(false)
+  const [summaryPatternId, setSummaryPatternId] = useState<string>(DEFAULT_SUMMARY_PATTERN_ID)
   const [overrides, setOverrides] = useState<Record<string, Partial<AssetMovementRow>>>({})
   const [manualIncludes, setManualIncludes] = useState<string[]>([])
   const [manualExcludes, setManualExcludes] = useState<string[]>([])
@@ -70,7 +77,12 @@ export default function HomePage() {
 
   useEffect(() => {
     setAtmKeywords(loadAtmKeywords())
+    setSummaryPatternId(loadSummaryPatternId())
   }, [])
+
+  useEffect(() => {
+    saveSummaryPatternId(summaryPatternId)
+  }, [summaryPatternId])
 
   useEffect(() => {
     return () => {
@@ -223,10 +235,11 @@ export default function HomePage() {
   }
 
   const downloadExcel = async () => {
+    const summaryText = findSummaryPattern(summaryPatternId).text
     const res = await fetch('/api/excel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ passbooks, assetTable })
+      body: JSON.stringify({ passbooks, assetTable, summaryText })
     })
     if (!res.ok) {
       alert('Excel生成に失敗しました')
@@ -509,6 +522,8 @@ export default function HomePage() {
             <AssetMovementView
               table={assetTable}
               passbooks={passbooks}
+              summaryPatternId={summaryPatternId}
+              onSummaryPatternChange={setSummaryPatternId}
               onConclusionChange={(rowId, value) =>
                 setOverrides((prev) => ({ ...prev, [rowId]: { ...prev[rowId], conclusionAmount: value } }))
               }

@@ -3,10 +3,13 @@
 import { useState } from 'react'
 import type { AssetMovementTable, ParsedPassbook } from '@/types'
 import { toWareki } from '@/lib/wareki'
+import { SUMMARY_PATTERNS, findSummaryPattern } from '@/lib/summary-patterns'
 
 type Props = {
   table: AssetMovementTable
   passbooks: ParsedPassbook[]
+  summaryPatternId: string
+  onSummaryPatternChange: (id: string) => void
   onConclusionChange: (rowId: string, value: number) => void
   onRemarksChange: (rowId: string, value: string) => void
   onRemoveRow?: (rowId: string) => void
@@ -57,6 +60,8 @@ function ConclusionInput({
 export function AssetMovementView({
   table,
   passbooks,
+  summaryPatternId,
+  onSummaryPatternChange,
   onConclusionChange,
   onRemarksChange,
   onRemoveRow
@@ -65,10 +70,35 @@ export function AssetMovementView({
 
   const conclusionTotal = table.rows.reduce((acc, r) => acc + (r.conclusionAmount || 0), 0)
   const colspanLeft = 1 + table.passbookOrder.length * 2
+  const summaryText = findSummaryPattern(summaryPatternId).text
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm border">
+    <div className="space-y-3">
+      <section className="bg-slate-50 border border-slate-200 rounded p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-sm font-bold text-slate-700">調査結果サマリー文:</label>
+          <select
+            value={summaryPatternId}
+            onChange={(e) => onSummaryPatternChange(e.target.value)}
+            className="border border-slate-300 rounded px-2 py-1 text-sm bg-white"
+          >
+            {SUMMARY_PATTERNS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-slate-500">
+            選択した文章は Excel 出力の表ヘッダ上に挿入されます
+          </span>
+        </div>
+        <div className="bg-white border border-slate-200 rounded p-3 text-sm text-slate-800 whitespace-pre-line leading-relaxed">
+          {summaryText}
+        </div>
+      </section>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm border">
         <thead>
           <tr className="bg-slate-800 text-white">
             <th rowSpan={4} className="px-2 py-1 border align-bottom">日付</th>
@@ -175,6 +205,7 @@ export function AssetMovementView({
           </tfoot>
         )}
       </table>
+      </div>
     </div>
   )
 }

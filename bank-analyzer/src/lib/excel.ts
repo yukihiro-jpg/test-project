@@ -66,7 +66,8 @@ function applyDataStyle(cell: ExcelJS.Cell, opts: { numeric?: boolean } = {}) {
 
 export async function buildExcelWorkbook(
   passbooks: ParsedPassbook[],
-  assetTable: AssetMovementTable
+  assetTable: AssetMovementTable,
+  summaryText?: string
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Bank Analyzer'
@@ -145,13 +146,15 @@ export async function buildExcelWorkbook(
 
   movement.addRow([])
 
-  const summaryRow = movement.addRow([
-    '被相続人の預貯金等について調査・確認を行った結果、特筆すべき取引とその内容は以下の通りです。下記表以外の被相続人の預貯金等の取引については財産性があると考えられるものはありませんでした。'
-  ])
+  const finalSummary =
+    summaryText ??
+    '被相続人の預貯金等について調査・確認を行った結果、特筆すべき取引とそのお内容は以下の通りです。下記表以外の被相続人の預貯金等の取引については財産性があると考えられるものはありませんでした。'
+  const summaryLineCount = finalSummary.split('\n').length
+  const summaryRow = movement.addRow([finalSummary])
   movement.mergeCells(summaryRow.number, 1, summaryRow.number, colCount)
   summaryRow.font = { bold: true, size: 11, name: FONT_NAME, color: { argb: 'FF222222' } }
-  summaryRow.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true }
-  summaryRow.height = 48
+  summaryRow.alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
+  summaryRow.height = Math.max(28, summaryLineCount * 22 + 8)
 
   movement.addRow([])
 
