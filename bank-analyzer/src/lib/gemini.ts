@@ -138,32 +138,47 @@ function verifyBalances(
   return { ok: mismatches.length === 0, mismatches, expectedFinalBalance: prev }
 }
 
-async function callGemini(pdfBase64: string, prompt: string): Promise<RawAnalysis> {
+async function callGemini(pdfBase64: string, prompt: string, label = ''): Promise<RawAnalysis> {
   const genAI = getClient()
+  const generationConfig: Record<string, unknown> = {
+    temperature: 0.1,
+    responseMimeType: 'application/json'
+  }
+  // gemini-2.5-flash の思考プロセスを無効化して高速化（対応モデルのみ）
+  if (process.env.GEMINI_DISABLE_THINKING !== 'false') {
+    generationConfig.thinkingConfig = { thinkingBudget: 0 }
+  }
   const model = genAI.getGenerativeModel({
     model: MODEL,
-    generationConfig: {
-      temperature: 0.1,
-      responseMimeType: 'application/json',
-      // gemini-2.5-flash の思考プロセスを無効化して高速化
-      // （構造抽出タスクには思考は不要）
-      // @ts-expect-error thinkingConfig は SDK 型定義に未追加
-      thinkingConfig: { thinkingBudget: 0 }
-    }
+    generationConfig: generationConfig as never
   })
 
-  const result = await model.generateContent([
-    { text: prompt },
-    {
-      inlineData: {
-        mimeType: 'application/pdf',
-        data: pdfBase64
+  try {
+    const result = await model.generateContent([
+      { text: prompt },
+      {
+        inlineData: {
+          mimeType: 'application/pdf',
+          data: pdfBase64
+        }
       }
-    }
-  ])
+    ])
 
-  const text = result.response.text()
-  return JSON.parse(text) as RawAnalysis
+    const text = result.response.text()
+    if (!text || !text.trim()) {
+      console.warn(`[gemini] ${label} 空レスポンス`)
+      return {}
+    }
+    try {
+      return JSON.parse(text) as RawAnalysis
+    } catch (e) {
+      console.error(`[gemini] ${label} JSONパース失敗:`, text.slice(0, 500))
+      throw new Error(`JSONパース失敗: ${(e as Error).message}`)
+    }
+  } catch (err) {
+    console.error(`[gemini] ${label} 呼び出しエラー:`, err)
+    throw err
+  }
 }
 
 function rowsToTransactions(
@@ -218,7 +233,7 @@ async function analyzePage(
 
   let analysis: RawAnalysis
   try {
-    analysis = await callGemini(pdfBase64, prompt)
+    analysis = await callGemini(pdfBase64, prompt, `page ${pageInfo.current}/${pageInfo.total}`)
   } catch (err) {
     throw new Error(`Gemini API 呼び出しエラー（${pageInfo.current}p）: ${(err as Error).message}`)
   }
@@ -238,7 +253,7 @@ PDFを再度確認して正しい数値で出力し直してください。
 
 JSONのみを返してください。`
     try {
-      const retry = await callGemini(pdfBase64, retryPrompt)
+      const retry = await callGemini(pdfBase64, retryPrompt, `page ${pageInfo.current}/${pageInfo.total} retry`)
       const retryRows = retry.取引 || []
       const retryVerification = verifyBalances(parseNumber(retry.開始残高), retryRows)
       if (retryVerification.ok) {
@@ -381,6 +396,38 @@ export async function analyzePassbook(opts: {
     if (pageEnd) lastPageEnd = pageEnd
 
     allTransactions.push(...rowsToTransactions(pageRows, passbookId, { startDate, endDate }, r.page))
+  }
+
+  // フォールバック: 全ページ並列で取引が0件 → 単一PDFモードでもう一度試す
+  if (allTransactions.length === 0) {
+    console.warn(
+      `[gemini] ${label}: ページ並列で取引0件、単一PDFモードへフォールバック`
+    )
+    warnings.push('ページ並列で取引が抽出できなかったため、単一PDFモードへフォールバックしました。')
+    try {
+      const { analysis: full, warnings: fw } = await analyzePage(
+        pdfBase64,
+        { current: 1, total: 1 },
+        { startDate, endDate, bankName, branchName, accountNumber }
+      )
+      warnings.push(...fw)
+      const fullRows = (full.取引 || []).filter((r) => isInRange(r.年月日 || '', startDate, endDate))
+      return {
+        passbookId,
+        fileName,
+        bankName: full.銀行名 || inferredBank,
+        branchName: full.支店名 || inferredBranch,
+        accountNumber: full.口座番号 || inferredAccount,
+        label,
+        purpose: '',
+        startBalance: parseNumber(full.開始残高),
+        endBalance: parseNumber(full.終了残高),
+        transactions: rowsToTransactions(fullRows, passbookId, { startDate, endDate }, 1),
+        warnings
+      }
+    } catch (err) {
+      warnings.push(`単一PDFモードのフォールバックも失敗: ${(err as Error).message}`)
+    }
   }
 
   // 取引を日付順に整列（ページ並列で順番が乱れないよう保険）
