@@ -1,0 +1,40 @@
+name: Build sync_agent.exe (Nuitka)
+
+on:
+  push:
+    branches:
+      - claude/mobile-document-scanner-5VSGl
+    paths:
+      - 'file-sync-system/sync_agent/**'
+      - 'file-sync-system/build_entry.py'
+      - 'file-sync-system/requirements.txt'
+      - '.github/workflows/build-sync-agent.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r file-sync-system/requirements.txt
+          pip install nuitka
+
+      - name: Build with Nuitka
+        run: |
+          cd file-sync-system
+          python -m nuitka --standalone --onefile --output-filename=sync_agent.exe --include-package=sync_agent --assume-yes-for-downloads build_entry.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync_agent_exe
+          path: file-sync-system/sync_agent.exe
+          retention-days: 90
