@@ -29,20 +29,21 @@ function bodyBorder(): Partial<ExcelJS.Borders> {
   }
 }
 
-// ヘッダ内部: 白罫線。外周は実線（位置に応じて差し替え）
+// ヘッダ罫線: 内部・外周ともに白線で統一（背景色とのコントラストで境界が分かるため）
+// ヘッダと表本体の境界（ヘッダの最下段の bottom）のみ実線で明示する。
 function headerBorder(pos: {
   isTopRow: boolean
   isBottomRow: boolean
   isLeftCol: boolean
   isRightCol: boolean
 }): Partial<ExcelJS.Borders> {
-  const inner = (): ExcelJS.Border => ({ style: 'thin', color: { argb: HEADER_INNER_WHITE } })
-  const outer = (): ExcelJS.Border => ({ style: 'medium', color: { argb: SOLID_DARK } })
+  const w = (): ExcelJS.Border => ({ style: 'thin', color: { argb: HEADER_INNER_WHITE } })
+  const sep = (): ExcelJS.Border => ({ style: 'medium', color: { argb: SOLID_DARK } })
   return {
-    top: pos.isTopRow ? outer() : inner(),
-    bottom: pos.isBottomRow ? outer() : inner(),
-    left: pos.isLeftCol ? outer() : inner(),
-    right: pos.isRightCol ? outer() : inner()
+    top: w(),
+    bottom: pos.isBottomRow ? sep() : w(),
+    left: w(),
+    right: w()
   }
 }
 
@@ -130,7 +131,8 @@ export async function buildExcelWorkbook(
   const colCount = 1 + passbookCount * 2 + 2
   const widths = [16]
   for (let i = 0; i < passbookCount; i++) widths.push(14, 14)
-  widths.push(16, 36)
+  // 結論列は「相続財産計上額の算出」(11文字) が省略されない幅にする
+  widths.push(24, 36)
   movement.columns = widths.map((w) => ({ width: w }))
 
   const introRow = movement.addRow(['金融資産異動一覧表'])
@@ -144,19 +146,22 @@ export async function buildExcelWorkbook(
   movement.mergeCells(noteRow.number, 1, noteRow.number, colCount)
   noteRow.font = { italic: true, color: { argb: 'FF555555' }, name: FONT_NAME }
 
-  movement.addRow([])
-
   const finalSummary =
     summaryText ??
     '被相続人の預貯金等について調査・確認を行った結果、特筆すべき取引とそのお内容は以下の通りです。下記表以外の被相続人の預貯金等の取引については財産性があると考えられるものはありませんでした。'
-  const summaryLineCount = finalSummary.split('\n').length
+
+  // 行高は段落数だけでなく、各段落が結合セル幅で何行に折り返されるかも考慮して算出する
+  const totalUnitWidth = widths.reduce((a, b) => a + b, 0)
+  // 全角文字 (Japanese) は概ね 1 セル幅単位 = 約 1 文字相当として扱う
+  const charsPerLine = Math.max(40, Math.floor(totalUnitWidth * 0.95))
+  const visualLines = finalSummary
+    .split('\n')
+    .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0)
   const summaryRow = movement.addRow([finalSummary])
   movement.mergeCells(summaryRow.number, 1, summaryRow.number, colCount)
   summaryRow.font = { bold: true, size: 11, name: FONT_NAME, color: { argb: 'FF222222' } }
   summaryRow.alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
-  summaryRow.height = Math.max(28, summaryLineCount * 22 + 8)
-
-  movement.addRow([])
+  summaryRow.height = Math.max(28, visualLines * 18 + 8)
 
   const bankNameRow = movement.addRow([''])
   const accountRow = movement.addRow([''])
@@ -229,11 +234,14 @@ export async function buildExcelWorkbook(
 
   if (assetTable.rows.length > 0) {
     const totalLabelCols = 1 + passbookCount * 2
-    const totalRow = movement.addRow([])
-    totalRow.getCell(1).value = '合計'
+    // 全列を空文字で埋めて作成 → eachCell が remarksCol(G列) まで到達するよう保証
+    const totalValues: (string | number)[] = new Array(remarksCol).fill('')
+    totalValues[0] = '合計'
+    totalValues[conclusionCol - 1] = conclusionTotal
+    const totalRow = movement.addRow(totalValues)
     movement.mergeCells(totalRow.number, 1, totalRow.number, totalLabelCols)
-    totalRow.getCell(conclusionCol).value = conclusionTotal
-    totalRow.eachCell({ includeEmpty: true }, (c, colNumber) => {
+    for (let col = 1; col <= remarksCol; col++) {
+      const c = totalRow.getCell(col)
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }
       c.font = { bold: true, name: FONT_NAME }
       c.border = {
@@ -242,15 +250,15 @@ export async function buildExcelWorkbook(
         right: { style: 'thin', color: { argb: SOLID_DARK } },
         bottom: { style: 'medium', color: { argb: SOLID_DARK } }
       }
-      if (colNumber === conclusionCol) {
+      if (col === conclusionCol) {
         c.numFmt = NUMBER_FORMAT
         c.alignment = { horizontal: 'right', vertical: 'middle' }
-      } else if (colNumber === 1) {
+      } else if (col === 1) {
         c.alignment = { horizontal: 'right', vertical: 'middle' }
       } else {
         c.alignment = { horizontal: 'center', vertical: 'middle' }
       }
-    })
+    }
     totalRow.height = 24
   }
 

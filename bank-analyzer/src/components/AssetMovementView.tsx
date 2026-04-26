@@ -3,13 +3,15 @@
 import { useState } from 'react'
 import type { AssetMovementTable, ParsedPassbook } from '@/types'
 import { toWareki } from '@/lib/wareki'
-import { SUMMARY_PATTERNS, findSummaryPattern } from '@/lib/summary-patterns'
+import { findSummaryPattern, type SummaryPattern } from '@/lib/summary-patterns'
 
 type Props = {
   table: AssetMovementTable
   passbooks: ParsedPassbook[]
   summaryPatternId: string
+  allPatterns: SummaryPattern[]
   onSummaryPatternChange: (id: string) => void
+  onOpenSummaryEditor: () => void
   onConclusionChange: (rowId: string, value: number) => void
   onRemarksChange: (rowId: string, value: string) => void
   onRemoveRow?: (rowId: string) => void
@@ -61,7 +63,9 @@ export function AssetMovementView({
   table,
   passbooks,
   summaryPatternId,
+  allPatterns,
   onSummaryPatternChange,
+  onOpenSummaryEditor,
   onConclusionChange,
   onRemarksChange,
   onRemoveRow
@@ -70,7 +74,7 @@ export function AssetMovementView({
 
   const conclusionTotal = table.rows.reduce((acc, r) => acc + (r.conclusionAmount || 0), 0)
   const colspanLeft = 1 + table.passbookOrder.length * 2
-  const summaryText = findSummaryPattern(summaryPatternId).text
+  const summaryText = findSummaryPattern(allPatterns, summaryPatternId).text
 
   return (
     <div className="space-y-3">
@@ -82,12 +86,20 @@ export function AssetMovementView({
             onChange={(e) => onSummaryPatternChange(e.target.value)}
             className="border border-slate-300 rounded px-2 py-1 text-sm bg-white"
           >
-            {SUMMARY_PATTERNS.map((p) => (
+            {allPatterns.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
+                {p.builtIn ? '' : '（自作）'}
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={onOpenSummaryEditor}
+            className="text-xs bg-slate-700 text-white px-2 py-1 rounded hover:bg-slate-800"
+          >
+            パターン管理…
+          </button>
           <span className="text-xs text-slate-500">
             選択した文章は Excel 出力の表ヘッダ上に挿入されます
           </span>

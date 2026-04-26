@@ -9,9 +9,14 @@ import { buildAssetMovementTable } from '@/lib/asset-movement'
 import {
   DEFAULT_SUMMARY_PATTERN_ID,
   findSummaryPattern,
+  getAllPatterns,
+  loadCustomPatterns,
   loadSummaryPatternId,
-  saveSummaryPatternId
+  saveCustomPatterns,
+  saveSummaryPatternId,
+  type SummaryPattern
 } from '@/lib/summary-patterns'
+import { SummaryPatternsModal } from '@/components/SummaryPatternsModal'
 import type { AssetMovementRow, ParsedPassbook, UploadItem } from '@/types'
 
 type ProgressEntry = {
@@ -61,6 +66,8 @@ export default function HomePage() {
   const [atmKeywords, setAtmKeywords] = useState<string[]>(DEFAULT_ATM_KEYWORDS)
   const [atmModalOpen, setAtmModalOpen] = useState(false)
   const [summaryPatternId, setSummaryPatternId] = useState<string>(DEFAULT_SUMMARY_PATTERN_ID)
+  const [customPatterns, setCustomPatterns] = useState<SummaryPattern[]>([])
+  const [summaryModalOpen, setSummaryModalOpen] = useState(false)
   const [overrides, setOverrides] = useState<Record<string, Partial<AssetMovementRow>>>({})
   const [manualIncludes, setManualIncludes] = useState<string[]>([])
   const [manualExcludes, setManualExcludes] = useState<string[]>([])
@@ -78,11 +85,18 @@ export default function HomePage() {
   useEffect(() => {
     setAtmKeywords(loadAtmKeywords())
     setSummaryPatternId(loadSummaryPatternId())
+    setCustomPatterns(loadCustomPatterns())
   }, [])
 
   useEffect(() => {
     saveSummaryPatternId(summaryPatternId)
   }, [summaryPatternId])
+
+  useEffect(() => {
+    saveCustomPatterns(customPatterns)
+  }, [customPatterns])
+
+  const allPatterns = useMemo(() => getAllPatterns(customPatterns), [customPatterns])
 
   useEffect(() => {
     return () => {
@@ -235,7 +249,7 @@ export default function HomePage() {
   }
 
   const downloadExcel = async () => {
-    const summaryText = findSummaryPattern(summaryPatternId).text
+    const summaryText = findSummaryPattern(allPatterns, summaryPatternId).text
     const res = await fetch('/api/excel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -523,7 +537,9 @@ export default function HomePage() {
               table={assetTable}
               passbooks={passbooks}
               summaryPatternId={summaryPatternId}
+              allPatterns={allPatterns}
               onSummaryPatternChange={setSummaryPatternId}
+              onOpenSummaryEditor={() => setSummaryModalOpen(true)}
               onConclusionChange={(rowId, value) =>
                 setOverrides((prev) => ({ ...prev, [rowId]: { ...prev[rowId], conclusionAmount: value } }))
               }
@@ -554,6 +570,13 @@ export default function HomePage() {
         keywords={atmKeywords}
         onChange={setAtmKeywords}
         onClose={() => setAtmModalOpen(false)}
+      />
+
+      <SummaryPatternsModal
+        open={summaryModalOpen}
+        customPatterns={customPatterns}
+        onChange={setCustomPatterns}
+        onClose={() => setSummaryModalOpen(false)}
       />
     </div>
   )
