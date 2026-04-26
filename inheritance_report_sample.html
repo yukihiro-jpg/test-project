@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>相続税申告概要報告書 | 市毛 哲 様</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@200;300;400;500;700&family=Noto+Serif+JP:wght@200;300;400;500;600&family=Cormorant+Garamond:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --navy: #1c2e44;
+            --navy-deep: #131e2d;
+            --navy-light: #2a4060;
+            --gold: #b89968;
+            --gold-light: #d4ba8a;
+            --gold-soft: rgba(184, 153, 104, 0.15);
+            --cream: #faf8f3;
+            --paper: #ffffff;
+            --text: #2c2c2c;
+            --text-mid: #5a5a5a;
+            --text-light: #9a9a9a;
+            --border: #e8e4dc;
+        }
+
+        body {
+            font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+            background: #d8d8d4;
+            font-weight: 300;
+            color: var(--text);
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        /* A4 Page */
+        .page {
+            width: 210mm;
+            height: 297mm;
+            margin: 0 auto;
+            background: var(--paper);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18);
+        }
+
+        /* ============ COVER PAGE ============ */
+        .page-cover {
+            background: var(--navy);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 70px;
+        }
+
+        /* Decorative circles */
+        .deco {
+            position: absolute;
+            border-radius: 50%;
+            border: 1px solid var(--gold);
+            opacity: 0.15;
+        }
+        .deco-1 {
+            width: 480px;
+            height: 480px;
+            top: -240px;
+            right: -240px;
+        }
+        .deco-2 {
+            width: 320px;
+            height: 320px;
+            bottom: -160px;
+            left: -160px;
+            opacity: 0.1;
+        }
+        .deco-3 {
+            width: 140px;
+            height: 140px;
+            top: 100px;
+            right: 100px;
+            opacity: 0.25;
+        }
+
+        /* Cover top brand */
+        .cover-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            position: relative;
+            z-index: 2;
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            border: 1px solid var(--gold);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 16px;
+            color: var(--gold);
+            font-weight: 400;
+        }
+
+        .brand-text {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 13px;
+            letter-spacing: 4px;
+            color: var(--gold);
+            font-weight: 400;
+        }
+
+        .doc-no {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 11px;
+            letter-spacing: 3px;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        /* Cover center */
+        .cover-center {
+            text-align: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .eyebrow {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 12px;
+            letter-spacing: 6px;
+            color: var(--gold);
+            margin-bottom: 60px;
+            text-transform: uppercase;
+        }
+
+        .main-title {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 44px;
+            font-weight: 300;
+            letter-spacing: 14px;
+            color: white;
+            line-height: 1.7;
+            margin-bottom: 20px;
+            padding-left: 14px;
+        }
+
+        .sub-title-en {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 13px;
+            letter-spacing: 5px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 70px;
+            font-style: italic;
+        }
+
+        .ornament {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin: 0 auto 70px;
+        }
+
+        .ornament-line {
+            width: 60px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--gold));
+        }
+
+        .ornament-line-r {
+            background: linear-gradient(90deg, var(--gold), transparent);
+        }
+
+        .ornament-dot {
+            width: 6px;
+            height: 6px;
+            border: 1px solid var(--gold);
+            transform: rotate(45deg);
+        }
+
+        .client-block {
+            display: inline-block;
+            padding: 36px 60px;
+            border-top: 1px solid rgba(184, 153, 104, 0.3);
+            border-bottom: 1px solid rgba(184, 153, 104, 0.3);
+        }
+
+        .client-label {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 10px;
+            letter-spacing: 4px;
+            color: var(--gold);
+            margin-bottom: 16px;
+        }
+
+        .client-name {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 28px;
+            font-weight: 300;
+            color: white;
+            letter-spacing: 10px;
+            padding-left: 10px;
+        }
+
+        .client-honorific {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 18px;
+            color: var(--gold-light);
+            margin-left: 8px;
+            font-weight: 300;
+        }
+
+        .client-sub {
+            font-family: 'Noto Sans JP', sans-serif;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+            letter-spacing: 3px;
+            margin-top: 18px;
+            font-weight: 300;
+        }
+
+        /* Cover bottom */
+        .cover-bottom {
+            position: relative;
+            z-index: 2;
+        }
+
+        .cover-bottom-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 40px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .bottom-item-label {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 9px;
+            letter-spacing: 3px;
+            color: var(--gold);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .bottom-item-value {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.85);
+            letter-spacing: 2px;
+            font-weight: 300;
+        }
+
+        .bottom-item-value-en {
+            font-family: 'Cormorant Garamond', serif;
+        }
+
+        /* Confidential stamp */
+        .confidential {
+            position: absolute;
+            top: 50%;
+            right: 70px;
+            transform: translateY(-50%) rotate(90deg);
+            transform-origin: right center;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 10px;
+            letter-spacing: 8px;
+            color: rgba(184, 153, 104, 0.4);
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .page {
+                box-shadow: none;
+                margin: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ====================== PAGE 1 : COVER ====================== -->
+    <div class="page page-cover">
+        <div class="deco deco-1"></div>
+        <div class="deco deco-2"></div>
+        <div class="deco deco-3"></div>
+
+        <div class="confidential">CONFIDENTIAL DOCUMENT</div>
+
+        <!-- TOP -->
+        <div class="cover-top">
+            <div class="brand-mark">
+                <div class="brand-icon">S</div>
+                <div class="brand-text">SOUZOKU&nbsp;ADVISORY</div>
+            </div>
+            <div class="doc-no">No. 2026 - 0426</div>
+        </div>
+
+        <!-- CENTER -->
+        <div class="cover-center">
+            <div class="eyebrow">ESTATE&nbsp;&amp;&nbsp;INHERITANCE&nbsp;ADVISORY</div>
+
+            <div class="main-title">
+                相続税申告<br>概要報告書
+            </div>
+
+            <div class="sub-title-en">Inheritance Tax Declaration Summary Report</div>
+
+            <div class="ornament">
+                <div class="ornament-line"></div>
+                <div class="ornament-dot"></div>
+                <div class="ornament-line ornament-line-r"></div>
+            </div>
+
+            <div class="client-block">
+                <div class="client-label">For the Family of</div>
+                <div>
+                    <span class="client-name">市毛　哲</span><span class="client-honorific">様</span>
+                </div>
+                <div class="client-sub">ご遺族の皆様へ</div>
+            </div>
+        </div>
+
+        <!-- BOTTOM -->
+        <div class="cover-bottom">
+            <div class="cover-bottom-grid">
+                <div>
+                    <div class="bottom-item-label">Issued</div>
+                    <div class="bottom-item-value">令和8年 4月 26日</div>
+                </div>
+                <div>
+                    <div class="bottom-item-label">Prepared By</div>
+                    <div class="bottom-item-value">税理士法人　○○会計</div>
+                </div>
+                <div>
+                    <div class="bottom-item-label">Reference</div>
+                    <div class="bottom-item-value bottom-item-value-en">IHT-2026-0426</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
