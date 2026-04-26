@@ -170,7 +170,15 @@ async function callGemini(pdfBase64: string, prompt: string, label = ''): Promis
       return {}
     }
     try {
-      return JSON.parse(text) as RawAnalysis
+      const parsed = JSON.parse(text) as RawAnalysis
+      const txCount = parsed.取引?.length ?? 0
+      const sb = parsed.開始残高 ?? '?'
+      const eb = parsed.終了残高 ?? '?'
+      console.log(
+        `[gemini] ${label} 受信: 取引${txCount}件 / 開始残高=${sb} / 終了残高=${eb}` +
+          (txCount === 0 ? `\n  raw response (1KB): ${text.slice(0, 1000)}` : '')
+      )
+      return parsed
     } catch (e) {
       console.error(`[gemini] ${label} JSONパース失敗:`, text.slice(0, 500))
       throw new Error(`JSONパース失敗: ${(e as Error).message}`)
