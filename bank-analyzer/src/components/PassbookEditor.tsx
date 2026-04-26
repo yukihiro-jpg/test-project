@@ -23,9 +23,9 @@ const DEFAULT_WIDTHS: Record<ColKey, number> = {
   mark: 64,
   date: 160,
   desc: 196,
-  deposit: 110,
-  withdrawal: 110,
-  balance: 130,
+  deposit: 88,
+  withdrawal: 88,
+  balance: 104,
   remarks: 200
 }
 
@@ -49,7 +49,7 @@ const COL_ALIGN: Record<ColKey, 'left' | 'center' | 'right'> = {
   remarks: 'left'
 }
 
-const STORAGE_KEY = 'bank-analyzer-passbook-col-widths-v2'
+const STORAGE_KEY = 'bank-analyzer-passbook-col-widths-v3'
 
 export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAddTx }: Props) {
   const pdfRef = useRef<PdfViewerHandle>(null)
@@ -119,7 +119,10 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
     setMismatchCursor((c) => c + 1)
   }
 
-  const handleRowClick = (tx: Transaction) => {
+  const handleRowClick = (tx: Transaction, e: React.MouseEvent) => {
+    // 入力欄やボタンをクリックした場合は通常の編集動作のみ（PDFジャンプはしない）
+    const target = e.target as HTMLElement
+    if (target.closest('input, button, select, textarea, a')) return
     setSelectedTxId(tx.id)
     if (tx.pageNumber && pdfRef.current) {
       pdfRef.current.goToPage(tx.pageNumber)
@@ -297,9 +300,9 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                 key={tx.id}
                 data-tx-id={tx.id}
                 className={`border-t cursor-pointer ${rowClass}`}
-                onClick={() => handleRowClick(tx)}
+                onClick={(e) => handleRowClick(tx, e)}
               >
-                <td className="px-1 py-0.5 text-center" onClick={(e) => e.stopPropagation()}>
+                <td className="px-1 py-0.5 text-center">
                   {isIncluded ? (
                     <span
                       className="inline-flex items-center justify-center w-7 h-6 rounded bg-amber-200 text-amber-900 font-bold text-xs"
@@ -319,7 +322,7 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                     </button>
                   )}
                 </td>
-                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
+                <td className="px-1 py-0.5">
                   <WarekiInput value={tx.date} onChange={(v) => updateTx(tx.id, { date: v })} />
                   {tx.pageNumber && (
                     <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">
@@ -327,7 +330,7 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                     </div>
                   )}
                 </td>
-                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
+                <td className="px-1 py-0.5">
                   <input
                     type="text"
                     value={tx.description}
@@ -335,19 +338,19 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                     className="w-full border border-slate-200 rounded px-1 py-0.5"
                   />
                 </td>
-                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
+                <td className="px-1 py-0.5">
                   <NumberInput
                     value={tx.deposit || 0}
                     onChange={(v) => updateTx(tx.id, { deposit: v })}
                   />
                 </td>
-                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
+                <td className="px-1 py-0.5">
                   <NumberInput
                     value={tx.withdrawal || 0}
                     onChange={(v) => updateTx(tx.id, { withdrawal: v })}
                   />
                 </td>
-                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
+                <td className="px-1 py-0.5">
                   <NumberInput
                     value={tx.balance || 0}
                     onChange={(v) => updateTx(tx.id, { balance: v })}
@@ -364,7 +367,7 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                     </div>
                   )}
                 </td>
-                <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
+                <td className="px-1 py-0.5">
                   <input
                     type="text"
                     value={tx.remarks || ''}

@@ -290,21 +290,25 @@ export default function HomePage() {
             </div>
             <div className="flex flex-wrap gap-3 items-end">
               <label className="flex flex-col text-xs">
-                <span className="mb-1 text-slate-600">開始日</span>
+                <span className="mb-1 text-slate-600">開始日 (YYYY-MM-DD)</span>
                 <input
-                  type="date"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="2025-01-01"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="border border-slate-300 rounded px-2 py-1 text-sm"
+                  className="border border-slate-300 rounded px-2 py-1 text-sm w-32 font-mono"
                 />
               </label>
               <label className="flex flex-col text-xs">
-                <span className="mb-1 text-slate-600">終了日</span>
+                <span className="mb-1 text-slate-600">終了日 (YYYY-MM-DD)</span>
                 <input
-                  type="date"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="2026-04-30"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="border border-slate-300 rounded px-2 py-1 text-sm"
+                  className="border border-slate-300 rounded px-2 py-1 text-sm w-32 font-mono"
                 />
               </label>
               <button
