@@ -14,17 +14,6 @@ type ProgressEntry = {
   message?: string
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  const buf = await file.arrayBuffer()
-  const bytes = new Uint8Array(buf)
-  let binary = ''
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)))
-  }
-  return btoa(binary)
-}
-
 export default function HomePage() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -129,24 +118,27 @@ export default function HomePage() {
       const it = items[i]
       setProgress((p) => p.map((e, idx) => (idx === i ? { ...e, status: 'analyzing' } : e)))
       try {
-        const pdfBase64 = await fileToBase64(it.file)
-        const res = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            passbookId: it.id,
-            fileName: it.file.name,
-            label: it.label,
-            bankName: it.bankName,
-            branchName: it.branchName,
-            accountNumber: it.accountNumber,
-            startDate,
-            endDate,
-            pdfBase64
-          })
-        })
+        const form = new FormData()
+        form.append('file', it.file)
+        form.append('passbookId', it.id)
+        form.append('fileName', it.file.name)
+        form.append('label', it.label)
+        form.append('bankName', it.bankName)
+        form.append('branchName', it.branchName)
+        form.append('accountNumber', it.accountNumber)
+        form.append('startDate', startDate)
+        form.append('endDate', endDate)
+
+        let res: Response
+        try {
+          res = await fetch('/api/analyze', { method: 'POST', body: form })
+        } catch (netErr) {
+          throw new Error(
+            `通信エラー: ${(netErr as Error).message}（PDFが大きい・サーバーが停止・ネット切断などの可能性）`
+          )
+        }
         if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: 'unknown' }))
+          const err = await res.json().catch(() => ({ error: `HTTP ${res.status} ${res.statusText}` }))
           throw new Error(err.error || `HTTP ${res.status}`)
         }
         const data = await res.json()
