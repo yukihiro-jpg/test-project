@@ -51,3 +51,12 @@ export type AssetMovementTable = {
   passbookOrder: string[]
   rows: AssetMovementRow[]
 }
+
+export type UploadItem = {
+  id: string
+  file: File
+  label: string
+  bankName: string
+  branchName: string
+  accountNumber: string
+}
