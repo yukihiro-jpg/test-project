@@ -9,9 +9,38 @@ import { buildAssetMovementTable } from '@/lib/asset-movement'
 import type { AssetMovementRow, ParsedPassbook, UploadItem } from '@/types'
 
 type ProgressEntry = {
+  id: string
   fileName: string
-  status: 'pending' | 'analyzing' | 'done' | 'error'
+  status: 'pending' | 'uploading' | 'analyzing' | 'done' | 'error'
   message?: string
+  uploadPct?: number
+  startedAt?: number
+  finishedAt?: number
+}
+
+const MAX_PARALLEL = 3
+
+function uploadWithProgress(
+  url: string,
+  form: FormData,
+  onUploadProgress: (pct: number) => void,
+  onUploadDone: () => void
+): Promise<{ status: number; statusText: string; body: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', url)
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) onUploadProgress(e.loaded / e.total)
+    })
+    xhr.upload.addEventListener('load', () => onUploadDone())
+    xhr.addEventListener('load', () => {
+      resolve({ status: xhr.status, statusText: xhr.statusText, body: xhr.responseText })
+    })
+    xhr.addEventListener('error', () => reject(new Error('ネットワークエラー')))
+    xhr.addEventListener('abort', () => reject(new Error('中断されました')))
+    xhr.addEventListener('timeout', () => reject(new Error('タイムアウト')))
+    xhr.send(form)
+  })
 }
 
 export default function HomePage() {
@@ -29,7 +58,14 @@ export default function HomePage() {
   const [manualExcludes, setManualExcludes] = useState<string[]>([])
   const [pdfUrls, setPdfUrls] = useState<Record<string, string>>({})
   const [dragOver, setDragOver] = useState(false)
+  const [tick, setTick] = useState(0)
   const pdfUrlsRef = useRef<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!analyzing) return
+    const t = setInterval(() => setTick((v) => v + 1), 1000)
+    return () => clearInterval(t)
+  }, [analyzing])
 
   useEffect(() => {
     setAtmKeywords(loadAtmKeywords())
@@ -110,13 +146,18 @@ export default function HomePage() {
     for (const url of Object.values(pdfUrlsRef.current)) URL.revokeObjectURL(url)
     pdfUrlsRef.current = {}
     setPdfUrls({})
-    setProgress(items.map((it) => ({ fileName: it.file.name, status: 'pending' })))
+    setProgress(items.map((it) => ({ id: it.id, fileName: it.file.name, status: 'pending' })))
+
+    const updateProgressById = (id: string, patch: Partial<ProgressEntry>) => {
+      setProgress((p) => p.map((e) => (e.id === id ? { ...e, ...patch } : e)))
+    }
 
     const results: ParsedPassbook[] = []
     const newUrls: Record<string, string> = {}
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i]
-      setProgress((p) => p.map((e, idx) => (idx === i ? { ...e, status: 'analyzing' } : e)))
+
+    const queue = [...items]
+    const processOne = async (it: UploadItem) => {
+      updateProgressById(it.id, { status: 'uploading', uploadPct: 0, startedAt: Date.now() })
       try {
         const form = new FormData()
         form.append('file', it.file)
@@ -129,29 +170,42 @@ export default function HomePage() {
         form.append('startDate', startDate)
         form.append('endDate', endDate)
 
-        let res: Response
-        try {
-          res = await fetch('/api/analyze', { method: 'POST', body: form })
-        } catch (netErr) {
-          throw new Error(
-            `通信エラー: ${(netErr as Error).message}（PDFが大きい・サーバーが停止・ネット切断などの可能性）`
-          )
+        const r = await uploadWithProgress(
+          '/api/analyze',
+          form,
+          (pct) => updateProgressById(it.id, { uploadPct: pct }),
+          () => updateProgressById(it.id, { status: 'analyzing', uploadPct: 1 })
+        )
+        if (r.status < 200 || r.status >= 300) {
+          let msg = `HTTP ${r.status} ${r.statusText}`
+          try {
+            const j = JSON.parse(r.body)
+            if (j?.error) msg = j.error
+          } catch {}
+          throw new Error(msg)
         }
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: `HTTP ${res.status} ${res.statusText}` }))
-          throw new Error(err.error || `HTTP ${res.status}`)
-        }
-        const data = await res.json()
+        const data = JSON.parse(r.body)
         results.push(data.passbook)
         const url = URL.createObjectURL(it.file)
         newUrls[data.passbook.passbookId] = url
-        setProgress((p) => p.map((e, idx) => (idx === i ? { ...e, status: 'done' } : e)))
+        updateProgressById(it.id, { status: 'done', finishedAt: Date.now() })
       } catch (err) {
-        setProgress((p) =>
-          p.map((e, idx) => (idx === i ? { ...e, status: 'error', message: (err as Error).message } : e))
-        )
+        updateProgressById(it.id, {
+          status: 'error',
+          message: (err as Error).message || '不明なエラー',
+          finishedAt: Date.now()
+        })
       }
     }
+
+    const workers = Array.from({ length: Math.min(MAX_PARALLEL, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const next = queue.shift()
+        if (!next) return
+        await processOne(next)
+      }
+    })
+    await Promise.all(workers)
 
     setPassbooks(results)
     pdfUrlsRef.current = newUrls
@@ -227,26 +281,56 @@ export default function HomePage() {
               </button>
             </div>
             {progress.length > 0 && (
-              <ul className="mt-2 text-xs space-y-0.5 max-h-20 overflow-auto">
-                {progress.map((p, i) => (
-                  <li key={i} className="flex items-center gap-2">
-                    <span
-                      className={
-                        p.status === 'done'
-                          ? 'text-green-600'
-                          : p.status === 'error'
-                          ? 'text-red-600'
-                          : p.status === 'analyzing'
-                          ? 'text-blue-600'
-                          : 'text-slate-400'
-                      }
-                    >
-                      {p.status === 'done' ? '✓' : p.status === 'error' ? '✗' : p.status === 'analyzing' ? '⏳' : '・'}
-                    </span>
-                    <span className="truncate">{p.fileName}</span>
-                    {p.message && <span className="text-red-600">{p.message}</span>}
-                  </li>
-                ))}
+              <ul className="mt-2 text-xs space-y-1 max-h-32 overflow-auto">
+                {progress.map((p) => {
+                  const elapsed = p.startedAt
+                    ? Math.floor(((p.finishedAt ?? Date.now()) - p.startedAt) / 1000)
+                    : 0
+                  const stageLabel =
+                    p.status === 'pending'
+                      ? '待機中'
+                      : p.status === 'uploading'
+                      ? `送信中 ${Math.round((p.uploadPct ?? 0) * 100)}%`
+                      : p.status === 'analyzing'
+                      ? 'Gemini解析中'
+                      : p.status === 'done'
+                      ? '完了'
+                      : 'エラー'
+                  const icon =
+                    p.status === 'done'
+                      ? '✓'
+                      : p.status === 'error'
+                      ? '✗'
+                      : p.status === 'analyzing' || p.status === 'uploading'
+                      ? '⏳'
+                      : '・'
+                  const color =
+                    p.status === 'done'
+                      ? 'text-green-600'
+                      : p.status === 'error'
+                      ? 'text-red-600'
+                      : p.status === 'analyzing' || p.status === 'uploading'
+                      ? 'text-blue-600'
+                      : 'text-slate-400'
+                  return (
+                    <li key={p.id} className="flex items-center gap-2" data-tick={tick}>
+                      <span className={`${color} w-4 text-center`}>{icon}</span>
+                      <span className="truncate flex-1">{p.fileName}</span>
+                      <span className={`${color} font-medium whitespace-nowrap`}>{stageLabel}</span>
+                      {p.startedAt && (
+                        <span className="text-slate-500 font-mono w-12 text-right">
+                          {String(Math.floor(elapsed / 60)).padStart(2, '0')}:
+                          {String(elapsed % 60).padStart(2, '0')}
+                        </span>
+                      )}
+                      {p.message && (
+                        <span className="text-red-600 truncate" title={p.message}>
+                          {p.message}
+                        </span>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </section>

@@ -1,8 +1,8 @@
 'use client'
 
 import type { ParsedPassbook, Transaction } from '@/types'
-import { toWarekiShort } from '@/lib/wareki'
 import { PdfViewer } from './PdfViewer'
+import { NumberInput, WarekiInput } from './FormattedInputs'
 
 type Props = {
   passbook: ParsedPassbook
@@ -94,11 +94,11 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
         <thead className="bg-slate-700 text-white sticky top-0 z-10">
           <tr>
             <th className="px-2 py-1 text-center w-16" title="金融資産異動一覧表への計上">計上</th>
-            <th className="px-2 py-1 text-left w-24">日付</th>
+            <th className="px-2 py-1 text-left w-36">日付</th>
             <th className="px-2 py-1 text-left">摘要</th>
-            <th className="px-2 py-1 text-right w-24">入金</th>
-            <th className="px-2 py-1 text-right w-24">出金</th>
-            <th className="px-2 py-1 text-right w-28">残高</th>
+            <th className="px-2 py-1 text-right w-28">入金</th>
+            <th className="px-2 py-1 text-right w-28">出金</th>
+            <th className="px-2 py-1 text-right w-32">残高</th>
             <th className="px-2 py-1 text-left w-40">備考</th>
           </tr>
         </thead>
@@ -128,14 +128,10 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                   )}
                 </td>
                 <td className="px-1 py-0.5">
-                  <input
-                    type="text"
+                  <WarekiInput
                     value={tx.date}
-                    onChange={(e) => updateTx(tx.id, { date: e.target.value })}
-                    placeholder="YYYY-MM-DD"
-                    className="w-full border border-slate-200 rounded px-1 py-0.5 font-mono"
+                    onChange={(v) => updateTx(tx.id, { date: v })}
                   />
-                  <div className="text-[10px] text-slate-500 mt-0.5 leading-tight">{toWarekiShort(tx.date)}</div>
                 </td>
                 <td className="px-1 py-0.5">
                   <input
@@ -146,27 +142,21 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                   />
                 </td>
                 <td className="px-1 py-0.5">
-                  <input
-                    type="number"
-                    value={tx.deposit || ''}
-                    onChange={(e) => updateTx(tx.id, { deposit: Number(e.target.value) || 0 })}
-                    className="w-full border border-slate-200 rounded px-1 py-0.5 text-right"
+                  <NumberInput
+                    value={tx.deposit || 0}
+                    onChange={(v) => updateTx(tx.id, { deposit: v })}
                   />
                 </td>
                 <td className="px-1 py-0.5">
-                  <input
-                    type="number"
-                    value={tx.withdrawal || ''}
-                    onChange={(e) => updateTx(tx.id, { withdrawal: Number(e.target.value) || 0 })}
-                    className="w-full border border-slate-200 rounded px-1 py-0.5 text-right"
+                  <NumberInput
+                    value={tx.withdrawal || 0}
+                    onChange={(v) => updateTx(tx.id, { withdrawal: v })}
                   />
                 </td>
                 <td className="px-1 py-0.5">
-                  <input
-                    type="number"
-                    value={tx.balance || ''}
-                    onChange={(e) => updateTx(tx.id, { balance: Number(e.target.value) || 0 })}
-                    className="w-full border border-slate-200 rounded px-1 py-0.5 text-right"
+                  <NumberInput
+                    value={tx.balance || 0}
+                    onChange={(v) => updateTx(tx.id, { balance: v })}
                   />
                 </td>
                 <td className="px-1 py-0.5">
