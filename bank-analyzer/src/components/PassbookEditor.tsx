@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ParsedPassbook, Transaction } from '@/types'
 import { PdfViewer, type PdfViewerHandle } from './PdfViewer'
 import { NumberInput, WarekiInput } from './FormattedInputs'
+import { computeBalanceMismatches } from '@/lib/balance-check'
 
 type Props = {
   passbook: ParsedPassbook
@@ -52,8 +53,10 @@ const STORAGE_KEY = 'bank-analyzer-passbook-col-widths'
 
 export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAddTx }: Props) {
   const pdfRef = useRef<PdfViewerHandle>(null)
+  const tableScrollRef = useRef<HTMLDivElement>(null)
   const [selectedTxId, setSelectedTxId] = useState<string | null>(null)
   const [widths, setWidths] = useState<Record<ColKey, number>>(DEFAULT_WIDTHS)
+  const [mismatchCursor, setMismatchCursor] = useState(0)
 
   useEffect(() => {
     try {
@@ -82,6 +85,39 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
   const updatePurpose = (purpose: string) => {
     onChange({ ...passbook, purpose })
   }
+  const updateStartBalance = (v: number) => {
+    onChange({ ...passbook, startBalance: v })
+  }
+  const updateEndBalance = (v: number) => {
+    onChange({ ...passbook, endBalance: v })
+  }
+
+  const startBalanceValue = passbook.startBalance ?? 0
+  const balanceCheck = useMemo(
+    () => computeBalanceMismatches(passbook.transactions, startBalanceValue),
+    [passbook.transactions, startBalanceValue]
+  )
+  const mismatchMap = useMemo(() => {
+    const m = new Map<string, { expected: number; actual: number }>()
+    for (const x of balanceCheck.mismatches) m.set(x.txId, { expected: x.expected, actual: x.actual })
+    return m
+  }, [balanceCheck])
+
+  const jumpToMismatch = (txId: string) => {
+    const sc = tableScrollRef.current
+    if (!sc) return
+    const row = sc.querySelector<HTMLTableRowElement>(`tr[data-tx-id="${CSS.escape(txId)}"]`)
+    if (!row) return
+    const top = row.offsetTop - sc.clientHeight / 3
+    sc.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+    setSelectedTxId(txId)
+  }
+  const handleNextMismatch = () => {
+    if (balanceCheck.mismatches.length === 0) return
+    const idx = mismatchCursor % balanceCheck.mismatches.length
+    jumpToMismatch(balanceCheck.mismatches[idx].txId)
+    setMismatchCursor((c) => c + 1)
+  }
 
   const handleRowClick = (tx: Transaction) => {
     setSelectedTxId(tx.id)
@@ -109,12 +145,9 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
     document.body.style.cursor = 'col-resize'
   }
 
-  const computedEnd = passbook.transactions.reduce(
-    (acc, tx) => acc + tx.deposit - tx.withdrawal,
-    passbook.startBalance ?? 0
-  )
+  const computedEnd = balanceCheck.computedEnd
   const declaredEnd = passbook.endBalance ?? 0
-  const balanceOk = Math.abs(computedEnd - declaredEnd) < 0.5
+  const balanceOk = balanceCheck.mismatches.length === 0 && Math.abs(computedEnd - declaredEnd) < 0.5
 
   const totalWidth = COL_KEYS.reduce((sum, k) => sum + widths[k], 0)
 
@@ -159,15 +192,54 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
           />
         </label>
         <div
-          className={`p-2 rounded text-xs flex flex-wrap gap-x-4 gap-y-0.5 ${
-            balanceOk ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'
+          className={`p-2 rounded text-xs space-y-1 ${
+            balanceOk ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
           }`}
         >
-          <span>開始残高: {fmt(passbook.startBalance ?? 0)} 円</span>
-          <span>終了残高（申告）: {fmt(declaredEnd)} 円</span>
-          <span>
-            終了残高（計算上）: {fmt(computedEnd)} 円 {balanceOk ? '✓ 一致' : '⚠ 不一致'}
-          </span>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 items-center">
+            <label className="flex items-center gap-1">
+              <span>開始残高:</span>
+              <NumberInput
+                value={startBalanceValue}
+                onChange={updateStartBalance}
+                className="w-28 border border-slate-300 rounded px-1 py-0.5 text-right bg-white"
+              />
+              <span>円</span>
+            </label>
+            <label className="flex items-center gap-1">
+              <span>終了残高（申告）:</span>
+              <NumberInput
+                value={declaredEnd}
+                onChange={updateEndBalance}
+                className="w-28 border border-slate-300 rounded px-1 py-0.5 text-right bg-white"
+              />
+              <span>円</span>
+            </label>
+            <span>
+              終了残高（計算上）: <strong>{fmt(computedEnd)}</strong> 円
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {balanceOk ? (
+              <span className="font-bold">✓ 残高すべて一致</span>
+            ) : (
+              <>
+                <span className="font-bold">⚠ 残高不一致: {balanceCheck.mismatches.length}行</span>
+                <button
+                  type="button"
+                  onClick={handleNextMismatch}
+                  className="bg-red-600 text-white px-2 py-0.5 rounded text-xs hover:bg-red-700"
+                >
+                  次の不一致へ →
+                </button>
+                {Math.abs(computedEnd - declaredEnd) > 0.5 && (
+                  <span className="text-xs">
+                    （計算と申告の差: {fmt(Math.abs(computedEnd - declaredEnd))}円）
+                  </span>
+                )}
+              </>
+            )}
+          </div>
         </div>
         {passbook.warnings.length > 0 && (
           <ul className="text-xs text-amber-900 list-disc list-inside max-h-24 overflow-auto">
@@ -196,7 +268,7 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
   )
 
   const dataPanel = (
-    <div className="h-full min-h-0 overflow-auto border rounded">
+    <div ref={tableScrollRef} className="h-full min-h-0 overflow-auto border rounded">
       <table className="text-sm" style={{ width: totalWidth, tableLayout: 'fixed' }}>
         <colgroup>
           {COL_KEYS.map((c) => (
@@ -210,7 +282,12 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
           {passbook.transactions.map((tx) => {
             const isIncluded = includedTxIds?.has(tx.id) ?? false
             const isSelected = selectedTxId === tx.id
-            const rowClass = isSelected
+            const mismatch = mismatchMap.get(tx.id)
+            const rowClass = mismatch
+              ? isSelected
+                ? 'bg-red-200'
+                : 'bg-red-100 hover:bg-red-200'
+              : isSelected
               ? 'bg-blue-100'
               : isIncluded
               ? 'bg-amber-50'
@@ -218,6 +295,7 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
             return (
               <tr
                 key={tx.id}
+                data-tx-id={tx.id}
                 className={`border-t cursor-pointer ${rowClass}`}
                 onClick={() => handleRowClick(tx)}
               >
@@ -273,7 +351,18 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                   <NumberInput
                     value={tx.balance || 0}
                     onChange={(v) => updateTx(tx.id, { balance: v })}
+                    className={`w-full border rounded px-1 py-0.5 text-right ${
+                      mismatch ? 'border-red-500 bg-red-50' : 'border-slate-200'
+                    }`}
                   />
+                  {mismatch && (
+                    <div
+                      className="text-[10px] text-red-700 mt-0.5 leading-tight"
+                      title={`計算上の期待値: ${mismatch.expected.toLocaleString()}`}
+                    >
+                      期待値: {mismatch.expected.toLocaleString()}
+                    </div>
+                  )}
                 </td>
                 <td className="px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
                   <input
