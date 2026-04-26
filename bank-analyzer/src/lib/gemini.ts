@@ -97,7 +97,39 @@ ${pageHeader}以下のPDFから取引明細を抽出してください${bankName
 - 残高欄に印字される「*」「＊」「¥」「￥」「\\」「※」などの**記号は除去**して、純粋な数値だけを返してください（例: "*15,896,267" → 15896267）。
 - 数値は半角数字で、カンマなしで返してください。
 - ヘッダー行・タイトル行・小計行・ページ番号行は含めないでください。
+
+【取引ではない案内行を除外】次のような「取引ではない行」は **取引リストに含めないでください**。これらは入出金が伴わず、ただの案内・残高表示行です:
+  - 「窓口または店舗内のATMにて新通帳への繰り越しをお願いします」など、新通帳作成・繰越の案内文
+  - 「ただ今の取引記帳残高　〇〇〇円」「お預り合計」「現在残高」など、残高や合計を表示するだけの行
+  - 「次ページへ続く」「以下余白」などの案内行
+  - 通帳冒頭の「お取扱店」「口座開設日」など、取引と関係ない情報行
+
 - 取引が0件であっても "取引": [] を返してください。`
+}
+
+// 念のためサーバー側でも除外フィルタをかける（Gemini が見落としても落とせるよう二重化）
+const TRANSITION_KEYWORDS = [
+  '繰り越し',
+  '繰越',
+  '新通帳',
+  'ただ今',
+  '記帳残高',
+  '現在残高',
+  '現在高表示',
+  '通帳更新',
+  '次ページへ続',
+  '以下余白',
+  'お取扱店',
+  '口座開設'
+]
+
+function isTransitionRow(row: RawRow): boolean {
+  const dep = parseNumber(row.入金額)
+  const wd = parseNumber(row.出金額)
+  // 入金も出金もないが残高だけある行は「ただの残高表示行」の可能性が高い
+  if (dep !== 0 || wd !== 0) return false
+  const text = `${row.摘要 || ''} ${row.備考 || ''}`
+  return TRANSITION_KEYWORDS.some((kw) => text.includes(kw))
 }
 
 function parseNumber(value: number | string | undefined): number {
@@ -286,7 +318,9 @@ export async function analyzePassbook(opts: {
       { startDate, endDate, bankName, branchName, accountNumber }
     )
     warnings.push(...w)
-    const rows = (analysis.取引 || []).filter((r) => isInRange(r.年月日 || '', startDate, endDate))
+    const rows = (analysis.取引 || [])
+      .filter((r) => !isTransitionRow(r))
+      .filter((r) => isInRange(r.年月日 || '', startDate, endDate))
     return {
       passbookId,
       fileName,
@@ -344,9 +378,9 @@ export async function analyzePassbook(opts: {
   for (const r of results) {
     if (!r) continue
     warnings.push(...r.warnings)
-    const pageRows = (r.analysis.取引 || []).filter((row) =>
-      isInRange(row.年月日 || '', startDate, endDate)
-    )
+    const pageRows = (r.analysis.取引 || [])
+      .filter((row) => !isTransitionRow(row))
+      .filter((row) => isInRange(row.年月日 || '', startDate, endDate))
     const pageStart = parseNumber(r.analysis.開始残高)
     const pageEnd = parseNumber(r.analysis.終了残高)
 
@@ -377,7 +411,9 @@ export async function analyzePassbook(opts: {
         { startDate, endDate, bankName, branchName, accountNumber }
       )
       warnings.push(...fw)
-      const fullRows = (full.取引 || []).filter((r) => isInRange(r.年月日 || '', startDate, endDate))
+      const fullRows = (full.取引 || [])
+        .filter((r) => !isTransitionRow(r))
+        .filter((r) => isInRange(r.年月日 || '', startDate, endDate))
       return {
         passbookId,
         fileName,
