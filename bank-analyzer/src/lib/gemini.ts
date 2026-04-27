@@ -4,7 +4,7 @@ import type { ParsedPassbook, Transaction } from '@/types'
 import { parseLooseDate, toIsoDate } from './wareki'
 
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
-const PAGE_PARALLELISM = Number(process.env.GEMINI_PAGE_PARALLELISM || '5')
+const PAGE_PARALLELISM = Number(process.env.GEMINI_PAGE_PARALLELISM || '8')
 
 type RawRow = {
   銀行名?: string
@@ -68,6 +68,11 @@ ${pageHeader}以下のPDFから取引明細を抽出してください${bankName
   2. 収まらなければ**平成**（平成元年 = 1989年1月8日〜2019年4月30日）
   3. それでも収まらなければ**昭和**
 - 解決した結果は必ず西暦4桁の "YYYY/MM/DD" 形式で出力してください。
+- **重要**: 通帳の取引は時系列順（日付の昇順）で印字されます。あるページの中で
+  前後の行より日付が1年以上前後にずれている行があったら、それは年の数字を
+  読み間違えている可能性が極めて高いです（例: 「2-6-17」を「3-6-17」と誤読）。
+  必ず前後行と整合する年で出力してください。和暦の年（最初の数字）は2/3、
+  3/4、4/5、5/6 など隣接する数字が混同されやすいので特に注意。
 
 【ゆうちょ等の少額利息行に特に注意】
 ゆうちょ銀行などの通帳では、**金額と摘要が空白なしで一体になった表記**が
@@ -519,16 +524,14 @@ export async function analyzePassbook(opts: {
     if (firstStart === null && pageStart) firstStart = pageStart
     if (pageRows.length > 0) lastEnd = pageEnd
 
-    // ページ境界の残高接続チェック
-    if (lastPageEnd !== null && pageStart && Math.abs(lastPageEnd - pageStart) > 0.5) {
-      warnings.push(
-        `${r.page}ページ目の開始残高(${pageStart.toLocaleString()})が前ページ終了残高(${lastPageEnd.toLocaleString()})と一致しません`
-      )
-    }
+    // ページ境界の残高接続チェックは client 側で動的に行うためここでは生成しない
+    // （ユーザーが値を直したら自動で警告が消えるようにするため）
     if (pageEnd) lastPageEnd = pageEnd
 
     allTransactions.push(...rowsToTransactions(pageRows, passbookId, { startDate, endDate }, r.page))
   }
+  // lastPageEnd は使用しない（client 側で再計算）
+  void lastPageEnd
 
   // フォールバック: 全ページ並列で取引が0件 → 単一PDFモードでもう一度試す
   if (allTransactions.length === 0) {

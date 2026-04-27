@@ -5,6 +5,7 @@ import type { ParsedPassbook, Transaction } from '@/types'
 import { PdfViewer, type PdfViewerHandle } from './PdfViewer'
 import { NumberInput, WarekiInput } from './FormattedInputs'
 import { computeBalanceMismatches } from '@/lib/balance-check'
+import { parseLooseDate, toIsoDate } from '@/lib/wareki'
 
 type Props = {
   passbook: ParsedPassbook
@@ -101,6 +102,15 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
       ...passbook,
       transactions: passbook.transactions.filter((t) => t.id !== id)
     })
+  }
+  const shiftTxYear = (id: string, deltaYears: number) => {
+    const tx = passbook.transactions.find((t) => t.id === id)
+    if (!tx) return
+    const d = parseLooseDate(tx.date)
+    if (!d) return
+    const next = new Date(d)
+    next.setFullYear(next.getFullYear() + deltaYears)
+    updateTx(id, { date: toIsoDate(next) })
   }
   const updatePurpose = (purpose: string) => {
     onChange({ ...passbook, purpose })
@@ -308,6 +318,19 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
             )}
           </div>
         </div>
+        {balanceCheck.pageBoundaryWarnings.length > 0 && (
+          <ul className="text-xs text-amber-900 list-disc list-inside max-h-20 overflow-auto bg-amber-50 p-2 rounded">
+            {balanceCheck.pageBoundaryWarnings.map((w, i) => (
+              <li key={i}>
+                {w.page}ページ目の開始残高(
+                {w.pageStart.toLocaleString()}
+                )が前ページ終了残高(
+                {w.prevPageEnd.toLocaleString()}
+                )と一致しません
+              </li>
+            ))}
+          </ul>
+        )}
         {passbook.warnings.length > 0 && (
           <ul className="text-xs text-amber-900 list-disc list-inside max-h-24 overflow-auto">
             {passbook.warnings.map((w, i) => (
@@ -408,11 +431,29 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                 </td>
                 <td className="px-1 py-0.5">
                   <WarekiInput value={tx.date} onChange={(v) => updateTx(tx.id, { date: v })} />
-                  {tx.pageNumber && (
-                    <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">
-                      p.{tx.pageNumber}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => shiftTxYear(tx.id, -1)}
+                      className="text-[10px] text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded px-1 border border-slate-200"
+                      title="この行の年を1年戻す（OCRが年を読み間違えた時に）"
+                    >
+                      −1年
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => shiftTxYear(tx.id, +1)}
+                      className="text-[10px] text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded px-1 border border-slate-200"
+                      title="この行の年を1年進める"
+                    >
+                      ＋1年
+                    </button>
+                    {tx.pageNumber && (
+                      <span className="text-[10px] text-slate-400 leading-tight ml-auto">
+                        p.{tx.pageNumber}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-1 py-0.5">
                   <input
