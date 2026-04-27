@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { PassbookEditor } from '@/components/PassbookEditor'
 import { AssetMovementView } from '@/components/AssetMovementView'
 import { AtmKeywordsModal } from '@/components/AtmKeywordsModal'
+import { DepositSummaryView } from '@/components/DepositSummaryView'
 import { DEFAULT_ATM_KEYWORDS, loadAtmKeywords, saveAtmKeywords } from '@/lib/atm-keywords'
 import { buildAssetMovementTable } from '@/lib/asset-movement'
 import {
@@ -17,7 +18,14 @@ import {
   type SummaryPattern
 } from '@/lib/summary-patterns'
 import { SummaryPatternsModal } from '@/components/SummaryPatternsModal'
-import type { AssetMovementRow, ParsedPassbook, UploadItem } from '@/types'
+import type {
+  AssetMovementRow,
+  BalanceCertUploadItem,
+  DepositRow,
+  ParsedBalanceCert,
+  ParsedPassbook,
+  UploadItem
+} from '@/types'
 
 type ProgressEntry = {
   id: string
@@ -73,8 +81,15 @@ export default function HomePage() {
   const [manualExcludes, setManualExcludes] = useState<string[]>([])
   const [pdfUrls, setPdfUrls] = useState<Record<string, string>>({})
   const [dragOver, setDragOver] = useState(false)
+  const [certDragOver, setCertDragOver] = useState(false)
   const [tick, setTick] = useState(0)
   const pdfUrlsRef = useRef<Record<string, string>>({})
+
+  // 残高証明書関連
+  const [certItems, setCertItems] = useState<BalanceCertUploadItem[]>([])
+  const [parsedCerts, setParsedCerts] = useState<ParsedBalanceCert[]>([])
+  const [depositRows, setDepositRows] = useState<DepositRow[]>([])
+  const [referenceDate, setReferenceDate] = useState('')
 
   useEffect(() => {
     if (!analyzing) return
@@ -164,26 +179,76 @@ export default function HomePage() {
     setItems((prev) => prev.filter((it) => it.id !== id))
   }
 
+  const addCertFiles = (files: File[]) => {
+    const next: BalanceCertUploadItem[] = files
+      .filter((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
+      .map((f) => ({
+        id: `cert-${f.name}-${f.size}-${Date.now()}-${Math.random()}`,
+        file: f
+      }))
+    setCertItems([...certItems, ...next])
+  }
+  const removeCertItem = (id: string) => {
+    setCertItems((prev) => prev.filter((it) => it.id !== id))
+  }
+
+  const handleDepositRowChange = (id: string, patch: Partial<DepositRow>) => {
+    setDepositRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+  }
+  const handleAddBlankDepositRow = () => {
+    setDepositRows((prev) => [
+      ...prev,
+      {
+        id: `manual-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        bankName: '',
+        branchName: '',
+        accountType: '',
+        accountNumber: '',
+        amount: 0,
+        accruedInterest: 0,
+        hasCertificate: false,
+        remarks: ''
+      }
+    ])
+  }
+  const handleRemoveDepositRow = (id: string) => {
+    if (!confirm('この行を預金一覧から削除します。よろしいですか？')) return
+    setDepositRows((prev) => prev.filter((r) => r.id !== id))
+  }
+
   const handleAnalyze = async () => {
     setAnalyzing(true)
     setPassbooks([])
+    setParsedCerts([])
+    setDepositRows([])
     setOverrides({})
     setManualIncludes([])
     setManualExcludes([])
     for (const url of Object.values(pdfUrlsRef.current)) URL.revokeObjectURL(url)
     pdfUrlsRef.current = {}
     setPdfUrls({})
-    setProgress(items.map((it) => ({ id: it.id, fileName: it.file.name, status: 'pending' })))
+
+    const passbookProgress: ProgressEntry[] = items.map((it) => ({
+      id: it.id,
+      fileName: `[通帳] ${it.file.name}`,
+      status: 'pending'
+    }))
+    const certProgress: ProgressEntry[] = certItems.map((it) => ({
+      id: it.id,
+      fileName: `[残高証明] ${it.file.name}`,
+      status: 'pending'
+    }))
+    setProgress([...passbookProgress, ...certProgress])
 
     const updateProgressById = (id: string, patch: Partial<ProgressEntry>) => {
       setProgress((p) => p.map((e) => (e.id === id ? { ...e, ...patch } : e)))
     }
 
-    const results: ParsedPassbook[] = []
+    // ----- 通帳の解析 -----
+    const passbookResults: ParsedPassbook[] = []
     const newUrls: Record<string, string> = {}
-
-    const queue = [...items]
-    const processOne = async (it: UploadItem) => {
+    const passbookQueue = [...items]
+    const processPassbook = async (it: UploadItem) => {
       updateProgressById(it.id, { status: 'uploading', uploadPct: 0, startedAt: Date.now() })
       try {
         const form = new FormData()
@@ -196,7 +261,6 @@ export default function HomePage() {
         form.append('accountNumber', it.accountNumber)
         form.append('startDate', startDate)
         form.append('endDate', endDate)
-
         const r = await uploadWithProgress(
           '/api/analyze',
           form,
@@ -212,7 +276,7 @@ export default function HomePage() {
           throw new Error(msg)
         }
         const data = JSON.parse(r.body)
-        results.push(data.passbook)
+        passbookResults.push(data.passbook)
         const url = URL.createObjectURL(it.file)
         newUrls[data.passbook.passbookId] = url
         updateProgressById(it.id, { status: 'done', finishedAt: Date.now() })
@@ -225,20 +289,83 @@ export default function HomePage() {
       }
     }
 
-    const workers = Array.from({ length: Math.min(MAX_PARALLEL, queue.length) }, async () => {
-      while (queue.length > 0) {
-        const next = queue.shift()
-        if (!next) return
-        await processOne(next)
+    // ----- 残高証明書の解析 -----
+    const certResults: ParsedBalanceCert[] = []
+    const certQueue = [...certItems]
+    const processCert = async (it: BalanceCertUploadItem) => {
+      updateProgressById(it.id, { status: 'uploading', uploadPct: 0, startedAt: Date.now() })
+      try {
+        const form = new FormData()
+        form.append('file', it.file)
+        form.append('certId', it.id)
+        form.append('fileName', it.file.name)
+        const r = await uploadWithProgress(
+          '/api/analyze-balance',
+          form,
+          (pct) => updateProgressById(it.id, { uploadPct: pct }),
+          () => updateProgressById(it.id, { status: 'analyzing', uploadPct: 1 })
+        )
+        if (r.status < 200 || r.status >= 300) {
+          let msg = `HTTP ${r.status} ${r.statusText}`
+          try {
+            const j = JSON.parse(r.body)
+            if (j?.error) msg = j.error
+          } catch {}
+          throw new Error(msg)
+        }
+        const data = JSON.parse(r.body)
+        certResults.push(data.cert)
+        updateProgressById(it.id, { status: 'done', finishedAt: Date.now() })
+      } catch (err) {
+        updateProgressById(it.id, {
+          status: 'error',
+          message: (err as Error).message || '不明なエラー',
+          finishedAt: Date.now()
+        })
       }
-    })
+    }
+
+    const workers: Promise<void>[] = []
+    const totalSlots = Math.min(MAX_PARALLEL, passbookQueue.length + certQueue.length)
+    for (let i = 0; i < totalSlots; i++) {
+      workers.push(
+        (async () => {
+          while (passbookQueue.length > 0 || certQueue.length > 0) {
+            const passbook = passbookQueue.shift()
+            if (passbook) {
+              await processPassbook(passbook)
+              continue
+            }
+            const cert = certQueue.shift()
+            if (cert) {
+              await processCert(cert)
+              continue
+            }
+            return
+          }
+        })()
+      )
+    }
     await Promise.all(workers)
 
-    setPassbooks(results)
+    setPassbooks(passbookResults)
     pdfUrlsRef.current = newUrls
     setPdfUrls(newUrls)
-    if (results.length > 0) {
-      setActiveTab('movement')
+    setParsedCerts(certResults)
+
+    // 残高証明書の行を depositRows に集約。基準日も最初のものから推測
+    const allDepositRows: DepositRow[] = []
+    let inferredRefDate = ''
+    for (const c of certResults) {
+      allDepositRows.push(...c.rows)
+      if (!inferredRefDate && c.referenceDate) inferredRefDate = c.referenceDate
+    }
+    setDepositRows(allDepositRows)
+    if (inferredRefDate && !referenceDate) setReferenceDate(inferredRefDate)
+
+    const haveResults = passbookResults.length > 0 || certResults.length > 0
+    if (haveResults) {
+      setActiveTab(passbookResults.length > 0 ? 'movement' : 'deposit')
       setScreen('results')
     }
     setAnalyzing(false)
@@ -253,7 +380,13 @@ export default function HomePage() {
     const res = await fetch('/api/excel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ passbooks, assetTable, summaryText })
+      body: JSON.stringify({
+        passbooks,
+        assetTable,
+        summaryText,
+        depositRows,
+        referenceDate
+      })
     })
     if (!res.ok) {
       alert('Excel生成に失敗しました')
@@ -285,7 +418,7 @@ export default function HomePage() {
         <button
           type="button"
           onClick={() => setScreen('results')}
-          disabled={passbooks.length === 0}
+          disabled={passbooks.length === 0 && depositRows.length === 0 && parsedCerts.length === 0}
           className={`px-5 py-2.5 text-sm font-bold border-b-2 transition ${
             screen === 'results'
               ? 'border-blue-600 text-blue-700'
@@ -293,9 +426,9 @@ export default function HomePage() {
           }`}
         >
           ② 解析結果
-          {passbooks.length > 0 && (
+          {(passbooks.length > 0 || certItems.length > 0) && (
             <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
-              {passbooks.length}件
+              通帳{passbooks.length} / 残証{parsedCerts.length}
             </span>
           )}
         </button>
@@ -317,34 +450,48 @@ export default function HomePage() {
             </div>
             <div className="flex flex-wrap gap-3 items-end">
               <label className="flex flex-col text-xs">
-                <span className="mb-1 text-slate-600">開始日 (YYYY-MM-DD)</span>
+                <span className="mb-1 text-slate-600">開始日（西暦/和暦）</span>
                 <input
                   type="text"
-                  inputMode="numeric"
-                  placeholder="2025-01-01"
+                  placeholder="2025-01-01 / 令和7年1月1日"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="border border-slate-300 rounded px-2 py-1 text-sm w-32 font-mono"
+                  className="border border-slate-300 rounded px-2 py-1 text-sm w-44 font-mono"
                 />
               </label>
               <label className="flex flex-col text-xs">
-                <span className="mb-1 text-slate-600">終了日 (YYYY-MM-DD)</span>
+                <span className="mb-1 text-slate-600">終了日（西暦/和暦）</span>
                 <input
                   type="text"
-                  inputMode="numeric"
-                  placeholder="2026-04-30"
+                  placeholder="2026-04-30 / 令和8年4月30日"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="border border-slate-300 rounded px-2 py-1 text-sm w-32 font-mono"
+                  className="border border-slate-300 rounded px-2 py-1 text-sm w-44 font-mono"
+                />
+              </label>
+              <label className="flex flex-col text-xs">
+                <span className="mb-1 text-slate-600">基準日（残高証明書用）</span>
+                <input
+                  type="text"
+                  placeholder="2026-02-20 / 令和8年2月20日"
+                  value={referenceDate}
+                  onChange={(e) => setReferenceDate(e.target.value)}
+                  className="border border-slate-300 rounded px-2 py-1 text-sm w-44 font-mono"
                 />
               </label>
               <button
                 type="button"
-                disabled={analyzing || items.length === 0 || !startDate || !endDate}
+                disabled={
+                  analyzing ||
+                  (items.length === 0 && certItems.length === 0) ||
+                  (items.length > 0 && (!startDate || !endDate))
+                }
                 onClick={handleAnalyze}
                 className="bg-blue-600 text-white px-4 py-2 rounded font-bold text-sm hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
               >
-                {analyzing ? '解析中…' : `${items.length}件を解析`}
+                {analyzing
+                  ? '解析中…'
+                  : `${items.length + certItems.length}件を解析`}
               </button>
             </div>
             {progress.length > 0 && (
@@ -402,39 +549,88 @@ export default function HomePage() {
             )}
           </section>
 
-          <section className="bg-white rounded-lg shadow p-3 flex flex-col min-h-0">
-            <h2 className="font-bold text-sm mb-2">②通帳PDFをアップロード</h2>
-            <div
-              onDragOver={(e) => {
-                e.preventDefault()
-                setDragOver(true)
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault()
-                setDragOver(false)
-                addFiles(Array.from(e.dataTransfer.files))
-              }}
-              className={`flex-1 min-h-0 border-2 border-dashed rounded p-4 text-center flex flex-col items-center justify-center transition ${
-                dragOver ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-slate-50'
-              }`}
-            >
-              <p className="text-slate-600 mb-2 text-sm">PDFをドラッグ＆ドロップ</p>
-              <label className="inline-block bg-slate-700 text-white px-3 py-1.5 rounded cursor-pointer hover:bg-slate-800 text-sm">
-                ファイルを選択
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => addFiles(Array.from(e.target.files || []))}
-                />
-              </label>
-              {items.length > 0 && (
-                <p className="mt-2 text-xs text-slate-500">{items.length}件登録済み（右側で銀行情報を入力）</p>
-              )}
-            </div>
-          </section>
+          <div className="grid grid-cols-2 gap-3 min-h-0">
+            <section className="bg-white rounded-lg shadow p-3 flex flex-col min-h-0">
+              <h2 className="font-bold text-sm mb-2">②通帳PDF</h2>
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDragOver(true)
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setDragOver(false)
+                  addFiles(Array.from(e.dataTransfer.files))
+                }}
+                className={`flex-1 min-h-0 border-2 border-dashed rounded p-3 text-center flex flex-col items-center justify-center transition ${
+                  dragOver ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-slate-50'
+                }`}
+              >
+                <p className="text-slate-600 mb-2 text-xs">通帳PDFをドラッグ＆ドロップ</p>
+                <label className="inline-block bg-slate-700 text-white px-3 py-1.5 rounded cursor-pointer hover:bg-slate-800 text-xs">
+                  ファイルを選択
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => addFiles(Array.from(e.target.files || []))}
+                  />
+                </label>
+                {items.length > 0 && (
+                  <p className="mt-2 text-xs text-slate-500">{items.length}件登録済み</p>
+                )}
+              </div>
+            </section>
+
+            <section className="bg-white rounded-lg shadow p-3 flex flex-col min-h-0">
+              <h2 className="font-bold text-sm mb-2">④残高証明書PDF</h2>
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setCertDragOver(true)
+                }}
+                onDragLeave={() => setCertDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setCertDragOver(false)
+                  addCertFiles(Array.from(e.dataTransfer.files))
+                }}
+                className={`flex-1 min-h-0 border-2 border-dashed rounded p-3 text-center flex flex-col items-center justify-center transition ${
+                  certDragOver ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 bg-slate-50'
+                }`}
+              >
+                <p className="text-slate-600 mb-2 text-xs">残高証明書PDFをドラッグ＆ドロップ</p>
+                <label className="inline-block bg-emerald-700 text-white px-3 py-1.5 rounded cursor-pointer hover:bg-emerald-800 text-xs">
+                  ファイルを選択
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => addCertFiles(Array.from(e.target.files || []))}
+                  />
+                </label>
+                {certItems.length > 0 && (
+                  <ul className="mt-2 text-xs text-slate-600 space-y-0.5 max-h-24 overflow-auto w-full">
+                    {certItems.map((c) => (
+                      <li key={c.id} className="flex items-center gap-1 px-1">
+                        <span className="truncate flex-1 text-left">{c.file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeCertItem(c.id)}
+                          className="text-red-600 hover:underline"
+                        >
+                          ✕
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+          </div>
         </div>
 
         <section className="bg-white rounded-lg shadow p-3 flex flex-col min-h-0">
@@ -497,18 +693,32 @@ export default function HomePage() {
       </div>
       )}
 
-      {screen === 'results' && passbooks.length > 0 && (
+      {screen === 'results' && (passbooks.length > 0 || depositRows.length > 0 || parsedCerts.length > 0) && (
         <section className="bg-white rounded-lg shadow p-4 space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex flex-wrap gap-1 border-b">
+              {passbooks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('movement')}
+                  className={`px-3 py-2 text-sm ${
+                    activeTab === 'movement' ? 'border-b-2 border-blue-600 font-bold text-blue-700' : 'text-slate-600'
+                  }`}
+                >
+                  金融資産異動一覧表
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => setActiveTab('movement')}
+                onClick={() => setActiveTab('deposit')}
                 className={`px-3 py-2 text-sm ${
-                  activeTab === 'movement' ? 'border-b-2 border-blue-600 font-bold text-blue-700' : 'text-slate-600'
+                  activeTab === 'deposit' ? 'border-b-2 border-blue-600 font-bold text-blue-700' : 'text-slate-600'
                 }`}
               >
-                金融資産異動一覧表
+                預金一覧表
+                {depositRows.length > 0 && (
+                  <span className="ml-1 text-xs text-slate-500">({depositRows.length})</span>
+                )}
               </button>
               {passbooks.map((p) => (
                 <button
@@ -532,7 +742,7 @@ export default function HomePage() {
             </button>
           </div>
 
-          {activeTab === 'movement' ? (
+          {activeTab === 'movement' && passbooks.length > 0 ? (
             <AssetMovementView
               table={assetTable}
               passbooks={passbooks}
@@ -547,6 +757,15 @@ export default function HomePage() {
                 setOverrides((prev) => ({ ...prev, [rowId]: { ...prev[rowId], remarks: value } }))
               }
               onRemoveRow={handleRemoveRow}
+            />
+          ) : activeTab === 'deposit' ? (
+            <DepositSummaryView
+              rows={depositRows}
+              referenceDate={referenceDate}
+              onReferenceDateChange={setReferenceDate}
+              onRowChange={handleDepositRowChange}
+              onAddBlankRow={handleAddBlankDepositRow}
+              onRemoveRow={handleRemoveDepositRow}
             />
           ) : (
             (() => {

@@ -61,3 +61,30 @@ export type UploadItem = {
   branchName: string
   accountNumber: string
 }
+
+export type BalanceCertUploadItem = {
+  id: string
+  file: File
+}
+
+export type DepositRow = {
+  id: string
+  bankName: string
+  branchName: string
+  accountType: string
+  accountNumber: string
+  amount: number
+  accruedInterest: number
+  hasCertificate: boolean
+  remarks: string
+  sourceFileName?: string
+}
+
+export type ParsedBalanceCert = {
+  certId: string
+  fileName: string
+  referenceDate: string // 証明日 (基準日として使う候補)
+  issueDate: string // 発行日
+  rows: DepositRow[]
+  warnings: string[]
+}

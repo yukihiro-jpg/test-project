@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs'
-import type { AssetMovementTable, ParsedPassbook } from '@/types'
+import type { AssetMovementTable, DepositRow, ParsedPassbook } from '@/types'
 import { toWareki } from './wareki'
 
 const NUMBER_FORMAT = '#,##0;△#,##0;""'
@@ -68,7 +68,9 @@ function applyDataStyle(cell: ExcelJS.Cell, opts: { numeric?: boolean } = {}) {
 export async function buildExcelWorkbook(
   passbooks: ParsedPassbook[],
   assetTable: AssetMovementTable,
-  summaryText?: string
+  summaryText?: string,
+  depositRows: DepositRow[] = [],
+  referenceDate?: string
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Bank Analyzer'
@@ -263,6 +265,131 @@ export async function buildExcelWorkbook(
   }
 
   movement.views = [{ state: 'frozen', ySplit: subColRow.number }]
+
+  // ===== 預金一覧表シート =====
+  if (depositRows.length > 0) {
+    const ds = wb.addWorksheet('預金一覧表')
+    ds.columns = [
+      { width: 3 }, // A: 余白
+      { width: 18 }, // B: 銀行名
+      { width: 14 }, // C: 支店名
+      { width: 14 }, // D: 種類
+      { width: 22 }, // E: 口座番号
+      { width: 16 }, // F: 金額
+      { width: 14 }, // G: 経過利息
+      { width: 11 }, // H: 残証有無
+      { width: 30 } // I: 備考
+    ]
+
+    // タイトル
+    const titleRow = ds.addRow(['', '預金一覧'])
+    titleRow.getCell(2).font = { bold: true, size: 13, name: FONT_NAME }
+    titleRow.height = 22
+
+    // 基準日
+    if (referenceDate) {
+      const wareki = toWareki(referenceDate)
+      const dateRow = ds.addRow(['', `基準日: ${wareki || referenceDate}`])
+      ds.mergeCells(dateRow.number, 2, dateRow.number, 9)
+      dateRow.getCell(2).font = { italic: true, size: 11, name: FONT_NAME, color: { argb: 'FF555555' } }
+    }
+
+    ds.addRow([])
+
+    // ヘッダ
+    const headerLabels = ['', '銀行名', '支店名', '種類', '口座番号', '金額', '経過利息', '残証有無', '備考']
+    const dsHeader = ds.addRow(headerLabels)
+    dsHeader.height = 26
+    for (let col = 2; col <= 9; col++) {
+      const cell = dsHeader.getCell(col)
+      cell.fill = HEADER_FILL
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: FONT_NAME }
+      cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      cell.border = {
+        top: { style: 'thin', color: { argb: HEADER_INNER_WHITE } },
+        bottom: { style: 'medium', color: { argb: SOLID_DARK } },
+        left: { style: 'thin', color: { argb: HEADER_INNER_WHITE } },
+        right: { style: 'thin', color: { argb: HEADER_INNER_WHITE } }
+      }
+    }
+
+    // データ行
+    let totalAmount = 0
+    let totalInterest = 0
+    for (const r of depositRows) {
+      totalAmount += r.amount || 0
+      totalInterest += r.accruedInterest || 0
+      const dsRow = ds.addRow([
+        '',
+        r.bankName,
+        r.branchName,
+        r.accountType,
+        r.accountNumber,
+        r.amount || 0,
+        r.accruedInterest || 0,
+        r.hasCertificate ? '☑' : '☐',
+        r.remarks
+      ])
+      dsRow.height = 22
+      for (let col = 2; col <= 9; col++) {
+        const c = dsRow.getCell(col)
+        c.font = { name: FONT_NAME, size: 10 }
+        c.border = bodyBorder()
+        const isNumeric = col === 6 || col === 7
+        const isCenter = col === 8
+        c.alignment = {
+          vertical: 'middle',
+          wrapText: true,
+          horizontal: isNumeric ? 'right' : isCenter ? 'center' : 'left'
+        }
+        if (isNumeric) c.numFmt = NUMBER_FORMAT
+      }
+    }
+
+    // 計 行
+    const sumRow = ds.addRow(['', '計', '', '', '', totalAmount, totalInterest, '', ''])
+    sumRow.height = 22
+    for (let col = 2; col <= 9; col++) {
+      const c = sumRow.getCell(col)
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }
+      c.font = { bold: true, name: FONT_NAME, size: 10 }
+      c.border = {
+        top: { style: 'medium', color: { argb: SOLID_DARK } },
+        bottom: { style: 'medium', color: { argb: SOLID_DARK } },
+        left: { style: 'thin', color: { argb: SOLID_DARK } },
+        right: { style: 'thin', color: { argb: SOLID_DARK } }
+      }
+      const isNumeric = col === 6 || col === 7
+      c.alignment = { vertical: 'middle', horizontal: isNumeric ? 'right' : 'left' }
+      if (isNumeric) c.numFmt = NUMBER_FORMAT
+    }
+
+    // 合計（金額＋経過利息）
+    ds.addRow([])
+    const grandRow = ds.addRow(['', '', '', '', '', '', '合計', totalAmount + totalInterest, ''])
+    grandRow.height = 22
+    const gc1 = grandRow.getCell(7)
+    const gc2 = grandRow.getCell(8)
+    gc1.font = { bold: true, name: FONT_NAME, size: 11 }
+    gc1.alignment = { horizontal: 'center', vertical: 'middle' }
+    gc1.border = {
+      top: { style: 'medium', color: { argb: SOLID_DARK } },
+      bottom: { style: 'medium', color: { argb: SOLID_DARK } },
+      left: { style: 'medium', color: { argb: SOLID_DARK } },
+      right: { style: 'thin', color: { argb: SOLID_DARK } }
+    }
+    gc2.font = { bold: true, name: FONT_NAME, size: 12 }
+    gc2.numFmt = NUMBER_FORMAT
+    gc2.alignment = { horizontal: 'right', vertical: 'middle' }
+    gc2.border = {
+      top: { style: 'medium', color: { argb: SOLID_DARK } },
+      bottom: { style: 'medium', color: { argb: SOLID_DARK } },
+      left: { style: 'thin', color: { argb: SOLID_DARK } },
+      right: { style: 'medium', color: { argb: SOLID_DARK } }
+    }
+
+    ds.views = [{ state: 'frozen', ySplit: dsHeader.number }]
+  }
 
   const buf = await wb.xlsx.writeBuffer()
   return Buffer.from(buf)
