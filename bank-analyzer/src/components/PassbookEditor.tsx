@@ -16,7 +16,7 @@ type Props = {
 
 const fmt = (n: number) => (n ? n.toLocaleString() : '')
 
-const COL_KEYS = ['mark', 'date', 'desc', 'deposit', 'withdrawal', 'balance', 'remarks'] as const
+const COL_KEYS = ['mark', 'date', 'desc', 'deposit', 'withdrawal', 'balance', 'remarks', 'delete'] as const
 type ColKey = (typeof COL_KEYS)[number]
 
 const DEFAULT_WIDTHS: Record<ColKey, number> = {
@@ -26,7 +26,8 @@ const DEFAULT_WIDTHS: Record<ColKey, number> = {
   deposit: 88,
   withdrawal: 88,
   balance: 104,
-  remarks: 200
+  remarks: 200,
+  delete: 56
 }
 
 const COL_LABELS: Record<ColKey, string> = {
@@ -36,7 +37,8 @@ const COL_LABELS: Record<ColKey, string> = {
   deposit: '入金',
   withdrawal: '出金',
   balance: '残高',
-  remarks: '備考'
+  remarks: '備考',
+  delete: '削除'
 }
 
 const COL_ALIGN: Record<ColKey, 'left' | 'center' | 'right'> = {
@@ -46,10 +48,11 @@ const COL_ALIGN: Record<ColKey, 'left' | 'center' | 'right'> = {
   deposit: 'right',
   withdrawal: 'right',
   balance: 'right',
-  remarks: 'left'
+  remarks: 'left',
+  delete: 'center'
 }
 
-const STORAGE_KEY = 'bank-analyzer-passbook-col-widths-v3'
+const STORAGE_KEY = 'bank-analyzer-passbook-col-widths-v4'
 
 export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAddTx }: Props) {
   const pdfRef = useRef<PdfViewerHandle>(null)
@@ -80,6 +83,17 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
     onChange({
       ...passbook,
       transactions: passbook.transactions.map((tx) => (tx.id === id ? { ...tx, ...patch } : tx))
+    })
+  }
+  const deleteTx = (id: string) => {
+    const tx = passbook.transactions.find((t) => t.id === id)
+    if (!tx) return
+    const desc = tx.description ? `「${tx.description}」` : ''
+    const dateLabel = tx.date || '日付不明'
+    if (!confirm(`${dateLabel} ${desc} の取引行を削除します。よろしいですか？`)) return
+    onChange({
+      ...passbook,
+      transactions: passbook.transactions.filter((t) => t.id !== id)
     })
   }
   const updatePurpose = (purpose: string) => {
@@ -374,6 +388,16 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                     onChange={(e) => updateTx(tx.id, { remarks: e.target.value })}
                     className="w-full border border-slate-200 rounded px-1 py-0.5"
                   />
+                </td>
+                <td className="px-1 py-0.5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => deleteTx(tx.id)}
+                    className="px-2 py-0.5 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                    title="この取引行を解析データから削除"
+                  >
+                    ✕
+                  </button>
                 </td>
               </tr>
             )

@@ -14,7 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <h1 className="text-xl font-bold">通帳解析アプリ</h1>
           <p className="text-xs text-slate-300">相続税申告 現金預金評価ツール</p>
         </header>
-        <main className="max-w-7xl mx-auto px-4 py-6">{children}</main>
+        <main className="w-full px-4 py-4">{children}</main>
       </body>
     </html>
   )
