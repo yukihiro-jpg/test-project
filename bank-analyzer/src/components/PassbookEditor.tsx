@@ -16,10 +16,11 @@ type Props = {
 
 const fmt = (n: number) => (n ? n.toLocaleString() : '')
 
-const COL_KEYS = ['mark', 'date', 'desc', 'deposit', 'withdrawal', 'balance', 'remarks', 'delete'] as const
+const COL_KEYS = ['drag', 'mark', 'date', 'desc', 'deposit', 'withdrawal', 'balance', 'remarks', 'delete'] as const
 type ColKey = (typeof COL_KEYS)[number]
 
 const DEFAULT_WIDTHS: Record<ColKey, number> = {
+  drag: 32,
   mark: 64,
   date: 160,
   desc: 196,
@@ -31,6 +32,7 @@ const DEFAULT_WIDTHS: Record<ColKey, number> = {
 }
 
 const COL_LABELS: Record<ColKey, string> = {
+  drag: '',
   mark: '計上',
   date: '日付',
   desc: '摘要',
@@ -42,6 +44,7 @@ const COL_LABELS: Record<ColKey, string> = {
 }
 
 const COL_ALIGN: Record<ColKey, 'left' | 'center' | 'right'> = {
+  drag: 'center',
   mark: 'center',
   date: 'left',
   desc: 'left',
@@ -52,7 +55,7 @@ const COL_ALIGN: Record<ColKey, 'left' | 'center' | 'right'> = {
   delete: 'center'
 }
 
-const STORAGE_KEY = 'bank-analyzer-passbook-col-widths-v4'
+const STORAGE_KEY = 'bank-analyzer-passbook-col-widths-v5'
 
 export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAddTx }: Props) {
   const pdfRef = useRef<PdfViewerHandle>(null)
@@ -60,6 +63,9 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
   const [selectedTxId, setSelectedTxId] = useState<string | null>(null)
   const [widths, setWidths] = useState<Record<ColKey, number>>(DEFAULT_WIDTHS)
   const [mismatchCursor, setMismatchCursor] = useState(0)
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [dragPosition, setDragPosition] = useState<'before' | 'after'>('before')
 
   useEffect(() => {
     try {
@@ -141,6 +147,50 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
     if (tx.pageNumber && pdfRef.current) {
       pdfRef.current.goToPage(tx.pageNumber)
     }
+  }
+
+  // ドラッグ&ドロップで取引行の並び替え
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggingId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }
+  const handleDragEnd = () => {
+    setDraggingId(null)
+    setDragOverId(null)
+  }
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (id === draggingId) return
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const middle = rect.top + rect.height / 2
+    setDragOverId(id)
+    setDragPosition(e.clientY < middle ? 'before' : 'after')
+  }
+  const handleDragLeave = (e: React.DragEvent) => {
+    // 子要素からのleaveは無視（チラつき防止）
+    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return
+  }
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault()
+    if (!draggingId || draggingId === targetId) {
+      handleDragEnd()
+      return
+    }
+    const txs = [...passbook.transactions]
+    const fromIdx = txs.findIndex((t) => t.id === draggingId)
+    const toIdx = txs.findIndex((t) => t.id === targetId)
+    if (fromIdx === -1 || toIdx === -1) {
+      handleDragEnd()
+      return
+    }
+    const [moved] = txs.splice(fromIdx, 1)
+    let insertAt = txs.findIndex((t) => t.id === targetId)
+    if (dragPosition === 'after') insertAt += 1
+    txs.splice(insertAt, 0, moved)
+    onChange({ ...passbook, transactions: txs })
+    handleDragEnd()
   }
 
   const startResize = (col: ColKey, e: React.MouseEvent) => {
@@ -309,13 +359,33 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
               : isIncluded
               ? 'bg-amber-50'
               : 'hover:bg-slate-50'
+            const isDragging = draggingId === tx.id
+            const isDragOverThis = dragOverId === tx.id && draggingId !== tx.id
+            const dragIndicator =
+              isDragOverThis && dragPosition === 'before'
+                ? 'border-t-4 border-t-blue-500'
+                : isDragOverThis && dragPosition === 'after'
+                ? 'border-b-4 border-b-blue-500'
+                : ''
             return (
               <tr
                 key={tx.id}
                 data-tx-id={tx.id}
-                className={`border-t cursor-pointer ${rowClass}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, tx.id)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => handleDragOver(e, tx.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, tx.id)}
+                className={`border-t cursor-pointer ${rowClass} ${dragIndicator} ${isDragging ? 'opacity-40' : ''}`}
                 onClick={(e) => handleRowClick(tx, e)}
               >
+                <td
+                  className="px-0 py-0 text-center text-slate-400 select-none cursor-grab active:cursor-grabbing"
+                  title="ドラッグして並び替え"
+                >
+                  ≡
+                </td>
                 <td className="px-1 py-0.5 text-center">
                   {isIncluded ? (
                     <span

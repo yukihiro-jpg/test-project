@@ -394,6 +394,13 @@ export async function analyzePassbook(opts: {
     const rows = (analysis.取引 || [])
       .filter((r) => !isTransitionRow(r))
       .filter((r) => isInRange(r.年月日 || '', startDate, endDate))
+    const txs = rowsToTransactions(rows, passbookId, { startDate, endDate }, 1)
+    // 開始残高は期間内最初の取引から逆算
+    let startBalanceVal: number | null = parseNumber(analysis.開始残高) || null
+    if (txs.length > 0) {
+      const first = txs[0]
+      startBalanceVal = first.balance - first.deposit + first.withdrawal
+    }
     return {
       passbookId,
       fileName,
@@ -402,9 +409,9 @@ export async function analyzePassbook(opts: {
       accountNumber: analysis.口座番号 || accountNumber || '',
       label,
       purpose: '',
-      startBalance: parseNumber(analysis.開始残高),
+      startBalance: startBalanceVal,
       endBalance: parseNumber(analysis.終了残高),
-      transactions: rowsToTransactions(rows, passbookId, { startDate, endDate }, 1),
+      transactions: txs,
       warnings
     }
   }
@@ -487,6 +494,12 @@ export async function analyzePassbook(opts: {
       const fullRows = (full.取引 || [])
         .filter((r) => !isTransitionRow(r))
         .filter((r) => isInRange(r.年月日 || '', startDate, endDate))
+      const txs = rowsToTransactions(fullRows, passbookId, { startDate, endDate }, 1)
+      let startBalanceVal: number | null = parseNumber(full.開始残高) || null
+      if (txs.length > 0) {
+        const first = txs[0]
+        startBalanceVal = first.balance - first.deposit + first.withdrawal
+      }
       return {
         passbookId,
         fileName,
@@ -495,9 +508,9 @@ export async function analyzePassbook(opts: {
         accountNumber: full.口座番号 || inferredAccount,
         label,
         purpose: '',
-        startBalance: parseNumber(full.開始残高),
+        startBalance: startBalanceVal,
         endBalance: parseNumber(full.終了残高),
-        transactions: rowsToTransactions(fullRows, passbookId, { startDate, endDate }, 1),
+        transactions: txs,
         warnings
       }
     } catch (err) {
@@ -505,18 +518,31 @@ export async function analyzePassbook(opts: {
     }
   }
 
-  // 取引を日付順に整列（ページ並列で順番が乱れないよう保険）
+  // 取引をページ番号→日付の順に整列。
+  // 通帳の物理ページ順は必ず日付順なので、ページ番号を主キーにすれば
+  // 「日付の読み取り誤りによりページ順が逆転して見える」問題を防げる。
   allTransactions.sort((a, b) => {
+    const pa = a.pageNumber ?? 0
+    const pb = b.pageNumber ?? 0
+    if (pa !== pb) return pa - pb
     const da = parseLooseDate(a.date)?.getTime() ?? 0
     const db = parseLooseDate(b.date)?.getTime() ?? 0
-    if (da !== db) return da - db
-    return (a.pageNumber ?? 0) - (b.pageNumber ?? 0)
+    return da - db
   })
 
   // ID重複しないよう振り直し
   allTransactions.forEach((tx, i) => {
     tx.id = `${passbookId}-tx-${i}`
   })
+
+  // 開始残高は「期間内最初の取引の直前の残高」を厳密に算出する。
+  // ページ単独の 開始残高 だと、解析期間が通帳の途中から始まるケースで
+  // 期間外取引を含んだ値になり不一致の原因になる。
+  let derivedStart: number | null = firstStart
+  if (allTransactions.length > 0) {
+    const first = allTransactions[0]
+    derivedStart = first.balance - first.deposit + first.withdrawal
+  }
 
   return {
     passbookId,
@@ -526,7 +552,7 @@ export async function analyzePassbook(opts: {
     accountNumber: inferredAccount,
     label,
     purpose: '',
-    startBalance: firstStart,
+    startBalance: derivedStart,
     endBalance: lastEnd,
     transactions: allTransactions,
     warnings
