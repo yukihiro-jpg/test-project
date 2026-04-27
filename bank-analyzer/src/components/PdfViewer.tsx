@@ -66,7 +66,12 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer({
         const buf = await res.arrayBuffer()
         if (cancelled) return
 
-        const pdf = await pdfjsLib.getDocument({ data: buf }).promise
+        const pdf = await pdfjsLib.getDocument({
+          data: buf,
+          cMapUrl: '/cmaps/',
+          cMapPacked: true,
+          standardFontDataUrl: '/standard_fonts/'
+        }).promise
         if (cancelled) return
         setNumPages(pdf.numPages)
         setCurrentPage(1)
