@@ -69,6 +69,17 @@ ${pageHeader}以下のPDFから取引明細を抽出してください${bankName
   3. それでも収まらなければ**昭和**
 - 解決した結果は必ず西暦4桁の "YYYY/MM/DD" 形式で出力してください。
 
+【ゆうちょ等の少額利息行に特に注意】
+ゆうちょ銀行などの通帳では、**金額と摘要が空白なしで一体になった表記**が
+頻出します:
+- 「3受取利子」 → 入金額: **3**、摘要: **「受取利子」**
+- 「1受取利子」 → 入金額: **1**、摘要: **「受取利子」**
+- 「10受取利子」 → 入金額: **10**、摘要: **「受取利子」**
+- 「2受取利息」 → 入金額: **2**、摘要: **「受取利息」**
+このように **行頭が数字で直後に日本語の摘要が続く場合は、必ず数字を金額**
+として分離し、残りを摘要に入れてください。「3受取利子」を摘要欄に丸ごと
+入れて入金額を0にするのは誤りです。
+
 【出力形式】以下のJSONのみを返してください。説明文・コードブロックは不要です。
 
 {
@@ -180,6 +191,47 @@ function isInRange(date: string, start: string, end: string): boolean {
   const e = parseLooseDate(end)
   if (!d || !s || !e) return true
   return d.getTime() >= s.getTime() && d.getTime() <= e.getTime()
+}
+
+// 摘要に金額が混入しているケース（ゆうちょの「3受取利子」型）の自動補正。
+// 1) 残高検証で不一致 かつ 入金=出金=0
+// 2) 摘要が「先頭数字 + 日本語テキスト」
+// 3) 抽出した数字が残高変化額と完全一致
+// の3条件を満たす行だけを補正する。
+const DIGIT_PREFIX_PATTERN = /^(\d{1,7})\s*([　-鿿々〆ヵヶ].+)$/
+
+function autoCorrectAmountInDescription(
+  transactions: Transaction[],
+  startBalance: number
+): { count: number } {
+  let prev = startBalance
+  let count = 0
+  for (const tx of transactions) {
+    const expected = prev + (tx.deposit || 0) - (tx.withdrawal || 0)
+    const actual = tx.balance || 0
+    const ok = Math.abs(expected - actual) <= 0.5
+    const noAmount = (tx.deposit || 0) === 0 && (tx.withdrawal || 0) === 0
+    if (!ok && noAmount && tx.description) {
+      const m = tx.description.trim().match(DIGIT_PREFIX_PATTERN)
+      if (m) {
+        const digit = Number(m[1])
+        const newDesc = m[2].trim()
+        const delta = actual - prev
+        if (Math.abs(delta) === digit && digit > 0) {
+          if (delta > 0) {
+            tx.deposit = digit
+          } else {
+            tx.withdrawal = digit
+          }
+          tx.description = newDesc
+          tx.remarks = ((tx.remarks || '') + ' 自動補正: 摘要から金額を抽出').trim()
+          count++
+        }
+      }
+    }
+    prev = tx.balance
+  }
+  return { count }
 }
 
 async function callGemini(pdfBase64: string, prompt: string, label = ''): Promise<RawAnalysis> {
@@ -542,6 +594,17 @@ export async function analyzePassbook(opts: {
   if (allTransactions.length > 0) {
     const first = allTransactions[0]
     derivedStart = first.balance - first.deposit + first.withdrawal
+  }
+
+  // 摘要に金額が混入したケースを自動補正
+  // 例: 摘要="3受取利子" 入金=0 出金=0 → 入金=3, 摘要="受取利子"
+  if (derivedStart !== null) {
+    const corr = autoCorrectAmountInDescription(allTransactions, derivedStart)
+    if (corr.count > 0) {
+      warnings.push(
+        `${corr.count}件の摘要から金額を自動抽出しました（残高変化額と一致したもののみ）。各行の備考に「自動補正」と記載されています。`
+      )
+    }
   }
 
   return {
