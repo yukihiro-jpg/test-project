@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from .config import config
@@ -26,26 +25,11 @@ from .services.document_parser import (
     parse_tohon, parse_kotei_shisan, parse_nochi_daicho,
     calculate_ownership,
     detect_prefecture_from_properties, detect_city_from_properties,
-    extract_address_parts,
 )
 from .services.geocoder import geocode
-from .services.nta_scraper import (
-    fetch_multiplier_table,
-    load_multipliers_json,
-    lookup_from_saved_data,
-    lookup_multiplier,
-    resolve_municipality_code,
-    save_multipliers_csv,
-    save_multipliers_json,
-    scrape_prefecture_multipliers,
-)
 from .services.reinfolib_client import ReinfolibClient
 from .services.wagri_client import WagriClient
-from .services.valuation import (
-    calculate_valuation,
-    check_consistency,
-    select_valuation_chimoku,
-)
+from .services.valuation import check_consistency
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -59,11 +43,6 @@ config.upload_dir.mkdir(parents=True, exist_ok=True)
 
 DATA_DIR = BASE_DIR.parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-PDF_CACHE_DIR = DATA_DIR / "pdf_cache"
-PDF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-MANUAL_MULTIPLIER_FILE = DATA_DIR / "manual_multipliers.json"
-IMPORTED_MULTIPLIER_FILE = DATA_DIR / "multipliers_imported.json"
-MUNICIPALITY_LIST_FILE = DATA_DIR / "ibaraki_municipality_list.json"
 
 reinfolib = ReinfolibClient()
 wagri = WagriClient()
@@ -401,20 +380,6 @@ async def evaluate_properties(request: Request):
     if not sd:
         return JSONResponse({"error": "セッションが見つかりません"}, status_code=404)
 
-    # 倍率表取得
-    multiplier_rows = []
-    municipality_code = ""
-    if prefecture and city:
-        try:
-            municipality_code = await resolve_municipality_code(prefecture, city)
-            if municipality_code:
-                multiplier_rows = await fetch_multiplier_table(prefecture, municipality_code)
-        except Exception as e:
-            logger.warning("倍率表取得失敗: %s", e)
-
-    # Excel取込済み倍率表を先読み
-    imported_multipliers = _load_imported_multipliers()
-
     evaluations: list[PropertyEvaluation] = []
     prop_id = 0
 
@@ -449,12 +414,6 @@ async def evaluate_properties(request: Request):
         # ジオコーディング + API
         await _enrich_with_apis(ev, prefecture)
 
-        # 倍率表
-        _apply_multiplier(ev, prefecture, city, multiplier_rows, imported_multipliers)
-
-        # 倍率方式 評価額算出
-        _apply_valuation(ev, imported_multipliers, city)
-
         evaluations.append(ev)
 
     # 建物の評価情報
@@ -483,264 +442,7 @@ async def evaluate_properties(request: Request):
 
     return JSONResponse({
         "session_id": session_id,
-        "municipality_code": municipality_code,
         "evaluations": [_evaluation_to_dict(ev) for ev in evaluations],
-    })
-
-
-# ------------------------------------------------------------------
-# 倍率表バッチスクレイピング
-# ------------------------------------------------------------------
-@app.post("/api/scrape_multipliers")
-async def scrape_multipliers(request: Request):
-    body = await request.json()
-    prefecture = body.get("prefecture", "茨城県")
-    pref_key = _pref_key(prefecture)
-    json_path = DATA_DIR / f"{pref_key}_multipliers.json"
-    csv_path = DATA_DIR / f"{pref_key}_multipliers.csv"
-
-    try:
-        records = await scrape_prefecture_multipliers(prefecture)
-        if not records:
-            return JSONResponse({"error": f"{prefecture}の倍率表を取得できませんでした"}, status_code=500)
-        save_multipliers_json(records, prefecture, json_path)
-        save_multipliers_csv(records, csv_path)
-        cities = set(r["municipality"] for r in records)
-        rosenka_count = sum(1 for r in records if r["is_rosenka_area"])
-        return JSONResponse({
-            "prefecture": prefecture,
-            "total_records": len(records),
-            "municipality_count": len(cities),
-            "rosenka_count": rosenka_count,
-            "bairitsu_count": len(records) - rosenka_count,
-        })
-    except Exception as e:
-        logger.error("スクレイピング失敗: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@app.get("/api/multiplier_data/{prefecture}")
-async def get_multiplier_data(prefecture: str):
-    json_path = DATA_DIR / f"{_pref_key(prefecture)}_multipliers.json"
-    data = load_multipliers_json(json_path)
-    if not data:
-        return JSONResponse({"error": f"{prefecture}の倍率データが見つかりません"}, status_code=404)
-    return JSONResponse(data)
-
-
-@app.get("/api/multiplier_lookup")
-async def multiplier_lookup(prefecture: str, city: str, town: str):
-    json_path = DATA_DIR / f"{_pref_key(prefecture)}_multipliers.json"
-    data = load_multipliers_json(json_path)
-    if not data:
-        return JSONResponse({"error": f"{prefecture}の倍率データが見つかりません"}, status_code=404)
-    info = lookup_from_saved_data(data, city, town)
-    return JSONResponse({
-        "town_name": info.town_name, "area_name": info.area_name,
-        "leasehold_ratio": info.leasehold_ratio, "is_rosenka_area": info.is_rosenka_area,
-        "residential_multiplier": info.residential_multiplier,
-        "paddy_multiplier": info.paddy_multiplier, "field_multiplier": info.field_multiplier,
-        "forest_multiplier": info.forest_multiplier, "wasteland_multiplier": info.wasteland_multiplier,
-    })
-
-
-# ------------------------------------------------------------------
-# 倍率表PDF / 手入力データ
-# ------------------------------------------------------------------
-@app.get("/api/multiplier_pdf/{municipality_code}")
-async def get_multiplier_pdf(municipality_code: str):
-    """ダウンロード済み倍率表PDFを返す."""
-    code = municipality_code.lower().replace("rt", "").replace(".pdf", "")
-    pdf_path = PDF_CACHE_DIR / f"{code}rt.pdf"
-    if not pdf_path.exists():
-        return JSONResponse({"error": f"PDFが見つかりません: {code}"}, status_code=404)
-    return FileResponse(
-        pdf_path,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename={code}rt.pdf"},
-    )
-
-
-@app.get("/api/municipality_list")
-async def get_municipality_list():
-    """ダウンロード済みPDFキャッシュ + 保存済み市町村一覧を返す."""
-    import json as _json
-
-    saved: list[dict[str, str]] = []
-    if MUNICIPALITY_LIST_FILE.exists():
-        try:
-            saved = _json.loads(MUNICIPALITY_LIST_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            saved = []
-
-    cached_codes = {
-        p.stem.replace("rt", "")
-        for p in PDF_CACHE_DIR.glob("*rt.pdf")
-    }
-
-    items: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for m in saved:
-        code = m.get("code", "")
-        items.append({
-            "code": code,
-            "name": m.get("name", code),
-            "cached": code in cached_codes,
-        })
-        seen.add(code)
-    for code in sorted(cached_codes):
-        if code not in seen:
-            items.append({"code": code, "name": code, "cached": True})
-
-    return JSONResponse({"municipalities": items, "cached_count": len(cached_codes)})
-
-
-@app.post("/api/save_multiplier")
-async def save_multiplier(request: Request):
-    """手入力された倍率データを保存."""
-    import json as _json
-
-    body = await request.json()
-    municipality = (body.get("municipality") or "").strip()
-    if not municipality:
-        return JSONResponse({"error": "municipality is required"}, status_code=400)
-
-    record = {
-        "town_name": body.get("town_name", ""),
-        "area_name": body.get("area_name", ""),
-        "leasehold_ratio": body.get("leasehold_ratio", ""),
-        "residential": body.get("residential", ""),
-        "paddy": body.get("paddy", ""),
-        "field": body.get("field", ""),
-        "forest": body.get("forest", ""),
-        "wasteland": body.get("wasteland", ""),
-    }
-
-    data: dict[str, list[dict[str, Any]]] = {}
-    if MANUAL_MULTIPLIER_FILE.exists():
-        try:
-            data = _json.loads(MANUAL_MULTIPLIER_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
-    data.setdefault(municipality, []).append(record)
-    MANUAL_MULTIPLIER_FILE.write_text(
-        _json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8",
-    )
-    return JSONResponse({"ok": True, "count": len(data[municipality]), "record": record})
-
-
-@app.get("/api/multipliers/{municipality}")
-async def get_manual_multipliers(municipality: str):
-    """保存済み倍率データを返す（Excel取込 + 手入力をマージ）."""
-    import json as _json
-
-    records: list[dict[str, Any]] = []
-
-    # Excel取込データ
-    if IMPORTED_MULTIPLIER_FILE.exists():
-        try:
-            imported = _json.loads(IMPORTED_MULTIPLIER_FILE.read_text(encoding="utf-8"))
-            for r in imported.get(municipality, []):
-                records.append({**r, "source": "imported"})
-        except Exception:
-            pass
-
-    # 手入力データ
-    if MANUAL_MULTIPLIER_FILE.exists():
-        try:
-            manual = _json.loads(MANUAL_MULTIPLIER_FILE.read_text(encoding="utf-8"))
-            for r in manual.get(municipality, []):
-                records.append({**r, "source": "manual"})
-        except Exception:
-            pass
-
-    return JSONResponse({"municipality": municipality, "records": records})
-
-
-@app.get("/api/imported_municipalities")
-async def get_imported_municipalities():
-    """Excel取込済みの市町村一覧を返す."""
-    import json as _json
-
-    if not IMPORTED_MULTIPLIER_FILE.exists():
-        return JSONResponse({"municipalities": []})
-    try:
-        data = _json.loads(IMPORTED_MULTIPLIER_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return JSONResponse({"municipalities": []})
-
-    items = [
-        {"name": name, "count": len(records)}
-        for name, records in sorted(data.items())
-    ]
-    return JSONResponse({"municipalities": items})
-
-
-@app.get("/api/lookup_multiplier")
-async def lookup_multiplier_endpoint(
-    municipality: str,
-    town_name: str = "",
-    chimoku: str = "",
-):
-    """市町村+町名+地目から倍率候補を返す.
-
-    Args:
-        municipality: 市町村名 (例: 水戸市)
-        town_name: 町名 (例: 加倉井町) — 部分一致
-        chimoku: 地目 (宅地/田/畑/山林/原野)
-    """
-    import json as _json
-
-    if not IMPORTED_MULTIPLIER_FILE.exists():
-        return JSONResponse({"candidates": [], "error": "倍率表データが未取込"})
-
-    try:
-        data = _json.loads(IMPORTED_MULTIPLIER_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return JSONResponse({"candidates": [], "error": "倍率表データ読込失敗"})
-
-    records = data.get(municipality, [])
-    if not records:
-        return JSONResponse({
-            "candidates": [],
-            "error": f"{municipality} の倍率データが未取込",
-        })
-
-    # 町名部分一致フィルタ
-    if town_name:
-        filtered = [r for r in records if town_name in r.get("town_name", "")]
-        if not filtered:
-            # 前方一致フォールバック
-            filtered = [r for r in records if r.get("town_name", "").startswith(town_name)]
-    else:
-        filtered = records
-
-    # 地目別倍率キー
-    chimoku_key_map = {
-        "宅地": "residential",
-        "田": "paddy",
-        "畑": "field",
-        "山林": "forest",
-        "原野": "wasteland",
-        "牧場": "pasture",
-        "池沼": "pond",
-    }
-    target_key = chimoku_key_map.get(chimoku, "")
-
-    candidates = []
-    for r in filtered:
-        c = dict(r)
-        if target_key:
-            c["selected_multiplier"] = r.get(target_key, "")
-            c["selected_chimoku"] = chimoku
-        candidates.append(c)
-
-    return JSONResponse({
-        "municipality": municipality,
-        "town_name": town_name,
-        "chimoku": chimoku,
-        "candidates": candidates[:50],  # 最大50件
-        "total": len(candidates),
     })
 
 
@@ -802,10 +504,6 @@ def _to_int(value: Any) -> int | None:
         return None
 
 
-def _pref_key(prefecture: str) -> str:
-    return prefecture.replace("都", "").replace("府", "").replace("県", "").replace("道", "")
-
-
 def _match_property(loc1: str, chiban1: str, loc2: str, chiban2: str) -> bool:
     """所在+地番で同一物件か判定（部分一致）."""
     if not loc1 or not loc2:
@@ -813,17 +511,6 @@ def _match_property(loc1: str, chiban1: str, loc2: str, chiban2: str) -> bool:
     loc_match = loc1 in loc2 or loc2 in loc1
     chiban_match = chiban1 and chiban2 and (chiban1 in chiban2 or chiban2 in chiban1)
     return loc_match and chiban_match
-
-
-def _extract_town_name(location: str, chiban: str) -> str:
-    combined = location + chiban
-    m = re.search(r"([^\d市区郡県都府道]+?[町丁村])", combined)
-    if m:
-        return m.group(1)
-    m = re.search(r"(大字\S+)", combined)
-    if m:
-        return m.group(1)
-    return location
 
 
 async def _enrich_with_apis(ev: PropertyEvaluation, prefecture: str):
@@ -864,118 +551,6 @@ async def _enrich_with_apis(ev: PropertyEvaluation, prefecture: str):
                 logger.warning("WAGRI 農振取得エラー: %s", e)
     else:
         ev.notes.append("住所から座標を特定できませんでした")
-
-
-def _load_imported_multipliers() -> dict[str, list[dict[str, Any]]]:
-    """Excel取込済み倍率表を読み込む."""
-    import json as _json
-
-    if not IMPORTED_MULTIPLIER_FILE.exists():
-        return {}
-    try:
-        return _json.loads(IMPORTED_MULTIPLIER_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-
-def _lookup_imported_multiplier(
-    imported_data: dict[str, list[dict[str, Any]]],
-    city: str,
-    town: str,
-) -> dict[str, Any] | None:
-    """Excel取込倍率表から市町村+町名で1件抽出（部分一致）."""
-    if not city or not town:
-        return None
-    records = imported_data.get(city, [])
-    if not records:
-        return None
-    # 町名部分一致
-    for r in records:
-        if town in r.get("town_name", ""):
-            return r
-    # 前方一致
-    for r in records:
-        if r.get("town_name", "").startswith(town):
-            return r
-    return None
-
-
-def _apply_multiplier(
-    ev: PropertyEvaluation,
-    prefecture: str,
-    city: str,
-    multiplier_rows,
-    imported_data: dict[str, list[dict[str, Any]]] | None = None,
-):
-    """倍率表情報を適用（Excel取込データ最優先）."""
-    location = ev.location or ""
-    chiban = ev.chiban or ""
-    town = _extract_town_name(location, chiban)
-    if not town or not prefecture:
-        return
-
-    # 1. Excel取込データ最優先
-    if imported_data:
-        rec = _lookup_imported_multiplier(imported_data, city, town)
-        if rec:
-            ev.multiplier.town_name = rec.get("town_name", "")
-            ev.multiplier.area_name = rec.get("area_name", "")
-            ev.multiplier.leasehold_ratio = rec.get("leasehold_ratio", "")
-            ev.multiplier.residential_multiplier = rec.get("residential", "")
-            ev.multiplier.paddy_multiplier = rec.get("paddy", "")
-            ev.multiplier.field_multiplier = rec.get("field", "")
-            ev.multiplier.forest_multiplier = rec.get("forest", "")
-            ev.multiplier.wasteland_multiplier = rec.get("wasteland", "")
-            ev.multiplier.is_rosenka_area = False
-            ev.data_sources.append("国税庁 評価倍率表（Excel取込）")
-            return
-
-    # 2. 保存済みスクレイピングデータ
-    saved_data = load_multipliers_json(DATA_DIR / f"{_pref_key(prefecture)}_multipliers.json")
-    if saved_data and city:
-        ev.multiplier = lookup_from_saved_data(saved_data, city, town)
-        if ev.multiplier.town_name:
-            ev.data_sources.append("国税庁 評価倍率表（保存済み）")
-            return
-
-    # 3. リアルタイムスクレイピングの結果
-    if multiplier_rows:
-        from .services.nta_scraper import lookup_multiplier as _lookup
-        ev.multiplier = _lookup(multiplier_rows, town)
-        ev.data_sources.append("国税庁 評価倍率表")
-
-
-def _apply_valuation(
-    ev: PropertyEvaluation,
-    imported_data: dict[str, list[dict[str, Any]]] | None,
-    city: str,
-):
-    """倍率方式による相続税評価額を計算して ev.valuation にセット."""
-    if ev.property_type != "土地":
-        return
-    if not imported_data or not city:
-        return
-
-    # 倍率表レコード取得
-    town = _extract_town_name(ev.location or "", ev.chiban or "")
-    if not town:
-        return
-    rec = _lookup_imported_multiplier(imported_data, city, town)
-    if not rec:
-        return
-
-    chimoku = select_valuation_chimoku(ev)
-    if not chimoku:
-        ev.notes.append("評価地目が不明のため倍率方式の計算をスキップしました")
-        return
-
-    share = ev.ownership.share_fraction if ev.ownership else None
-    ev.valuation = calculate_valuation(
-        assessed_value=ev.assessed_value,
-        chimoku=chimoku,
-        multiplier_record=rec,
-        share_fraction=share,
-    )
 
 
 # ------------------------------------------------------------------
@@ -1100,7 +675,6 @@ def _evaluation_to_dict(ev: PropertyEvaluation) -> dict[str, Any]:
             "area_name": ev.multiplier.area_name,
             "town_name": ev.multiplier.town_name,
         },
-        "valuation": None,
         "consistency_checks": [
             {
                 "field_name": c.field_name,
@@ -1115,26 +689,6 @@ def _evaluation_to_dict(ev: PropertyEvaluation) -> dict[str, Any]:
         "data_sources": ev.data_sources,
         "notes": ev.notes,
     }
-
-    # 倍率方式 評価結果
-    if ev.valuation:
-        v = ev.valuation
-        d["valuation"] = {
-            "method": v.method,
-            "chimoku_used": v.chimoku_used,
-            "multiplier_raw": v.multiplier_raw,
-            "multiplier_value": v.multiplier_value,
-            "multiplier_prefix": v.multiplier_prefix,
-            "assessed_value": v.assessed_value,
-            "evaluated_value": v.evaluated_value,
-            "share_fraction": v.share_fraction,
-            "final_value": v.final_value,
-            "town_name": v.town_name,
-            "area_name": v.area_name,
-            "leasehold_ratio": v.leasehold_ratio,
-            "formula": v.formula,
-            "warnings": v.warnings,
-        }
 
     # 建物情報
     if ev.tohon_building:

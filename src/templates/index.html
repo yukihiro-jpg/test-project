@@ -84,7 +84,6 @@
     .eval-table thead .col-h.g-youto    { background: #DEEBF7; }
     .eval-table thead .col-h.g-hazard   { background: #FFE699; }
     .eval-table thead .col-h.g-bairitsu { background: #D9E1F2; }
-    .eval-table thead .col-h.g-hyouka   { background: #C6E0B4; }
     .eval-table td { color: #222; text-align: left; }
     .eval-table td.center { text-align: center; }
     .eval-table td.num    { text-align: right; }
@@ -102,81 +101,6 @@
     <p>書類アップロード or 手入力 + API連携で評価基礎情報を自動収集</p>
   </header>
   <div class="container">
-
-    <!-- 倍率表データ管理 -->
-    <div class="card">
-      <h2>倍率表データ管理</h2>
-      <p style="font-size:13px; color:#666; margin-bottom:12px;">国税庁サイトから都道府県の倍率表を一括取得します。</p>
-      <div class="form-row">
-        <div class="form-group">
-          <label>都道府県</label>
-          <select id="scrapePref"><option value="茨城県" selected>茨城県</option></select>
-        </div>
-        <div class="form-group" style="display:flex;align-items:flex-end;">
-          <button class="btn btn-primary" id="scrapeBtn" onclick="runScrape()">一括スクレイピング実行</button>
-        </div>
-        <div class="form-group" style="display:flex;align-items:flex-end;">
-          <button class="btn btn-outline" onclick="checkSavedData()">保存済みデータを確認</button>
-        </div>
-      </div>
-      <div id="scrapeStatus"></div>
-      <div id="scrapeResult" class="hidden"></div>
-    </div>
-
-    <!-- 倍率データ管理 (PDF + 手入力) -->
-    <div class="card">
-      <h2>倍率データ管理</h2>
-      <p style="font-size:13px; color:#666; margin-bottom:12px;">Excel取込済みの市町村はそのまま検索可能です。未取込の市町村はPDFダウンロード＋手入力で登録します。</p>
-
-      <div id="importedStatus" style="margin-bottom:12px;"></div>
-
-      <div class="btn-group" style="margin-bottom:16px;">
-        <button class="btn btn-primary" id="downloadPdfsBtn" onclick="downloadPdfs()">PDF一括ダウンロード実行</button>
-        <button class="btn btn-outline" onclick="loadMunicipalityList()">市町村一覧を読み込み</button>
-      </div>
-      <div id="pdfDownloadStatus"></div>
-
-      <div class="form-row" style="margin-top:12px;">
-        <div class="form-group">
-          <label>市町村を選択</label>
-          <select id="municipalitySelect" onchange="onMunicipalitySelected()">
-            <option value="">-- 選択してください --</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- PDF表示 -->
-      <div id="pdfViewerContainer" class="hidden" style="margin-top:12px;">
-        <iframe id="pdfViewer" style="width:100%;height:600px;border:1px solid #ccc;border-radius:4px;"></iframe>
-      </div>
-
-      <!-- 手入力フォーム -->
-      <div id="multiplierInputForm" class="hidden" style="margin-top:16px;">
-        <h3 style="font-size:14px; color:#1F4E79; margin-bottom:10px;">倍率データ手入力</h3>
-        <div class="form-row">
-          <div class="form-group"><label>町名</label><input type="text" id="mi_town_name" placeholder="例: 大字○○"></div>
-          <div class="form-group"><label>地区名</label><input type="text" id="mi_area_name" placeholder="例: 全域"></div>
-          <div class="form-group"><label>借地権割合</label><input type="text" id="mi_leasehold" placeholder="例: 40%"></div>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label>宅地</label><input type="text" id="mi_residential" placeholder="例: 1.1"></div>
-          <div class="form-group"><label>田</label><input type="text" id="mi_paddy" placeholder="例: 11"></div>
-          <div class="form-group"><label>畑</label><input type="text" id="mi_field" placeholder="例: 8.2"></div>
-          <div class="form-group"><label>山林</label><input type="text" id="mi_forest" placeholder="例: 7.9"></div>
-          <div class="form-group"><label>原野</label><input type="text" id="mi_wasteland" placeholder="例: 3.8"></div>
-        </div>
-        <div class="btn-group">
-          <button class="btn btn-success" onclick="saveMultiplier()">保存</button>
-        </div>
-        <div id="saveMultiplierStatus" style="margin-top:8px;"></div>
-      </div>
-
-      <!-- 保存済みデータテーブル -->
-      <div id="savedMultipliersContainer" class="hidden" style="margin-top:16px;">
-        <h3 style="font-size:14px; color:#1F4E79; margin-bottom:10px;">保存済み倍率データ</h3>
-        <div id="savedMultipliersTable"></div>
-      </div>
-    </div>
 
     <!-- Step 1: 入力 -->
     <div class="card">
@@ -274,181 +198,6 @@
   <script>
     let sessionId = '';
     let uploadData = null;
-    let currentMunicipalityCode = '';
-    let currentMunicipalityName = '';
-
-    // --- 倍率PDF / 手入力管理 ---
-    async function downloadPdfs() {
-      const btn = document.getElementById('downloadPdfsBtn');
-      const status = document.getElementById('pdfDownloadStatus');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>取得中...';
-      status.innerHTML = '<div class="status status-info">既存スクレイピングを実行中（PDF一括取得は scripts/download_pdfs.py をご利用ください）...</div>';
-      try {
-        const resp = await fetch('/api/scrape_multipliers', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prefecture:'茨城県'}) });
-        const data = await resp.json();
-        if (data.error) status.innerHTML = '<div class="status status-error">'+data.error+'</div>';
-        else status.innerHTML = '<div class="status status-success">スクレイピング完了 ('+data.total_records+'件)</div>';
-      } catch(e) { status.innerHTML = '<div class="status status-error">'+e.message+'</div>'; }
-      btn.disabled = false; btn.textContent = 'PDF一括ダウンロード実行';
-      loadMunicipalityList();
-    }
-
-    let importedMunicipalitySet = new Set();
-
-    async function loadImportedStatus() {
-      try {
-        const resp = await fetch('/api/imported_municipalities');
-        const data = await resp.json();
-        const list = data.municipalities || [];
-        importedMunicipalitySet = new Set(list.map(m => m.name));
-        const el = document.getElementById('importedStatus');
-        if (!list.length) {
-          el.innerHTML = '<div class="status status-warn">Excel取込済みの倍率データはありません。</div>';
-          return;
-        }
-        const tags = list.map(m =>
-          '<span style="background:#d4edda;color:#155724;padding:4px 10px;border-radius:12px;font-size:12px;margin-right:6px;">'
-          + m.name + ' (' + m.count + '件)</span>'
-        ).join('');
-        el.innerHTML = '<div class="status status-success"><strong>Excel取込済み:</strong> ' + tags + '</div>';
-      } catch(e) { console.error(e); }
-    }
-
-    async function loadMunicipalityList() {
-      const sel = document.getElementById('municipalitySelect');
-      const status = document.getElementById('pdfDownloadStatus');
-      await loadImportedStatus();
-      try {
-        const resp = await fetch('/api/municipality_list');
-        const data = await resp.json();
-        sel.innerHTML = '<option value="">-- 選択してください --</option>';
-
-        // Excel取込済みの市町村を優先表示（PDFキャッシュにない名前のみ単独項目として追加）
-        const mList = data.municipalities || [];
-        const existingNames = new Set(mList.map(m => m.name));
-        importedMunicipalitySet.forEach(name => {
-          if (!existingNames.has(name)) {
-            const opt = document.createElement('option');
-            opt.value = name;  // 名前をそのままコードとして使う
-            opt.dataset.name = name;
-            opt.textContent = '[Excel] ' + name;
-            sel.appendChild(opt);
-          }
-        });
-
-        mList.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m.code;
-          opt.dataset.name = m.name;
-          let prefix = '';
-          if (importedMunicipalitySet.has(m.name)) prefix = '[Excel] ';
-          else if (m.cached) prefix = '[PDF] ';
-          else prefix = '[ - ] ';
-          opt.textContent = prefix + m.name + ' (' + m.code + ')';
-          sel.appendChild(opt);
-        });
-        status.innerHTML = '<div class="status status-success">市町村 '+mList.length+'件 (Excel取込 '+importedMunicipalitySet.size+'件 / PDFキャッシュ '+data.cached_count+'件)</div>';
-      } catch(e) { status.innerHTML = '<div class="status status-error">'+e.message+'</div>'; }
-    }
-
-    function onMunicipalitySelected() {
-      const sel = document.getElementById('municipalitySelect');
-      const code = sel.value;
-      if (!code) {
-        document.getElementById('pdfViewerContainer').classList.add('hidden');
-        document.getElementById('multiplierInputForm').classList.add('hidden');
-        document.getElementById('savedMultipliersContainer').classList.add('hidden');
-        return;
-      }
-      currentMunicipalityCode = code;
-      currentMunicipalityName = sel.options[sel.selectedIndex].dataset.name || code;
-      document.getElementById('pdfViewer').src = '/api/multiplier_pdf/' + encodeURIComponent(code);
-      document.getElementById('pdfViewerContainer').classList.remove('hidden');
-      document.getElementById('multiplierInputForm').classList.remove('hidden');
-      document.getElementById('savedMultipliersContainer').classList.remove('hidden');
-      loadSavedMultipliers();
-    }
-
-    async function loadSavedMultipliers() {
-      const key = currentMunicipalityName || currentMunicipalityCode;
-      try {
-        const resp = await fetch('/api/multipliers/' + encodeURIComponent(key));
-        const data = await resp.json();
-        const recs = data.records || [];
-        const container = document.getElementById('savedMultipliersTable');
-        if (!recs.length) { container.innerHTML = '<p style="font-size:13px;color:#888;">保存済みデータはありません。</p>'; return; }
-        let h = '<p style="font-size:12px;color:#666;">計 '+recs.length+' 件</p>';
-        h += '<table class="results-table"><tr><th>元</th><th>町名</th><th>地区</th><th>借地権</th><th>宅地</th><th>田</th><th>畑</th><th>山林</th><th>原野</th></tr>';
-        recs.forEach(r => {
-          const src = r.source === 'imported' ? '<span style="color:#155724;">Excel</span>' : '<span style="color:#856404;">手入力</span>';
-          h += '<tr><td>'+src+'</td><td>'+(r.town_name||'')+'</td><td>'+(r.area_name||'')+'</td><td>'+(r.leasehold_ratio||'')+'</td><td>'+(r.residential||'')+'</td><td>'+(r.paddy||'')+'</td><td>'+(r.field||'')+'</td><td>'+(r.forest||'')+'</td><td>'+(r.wasteland||'')+'</td></tr>';
-        });
-        h += '</table>';
-        container.innerHTML = h;
-      } catch(e) { console.error(e); }
-    }
-
-    async function saveMultiplier() {
-      const status = document.getElementById('saveMultiplierStatus');
-      const key = currentMunicipalityName || currentMunicipalityCode;
-      if (!key) { status.innerHTML = '<div class="status status-error">市町村を選択してください</div>'; return; }
-      const payload = {
-        municipality: key,
-        town_name: document.getElementById('mi_town_name').value,
-        area_name: document.getElementById('mi_area_name').value,
-        leasehold_ratio: document.getElementById('mi_leasehold').value,
-        residential: document.getElementById('mi_residential').value,
-        paddy: document.getElementById('mi_paddy').value,
-        field: document.getElementById('mi_field').value,
-        forest: document.getElementById('mi_forest').value,
-        wasteland: document.getElementById('mi_wasteland').value,
-      };
-      try {
-        const resp = await fetch('/api/save_multiplier', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
-        const data = await resp.json();
-        if (data.error) { status.innerHTML = '<div class="status status-error">'+data.error+'</div>'; return; }
-        status.innerHTML = '<div class="status status-success">保存しました（'+data.count+'件）</div>';
-        ['mi_town_name','mi_area_name','mi_leasehold','mi_residential','mi_paddy','mi_field','mi_forest','mi_wasteland'].forEach(id => document.getElementById(id).value='');
-        loadSavedMultipliers();
-      } catch(e) { status.innerHTML = '<div class="status status-error">'+e.message+'</div>'; }
-    }
-
-    // --- スクレイピング ---
-    async function runScrape() {
-      const btn = document.getElementById('scrapeBtn');
-      const status = document.getElementById('scrapeStatus');
-      const pref = document.getElementById('scrapePref').value;
-      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>スクレイピング中...';
-      status.innerHTML = '<div class="status status-info">国税庁サイトから取得中（数分かかります）...</div>';
-      try {
-        const resp = await fetch('/api/scrape_multipliers', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prefecture:pref}) });
-        const data = await resp.json();
-        if (data.error) { status.innerHTML = '<div class="status status-error">'+data.error+'</div>'; }
-        else { status.innerHTML = '<div class="status status-success">完了！</div>'; showScrapeResult(data); }
-      } catch(e) { status.innerHTML = '<div class="status status-error">'+e.message+'</div>'; }
-      btn.disabled = false; btn.textContent = '一括スクレイピング実行';
-    }
-    function showScrapeResult(data) {
-      const a = document.getElementById('scrapeResult'); a.classList.remove('hidden');
-      a.innerHTML = `<table class="results-table" style="margin-top:12px;"><tr><td style="width:200px;font-weight:600;">市区町村数</td><td>${data.municipality_count}</td></tr><tr><td style="font-weight:600;">総レコード数</td><td>${data.total_records.toLocaleString()}</td></tr><tr><td style="font-weight:600;">路線価地域</td><td>${data.rosenka_count.toLocaleString()}件</td></tr><tr><td style="font-weight:600;">倍率地域</td><td>${data.bairitsu_count.toLocaleString()}件</td></tr></table>`;
-    }
-    async function checkSavedData() {
-      const pref = document.getElementById('scrapePref').value;
-      const status = document.getElementById('scrapeStatus');
-      try {
-        const resp = await fetch('/api/multiplier_data/'+encodeURIComponent(pref));
-        const data = await resp.json();
-        if (data.error) { status.innerHTML = '<div class="status status-warn">'+data.error+'</div>'; }
-        else {
-          status.innerHTML = '<div class="status status-success">保存済み（'+data.scraped_at+' 取得、'+data.total_records+'レコード）</div>';
-          const cities = Object.keys(data.municipalities);
-          const a = document.getElementById('scrapeResult'); a.classList.remove('hidden');
-          let h = '<div style="margin-top:12px;"><strong>市区町村（'+cities.length+'件）:</strong><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">';
-          cities.forEach(c => { h += '<span style="background:#eef3f9;padding:4px 10px;border-radius:4px;font-size:12px;">'+c+' ('+data.municipalities[c].records.length+')</span>'; });
-          h += '</div></div>'; a.innerHTML = h;
-        }
-      } catch(e) { status.innerHTML = '<div class="status status-error">'+e.message+'</div>'; }
-    }
 
     // --- タブ切替 ---
     function switchTab(mode) {
@@ -835,9 +584,7 @@
         const resp = await fetch('/api/evaluate', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ session_id:sessionId, prefecture:document.getElementById('detectedPrefecture').value, city:document.getElementById('detectedCity').value }) });
         const data = await resp.json();
         sessionId = data.session_id;
-        let msg = '基礎情報の取得が完了しました';
-        if (data.municipality_code) msg += '（倍率表コード: '+data.municipality_code+'）';
-        status.innerHTML = '<div class="status status-success">'+msg+'</div>';
+        status.innerHTML = '<div class="status status-success">基礎情報の取得が完了しました</div>';
         renderResults(data.evaluations);
         document.getElementById('resultCard').classList.remove('hidden');
       } catch(e) { status.innerHTML = '<div class="status status-error">'+e.message+'</div>'; }
@@ -902,13 +649,6 @@
         ['田倍率',             'bairitsu', ev => ev.multiplier?.paddy_multiplier || '',       'center'],
         ['畑倍率',             'bairitsu', ev => ev.multiplier?.field_multiplier || '',       'center'],
         ['山林倍率',           'bairitsu', ev => ev.multiplier?.forest_multiplier || '',      'center'],
-        // --- 評価 ---
-        ['評価地目',           'hyouka',   ev => ev.valuation?.chimoku_used || '',            'center'],
-        ['適用倍率',           'hyouka',   ev => ev.valuation?.multiplier_raw || '',          'center'],
-        ['評価額(持分前)',     'hyouka',   ev => yen(ev.valuation?.evaluated_value),          'num'],
-        ['相続税評価額(持分後)', 'hyouka', ev => yen(ev.valuation?.final_value),              'num final-val'],
-        ['計算式',             'hyouka',   ev => ev.valuation?.formula || '',                 'wrap'],
-        ['注意事項',           'hyouka',   ev => (ev.valuation?.warnings?.length ? ev.valuation.warnings.join('／') : ''), 'wrap'],
       ];
 
       // グループ定義 (列数は cols の並びと一致していること)
@@ -922,7 +662,6 @@
         ['用途',     'youto',    4],
         ['ハザード', 'hazard',   4],
         ['倍率',     'bairitsu', 7],
-        ['評価',     'hyouka',   6],
       ];
 
       let html = '<div class="eval-table-wrap"><table class="eval-table">';
@@ -968,9 +707,6 @@
         if (ev.notes?.length) {
           extras.push('<div style="font-size:11px;color:#c62828;margin-top:2px;"><strong>注記:</strong> '+ev.notes.map(esc).join(' / ')+'</div>');
         }
-        if (ev.valuation?.warnings?.length) {
-          extras.push('<div style="font-size:11px;color:#c62828;margin-top:2px;"><strong>評価注意:</strong> '+ev.valuation.warnings.map(esc).join(' / ')+'</div>');
-        }
         if (extras.length) {
           html += '<div style="margin-top:8px;padding:6px 10px;background:#f5f7fb;border-left:3px solid #1F4E79;border-radius:3px;">'
                 + '<div style="font-size:11px;color:#1F4E79;font-weight:700;">物件 '+esc(ev.property_id)+' ['+esc(ev.property_type)+']</div>'
@@ -982,11 +718,6 @@
       area.innerHTML = html;
     }
     function exportExcel() { if (sessionId) window.location.href = '/api/export/'+sessionId; }
-
-    // 起動時: Excel取込済み倍率データ・市町村一覧を自動ロード
-    window.addEventListener('DOMContentLoaded', () => {
-      loadMunicipalityList();
-    });
   </script>
 </body>
 </html>

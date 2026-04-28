@@ -26,13 +26,5 @@ class AppConfig:
     # アップロード先
     upload_dir: Path = Path(os.getenv("UPLOAD_DIR", "uploads"))
 
-    # 国税庁スクレイピング
-    nta_base_url: str = "https://www.rosenka.nta.go.jp"
-    nta_year: str = os.getenv("NTA_YEAR", "r07")  # 令和7年
-
-    @property
-    def nta_year_path(self) -> str:
-        return f"main_{self.nta_year}"
-
 
 config = AppConfig()

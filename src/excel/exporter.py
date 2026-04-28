@@ -27,7 +27,6 @@ SUBGROUP_FILLS = {
     "用途": PatternFill(start_color="DEEBF7", end_color="DEEBF7", fill_type="solid"),
     "ハザード": PatternFill(start_color="FFE699", end_color="FFE699", fill_type="solid"),
     "倍率": PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid"),
-    "評価": PatternFill(start_color="C6E0B4", end_color="C6E0B4", fill_type="solid"),
     "基本": PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid"),
 }
 SUBGROUP_FONT = Font(name="Yu Gothic", bold=True, size=9, color="333333")
@@ -138,25 +137,6 @@ def _build_columns() -> list[tuple[str, int, str, callable, Alignment]]:
         ("田倍率", 8, "倍率", lambda ev: ev.multiplier.paddy_multiplier, CENTER),
         ("畑倍率", 8, "倍率", lambda ev: ev.multiplier.field_multiplier, CENTER),
         ("山林倍率", 8, "倍率", lambda ev: ev.multiplier.forest_multiplier, CENTER),
-        # --- 相続税評価額（倍率方式）---
-        ("評価地目", 10, "評価",
-         lambda ev: ev.valuation.chimoku_used if ev.valuation else "",
-         CENTER),
-        ("適用倍率", 10, "評価",
-         lambda ev: ev.valuation.multiplier_raw if ev.valuation else "",
-         CENTER),
-        ("評価額(持分前)", 16, "評価",
-         lambda ev: _yen(ev.valuation.evaluated_value) if ev.valuation else "",
-         RIGHT),
-        ("相続税評価額(持分後)", 18, "評価",
-         lambda ev: _yen(ev.valuation.final_value) if ev.valuation else "",
-         RIGHT),
-        ("計算式", 30, "評価",
-         lambda ev: ev.valuation.formula if ev.valuation else "",
-         LEFT),
-        ("注意事項", 28, "評価",
-         lambda ev: "／".join(ev.valuation.warnings) if ev.valuation and ev.valuation.warnings else "",
-         LEFT),
     ]
     return cols
 
