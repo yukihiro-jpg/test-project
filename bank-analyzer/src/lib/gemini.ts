@@ -63,10 +63,10 @@ ${pageHeader}以下のPDFから取引明細を抽出してください${bankName
 
 【日付の解釈ルール（極めて重要）】
 - 通帳の日付は「YY-MM-DD」「YY.MM.DD」「YY/MM/DD」のように**2桁の年**で印字されることが頻繁にあります（例: 07-12-29）。これは西暦ではなく**和暦の年**です。
+- **このアプリで扱う通帳は最古でも平成20年（2008年）以降のものです**。それより前の年は採用しないでください（昭和・大正・明治・平成1〜19年は解析対象外）。
 - 2桁年は次の優先順位で和暦に解決してください:
   1. **令和**（令和元年 = 2019年5月1日以降）として解釈し、指定期間 ${startDate} 〜 ${endDate} に収まるか確認
-  2. 収まらなければ**平成**（平成元年 = 1989年1月8日〜2019年4月30日）
-  3. それでも収まらなければ**昭和**
+  2. 収まらなければ**平成20年〜30年**（2008年〜2018年）の範囲で平成として解釈
 - 解決した結果は必ず西暦4桁の "YYYY/MM/DD" 形式で出力してください。
 - **重要**: 通帳の取引は時系列順（日付の昇順）で印字されます。あるページの中で
   前後の行より日付が1年以上前後にずれている行があったら、それは年の数字を
@@ -196,6 +196,54 @@ function isInRange(date: string, start: string, end: string): boolean {
   const e = parseLooseDate(end)
   if (!d || !s || !e) return true
   return d.getTime() >= s.getTime() && d.getTime() <= e.getTime()
+}
+
+// 単調性ベースの日付自動補正
+// 通帳の取引は必ず日付昇順で印字されるため、前後の行と比べて
+// 逆行している行は OCR 誤読（年の数字違い）の可能性が高い。
+// ±1年 / ±2年 シフトで単調性が回復するなら自動補正する。
+function correctNonMonotonicDates(
+  transactions: Transaction[]
+): { count: number; warnings: string[] } {
+  if (transactions.length < 2) return { count: 0, warnings: [] }
+  let count = 0
+
+  for (let i = 0; i < transactions.length; i++) {
+    const cur = transactions[i]
+    const curDate = parseLooseDate(cur.date)
+    if (!curDate) continue
+    const prevDate = i > 0 ? parseLooseDate(transactions[i - 1].date) : null
+    const nextDate =
+      i < transactions.length - 1 ? parseLooseDate(transactions[i + 1].date) : null
+
+    const breaksWithPrev = prevDate && curDate.getTime() < prevDate.getTime()
+    const breaksWithNext = nextDate && curDate.getTime() > nextDate.getTime()
+
+    if (!breaksWithPrev && !breaksWithNext) continue // 単調 → 何もしない
+
+    // ±1, ±2 年シフトで単調性が回復するか試す（小さい変動を優先）
+    for (const shift of [-1, +1, -2, +2]) {
+      const shifted = new Date(curDate)
+      shifted.setFullYear(shifted.getFullYear() + shift)
+      const fitsAfterPrev = !prevDate || shifted.getTime() >= prevDate.getTime()
+      const fitsBeforeNext = !nextDate || shifted.getTime() <= nextDate.getTime()
+      if (fitsAfterPrev && fitsBeforeNext) {
+        cur.date = toIsoDate(shifted)
+        const sign = shift > 0 ? `+${shift}` : `${shift}`
+        cur.remarks = ((cur.remarks || '') + ` 自動補正: 単調性回復のため${sign}年`).trim()
+        count++
+        break
+      }
+    }
+  }
+
+  const warnings: string[] = []
+  if (count > 0) {
+    warnings.push(
+      `${count}件の取引日を単調性回復のため自動補正しました（年のOCR誤読の可能性）。各行の備考に補正内容を記載しています。`
+    )
+  }
+  return { count, warnings }
 }
 
 // 摘要に金額が混入しているケース（ゆうちょの「3受取利子」型）の自動補正。
@@ -589,6 +637,10 @@ export async function analyzePassbook(opts: {
   allTransactions.forEach((tx, i) => {
     tx.id = `${passbookId}-tx-${i}`
   })
+
+  // 単調性ベースで日付の年OCR誤読を自動補正（残高補正より先に実行）
+  const dateCorr = correctNonMonotonicDates(allTransactions)
+  if (dateCorr.warnings.length > 0) warnings.push(...dateCorr.warnings)
 
   // 開始残高は「期間内最初の取引の直前の残高」を厳密に算出する。
   // ページ単独の 開始残高 だと、解析期間が通帳の途中から始まるケースで

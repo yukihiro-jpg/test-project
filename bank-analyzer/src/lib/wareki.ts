@@ -8,6 +8,13 @@ const ERAS: Era[] = [
   { name: '明治', start: new Date(1868, 0, 25) }
 ]
 
+// 解析対象とする最古の年（西暦）。これより前は 2桁年表記でも採用しない。
+// 平成20年 = 2008年 を既定の下限とする（環境変数で上書き可）。
+const MIN_YEAR =
+  typeof process !== 'undefined' && process.env?.PASSBOOK_MIN_YEAR
+    ? Number(process.env.PASSBOOK_MIN_YEAR) || 2008
+    : 2008
+
 export function toWareki(input: string | Date): string {
   const date = typeof input === 'string' ? parseLooseDate(input) : input
   if (!date || isNaN(date.getTime())) return typeof input === 'string' ? input : ''
@@ -73,6 +80,8 @@ export function parseLooseDate(input: string, opts?: { rangeStart?: string; rang
     const candidates: Date[] = []
     for (const era of ERAS) {
       const year = era.start.getFullYear() + yy - 1
+      // 平成20年(2008)未満や昭和以前は解析対象外（OCR誤読の温床になるため）
+      if (year < MIN_YEAR) continue
       const cand = new Date(year, mm, dd)
       if (cand.getTime() >= era.start.getTime()) candidates.push(cand)
     }
