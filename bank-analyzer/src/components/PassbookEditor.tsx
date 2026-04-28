@@ -21,15 +21,15 @@ const COL_KEYS = ['drag', 'mark', 'date', 'desc', 'deposit', 'withdrawal', 'bala
 type ColKey = (typeof COL_KEYS)[number]
 
 const DEFAULT_WIDTHS: Record<ColKey, number> = {
-  drag: 32,
-  mark: 64,
-  date: 160,
+  drag: 24,
+  mark: 56,
+  date: 200,
   desc: 196,
   deposit: 88,
   withdrawal: 88,
-  balance: 104,
+  balance: 110,
   remarks: 200,
-  delete: 56
+  delete: 44
 }
 
 const COL_LABELS: Record<ColKey, string> = {
@@ -56,7 +56,7 @@ const COL_ALIGN: Record<ColKey, 'left' | 'center' | 'right'> = {
   delete: 'center'
 }
 
-const STORAGE_KEY = 'bank-analyzer-passbook-col-widths-v5'
+const STORAGE_KEY = 'bank-analyzer-passbook-col-widths-v6'
 
 export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAddTx }: Props) {
   const pdfRef = useRef<PdfViewerHandle>(null)
@@ -346,7 +346,7 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
     <th
       key={col}
       style={{ width: widths[col], minWidth: widths[col] }}
-      className={`relative px-2 py-1 select-none text-${COL_ALIGN[col]} border-r border-slate-600 last:border-r-0`}
+      className={`relative px-1 py-1 select-none text-${COL_ALIGN[col]} border-r border-slate-500 last:border-r-0 text-[11px] font-semibold`}
     >
       {COL_LABELS[col]}
       <span
@@ -357,16 +357,23 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
     </th>
   )
 
+  const cellTd = 'border border-slate-300 p-0 align-middle'
+  const cellInputBase =
+    'w-full h-full px-1.5 py-0 bg-transparent border-0 outline-none text-[12px] focus:bg-blue-50 focus:outline focus:outline-2 focus:outline-blue-400 focus:-outline-offset-1'
+
   const dataPanel = (
-    <div ref={tableScrollRef} className="h-full min-h-0 overflow-auto border rounded">
-      <table className="text-sm" style={{ width: totalWidth, tableLayout: 'fixed' }}>
+    <div ref={tableScrollRef} className="h-full min-h-0 overflow-auto border border-slate-300">
+      <table
+        className="text-[12px] border-collapse"
+        style={{ width: totalWidth, tableLayout: 'fixed' }}
+      >
         <colgroup>
           {COL_KEYS.map((c) => (
             <col key={c} style={{ width: widths[c] }} />
           ))}
         </colgroup>
         <thead className="bg-slate-700 text-white sticky top-0 z-10">
-          <tr>{COL_KEYS.map(renderHeaderCell)}</tr>
+          <tr style={{ height: 26 }}>{COL_KEYS.map(renderHeaderCell)}</tr>
         </thead>
         <tbody>
           {passbook.transactions.map((tx) => {
@@ -376,7 +383,7 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
             const rowClass = mismatch
               ? isSelected
                 ? 'bg-red-200'
-                : 'bg-red-100 hover:bg-red-200'
+                : 'bg-red-50 hover:bg-red-100'
               : isSelected
               ? 'bg-blue-100'
               : isIncluded
@@ -386,9 +393,9 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
             const isDragOverThis = dragOverId === tx.id && draggingId !== tx.id
             const dragIndicator =
               isDragOverThis && dragPosition === 'before'
-                ? 'border-t-4 border-t-blue-500'
+                ? 'border-t-2 border-t-blue-500'
                 : isDragOverThis && dragPosition === 'after'
-                ? 'border-b-4 border-b-blue-500'
+                ? 'border-b-2 border-b-blue-500'
                 : ''
             return (
               <tr
@@ -400,20 +407,21 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                 onDragOver={(e) => handleDragOver(e, tx.id)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, tx.id)}
-                className={`border-t cursor-pointer ${rowClass} ${dragIndicator} ${isDragging ? 'opacity-40' : ''}`}
+                style={{ height: 24 }}
+                className={`cursor-pointer ${rowClass} ${dragIndicator} ${isDragging ? 'opacity-40' : ''}`}
                 onClick={(e) => handleRowClick(tx, e)}
               >
                 <td
-                  className="px-0 py-0 text-center text-slate-400 select-none cursor-grab active:cursor-grabbing"
+                  className={`${cellTd} text-center text-slate-400 select-none cursor-grab active:cursor-grabbing`}
                   title="ドラッグして並び替え"
                 >
                   ≡
                 </td>
-                <td className="px-1 py-0.5 text-center">
+                <td className={`${cellTd} text-center`}>
                   {isIncluded ? (
                     <span
-                      className="inline-flex items-center justify-center w-7 h-6 rounded bg-amber-200 text-amber-900 font-bold text-xs"
-                      title="一覧表に計上中（一覧表側で削除できます）"
+                      className="inline-flex items-center justify-center w-6 h-5 rounded bg-amber-200 text-amber-900 font-bold text-[11px]"
+                      title="一覧表に計上中"
                     >
                       ✓
                     </span>
@@ -422,90 +430,103 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                       type="button"
                       onClick={() => onAddTx?.(tx.id)}
                       disabled={!onAddTx}
-                      className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-slate-300"
+                      className="px-1.5 py-0 h-5 text-[11px] bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-slate-300"
                       title="金融資産異動一覧表に追加"
                     >
                       ＋追加
                     </button>
                   )}
                 </td>
-                <td className="px-1 py-0.5">
-                  <WarekiInput value={tx.date} onChange={(v) => updateTx(tx.id, { date: v })} />
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => shiftTxYear(tx.id, -1)}
-                      className="text-[10px] text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded px-1 border border-slate-200"
-                      title="この行の年を1年戻す（OCRが年を読み間違えた時に）"
-                    >
-                      −1年
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => shiftTxYear(tx.id, +1)}
-                      className="text-[10px] text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded px-1 border border-slate-200"
-                      title="この行の年を1年進める"
-                    >
-                      ＋1年
-                    </button>
-                    {tx.pageNumber && (
-                      <span className="text-[10px] text-slate-400 leading-tight ml-auto">
-                        p.{tx.pageNumber}
-                      </span>
-                    )}
+                <td className={cellTd}>
+                  <div className="flex items-center h-full">
+                    <WarekiInput
+                      value={tx.date}
+                      onChange={(v) => updateTx(tx.id, { date: v })}
+                      className={`${cellInputBase} text-left flex-1 min-w-0`}
+                    />
+                    <div className="flex items-center gap-0.5 px-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => shiftTxYear(tx.id, -1)}
+                        className="text-[10px] text-slate-500 hover:text-blue-700 hover:bg-blue-100 px-0.5 leading-none"
+                        title="この行の年を1年戻す"
+                      >
+                        ◀
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => shiftTxYear(tx.id, +1)}
+                        className="text-[10px] text-slate-500 hover:text-blue-700 hover:bg-blue-100 px-0.5 leading-none"
+                        title="この行の年を1年進める"
+                      >
+                        ▶
+                      </button>
+                      {tx.pageNumber && (
+                        <span className="text-[10px] text-slate-400 leading-none">p{tx.pageNumber}</span>
+                      )}
+                    </div>
                   </div>
                 </td>
-                <td className="px-1 py-0.5">
+                <td className={cellTd}>
                   <input
                     type="text"
                     value={tx.description}
                     onChange={(e) => updateTx(tx.id, { description: e.target.value })}
-                    className="w-full border border-slate-200 rounded px-1 py-0.5"
+                    className={`${cellInputBase} text-left`}
                   />
                 </td>
-                <td className="px-1 py-0.5">
+                <td className={cellTd}>
                   <NumberInput
                     value={tx.deposit || 0}
                     onChange={(v) => updateTx(tx.id, { deposit: v })}
+                    className={`${cellInputBase} text-right`}
                   />
                 </td>
-                <td className="px-1 py-0.5">
+                <td className={cellTd}>
                   <NumberInput
                     value={tx.withdrawal || 0}
                     onChange={(v) => updateTx(tx.id, { withdrawal: v })}
+                    className={`${cellInputBase} text-right`}
                   />
                 </td>
-                <td className="px-1 py-0.5">
-                  <NumberInput
-                    value={tx.balance || 0}
-                    onChange={(v) => updateTx(tx.id, { balance: v })}
-                    className={`w-full border rounded px-1 py-0.5 text-right ${
-                      mismatch ? 'border-red-500 bg-red-50' : 'border-slate-200'
-                    }`}
-                  />
-                  {mismatch && (
-                    <div
-                      className="text-[10px] text-red-700 mt-0.5 leading-tight"
-                      title={`計算上の期待値: ${mismatch.expected.toLocaleString()}`}
-                    >
-                      期待値: {mismatch.expected.toLocaleString()}
-                    </div>
-                  )}
+                <td
+                  className={`${cellTd} ${mismatch ? 'bg-red-100 outline outline-2 outline-red-500 -outline-offset-2' : ''}`}
+                  title={
+                    mismatch
+                      ? `期待値: ${mismatch.expected.toLocaleString()} / 実際: ${mismatch.actual.toLocaleString()}`
+                      : undefined
+                  }
+                >
+                  <div className="flex items-center h-full">
+                    <NumberInput
+                      value={tx.balance || 0}
+                      onChange={(v) => updateTx(tx.id, { balance: v })}
+                      className={`${cellInputBase} text-right flex-1`}
+                    />
+                    {mismatch && (
+                      <span
+                        className="text-red-600 text-[11px] px-1 flex-shrink-0"
+                        title={`期待値: ${mismatch.expected.toLocaleString()}`}
+                      >
+                        ⚠
+                      </span>
+                    )}
+                  </div>
                 </td>
-                <td className="px-1 py-0.5">
+                <td className={cellTd}>
                   <input
                     type="text"
                     value={tx.remarks || ''}
                     onChange={(e) => updateTx(tx.id, { remarks: e.target.value })}
-                    className="w-full border border-slate-200 rounded px-1 py-0.5"
+                    className={`${cellInputBase} text-left`}
                   />
                 </td>
-                <td className="px-1 py-0.5 text-center">
+                <td className={`${cellTd} text-center`}>
                   <button
                     type="button"
                     onClick={() => deleteTx(tx.id)}
-                    className="px-2 py-0.5 text-xs bg-red-600 text-white rounded hover:bg-red-700"
-                    title="この取引行を解析データから削除"
+                    className="px-1.5 py-0 h-5 text-[11px] bg-red-600 text-white rounded hover:bg-red-700"
+                    title="この取引行を削除"
                   >
                     ✕
                   </button>

@@ -10,6 +10,12 @@ type NumberInputProps = {
   placeholder?: string
 }
 
+const DEFAULT_CELL_INPUT_CLASS =
+  'w-full h-full px-1.5 py-0 bg-transparent border-0 outline-none text-right focus:bg-blue-50 focus:outline focus:outline-2 focus:outline-blue-400 focus:-outline-offset-1'
+
+const DEFAULT_TEXT_CELL_INPUT_CLASS =
+  'w-full h-full px-1.5 py-0 bg-transparent border-0 outline-none text-left focus:bg-blue-50 focus:outline focus:outline-2 focus:outline-blue-400 focus:-outline-offset-1'
+
 export function NumberInput({ value, onChange, className, placeholder }: NumberInputProps) {
   const [focused, setFocused] = useState(false)
   const [draft, setDraft] = useState('')
@@ -37,7 +43,7 @@ export function NumberInput({ value, onChange, className, placeholder }: NumberI
         onChange(isNaN(n) ? 0 : n)
       }}
       onChange={(e) => setDraft(e.target.value)}
-      className={className ?? 'w-full border border-slate-200 rounded px-1 py-0.5 text-right'}
+      className={className ?? DEFAULT_CELL_INPUT_CLASS}
     />
   )
 }
@@ -73,7 +79,7 @@ export function WarekiInput({ value, onChange, className, placeholder }: WarekiI
         }
       }}
       onChange={(e) => setDraft(e.target.value)}
-      className={className ?? 'w-full border border-slate-200 rounded px-1 py-0.5'}
+      className={className ?? DEFAULT_TEXT_CELL_INPUT_CLASS}
     />
   )
 }
