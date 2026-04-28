@@ -67,6 +67,8 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [dragPosition, setDragPosition] = useState<'before' | 'after'>('before')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [lastClickedId, setLastClickedId] = useState<string | null>(null)
 
   useEffect(() => {
     try {
@@ -150,13 +152,75 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
   }
 
   const handleRowClick = (tx: Transaction, e: React.MouseEvent) => {
-    // 入力欄やボタンをクリックした場合は通常の編集動作のみ（PDFジャンプはしない）
+    // 入力欄やボタンをクリックした場合は通常の編集動作のみ
     const target = e.target as HTMLElement
     if (target.closest('input, button, select, textarea, a')) return
+
+    // Ctrl/Cmd + クリック: 個別選択トグル
+    if (e.ctrlKey || e.metaKey) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        if (next.has(tx.id)) next.delete(tx.id)
+        else next.add(tx.id)
+        return next
+      })
+      setLastClickedId(tx.id)
+      return
+    }
+
+    // Shift + クリック: 範囲選択
+    if (e.shiftKey && lastClickedId) {
+      const ids = passbook.transactions.map((t) => t.id)
+      const fromIdx = ids.indexOf(lastClickedId)
+      const toIdx = ids.indexOf(tx.id)
+      if (fromIdx >= 0 && toIdx >= 0) {
+        const [s, en] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx]
+        const rangeIds = ids.slice(s, en + 1)
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          for (const id of rangeIds) next.add(id)
+          return next
+        })
+        return
+      }
+    }
+
+    // 通常クリック: 選択解除 + PDFジャンプ
+    setSelectedIds(new Set())
     setSelectedTxId(tx.id)
+    setLastClickedId(tx.id)
     if (tx.pageNumber && pdfRef.current) {
       pdfRef.current.goToPage(tx.pageNumber)
     }
+  }
+
+  const addBlankRow = () => {
+    const last = passbook.transactions[passbook.transactions.length - 1]
+    const newTx: Transaction = {
+      id: `${passbook.passbookId}-manual-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      date: last?.date || '',
+      description: '',
+      deposit: 0,
+      withdrawal: 0,
+      balance: last?.balance || 0,
+      remarks: '手動追加',
+      pageNumber: last?.pageNumber
+    }
+    onChange({ ...passbook, transactions: [...passbook.transactions, newTx] })
+  }
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return
+    if (!confirm(`選択中の ${selectedIds.size} 行を削除します。よろしいですか？`)) return
+    onChange({
+      ...passbook,
+      transactions: passbook.transactions.filter((t) => !selectedIds.has(t.id))
+    })
+    setSelectedIds(new Set())
+  }
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set())
   }
 
   // ドラッグ&ドロップで取引行の並び替え
@@ -379,8 +443,11 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
           {passbook.transactions.map((tx) => {
             const isIncluded = includedTxIds?.has(tx.id) ?? false
             const isSelected = selectedTxId === tx.id
+            const isMultiSelected = selectedIds.has(tx.id)
             const mismatch = mismatchMap.get(tx.id)
-            const rowClass = mismatch
+            const rowClass = isMultiSelected
+              ? 'bg-indigo-200 hover:bg-indigo-300'
+              : mismatch
               ? isSelected
                 ? 'bg-red-200'
                 : 'bg-red-50 hover:bg-red-100'
@@ -543,8 +610,37 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ height: '85vh', minHeight: 600 }}>
       {leftPanel}
       <div className="flex flex-col h-full min-h-0">
-        <div className="text-xs text-slate-500 mb-1">
-          ヒント: 行をクリックすると左のPDFが該当ページにジャンプします。列ヘッダ右端をドラッグで列幅変更。
+        <div className="flex items-center gap-2 mb-1 text-xs">
+          <button
+            type="button"
+            onClick={addBlankRow}
+            className="px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-[11px]"
+            title="末尾に空白行を追加"
+          >
+            ＋ 1行追加
+          </button>
+          {selectedIds.size > 0 ? (
+            <>
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                className="px-2 py-0.5 bg-red-600 text-white rounded hover:bg-red-700 text-[11px]"
+              >
+                選択した {selectedIds.size} 行を削除
+              </button>
+              <button
+                type="button"
+                onClick={handleClearSelection}
+                className="px-2 py-0.5 bg-slate-200 text-slate-800 rounded hover:bg-slate-300 text-[11px]"
+              >
+                選択解除
+              </button>
+            </>
+          ) : (
+            <span className="text-slate-500">
+              行クリック=PDFジャンプ ／ Ctrl+クリック=個別選択 ／ Shift+クリック=範囲選択
+            </span>
+          )}
         </div>
         <div className="flex-1 min-h-0">{dataPanel}</div>
       </div>
