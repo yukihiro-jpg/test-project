@@ -195,18 +195,27 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
   }
 
   const addBlankRow = () => {
-    const last = passbook.transactions[passbook.transactions.length - 1]
+    const list = passbook.transactions
+    const targetIdx = selectedTxId ? list.findIndex((t) => t.id === selectedTxId) : -1
+    // 直近にクリックされた行があればその直前に挿入、なければ末尾に追加
+    const reference =
+      targetIdx >= 0 ? list[targetIdx] : list.length > 0 ? list[list.length - 1] : null
     const newTx: Transaction = {
       id: `${passbook.passbookId}-manual-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      date: last?.date || '',
+      date: reference?.date || '',
       description: '',
       deposit: 0,
       withdrawal: 0,
-      balance: last?.balance || 0,
+      balance: reference?.balance || 0,
       remarks: '手動追加',
-      pageNumber: last?.pageNumber
+      pageNumber: reference?.pageNumber
     }
-    onChange({ ...passbook, transactions: [...passbook.transactions, newTx] })
+    const next =
+      targetIdx >= 0
+        ? [...list.slice(0, targetIdx), newTx, ...list.slice(targetIdx)]
+        : [...list, newTx]
+    onChange({ ...passbook, transactions: next })
+    setSelectedTxId(newTx.id)
   }
 
   const handleDeleteSelected = () => {
@@ -615,9 +624,9 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
             type="button"
             onClick={addBlankRow}
             className="px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-[11px]"
-            title="末尾に空白行を追加"
+            title="直近にクリックした行の1行上に空白行を追加（未選択なら末尾）"
           >
-            ＋ 1行追加
+            ＋ 1行追加（選択行の上）
           </button>
           {selectedIds.size > 0 ? (
             <>

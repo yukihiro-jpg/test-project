@@ -639,17 +639,10 @@ export async function analyzePassbook(opts: {
     }
   }
 
-  // 取引をページ番号→日付の順に整列。
-  // 通帳の物理ページ順は必ず日付順なので、ページ番号を主キーにすれば
-  // 「日付の読み取り誤りによりページ順が逆転して見える」問題を防げる。
-  allTransactions.sort((a, b) => {
-    const pa = a.pageNumber ?? 0
-    const pb = b.pageNumber ?? 0
-    if (pa !== pb) return pa - pb
-    const da = parseLooseDate(a.date)?.getTime() ?? 0
-    const db = parseLooseDate(b.date)?.getTime() ?? 0
-    return da - db
-  })
+  // 取引をページ番号順だけで整列（同一ページ内は Gemini の読み取り順 = PDFの上から下 を保持）。
+  // Array.sort は ES2019 以降は安定ソートなので、同じ pageNumber 同士は挿入順が維持される。
+  // 日付による副ソートは行わない（同日に複数取引がある場合などPDFの並びと食い違うため）。
+  allTransactions.sort((a, b) => (a.pageNumber ?? 0) - (b.pageNumber ?? 0))
 
   // ID重複しないよう振り直し
   allTransactions.forEach((tx, i) => {
