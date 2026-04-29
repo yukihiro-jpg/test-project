@@ -97,7 +97,7 @@ def parse_nochi_with_gemini(file_path: Path) -> list[NochiDaicho]:
     # API呼び出し
     try:
         logger.info("Gemini API に解析リクエスト送信中...")
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         response = model.generate_content(
             [PROMPT, uploaded],
             generation_config=genai.types.GenerationConfig(
