@@ -387,9 +387,12 @@ async def evaluate_properties(request: Request):
     # 土地の評価情報構築
     for tl in sd.tohon_lands:
         prop_id += 1
+        # 所在に都道府県を含める
+        if prefecture and prefecture not in tl.location:
+            tl.location = prefecture + tl.location
         ev = PropertyEvaluation(property_id=prop_id, property_type="土地")
         ev.tohon_land = tl
-        ev.address = f"{prefecture}{tl.location}{tl.chiban}"
+        ev.address = f"{tl.location}{tl.chiban}"
 
         # 固定資産評価証明とのマッチング（所在+地番で）
         for kl in sd.kotei_lands:
@@ -420,9 +423,12 @@ async def evaluate_properties(request: Request):
     # 建物の評価情報
     for tb in sd.tohon_buildings:
         prop_id += 1
+        # 所在に都道府県を含める
+        if prefecture and prefecture not in tb.location:
+            tb.location = prefecture + tb.location
         ev = PropertyEvaluation(property_id=prop_id, property_type="建物")
         ev.tohon_building = tb
-        ev.address = f"{prefecture}{tb.location}{tb.kaoku_bango}"
+        ev.address = f"{tb.location}{tb.kaoku_bango}"
 
         # 固定資産評価証明の建物マッチング
         for kb in sd.kotei_buildings:

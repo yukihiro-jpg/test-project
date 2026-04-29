@@ -9,18 +9,28 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Optional
 
 from ..config import config
 from ..models import NochiDaicho
 
 logger = logging.getLogger(__name__)
 
+try:
+    import google.generativeai as genai
+    _GENAI_AVAILABLE = True
+except ImportError:
+    _GENAI_AVAILABLE = False
+    logger.warning(
+        "google-generativeai パッケージが未インストールです。"
+        "pip install google-generativeai でインストールしてください。"
+    )
+
 PROMPT = """\
 この画像は農地台帳（農地台帳登載事項）のスキャンPDFです。
 表に記載されているすべての筆（土地）の情報を読み取り、以下のJSON配列として出力してください。
 
 出力形式（JSON配列のみ、他のテキストは不要）:
-```json
 [
   {
     "no": 1,
@@ -36,7 +46,6 @@ PROMPT = """\
     "lease_period": ""
   }
 ]
-```
 
 各フィールドの説明:
 - no: 表の行番号
@@ -56,27 +65,38 @@ PROMPT = """\
 - 「自」は自作（所有）、「小」は小作（貸借あり）を意味します
 - 「調」は市街化調整区域を意味します
 - 複数ページある場合はすべてのページの筆を含めてください
-- JSON配列のみを出力し、```json マーカーは不要です
+- JSON配列のみを出力してください
 """
 
 
 def parse_nochi_with_gemini(file_path: Path) -> list[NochiDaicho]:
     """Gemini APIで農地台帳PDFを解析."""
-    if not config.gemini_api_key:
-        logger.warning("GEMINI_API_KEY が未設定のため農地台帳のAI解析をスキップします")
+    if not _GENAI_AVAILABLE:
+        logger.error("google-generativeai が利用できないため農地台帳を解析できません")
         return []
 
-    import google.generativeai as genai
+    api_key = config.gemini_api_key
+    if not api_key:
+        logger.error(
+            "GEMINI_API_KEY が未設定です。.env.local に GEMINI_API_KEY=... を追加してください"
+        )
+        return []
 
-    genai.configure(api_key=config.gemini_api_key)
+    logger.info("Gemini農地台帳解析を開始: %s (APIキー先頭: %s...)", file_path.name, api_key[:10])
+    genai.configure(api_key=api_key)
 
+    # ファイルアップロード
     try:
+        logger.info("Gemini にファイルをアップロード中...")
         uploaded = genai.upload_file(str(file_path))
+        logger.info("アップロード完了: %s", uploaded.name)
     except Exception as e:
-        logger.error("Gemini ファイルアップロード失敗: %s", e)
+        logger.error("Gemini ファイルアップロード失敗: %s", e, exc_info=True)
         return []
 
+    # API呼び出し
     try:
+        logger.info("Gemini API に解析リクエスト送信中...")
         model = genai.GenerativeModel("gemini-2.0-flash")
         response = model.generate_content(
             [PROMPT, uploaded],
@@ -85,16 +105,23 @@ def parse_nochi_with_gemini(file_path: Path) -> list[NochiDaicho]:
                 response_mime_type="application/json",
             ),
         )
+        logger.info("Gemini API 応答受信完了")
     except Exception as e:
-        logger.error("Gemini API呼び出し失敗: %s", e)
+        logger.error("Gemini API呼び出し失敗: %s", e, exc_info=True)
+        _cleanup_file(uploaded)
         return []
 
-    try:
-        genai.delete_file(uploaded.name)
-    except Exception:
-        pass
+    _cleanup_file(uploaded)
 
-    raw = response.text.strip()
+    # 応答パース
+    try:
+        raw = response.text.strip()
+    except Exception as e:
+        logger.error("Gemini 応答テキスト取得失敗: %s", e, exc_info=True)
+        return []
+
+    logger.info("Gemini応答 (先頭200文字): %s", raw[:200])
+
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
         if raw.endswith("```"):
@@ -104,7 +131,7 @@ def parse_nochi_with_gemini(file_path: Path) -> list[NochiDaicho]:
     try:
         records = json.loads(raw)
     except json.JSONDecodeError as e:
-        logger.error("Gemini応答のJSONパース失敗: %s\n応答: %s", e, raw[:500])
+        logger.error("Gemini応答のJSONパース失敗: %s\n応答全文: %s", e, raw[:1000])
         return []
 
     if not isinstance(records, list):
@@ -133,11 +160,18 @@ def parse_nochi_with_gemini(file_path: Path) -> list[NochiDaicho]:
         )
         results.append(nd)
 
-    logger.info("Gemini農地台帳解析: %s → %d筆", file_path.name, len(results))
+    logger.info("Gemini農地台帳解析完了: %s → %d筆抽出", file_path.name, len(results))
     return results
 
 
-def _to_float(value) -> float | None:
+def _cleanup_file(uploaded) -> None:
+    try:
+        genai.delete_file(uploaded.name)
+    except Exception:
+        pass
+
+
+def _to_float(value) -> Optional[float]:
     if value is None or value == "":
         return None
     try:
