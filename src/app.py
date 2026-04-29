@@ -22,10 +22,11 @@ from .models import (
     NochiDaicho,
 )
 from .services.document_parser import (
-    parse_tohon, parse_kotei_shisan, parse_nochi_daicho,
+    parse_tohon, parse_kotei_shisan,
     calculate_ownership,
     detect_prefecture_from_properties, detect_city_from_properties,
 )
+from .services.gemini_nochi_parser import parse_nochi_with_gemini
 from .services.geocoder import geocode
 from .services.reinfolib_client import ReinfolibClient
 from .services.wagri_client import WagriClient
@@ -116,12 +117,12 @@ async def upload_documents(
         except Exception as e:
             logger.error("固定資産解析エラー %s: %s", f.filename, e, exc_info=True)
 
-    # 農地台帳
+    # 農地台帳（Gemini API で画像解析）
     for f in nochi_files:
         path = await _save_file(f, session_id)
         try:
-            entries = parse_nochi_daicho(path)
-            logger.info("農地台帳解析 %s: %d件", f.filename, len(entries))
+            entries = parse_nochi_with_gemini(path)
+            logger.info("農地台帳解析(Gemini) %s: %d件", f.filename, len(entries))
             sd.nochi_daichos.extend(entries)
         except Exception as e:
             logger.error("農地台帳解析エラー %s: %s", f.filename, e, exc_info=True)

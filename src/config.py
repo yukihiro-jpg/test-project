@@ -23,6 +23,9 @@ class AppConfig:
     wagri_client_id: str = os.getenv("WAGRI_CLIENT_ID", "")
     wagri_client_secret: str = os.getenv("WAGRI_CLIENT_SECRET", "")
 
+    # Gemini API（農地台帳解析用）
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+
     # アップロード先
     upload_dir: Path = Path(os.getenv("UPLOAD_DIR", "uploads"))
 
