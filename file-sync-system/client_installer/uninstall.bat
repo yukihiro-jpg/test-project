@@ -11,6 +11,7 @@ set APP_DIR=%APPDATA%\KusakabeSyncAgent
 
 echo タスクスケジューラを削除中...
 schtasks /Delete /TN "KusakabeSyncAgent" /F > nul 2>&1
+schtasks /Delete /TN "KusakabeSyncAgentLogon" /F > nul 2>&1
 
 echo アプリケーションデータを削除中...
 if exist "%APP_DIR%" rmdir /S /Q "%APP_DIR%"

@@ -12,6 +12,7 @@ set APP_DIR=%APPDATA%\KusakabeSyncAgent
 REM 既存のインストールをクリーンアップ
 echo [1/6] 既存のインストール情報をクリアしています...
 schtasks /Delete /TN "KusakabeSyncAgent" /F > nul 2>&1
+schtasks /Delete /TN "KusakabeSyncAgentLogon" /F > nul 2>&1
 if exist "%APP_DIR%\config.json" del /Q "%APP_DIR%\config.json" > nul 2>&1
 if exist "%APP_DIR%\sync_manifest.json" del /Q "%APP_DIR%\sync_manifest.json" > nul 2>&1
 if exist "%APP_DIR%\sync.log" del /Q "%APP_DIR%\sync.log" > nul 2>&1
@@ -64,6 +65,7 @@ echo [5/6] 即時同期ボタンを作成中...
 REM タスクスケジューラ登録（PowerShell直接実行、VBS不要）
 echo [6/6] タスクスケジューラに登録中...
 schtasks /Create /TN "KusakabeSyncAgent" /TR "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%APP_DIR%\sync_agent.ps1\"" /SC MINUTE /MO 15 /F > nul
+schtasks /Create /TN "KusakabeSyncAgentLogon" /TR "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%APP_DIR%\sync_agent.ps1\"" /SC ONLOGON /F > nul
 
 echo.
 echo ============================================================
@@ -77,6 +79,7 @@ echo 以下のフォルダが作成されました:
 dir /B /AD "%LOCAL_FOLDER%"
 echo.
 echo 15分ごとに自動同期されます（画面非表示）。
+echo PCを開いた直後にも自動同期されます。
 echo 即座に同期したい場合は「今すぐ同期する.bat」をダブルクリックしてください。
 echo.
 pause
