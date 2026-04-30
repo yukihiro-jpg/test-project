@@ -128,52 +128,44 @@ function generateId(): string {
 
 /**
  * PDFテキスト抽出の空セルずれを解消する
- * 全行のセルX座標を集めて列境界を自動検出し、
+ * ヘッダ行（日付セルを含まず最もセルが多い行）の位置を基準に、
  * 各行をExcelのような固定幅配列に再構築する
  */
 function realignPdfRowsToColumns(allPages: RawTableRow[][]): void {
-  // 全ページの全行からX座標を収集
-  const allPositions: number[] = []
-  for (const page of allPages) {
-    for (const row of page) {
-      if (row.cellPositions) allPositions.push(...row.cellPositions)
+  const allRows = allPages.flat()
+  const rowsWithPos = allRows.filter((r) => r.cellPositions && r.cellPositions.length > 0)
+  if (rowsWithPos.length < 5) return
+
+  // ヘッダ行を探す: 日付セルを含まず、最もセルが多い行
+  let headerRow: RawTableRow | null = null
+  let maxCells = 0
+  for (const row of rowsWithPos) {
+    if (row.cells.some((c) => isDateCell(c))) continue
+    if (row.cells.length > maxCells) {
+      maxCells = row.cells.length
+      headerRow = row
     }
   }
-  if (allPositions.length < 3) return
+  if (!headerRow?.cellPositions || headerRow.cellPositions.length < 3) return
 
-  // X座標をソートしてクラスタリング（近い座標を同一列にまとめる）
-  allPositions.sort((a, b) => a - b)
-  const CLUSTER_THRESHOLD = 15
-  const clusters: { sum: number; count: number }[] = [{ sum: allPositions[0], count: 1 }]
-  for (let i = 1; i < allPositions.length; i++) {
-    const last = clusters[clusters.length - 1]
-    const center = last.sum / last.count
-    if (allPositions[i] - center < CLUSTER_THRESHOLD) {
-      last.sum += allPositions[i]
-      last.count++
-    } else {
-      clusters.push({ sum: allPositions[i], count: 1 })
-    }
-  }
-  const columnCenters = clusters.map((c) => c.sum / c.count)
-  if (columnCenters.length < 3) return
+  const columnPositions = headerRow.cellPositions
+  const numCols = columnPositions.length
+  console.log(`[realignPdfRows] ヘッダ行(${numCols}列)の位置を基準に全行を再配置:`,
+    headerRow.cells.map((c, i) => `${c}@${Math.round(columnPositions[i])}`).join(', '))
 
-  console.log(`[realignPdfRows] ${allPositions.length}個のX座標 → ${columnCenters.length}列を検出`)
-
-  // 各行のセルを列に再配置（空セルは空文字列で埋める）
+  // 各行のセルをヘッダ列位置に再配置
   for (const page of allPages) {
     for (const row of page) {
       if (!row.cellPositions || row.cellPositions.length === 0) continue
-      const newCells = new Array(columnCenters.length).fill('')
+      const newCells = new Array(numCols).fill('')
       for (let i = 0; i < row.cells.length; i++) {
         const x = row.cellPositions[i]
         let bestCol = 0
-        let bestDist = Math.abs(columnCenters[0] - x)
-        for (let c = 1; c < columnCenters.length; c++) {
-          const dist = Math.abs(columnCenters[c] - x)
+        let bestDist = Math.abs(columnPositions[0] - x)
+        for (let c = 1; c < numCols; c++) {
+          const dist = Math.abs(columnPositions[c] - x)
           if (dist < bestDist) { bestDist = dist; bestCol = c }
         }
-        // 既に別のセルが入っている場合は結合（同一列に複数テキスト）
         if (newCells[bestCol]) {
           newCells[bestCol] += ' ' + row.cells[i]
         } else {
