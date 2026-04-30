@@ -126,6 +126,65 @@ function generateId(): string {
   return `tx-${Date.now()}-${++idCounter}`
 }
 
+/**
+ * PDFテキスト抽出の空セルずれを解消する
+ * 全行のセルX座標を集めて列境界を自動検出し、
+ * 各行をExcelのような固定幅配列に再構築する
+ */
+function realignPdfRowsToColumns(allPages: RawTableRow[][]): void {
+  // 全ページの全行からX座標を収集
+  const allPositions: number[] = []
+  for (const page of allPages) {
+    for (const row of page) {
+      if (row.cellPositions) allPositions.push(...row.cellPositions)
+    }
+  }
+  if (allPositions.length < 3) return
+
+  // X座標をソートしてクラスタリング（近い座標を同一列にまとめる）
+  allPositions.sort((a, b) => a - b)
+  const CLUSTER_THRESHOLD = 15
+  const clusters: { sum: number; count: number }[] = [{ sum: allPositions[0], count: 1 }]
+  for (let i = 1; i < allPositions.length; i++) {
+    const last = clusters[clusters.length - 1]
+    const center = last.sum / last.count
+    if (allPositions[i] - center < CLUSTER_THRESHOLD) {
+      last.sum += allPositions[i]
+      last.count++
+    } else {
+      clusters.push({ sum: allPositions[i], count: 1 })
+    }
+  }
+  const columnCenters = clusters.map((c) => c.sum / c.count)
+  if (columnCenters.length < 3) return
+
+  console.log(`[realignPdfRows] ${allPositions.length}個のX座標 → ${columnCenters.length}列を検出`)
+
+  // 各行のセルを列に再配置（空セルは空文字列で埋める）
+  for (const page of allPages) {
+    for (const row of page) {
+      if (!row.cellPositions || row.cellPositions.length === 0) continue
+      const newCells = new Array(columnCenters.length).fill('')
+      for (let i = 0; i < row.cells.length; i++) {
+        const x = row.cellPositions[i]
+        let bestCol = 0
+        let bestDist = Math.abs(columnCenters[0] - x)
+        for (let c = 1; c < columnCenters.length; c++) {
+          const dist = Math.abs(columnCenters[c] - x)
+          if (dist < bestDist) { bestDist = dist; bestCol = c }
+        }
+        // 既に別のセルが入っている場合は結合（同一列に複数テキスト）
+        if (newCells[bestCol]) {
+          newCells[bestCol] += ' ' + row.cells[i]
+        } else {
+          newCells[bestCol] = row.cells[i]
+        }
+      }
+      row.cells = newCells
+    }
+  }
+}
+
 // 日付パターン（和暦・西暦・年なし等）
 const DATE_PATTERNS = [
   // R6.4.1, R06.04.01, H31.4.1
@@ -958,6 +1017,8 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
 
   // テキストPDF
   const allRawPages = rawPages.map((p) => p.rows)
+  // PDF空セル対策: X座標から列境界を検出し、Excel風の固定幅配列に再構築
+  realignPdfRowsToColumns(allRawPages)
   console.log(`[parsePdfFile] テキストPDF経路に入りました: ${allRawPages.length}ページ, 全${allRawPages.reduce((s, p) => s + p.length, 0)}行`)
   const mapping = detectColumnMappingFromAllPages(allRawPages)
   console.log(`[parsePdfFile] 列検出結果:`, mapping)
