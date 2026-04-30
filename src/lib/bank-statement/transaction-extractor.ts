@@ -1168,6 +1168,23 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
   }
   console.log(`[timing] page1 image render: ${((Date.now() - t4) / 1000).toFixed(1)}秒, 全体: ${((Date.now() - t0) / 1000).toFixed(1)}秒`)
 
+  // 解析結果のデバッグ出力（ページ1の全取引 + realign後のページ1の生行データ）
+  if (statementPages[0]?.transactions.length > 0) {
+    console.log('[解析結果] ページ1の取引データ:')
+    console.table(statementPages[0].transactions.map((tx) => ({
+      日付: tx.date, 摘要: tx.description,
+      出金: tx.withdrawal, 入金: tx.deposit, 残高: tx.balance,
+    })))
+  }
+  if (allRawPages[0]) {
+    console.log('[解析結果] realign後のページ1の生セル(先頭20行):')
+    console.table(allRawPages[0].slice(0, 20).map((r) => {
+      const obj: Record<string, string> = {}
+      r.cells.forEach((c, i) => { obj[`col${i}`] = c || '' })
+      return obj
+    }))
+  }
+
   return {
     pages: updatePageBalances(statementPages),
     pdfFile: file,
