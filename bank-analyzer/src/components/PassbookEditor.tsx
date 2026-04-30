@@ -477,9 +477,6 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
               <tr
                 key={tx.id}
                 data-tx-id={tx.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, tx.id)}
-                onDragEnd={handleDragEnd}
                 onDragOver={(e) => handleDragOver(e, tx.id)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, tx.id)}
@@ -488,6 +485,9 @@ export function PassbookEditor({ passbook, pdfUrl, includedTxIds, onChange, onAd
                 onClick={(e) => handleRowClick(tx, e)}
               >
                 <td
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, tx.id)}
+                  onDragEnd={handleDragEnd}
                   className={`${cellTd} text-center text-slate-400 select-none cursor-grab active:cursor-grabbing`}
                   title="ドラッグして並び替え"
                 >

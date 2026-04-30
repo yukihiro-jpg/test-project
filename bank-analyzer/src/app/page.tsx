@@ -401,6 +401,80 @@ export default function HomePage() {
     URL.revokeObjectURL(url)
   }
 
+  // 解析データのJSON保存
+  const downloadStateJson = () => {
+    const state = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      startDate,
+      endDate,
+      referenceDate,
+      passbooks,
+      parsedCerts,
+      depositRows,
+      overrides,
+      manualIncludes,
+      manualExcludes,
+      summaryPatternId,
+      customPatterns,
+      atmKeywords
+    }
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `bank-analyzer-state-${new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replace(/:/g, '-')}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // 解析データのJSON読込み
+  const handleLoadStateFiles = async (files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const state = JSON.parse(text)
+      if (typeof state !== 'object' || !state || state.version !== 1) {
+        alert('対応していないファイル形式です（version 1 のJSONのみ対応）')
+        return
+      }
+      // PDF Object URL は復元できないので破棄
+      for (const url of Object.values(pdfUrlsRef.current)) URL.revokeObjectURL(url)
+      pdfUrlsRef.current = {}
+      setPdfUrls({})
+
+      if (typeof state.startDate === 'string') setStartDate(state.startDate)
+      if (typeof state.endDate === 'string') setEndDate(state.endDate)
+      if (typeof state.referenceDate === 'string') setReferenceDate(state.referenceDate)
+      if (Array.isArray(state.passbooks)) setPassbooks(state.passbooks)
+      if (Array.isArray(state.parsedCerts)) setParsedCerts(state.parsedCerts)
+      if (Array.isArray(state.depositRows)) setDepositRows(state.depositRows)
+      if (state.overrides && typeof state.overrides === 'object') setOverrides(state.overrides)
+      if (Array.isArray(state.manualIncludes)) setManualIncludes(state.manualIncludes)
+      if (Array.isArray(state.manualExcludes)) setManualExcludes(state.manualExcludes)
+      if (typeof state.summaryPatternId === 'string') setSummaryPatternId(state.summaryPatternId)
+      if (Array.isArray(state.customPatterns)) setCustomPatterns(state.customPatterns)
+      if (Array.isArray(state.atmKeywords)) setAtmKeywords(state.atmKeywords)
+
+      const hasResults =
+        (Array.isArray(state.passbooks) && state.passbooks.length > 0) ||
+        (Array.isArray(state.depositRows) && state.depositRows.length > 0)
+      if (hasResults) {
+        setActiveTab(state.passbooks?.length > 0 ? 'movement' : 'deposit')
+        setScreen('results')
+      }
+      alert(
+        `解析データを復元しました。\n保存日時: ${state.savedAt || '不明'}\n\n注: PDFビューアは表示されません（PDFファイル自体はJSONに保存できないため）。\n  データの編集・Excel出力は可能です。`
+      )
+    } catch (err) {
+      alert(`読み込みエラー: ${(err as Error).message}`)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow flex">
@@ -440,13 +514,30 @@ export default function HomePage() {
           <section className="bg-white rounded-lg shadow p-3">
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-bold text-sm">①解析期間</h2>
-              <button
-                type="button"
-                onClick={() => setAtmModalOpen(true)}
-                className="text-xs bg-slate-200 text-slate-800 px-2 py-1 rounded hover:bg-slate-300"
-              >
-                ATM出金判定キーワード（{atmKeywords.length}件）
-              </button>
+              <div className="flex items-center gap-1">
+                <label
+                  className="text-xs bg-slate-600 text-white px-2 py-1 rounded hover:bg-slate-700 cursor-pointer"
+                  title="以前保存したJSONを読み込んで作業を再開"
+                >
+                  📂 JSON読込
+                  <input
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                      handleLoadStateFiles(e.target.files)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setAtmModalOpen(true)}
+                  className="text-xs bg-slate-200 text-slate-800 px-2 py-1 rounded hover:bg-slate-300"
+                >
+                  ATM出金判定キーワード（{atmKeywords.length}件）
+                </button>
+              </div>
             </div>
             <div className="flex flex-wrap gap-3 items-end">
               <label className="flex flex-col text-xs">
@@ -733,13 +824,38 @@ export default function HomePage() {
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={downloadExcel}
-              className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 text-sm font-bold"
-            >
-              Excelダウンロード
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={downloadStateJson}
+                className="bg-slate-600 text-white px-3 py-2 rounded hover:bg-slate-700 text-sm"
+                title="現在の解析データをJSONファイルとして保存（再開用）"
+              >
+                💾 JSON保存
+              </button>
+              <label
+                className="bg-slate-600 text-white px-3 py-2 rounded hover:bg-slate-700 text-sm cursor-pointer"
+                title="保存しておいたJSONを読み込んで復元"
+              >
+                📂 JSON読込
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={(e) => {
+                    handleLoadStateFiles(e.target.files)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={downloadExcel}
+                className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 text-sm font-bold"
+              >
+                Excelダウンロード
+              </button>
+            </div>
           </div>
 
           {activeTab === 'movement' && passbooks.length > 0 ? (
