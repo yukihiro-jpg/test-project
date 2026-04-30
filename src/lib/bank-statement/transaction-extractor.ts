@@ -28,7 +28,8 @@ interface OcrPdfPage {
  */
 async function processPdfInParallel(
   file: File,
-  chunkSize: number = 3,
+  chunkSize: number = 5,
+  concurrency: number = 4,
 ): Promise<{ totalCount: number; pages: OcrPdfPage[] }> {
   const pdfBuffer = await file.arrayBuffer()
   const sourcePdf = await PDFDocument.load(pdfBuffer)
@@ -48,22 +49,52 @@ async function processPdfInParallel(
     chunks.push({ startPage: start, pdfBase64: base64 })
   }
 
-  console.log(`PDF split into ${chunks.length} chunks of up to ${chunkSize} pages`)
+  console.log(`PDF split into ${chunks.length} chunks of up to ${chunkSize} pages (concurrency=${concurrency})`)
   const startTime = Date.now()
 
-  const promises = chunks.map((chunk) =>
-    fetch('/api/bank-statement/ocr-pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pdfData: chunk.pdfBase64 }),
-    })
-      .then((r) => (r.ok ? r.json() : { totalCount: 0, pages: [] }))
-      .then((data) => ({ data, startPage: chunk.startPage }))
-      .catch(() => ({ data: { totalCount: 0, pages: [] }, startPage: chunk.startPage })),
-  )
-  const results = await Promise.all(promises)
+  // チャンクごとにリトライ付きで取得（429/5xxで指数バックオフ最大3回）
+  async function fetchChunkWithRetry(chunk: { startPage: number; pdfBase64: string }) {
+    const maxAttempts = 3
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const r = await fetch('/api/bank-statement/ocr-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pdfData: chunk.pdfBase64 }),
+        })
+        if (r.ok) {
+          const data = await r.json()
+          if ((data.totalCount || 0) > 0 || attempt === maxAttempts) {
+            return { data, startPage: chunk.startPage }
+          }
+          // 0件: もう一度試す（一時的にGeminiが認識できなかった可能性）
+          console.warn(`Chunk startPage=${chunk.startPage} returned 0 transactions, retrying (attempt ${attempt}/${maxAttempts})`)
+        } else if (r.status === 429 || r.status >= 500) {
+          console.warn(`Chunk startPage=${chunk.startPage} HTTP ${r.status}, retrying (attempt ${attempt}/${maxAttempts})`)
+        } else {
+          // 4xx (except 429) は永続エラー扱いで打ち切り
+          return { data: { totalCount: 0, pages: [] }, startPage: chunk.startPage }
+        }
+      } catch (e) {
+        console.warn(`Chunk startPage=${chunk.startPage} fetch error (attempt ${attempt}/${maxAttempts}):`, e)
+      }
+      if (attempt < maxAttempts) {
+        await new Promise((res) => setTimeout(res, 2000 * Math.pow(2, attempt - 1)))
+      }
+    }
+    return { data: { totalCount: 0, pages: [] }, startPage: chunk.startPage }
+  }
+
+  // 並列度を制限してチャンクを処理（レート制限対策）
+  const results: { data: { totalCount?: number; pages?: OcrPdfPage[] }; startPage: number }[] = []
+  for (let i = 0; i < chunks.length; i += concurrency) {
+    const batch = chunks.slice(i, i + concurrency)
+    const batchResults = await Promise.all(batch.map(fetchChunkWithRetry))
+    results.push(...batchResults)
+    console.log(`Batch ${Math.floor(i / concurrency) + 1}/${Math.ceil(chunks.length / concurrency)} 完了 (${batch.length}チャンク)`)
+  }
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-  console.log(`All ${chunks.length} chunks completed in ${elapsed}s (parallel)`)
+  console.log(`All ${chunks.length} chunks completed in ${elapsed}s`)
 
   // マージ: 各チャンク内のpageIndexを全体のpageIndexに変換
   const mergedMap = new Map<number, OcrPdfPage>()
@@ -726,7 +757,7 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
     // スキャンPDF: まず PDF を直接 Gemini に並列送信（チャンク分割）
     console.log('Scanned/complex PDF detected, trying PDF-direct Gemini first (parallel)')
     try {
-      const data = await processPdfInParallel(file, 3)
+      const data = await processPdfInParallel(file, 5, 4)
       if (data.totalCount > 0) {
         const pdfPageCount = await getPdfPageCount(file)
         // 左パネル表示用に画像も生成
@@ -909,7 +940,7 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
 
     // 1段目: PDF を直接 Gemini に並列送信（チャンク分割）
     try {
-      const data = await processPdfInParallel(file, 3)
+      const data = await processPdfInParallel(file, 5, 4)
       if (data.totalCount > 0) {
         const pageCount = await getPdfPageCount(file)
         const imgUrls: string[] = []

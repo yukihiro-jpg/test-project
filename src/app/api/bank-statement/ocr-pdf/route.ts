@@ -149,34 +149,52 @@ async function processChunk(
   chunkBase64: string,
   startPage: number,
 ): Promise<Transaction[]> {
-  try {
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: { temperature: 0, maxOutputTokens: 64000 },
-    })
-    const result = await model.generateContent([
-      PROMPT,
-      { inlineData: { mimeType: 'application/pdf', data: chunkBase64 } },
-    ])
-    const responseText = result.response.text()
-    const jsonMatch = responseText.match(/\{[\s\S]*"transactions"[\s\S]*\}/)
-    if (!jsonMatch) return []
-    const parsed = JSON.parse(jsonMatch[0])
-    return (parsed.transactions || []).map((tx: {
-      page?: number; date?: string; description?: string;
-      deposit?: number | null; withdrawal?: number | null; balance?: number
-    }) => ({
-      page: (tx.page ?? 0) + startPage,
-      date: tx.date || '',
-      description: tx.description || '',
-      deposit: tx.deposit ?? null,
-      withdrawal: tx.withdrawal ?? null,
-      balance: tx.balance ?? 0,
-    }))
-  } catch (e) {
-    console.error(`OCR-PDF chunk error (startPage=${startPage}):`, e)
-    return []
+  const maxAttempts = 3
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: { temperature: 0, maxOutputTokens: 64000 },
+      })
+      const result = await model.generateContent([
+        PROMPT,
+        { inlineData: { mimeType: 'application/pdf', data: chunkBase64 } },
+      ])
+      const responseText = result.response.text()
+      const jsonMatch = responseText.match(/\{[\s\S]*"transactions"[\s\S]*\}/)
+      if (!jsonMatch) {
+        console.warn(`OCR-PDF chunk (startPage=${startPage}) attempt ${attempt}: JSON抽出失敗 response先頭=${responseText.slice(0, 200)}`)
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 2000 * attempt))
+          continue
+        }
+        return []
+      }
+      const parsed = JSON.parse(jsonMatch[0])
+      return (parsed.transactions || []).map((tx: {
+        page?: number; date?: string; description?: string;
+        deposit?: number | null; withdrawal?: number | null; balance?: number
+      }) => ({
+        page: (tx.page ?? 0) + startPage,
+        date: tx.date || '',
+        description: tx.description || '',
+        deposit: tx.deposit ?? null,
+        withdrawal: tx.withdrawal ?? null,
+        balance: tx.balance ?? 0,
+      }))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      const isRetriable = /429|503|504|timeout|ECONN|fetch failed/i.test(msg)
+      console.warn(`OCR-PDF chunk error (startPage=${startPage}, attempt=${attempt}/${maxAttempts}): ${msg}`)
+      if (attempt < maxAttempts && isRetriable) {
+        await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, attempt - 1)))
+        continue
+      }
+      console.error(`OCR-PDF chunk fatal (startPage=${startPage}):`, e)
+      return []
+    }
   }
+  return []
 }
 
 async function processSinglePdf(
