@@ -189,6 +189,8 @@ const DATE_PATTERNS = [
   /(20\d{2})年(\d{1,2})月(\d{1,2})日?/,
   // 20240401, 20260101 (YYYYMMDD 8桁)
   /^(20|21)\d{6}$/,
+  // 7.4.1, 6-12-25（和暦の年.月.日、元号なし）
+  /^(\d{1,2})[./\-](\d{1,2})[./\-](\d{1,2})$/,
   // 4/1, 04/01（年なし）
   /^(\d{1,2})[/.](\d{1,2})$/,
   // 0401（4桁の月日）
@@ -245,6 +247,19 @@ function parseDate(text: string, defaultYear?: number): string | null {
     const mo = parseInt(m3b[2])
     const d = parseInt(m3b[3])
     if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return formatDate(y, mo, d)
+  }
+
+  // 和暦 年.月.日（元号なし）: 7.4.1 → 令和7年, 6-12-25 → 令和6年, 25-9-2 → 平成25年
+  const m3d = cleaned.match(/^(\d{1,2})[./\-](\d{1,2})[./\-](\d{1,2})$/)
+  if (m3d) {
+    const eraYear = parseInt(m3d[1])
+    const month = parseInt(m3d[2])
+    const day = parseInt(m3d[3])
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      // 年が9以下→令和、10以上→平成
+      const western = eraYear <= 9 ? 2018 + eraYear : 1988 + eraYear
+      return formatDate(western, month, day)
+    }
   }
 
   // 月/日のみ
