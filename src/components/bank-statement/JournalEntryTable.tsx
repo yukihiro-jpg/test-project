@@ -766,7 +766,19 @@ export default function JournalEntryTable({
           {balanceMismatch.map((m) => (
             <div key={m.pageIndex}
               className="text-xs text-red-600 cursor-pointer hover:text-red-800 hover:underline"
-              onClick={() => onPageChange?.(m.pageIndex)}>
+              onClick={() => {
+                onPageChange?.(m.pageIndex)
+                // 該当ページの最初の仕訳行までスクロール
+                const pageFirstEntry = entries.find((e) => {
+                  const page = pages.find((p) => p.transactions.some((t) => t.id === e.transactionId))
+                  return page?.pageIndex === m.pageIndex
+                })
+                if (pageFirstEntry) {
+                  setTimeout(() => {
+                    document.querySelector(`[data-entry-id="${pageFirstEntry.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  }, 50)
+                }
+              }}>
               P{m.pageIndex + 1}: 計算残高 &yen;{m.calculated.toLocaleString()} / 通帳残高 &yen;{m.expected.toLocaleString()}（差額 &yen;{Math.abs(m.diff).toLocaleString()}）
             </div>
           ))}

@@ -92,6 +92,7 @@ function JournalEntryRowInner({
         </tr>
       )}
       <tr
+        data-entry-id={entry.id}
         className={`${bgClass} hover:bg-sky-50 cursor-pointer transition-colors`}
         style={{
           borderBottom: '1px solid #cbd5e1',
