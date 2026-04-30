@@ -128,32 +128,51 @@ function generateId(): string {
 
 /**
  * PDFテキスト抽出の空セルずれを解消する
- * ヘッダ行（日付セルを含まず最もセルが多い行）の位置を基準に、
- * 各行をExcelのような固定幅配列に再構築する
+ * ヘッダキーワードを含む全行のX座標を集めてクラスタリングし、
+ * 列境界を確定してから各行を固定幅配列に再構築する
  */
 function realignPdfRowsToColumns(allPages: RawTableRow[][]): void {
   const allRows = allPages.flat()
   const rowsWithPos = allRows.filter((r) => r.cellPositions && r.cellPositions.length > 0)
   if (rowsWithPos.length < 5) return
 
-  // ヘッダ行を探す: 日付セルを含まず、最もセルが多い行
-  let headerRow: RawTableRow | null = null
-  let maxCells = 0
+  const ALL_KEYWORDS = [...HEADER_DATE, ...HEADER_DESC, ...HEADER_DEPOSIT, ...HEADER_WITHDRAW, ...HEADER_BALANCE, ...HEADER_SIGNED, ...HEADER_DIRECTION]
+
+  // ヘッダキーワードを含む行からX座標を収集（差引残高が別行でも拾える）
+  const headerPositions: number[] = []
   for (const row of rowsWithPos) {
     if (row.cells.some((c) => isDateCell(c))) continue
-    if (row.cells.length > maxCells) {
-      maxCells = row.cells.length
-      headerRow = row
+    const hasKeyword = row.cells.some((c) => {
+      const cl = (c || '').replace(/[\s　]/g, '')
+      return cl && ALL_KEYWORDS.some((k) => cl.includes(k))
+    })
+    if (hasKeyword) {
+      headerPositions.push(...row.cellPositions!)
     }
   }
-  if (!headerRow?.cellPositions || headerRow.cellPositions.length < 3) return
+  if (headerPositions.length < 3) return
 
-  const columnPositions = headerRow.cellPositions
+  // クラスタリング（近い座標を同一列にまとめる）
+  headerPositions.sort((a, b) => a - b)
+  const THRESHOLD = 20
+  const clusters: { sum: number; count: number }[] = [{ sum: headerPositions[0], count: 1 }]
+  for (let i = 1; i < headerPositions.length; i++) {
+    const last = clusters[clusters.length - 1]
+    const center = last.sum / last.count
+    if (headerPositions[i] - center < THRESHOLD) {
+      last.sum += headerPositions[i]
+      last.count++
+    } else {
+      clusters.push({ sum: headerPositions[i], count: 1 })
+    }
+  }
+  const columnPositions = clusters.map((c) => c.sum / c.count)
+  if (columnPositions.length < 3) return
+
+  console.log(`[realignPdfRows] ヘッダキーワード行から${headerPositions.length}座標 → ${columnPositions.length}列:`,
+    columnPositions.map((x) => Math.round(x)).join(', '))
+
   const numCols = columnPositions.length
-  console.log(`[realignPdfRows] ヘッダ行(${numCols}列)の位置を基準に全行を再配置:`,
-    headerRow.cells.map((c, i) => `${c}@${Math.round(columnPositions[i])}`).join(', '))
-
-  // 各行のセルをヘッダ列位置に再配置
   for (const page of allPages) {
     for (const row of page) {
       if (!row.cellPositions || row.cellPositions.length === 0) continue
