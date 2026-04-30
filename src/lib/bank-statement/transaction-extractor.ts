@@ -727,13 +727,10 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
     try {
       const data = await processPdfInParallel(file, 3)
       if (data.totalCount > 0) {
-        const pdfBuffer = await file.arrayBuffer()
-        let binary = ''
-        const bytes = new Uint8Array(pdfBuffer)
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-        const pdfBase64 = btoa(binary)
-        const pdfDataUrlForViewer = `data:application/pdf;base64,${pdfBase64}`
         const pdfPageCount = await getPdfPageCount(file)
+        // 左パネル表示用に画像も生成
+        const imageUrls: string[] = []
+        for (let i = 0; i < pdfPageCount; i++) imageUrls.push(await renderPdfPageToImage(file, i + 1, 2))
         const statementPages: StatementPage[] = []
         for (let i = 0; i < pdfPageCount; i++) {
           const pg = data.pages.find((p) => p.pageIndex === i)
@@ -745,7 +742,7 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
           statementPages.push({
             pageIndex: i, transactions: txs,
             openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
-            pdfDataUrl: pdfDataUrlForViewer,
+            imageDataUrl: imageUrls[i],
           })
         }
         console.log(`PDF-direct OCR succeeded (scanned path): ${data.totalCount} transactions`)
@@ -906,13 +903,9 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
     try {
       const data = await processPdfInParallel(file, 3)
       if (data.totalCount > 0) {
-        const pdfBuffer = await file.arrayBuffer()
-        let binary = ''
-        const pdfBytes = new Uint8Array(pdfBuffer)
-        for (let i = 0; i < pdfBytes.length; i++) binary += String.fromCharCode(pdfBytes[i])
-        const pdfBase64 = btoa(binary)
-        const pdfDataUrlForViewer = `data:application/pdf;base64,${pdfBase64}`
         const pageCount = await getPdfPageCount(file)
+        const imgUrls: string[] = []
+        for (let i = 0; i < pageCount; i++) imgUrls.push(await renderPdfPageToImage(file, i + 1, 2))
         const statementPages: StatementPage[] = []
         for (let i = 0; i < pageCount; i++) {
           const pageData = data.pages.find((p) => p.pageIndex === i)
@@ -924,7 +917,7 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
           statementPages.push({
             pageIndex: i, transactions: txs,
             openingBalance: 0, closingBalance: 0, isBalanceValid: true, balanceDifference: 0,
-            pdfDataUrl: pdfDataUrlForViewer,
+            imageDataUrl: imgUrls[i],
           })
         }
         console.log(`PDF-direct OCR succeeded: ${data.totalCount} transactions`)
