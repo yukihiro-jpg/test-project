@@ -131,20 +131,50 @@ function generateId(): string {
  * realign不要で、ヘッダ（左寄せ）とデータ（右寄せ）のずれを正しく処理できる
  */
 function detectColumnsByKeywordPositions(rows: RawTableRow[]): ColumnMapping | null {
-  let dateX = -1, descX = -1, depositX = -1, withdrawX = -1, balanceX = -1
-
+  // ヘッダキーワードが最も多い行を探す（本文中の「内容」等の誤検出を防ぐ）
+  let bestRow: RawTableRow | null = null
+  let bestCount = 0
   for (const row of rows) {
-    if (!row.cellPositions || row.cellPositions.length === 0) continue
+    if (!row.cellPositions || row.cellPositions.length < 3) continue
     if (row.cells.some((c) => isDateCell(c))) continue
-    for (let i = 0; i < row.cells.length; i++) {
-      const cell = (row.cells[i] || '').replace(/[\s　]/g, '')
-      if (!cell) continue
-      const x = row.cellPositions[i]
-      if (dateX < 0 && matchHeaderKeyword(cell, HEADER_DATE)) dateX = x
-      if (descX < 0 && matchHeaderKeyword(cell, HEADER_DESC)) descX = x
-      if (withdrawX < 0 && matchHeaderKeyword(cell, HEADER_WITHDRAW)) withdrawX = x
-      if (depositX < 0 && matchHeaderKeyword(cell, HEADER_DEPOSIT)) depositX = x
-      if (balanceX < 0 && matchHeaderKeyword(cell, HEADER_BALANCE)) balanceX = x
+    let count = 0
+    for (const cell of row.cells) {
+      const cl = (cell || '').replace(/[\s　]/g, '')
+      if (!cl) continue
+      if (HEADER_DATE.some((k) => cl.includes(k))) count++
+      else if (HEADER_WITHDRAW.some((k) => cl.includes(k))) count++
+      else if (HEADER_DEPOSIT.some((k) => cl.includes(k))) count++
+      else if (HEADER_DESC.some((k) => cl.includes(k))) count++
+      else if (HEADER_BALANCE.some((k) => cl.includes(k))) count++
+    }
+    if (count > bestCount) { bestCount = count; bestRow = row }
+  }
+  if (!bestRow || bestCount < 2) return null
+
+  let dateX = -1, descX = -1, depositX = -1, withdrawX = -1, balanceX = -1
+  // メインヘッダ行からキーワード位置を取得
+  for (let i = 0; i < bestRow.cells.length; i++) {
+    const cl = (bestRow.cells[i] || '').replace(/[\s　]/g, '')
+    if (!cl) continue
+    const x = bestRow.cellPositions![i]
+    if (dateX < 0 && matchHeaderKeyword(cl, HEADER_DATE)) dateX = x
+    if (descX < 0 && matchHeaderKeyword(cl, HEADER_DESC)) descX = x
+    if (withdrawX < 0 && matchHeaderKeyword(cl, HEADER_WITHDRAW)) withdrawX = x
+    if (depositX < 0 && matchHeaderKeyword(cl, HEADER_DEPOSIT)) depositX = x
+    if (balanceX < 0 && matchHeaderKeyword(cl, HEADER_BALANCE)) balanceX = x
+  }
+  // 残高が別行にある場合、前後5行から探す
+  if (balanceX < 0) {
+    const bestIdx = rows.indexOf(bestRow)
+    for (let ri = Math.max(0, bestIdx - 5); ri <= Math.min(rows.length - 1, bestIdx + 5); ri++) {
+      const row = rows[ri]
+      if (!row.cellPositions) continue
+      for (let i = 0; i < row.cells.length; i++) {
+        const cl = (row.cells[i] || '').replace(/[\s　]/g, '')
+        if (balanceX < 0 && matchHeaderKeyword(cl, HEADER_BALANCE)) {
+          balanceX = row.cellPositions[i]
+        }
+      }
     }
   }
 
