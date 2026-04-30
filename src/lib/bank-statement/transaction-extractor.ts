@@ -249,16 +249,14 @@ function parseDate(text: string, defaultYear?: number): string | null {
     if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) return formatDate(y, mo, d)
   }
 
-  // 和暦 年.月.日（元号なし）: 7.4.1 → 令和7年, 6-12-25 → 令和6年, 25-9-2 → 平成25年
+  // 和暦 年.月.日（元号なし）: 7.4.1 → 令和7年 → 2025-04-01
   const m3d = cleaned.match(/^(\d{1,2})[./\-](\d{1,2})[./\-](\d{1,2})$/)
   if (m3d) {
     const eraYear = parseInt(m3d[1])
     const month = parseInt(m3d[2])
     const day = parseInt(m3d[3])
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      // 年が9以下→令和、10以上→平成
-      const western = eraYear <= 9 ? 2018 + eraYear : 1988 + eraYear
-      return formatDate(western, month, day)
+      return formatDate(2018 + eraYear, month, day)
     }
   }
 
