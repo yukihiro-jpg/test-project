@@ -9,7 +9,6 @@ import { parsePdfText, renderPdfPageToImage, getPdfPageCount } from './pdf-text-
 import { parseExcel } from './excel-parser'
 import { updatePageBalances } from './balance-validator'
 import { getTemplatePromptAddition, learnBankTemplate } from './bank-template'
-import { PDFDocument } from 'pdf-lib'
 
 interface OcrPdfPage {
   pageIndex: number
@@ -23,116 +22,101 @@ interface OcrPdfPage {
 }
 
 /**
- * PDFをチャンク分割して並列Gemini処理
- * 大量ページでも一定時間で処理できる
+ * オリジナルPDFをそのまま(チャンク分割なし)Geminiに送り、ページ範囲で分割処理
+ * pdf-libのチャンク分割はフォントデータが消えるため廃止
  */
 async function processPdfInParallel(
   file: File,
   chunkSize: number = 5,
-  concurrency: number = 4,
+  concurrency: number = 3,
 ): Promise<{ totalCount: number; pages: OcrPdfPage[] }> {
-  console.log(`[processPdfInParallel] 開始: file=${file.name}, size=${file.size}, chunkSize=${chunkSize}, concurrency=${concurrency}`)
+  const totalPages = await getPdfPageCount(file)
+  console.log(`[processPdfInParallel] 開始: file=${file.name}, size=${file.size}, totalPages=${totalPages}, chunkSize=${chunkSize}, concurrency=${concurrency}`)
+
+  // オリジナルPDFをbase64に変換（1回だけ）
   const pdfBuffer = await file.arrayBuffer()
-  let sourcePdf
-  try {
-    sourcePdf = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true })
-  } catch (e) {
-    console.warn('[processPdfInParallel] pdf-lib読込失敗、PDFをそのまま1リクエストで送信:', e)
-    // pdf-libで開けない場合、PDFをまるごと1リクエストで送信
-    const bytes = new Uint8Array(pdfBuffer)
-    let binary = ''
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-    const base64 = btoa(binary)
+  const bytes = new Uint8Array(pdfBuffer)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  const originalBase64 = btoa(binary)
+  console.log(`[processPdfInParallel] オリジナルPDF base64: ${(originalBase64.length / 1024).toFixed(0)} KB`)
+
+  // 小さいPDFはそのまま1リクエスト
+  if (totalPages <= chunkSize) {
     try {
       const r = await fetch('/api/bank-statement/ocr-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdfData: base64 }),
+        body: JSON.stringify({ pdfData: originalBase64 }),
       })
-      if (!r.ok) return { totalCount: 0, pages: [] }
-      const data = await r.json()
-      return { totalCount: data.totalCount || 0, pages: data.pages || [] }
-    } catch (err) {
-      console.error('[processPdfInParallel] フォールバック送信も失敗:', err)
-      return { totalCount: 0, pages: [] }
+      if (r.ok) {
+        const data = await r.json()
+        return { totalCount: data.totalCount || 0, pages: data.pages || [] }
+      }
+    } catch (e) {
+      console.error('[processPdfInParallel] 単一リクエスト失敗:', e)
     }
+    return { totalCount: 0, pages: [] }
   }
-  const totalPages = sourcePdf.getPageCount()
-  console.log(`[processPdfInParallel] PDF読込成功: ${totalPages}ページ`)
 
-  const chunks: { startPage: number; pdfBase64: string }[] = []
+  // ページ範囲リストを作成（オリジナルPDFをそのまま送り、プロンプトで範囲指定）
+  const ranges: { startPage: number; endPage: number }[] = []
   for (let start = 0; start < totalPages; start += chunkSize) {
-    const end = Math.min(start + chunkSize, totalPages)
-    const chunkDoc = await PDFDocument.create()
-    const pageIndices = Array.from({ length: end - start }, (_, i) => start + i)
-    const copiedPages = await chunkDoc.copyPages(sourcePdf, pageIndices)
-    for (const p of copiedPages) chunkDoc.addPage(p)
-    const bytes = await chunkDoc.save()
-    let binary = ''
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-    const base64 = btoa(binary)
-    chunks.push({ startPage: start, pdfBase64: base64 })
+    ranges.push({ startPage: start, endPage: Math.min(start + chunkSize, totalPages) })
   }
 
-  console.log(`PDF split into ${chunks.length} chunks of up to ${chunkSize} pages (concurrency=${concurrency})`)
+  console.log(`PDF: ${ranges.length}リクエスト (ページ範囲指定, concurrency=${concurrency})`)
   const startTime = Date.now()
 
-  // チャンクごとにリトライ付きで取得（429/5xxで指数バックオフ最大3回）
-  async function fetchChunkWithRetry(chunk: { startPage: number; pdfBase64: string }) {
+  async function fetchRangeWithRetry(range: { startPage: number; endPage: number }) {
     const maxAttempts = 3
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const r = await fetch('/api/bank-statement/ocr-pdf', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pdfData: chunk.pdfBase64 }),
+          body: JSON.stringify({ pdfData: originalBase64, startPage: range.startPage, endPage: range.endPage }),
         })
         if (r.ok) {
           const data = await r.json()
           if ((data.totalCount || 0) > 0 || attempt === maxAttempts) {
-            return { data, startPage: chunk.startPage }
+            return data
           }
-          // 0件: もう一度試す（一時的にGeminiが認識できなかった可能性）
-          console.warn(`Chunk startPage=${chunk.startPage} returned 0 transactions, retrying (attempt ${attempt}/${maxAttempts})`)
+          console.warn(`Pages ${range.startPage}-${range.endPage - 1} returned 0 transactions, retrying (${attempt}/${maxAttempts})`)
         } else if (r.status === 429 || r.status >= 500) {
-          console.warn(`Chunk startPage=${chunk.startPage} HTTP ${r.status}, retrying (attempt ${attempt}/${maxAttempts})`)
+          console.warn(`Pages ${range.startPage}-${range.endPage - 1} HTTP ${r.status}, retrying (${attempt}/${maxAttempts})`)
         } else {
-          // 4xx (except 429) は永続エラー扱いで打ち切り
-          return { data: { totalCount: 0, pages: [] }, startPage: chunk.startPage }
+          return { totalCount: 0, pages: [] }
         }
       } catch (e) {
-        console.warn(`Chunk startPage=${chunk.startPage} fetch error (attempt ${attempt}/${maxAttempts}):`, e)
+        console.warn(`Pages ${range.startPage}-${range.endPage - 1} fetch error (${attempt}/${maxAttempts}):`, e)
       }
       if (attempt < maxAttempts) {
         await new Promise((res) => setTimeout(res, 2000 * Math.pow(2, attempt - 1)))
       }
     }
-    return { data: { totalCount: 0, pages: [] }, startPage: chunk.startPage }
+    return { totalCount: 0, pages: [] }
   }
 
-  // 並列度を制限してチャンクを処理（レート制限対策）
-  const results: { data: { totalCount?: number; pages?: OcrPdfPage[] }; startPage: number }[] = []
-  for (let i = 0; i < chunks.length; i += concurrency) {
-    const batch = chunks.slice(i, i + concurrency)
-    const batchResults = await Promise.all(batch.map(fetchChunkWithRetry))
-    results.push(...batchResults)
-    console.log(`Batch ${Math.floor(i / concurrency) + 1}/${Math.ceil(chunks.length / concurrency)} 完了 (${batch.length}チャンク)`)
-  }
-  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-  console.log(`All ${chunks.length} chunks completed in ${elapsed}s`)
-
-  // マージ: 各チャンク内のpageIndexを全体のpageIndexに変換
+  // 並列度を制限して処理
   const mergedMap = new Map<number, OcrPdfPage>()
   let totalCount = 0
-  for (const { data, startPage } of results) {
-    totalCount += data.totalCount || 0
-    for (const pg of data.pages || []) {
-      const globalIdx = startPage + pg.pageIndex
-      const existing = mergedMap.get(globalIdx)
-      if (existing) existing.transactions.push(...pg.transactions)
-      else mergedMap.set(globalIdx, { pageIndex: globalIdx, transactions: pg.transactions })
+  for (let i = 0; i < ranges.length; i += concurrency) {
+    const batch = ranges.slice(i, i + concurrency)
+    const batchResults = await Promise.all(batch.map(fetchRangeWithRetry))
+    for (const data of batchResults) {
+      totalCount += data.totalCount || 0
+      for (const pg of data.pages || []) {
+        const existing = mergedMap.get(pg.pageIndex)
+        if (existing) existing.transactions.push(...pg.transactions)
+        else mergedMap.set(pg.pageIndex, { pageIndex: pg.pageIndex, transactions: pg.transactions })
+      }
     }
+    console.log(`Batch ${Math.floor(i / concurrency) + 1}/${Math.ceil(ranges.length / concurrency)} 完了`)
   }
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+  console.log(`All ${ranges.length} page ranges completed in ${elapsed}s, total=${totalCount} transactions`)
+
   const pages = Array.from(mergedMap.values()).sort((a, b) => a.pageIndex - b.pageIndex)
   return { totalCount, pages }
 }

@@ -9,11 +9,11 @@ async function getPdfjsLib() {
   return pdfjsLib
 }
 
-// 日本語CIDフォント(常陽銀行等)の解読に必要なCMap/標準フォントの場所
+// 日本語CIDフォント(常陽銀行等)の解読に必要なCMap/標準フォント（CDNから取得）
 const PDF_DOC_OPTIONS = {
-  cMapUrl: '/cmaps/',
+  cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
   cMapPacked: true,
-  standardFontDataUrl: '/standard_fonts/',
+  standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/',
 }
 
 interface TextItem {

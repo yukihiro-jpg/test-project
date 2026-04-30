@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { PDFDocument } from 'pdf-lib'
 
-const PROMPT = `この PDF は日本の銀行の取引明細書です。
+const BASE_PROMPT = `この PDF は日本の銀行の取引明細書です。
 通帳・お取引照合表（常陽銀行等）・取引明細書・現金出納帳などの形式があります。
-PDF 全ページから必ず取引データを読み取って JSON で返してください。
 
 【必ず守ること】
 - 取引行が1つでも見える場合、1行も漏らさずに transactions 配列に含める
 - ヘッダ行（取引日/勘定日/摘要/お支払金額/お預り金額/差引残高など）はスキップ
 - タイトル行（お取引照合表、口座情報、頁数など）はスキップ
-- 複数ページにまたがる場合、全ページから抽出
 
 【横型・見開き通帳の重要な注意】
 通帳の見開き2ページを1つの画像/PDFページにスキャンしている場合、
@@ -74,84 +71,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'GEMINI_API_KEY が設定されていません' }, { status: 500 })
     }
 
-    const { pdfData } = await request.json()
+    const { pdfData, startPage, endPage } = await request.json()
     if (!pdfData) {
       return NextResponse.json({ error: 'PDFデータがありません' }, { status: 400 })
     }
 
     const base64 = pdfData.replace(/^data:application\/pdf;base64,/, '')
-    const pdfBytes = Buffer.from(base64, 'base64')
     const genAI = new GoogleGenerativeAI(apiKey)
     const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 
-    // ページ数を確認してチャンク分割するか判定
-    let sourcePdf
-    let totalPages
-    try {
-      sourcePdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true })
-      totalPages = sourcePdf.getPageCount()
-    } catch (loadErr) {
-      // pdf-libで開けない → 分割不可なのでそのまま1リクエストでGeminiへ
-      console.warn('OCR-PDF: pdf-lib load failed, sending whole PDF to Gemini:', loadErr)
-      return await processSinglePdf(genAI, modelName, base64, 0)
-    }
-    const CHUNK_SIZE = 5 // 5ページずつ
-
-    if (totalPages <= CHUNK_SIZE) {
-      // 小さいPDFはそのまま1リクエスト
-      return await processSinglePdf(genAI, modelName, base64, totalPages)
+    // ページ範囲指定がある場合: オリジナルPDFをそのまま送り、プロンプトで範囲指定
+    if (typeof startPage === 'number' && typeof endPage === 'number') {
+      return await processPageRange(genAI, modelName, base64, startPage, endPage)
     }
 
-    // 大きいPDF: チャンク分割して並列処理
-    console.log(`OCR-PDF: ${totalPages}ページ → ${Math.ceil(totalPages / CHUNK_SIZE)}チャンクに分割 (${CHUNK_SIZE}ページ/チャンク)`)
-    const startTime = Date.now()
-
-    const chunks: { startPage: number; base64: string }[] = []
-    for (let start = 0; start < totalPages; start += CHUNK_SIZE) {
-      const end = Math.min(start + CHUNK_SIZE, totalPages)
-      const chunkDoc = await PDFDocument.create()
-      const pageIndices = Array.from({ length: end - start }, (_, i) => start + i)
-      const copiedPages = await chunkDoc.copyPages(sourcePdf, pageIndices)
-      for (const p of copiedPages) chunkDoc.addPage(p)
-      const chunkBytes = await chunkDoc.save()
-      chunks.push({ startPage: start, base64: Buffer.from(chunkBytes).toString('base64') })
-    }
-
-    // 並列リクエスト（同時実行数を制限してレート制限を回避）
-    const SERVER_CONCURRENCY = 4
-    const results: Transaction[][] = []
-    for (let i = 0; i < chunks.length; i += SERVER_CONCURRENCY) {
-      const batch = chunks.slice(i, i + SERVER_CONCURRENCY)
-      const batchResults = await Promise.all(
-        batch.map((chunk) => processChunk(genAI, modelName, chunk.base64, chunk.startPage)),
-      )
-      results.push(...batchResults)
-      console.log(`OCR-PDF: バッチ ${Math.floor(i / SERVER_CONCURRENCY) + 1}/${Math.ceil(chunks.length / SERVER_CONCURRENCY)} 完了 (${batch.length}チャンク)`)
-    }
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-    console.log(`OCR-PDF: 全${chunks.length}チャンク完了 ${elapsed}秒`)
-
-    // 結果をマージ
-    const allTransactions: Transaction[] = []
-    for (const r of results) {
-      allTransactions.push(...r)
-    }
-    console.log(`OCR-PDF: 合計 ${allTransactions.length} 件の取引を抽出`)
-
-    const pageGroups: Record<number, Transaction[]> = {}
-    for (const tx of allTransactions) {
-      if (!pageGroups[tx.page]) pageGroups[tx.page] = []
-      pageGroups[tx.page].push(tx)
-    }
-    const pages = Object.entries(pageGroups).map(([pageIdx, txs]) => ({
-      pageIndex: parseInt(pageIdx),
-      transactions: txs.map((t) => ({
-        date: t.date, description: t.description,
-        deposit: t.deposit, withdrawal: t.withdrawal, balance: t.balance,
-      })),
-    }))
-
-    return NextResponse.json({ pages, totalCount: allTransactions.length })
+    // ページ範囲指定なし: 全ページ処理
+    return await processSinglePdf(genAI, modelName, base64)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'OCR処理に失敗しました'
     console.error('OCR-PDF error:', err)
@@ -159,12 +94,20 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processChunk(
+async function processPageRange(
   genAI: GoogleGenerativeAI,
   modelName: string,
-  chunkBase64: string,
+  base64: string,
   startPage: number,
-): Promise<Transaction[]> {
+  endPage: number,
+): Promise<NextResponse> {
+  const pagePrompt = `${BASE_PROMPT}
+
+【重要: ページ範囲指定】
+この PDF は複数ページありますが、${startPage + 1}ページ目から${endPage}ページ目だけを処理してください。
+それ以外のページは完全に無視してください。
+page フィールドには0始まりのページ番号を入れてください（${startPage}～${endPage - 1}）。`
+
   const maxAttempts = 3
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -172,62 +115,81 @@ async function processChunk(
         model: modelName,
         generationConfig: { temperature: 0, maxOutputTokens: 64000 },
       })
+      console.log(`OCR-PDF: pages ${startPage}-${endPage - 1} (attempt ${attempt}) sending to ${modelName}`)
+      const startTime = Date.now()
       const result = await model.generateContent([
-        PROMPT,
-        { inlineData: { mimeType: 'application/pdf', data: chunkBase64 } },
+        pagePrompt,
+        { inlineData: { mimeType: 'application/pdf', data: base64 } },
       ])
       const responseText = result.response.text()
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+      console.log(`OCR-PDF: pages ${startPage}-${endPage - 1} completed in ${elapsed}s, response length=${responseText.length}`)
+
       const jsonMatch = responseText.match(/\{[\s\S]*"transactions"[\s\S]*\}/)
       if (!jsonMatch) {
-        console.warn(`OCR-PDF chunk (startPage=${startPage}) attempt ${attempt}: JSON抽出失敗 response先頭=${responseText.slice(0, 200)}`)
+        console.warn(`OCR-PDF pages ${startPage}-${endPage - 1}: JSON抽出失敗 response先頭=${responseText.slice(0, 300)}`)
         if (attempt < maxAttempts) {
           await new Promise((r) => setTimeout(r, 2000 * attempt))
           continue
         }
-        return []
+        return NextResponse.json({ pages: [], totalCount: 0 })
       }
       const parsed = JSON.parse(jsonMatch[0])
-      return (parsed.transactions || []).map((tx: {
+      const transactions: Transaction[] = (parsed.transactions || []).map((tx: {
         page?: number; date?: string; description?: string;
         deposit?: number | null; withdrawal?: number | null; balance?: number
       }) => ({
-        page: (tx.page ?? 0) + startPage,
+        page: tx.page ?? startPage,
         date: tx.date || '',
         description: tx.description || '',
         deposit: tx.deposit ?? null,
         withdrawal: tx.withdrawal ?? null,
         balance: tx.balance ?? 0,
       }))
+      console.log(`OCR-PDF: pages ${startPage}-${endPage - 1} extracted ${transactions.length} transactions`)
+
+      const pageGroups: Record<number, Transaction[]> = {}
+      for (const tx of transactions) {
+        if (!pageGroups[tx.page]) pageGroups[tx.page] = []
+        pageGroups[tx.page].push(tx)
+      }
+      const pages = Object.entries(pageGroups).map(([pageIdx, txs]) => ({
+        pageIndex: parseInt(pageIdx),
+        transactions: txs.map((t) => ({
+          date: t.date, description: t.description,
+          deposit: t.deposit, withdrawal: t.withdrawal, balance: t.balance,
+        })),
+      }))
+      return NextResponse.json({ pages, totalCount: transactions.length })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       const isRetriable = /429|503|504|timeout|ECONN|fetch failed/i.test(msg)
-      console.warn(`OCR-PDF chunk error (startPage=${startPage}, attempt=${attempt}/${maxAttempts}): ${msg}`)
+      console.warn(`OCR-PDF pages ${startPage}-${endPage - 1} error (attempt ${attempt}/${maxAttempts}): ${msg}`)
       if (attempt < maxAttempts && isRetriable) {
         await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, attempt - 1)))
         continue
       }
-      console.error(`OCR-PDF chunk fatal (startPage=${startPage}):`, e)
-      return []
     }
   }
-  return []
+  return NextResponse.json({ pages: [], totalCount: 0 })
 }
 
 async function processSinglePdf(
   genAI: GoogleGenerativeAI,
   modelName: string,
   base64: string,
-  totalPages: number,
 ): Promise<NextResponse> {
     const model = genAI.getGenerativeModel({
       model: modelName,
       generationConfig: { temperature: 0, maxOutputTokens: 64000 },
     })
 
-    console.log(`OCR-PDF: sending PDF (${(base64.length / 1024).toFixed(0)} KB base64, ${totalPages}p) to ${modelName}`)
+    const prompt = `${BASE_PROMPT}\nPDF 全ページから取引データを読み取って JSON で返してください。`
+
+    console.log(`OCR-PDF: sending full PDF (${(base64.length / 1024).toFixed(0)} KB base64) to ${modelName}`)
     const startTime = Date.now()
     const result = await model.generateContent([
-      PROMPT,
+      prompt,
       { inlineData: { mimeType: 'application/pdf', data: base64 } },
     ])
     const responseText = result.response.text()
@@ -236,6 +198,7 @@ async function processSinglePdf(
 
     const jsonMatch = responseText.match(/\{[\s\S]*"transactions"[\s\S]*\}/)
     if (!jsonMatch) {
+      console.warn(`OCR-PDF: JSON抽出失敗 response先頭=${responseText.slice(0, 300)}`)
       return NextResponse.json({ error: 'Gemini応答からJSONを抽出できませんでした' }, { status: 500 })
     }
 
