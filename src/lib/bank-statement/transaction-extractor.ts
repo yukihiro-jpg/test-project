@@ -1125,10 +1125,9 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
     }
   }
 
-  // ページ画像を生成
+  // テキストPDF: 取引抽出（画像はページ表示時にオンデマンド生成）
   const statementPages: StatementPage[] = []
   for (let i = 0; i < rawPages.length; i++) {
-    const imageDataUrl = await renderPdfPageToImage(file, i + 1, 2)
     const transactions = extractTransactions(rawPages[i].rows, mapping, i)
     statementPages.push({
       pageIndex: i,
@@ -1137,12 +1136,16 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
       closingBalance: 0,
       isBalanceValid: true,
       balanceDifference: 0,
-      imageDataUrl,
     })
+  }
+  // 最初のページの画像だけ先に生成
+  if (statementPages.length > 0) {
+    statementPages[0].imageDataUrl = await renderPdfPageToImage(file, 1, 2)
   }
 
   return {
     pages: updatePageBalances(statementPages),
+    pdfFile: file,
     sourceType: 'pdf-text',
     needsColumnMapping: false,
   }

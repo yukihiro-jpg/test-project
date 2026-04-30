@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import UploadDialog from '@/components/bank-statement/UploadDialog'
 import AccountMasterUploader from '@/components/bank-statement/AccountMasterUploader'
 import PatternListDialog from '@/components/bank-statement/PatternListDialog'
@@ -60,6 +60,8 @@ export default function BankStatementContent() {
   const [uploadConfig, setUploadConfig] = useState<UploadConfig | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
+  const [parseElapsed, setParseElapsed] = useState<string | null>(null)
+  const pdfFileRef = useRef<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [dateFrom, setDateFrom] = useState('')
@@ -447,6 +449,12 @@ export default function BankStatementContent() {
         const result = await parseFile(config.file, config.accountCode)
         clearInterval(progressTimer)
         setLoadingProgress(100)
+        const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1)
+        setParseElapsed(`${elapsedSec}秒`)
+        // テキストPDFのオンデマンド画像生成用にファイルを保持
+        if (result.pdfFile) {
+          pdfFileRef.current = result.pdfFile
+        }
 
         if (result.needsColumnMapping && result.rawPages) {
           setRawPages(result.rawPages)
@@ -483,6 +491,22 @@ export default function BankStatementContent() {
     },
     [applyParseResultFn],
   )
+
+  // ページ遷移時にオンデマンドで画像を生成（テキストPDF用）
+  useEffect(() => {
+    if (!pdfFileRef.current || pages.length === 0) return
+    const page = pages[currentPageIndex]
+    if (!page || page.imageDataUrl) return
+    let cancelled = false
+    ;(async () => {
+      const { renderPdfPageToImage } = await import('@/lib/bank-statement/pdf-text-parser')
+      const url = await renderPdfPageToImage(pdfFileRef.current!, currentPageIndex + 1, 2)
+      if (!cancelled) {
+        setPages((prev) => prev.map((p, i) => i === currentPageIndex ? { ...p, imageDataUrl: url } : p))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [currentPageIndex, pages])
 
   const handleColumnMappingConfirm = useCallback(
     (mapping: ColumnMapping) => {
@@ -806,6 +830,13 @@ export default function BankStatementContent() {
             </div>
             <span className="text-xs text-blue-500 w-8 text-right">{loadingProgress}%</span>
           </div>
+        </div>
+      )}
+
+      {/* 解析時間 */}
+      {parseElapsed && !isLoading && pages.length > 0 && (
+        <div className="bg-green-50 border-b border-green-200 px-4 py-1 text-xs text-green-700 shrink-0">
+          解析完了: {parseElapsed} ({pages.reduce((s, p) => s + p.transactions.length, 0)}件の取引を抽出)
         </div>
       )}
 
