@@ -487,7 +487,7 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
 
   // フォールバック: 複数行にまたがるヘッダの検出
   // お取引照合表等で「取引日」と「お支払金額」が別行に分かれている場合
-  for (let ri = 0; ri < Math.min(rows.length, 8); ri++) {
+  for (let ri = 0; ri < Math.min(rows.length, 30); ri++) {
     const row = rows[ri]
     if (row.cells.some((c) => isDateCell(c))) continue
     // この行と前後2行のセルを全て結合して検索
