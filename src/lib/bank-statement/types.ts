@@ -135,6 +135,7 @@ export interface PatternEntry {
 // パース結果のraw行データ（列マッピング用）
 export interface RawTableRow {
   cells: string[]
+  cellPositions?: number[] // 各セルの開始X座標（PDF空セルのずれ対策）
   rowIndex: number
   boundingBox?: { x: number; y: number; width: number; height: number }
 }
@@ -151,6 +152,7 @@ export interface ColumnMapping {
   directionColumn?: number       // 受払区分列（受入/払出で入出金を判別）
   extraColumns?: { col: number; name: string; direction: 'credit' | 'debit' }[]
   memoColumn?: number            // 備考列（摘要に連結）
+  columnXPositions?: number[]    // 各列ヘッダの中心X座標（PDF空セル対策）
 }
 
 // パース結果

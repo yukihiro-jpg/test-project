@@ -110,9 +110,11 @@ function groupTextItemsIntoRows(
       (a, b) => a.transform[4] - b.transform[4],
     )
 
-    // X座標のギャップでセルを分割
+    // X座標のギャップでセルを分割（各セルの開始X座標も記録）
     const cells: string[] = []
+    const cellPositions: number[] = []
     let currentCell = ''
+    let currentCellStartX = 0
     let lastX = -Infinity
 
     for (const item of sortedItems) {
@@ -121,14 +123,18 @@ function groupTextItemsIntoRows(
 
       if (gap > 20 && currentCell) {
         cells.push(currentCell.trim())
+        cellPositions.push(currentCellStartX)
         currentCell = item.str
+        currentCellStartX = x
       } else {
+        if (!currentCell) currentCellStartX = x
         currentCell += item.str
       }
       lastX = x + (item.width || 0)
     }
     if (currentCell.trim()) {
       cells.push(currentCell.trim())
+      cellPositions.push(currentCellStartX)
     }
 
     // boundingBox計算
@@ -140,6 +146,7 @@ function groupTextItemsIntoRows(
 
     return {
       cells,
+      cellPositions,
       rowIndex: idx,
       boundingBox: {
         x: minX,

@@ -350,12 +350,15 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
     }
     // 通常モード: 日付 + 残高 + (入金 or 出金)
     if (dateCol >= 0 && balanceCol >= 0 && (depositCol >= 0 || withdrawCol >= 0)) {
+      // 各列のX座標を記録（データ行の空セルずれ対策）
+      const xPositions = row.cellPositions
       const mapping: ColumnMapping = {
         dateColumn: dateCol,
         descriptionColumn: descCol,
         depositColumn: depositCol >= 0 ? depositCol : withdrawCol,
         withdrawalColumn: withdrawCol >= 0 ? withdrawCol : depositCol,
         balanceColumn: balanceCol,
+        columnXPositions: xPositions,
       }
       // 追加列の検出: 標準列以外で「入金」「出金」方向が指定されている列
       const usedCols = new Set([dateCol, descCol, depositCol, withdrawCol, balanceCol, signedCol].filter((c) => c >= 0))
@@ -434,6 +437,7 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
         depositColumn: depositCol2 >= 0 ? depositCol2 : withdrawCol2,
         withdrawalColumn: withdrawCol2 >= 0 ? withdrawCol2 : depositCol2,
         balanceColumn: balanceCol2,
+        columnXPositions: row.cellPositions,
       }
     }
   }
@@ -555,8 +559,28 @@ function extractTransactions(
   let runningBalance = 0 // 残高列がない場合のために running 集計
   let lastDate: string | null = null // 日付空欄時の引継ぎ用
 
+  // X座標ベースのセル取得関数（PDF空セルのずれ対策）
+  const headerXPos = mapping.columnXPositions
+  function getCellByColumn(row: RawTableRow, colIdx: number): string {
+    if (colIdx < 0) return ''
+    // cellPositionsとcolumnXPositionsの両方がある場合、X座標で最も近いセルを返す
+    if (headerXPos && headerXPos[colIdx] != null && row.cellPositions && row.cellPositions.length > 0) {
+      const targetX = headerXPos[colIdx]
+      let bestIdx = 0
+      let bestDist = Math.abs((row.cellPositions[0] || 0) - targetX)
+      for (let i = 1; i < row.cellPositions.length; i++) {
+        const dist = Math.abs((row.cellPositions[i] || 0) - targetX)
+        if (dist < bestDist) { bestDist = dist; bestIdx = i }
+      }
+      // X座標の差が大きすぎる場合は空セル（その列にデータなし）
+      if (bestDist > 50) return ''
+      return row.cells[bestIdx] || ''
+    }
+    return row.cells[colIdx] || ''
+  }
+
   for (const row of rows) {
-    const dateText = row.cells[mapping.dateColumn] || ''
+    const dateText = getCellByColumn(row, mapping.dateColumn)
     let date = parseDate(dateText)
     if (!date && lastDate && row.cells.some((c, i) => i !== mapping.dateColumn && c && c.trim())) {
       // 日付が空でも他の列にデータがある → 直前の日付を引き継ぐ
@@ -567,9 +591,9 @@ function extractTransactions(
 
     const baseDesc =
       mapping.descriptionColumn >= 0
-        ? row.cells[mapping.descriptionColumn] || ''
+        ? getCellByColumn(row, mapping.descriptionColumn)
         : ''
-    const txTypeText = hasTxType ? (row.cells[txTypeCol!] || '').trim() : ''
+    const txTypeText = hasTxType ? getCellByColumn(row, txTypeCol!).trim() : ''
     // 取引区分がある場合は「取引区分 摘要」として結合
     const description =
       txTypeText && baseDesc.trim()
@@ -578,7 +602,7 @@ function extractTransactions(
 
     let balance: number | null = null
     if (hasBalanceCol) {
-      const balanceText = row.cells[mapping.balanceColumn] || ''
+      const balanceText = getCellByColumn(row, mapping.balanceColumn)
       balance = parseAmount(balanceText)
       if (balance === null) continue // 残高列があるのに空の行はスキップ
     }
@@ -589,8 +613,8 @@ function extractTransactions(
     // 受払区分 + 金額1列モード: 受入/払出で方向を判定
     if (typeof mapping.directionColumn === 'number' && mapping.directionColumn >= 0 &&
         typeof mapping.signedAmountColumn === 'number' && mapping.signedAmountColumn >= 0) {
-      const dirText = (row.cells[mapping.directionColumn] || '').trim()
-      const amtText = row.cells[mapping.signedAmountColumn] || ''
+      const dirText = getCellByColumn(row, mapping.directionColumn).trim()
+      const amtText = getCellByColumn(row, mapping.signedAmountColumn)
       const amt = parseAmount(amtText)
       if (amt != null && amt > 0) {
         // 受入/入金/受 → 入金、それ以外（払出/出金/払）→ 出金
@@ -601,17 +625,17 @@ function extractTransactions(
     }
     // 符号付き1列モード: 正=入金, 負=出金
     else if (typeof mapping.signedAmountColumn === 'number' && mapping.signedAmountColumn >= 0) {
-      const signedText = row.cells[mapping.signedAmountColumn] || ''
+      const signedText = getCellByColumn(row, mapping.signedAmountColumn)
       const signed = parseSignedAmount(signedText)
       if (signed != null) {
         if (signed > 0) deposit = signed
         else if (signed < 0) withdrawal = Math.abs(signed)
       }
     } else {
-      const depositText = row.cells[mapping.depositColumn] || ''
+      const depositText = getCellByColumn(row, mapping.depositColumn)
       const withdrawalText =
         mapping.withdrawalColumn !== mapping.depositColumn
-          ? row.cells[mapping.withdrawalColumn] || ''
+          ? getCellByColumn(row, mapping.withdrawalColumn)
           : ''
       deposit = parseAmount(depositText)
       withdrawal =
@@ -631,7 +655,7 @@ function extractTransactions(
     if (mapping.extraColumns && mapping.extraColumns.length > 0) {
       const ex: typeof extras = []
       for (const ec of mapping.extraColumns) {
-        const amtText = row.cells[ec.col] || ''
+        const amtText = getCellByColumn(row, ec.col)
         const amt = parseAmount(amtText)
         if (amt != null && amt > 0) {
           ex.push({ name: ec.name, amount: amt, direction: ec.direction })
@@ -643,7 +667,7 @@ function extractTransactions(
     let memoText: string | undefined
     let descWithMemo = description
     if (typeof mapping.memoColumn === 'number' && mapping.memoColumn >= 0) {
-      const memo = (row.cells[mapping.memoColumn] || '').trim()
+      const memo = getCellByColumn(row, mapping.memoColumn).trim()
       if (memo) {
         memoText = memo
         descWithMemo = `${description}_${memo}`.slice(0, 25)
