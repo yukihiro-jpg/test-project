@@ -740,14 +740,15 @@ function extractTransactions(
   }
 
   for (const row of rows) {
+    // 合計行スキップ: いずれかのセルに「合計」「計」等が含まれていればスキップ
+    if (row.cells.some((c) => {
+      const cl = (c || '').replace(/[\s　]/g, '')
+      return cl === '合計' || cl === '計' || cl === '小計' || cl === '総計'
+    })) continue
     const dateText = getCellByColumn(row, mapping.dateColumn)
-    // 合計行はスキップ（「合計」「計」「合 計」等）
-    const dateCleaned = dateText.replace(/[\s　]/g, '')
-    if (/^合計$|^計$|^小計$|^総計$/.test(dateCleaned)) continue
     let date = parseDate(dateText)
     if (!date && lastDate && row.cells.some((c, i) => i !== mapping.dateColumn && c && c.trim())) {
       // 日付が空でも他の列にデータがある → 直前の日付を引き継ぐ
-      // ただし合計系キーワードを含む行はスキップ
       if (row.cells.some((c) => /合計|小計|総計/.test(c || ''))) continue
       date = lastDate
     }
