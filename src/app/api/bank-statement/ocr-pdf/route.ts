@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { PDFDocument } from 'pdf-lib'
 
 const PROMPT = `この PDF は日本の銀行の取引明細書です。
 通帳・お取引照合表（常陽銀行等）・取引明細書・現金出納帳などの形式があります。
@@ -79,14 +80,117 @@ export async function POST(request: NextRequest) {
     }
 
     const base64 = pdfData.replace(/^data:application\/pdf;base64,/, '')
+    const pdfBytes = Buffer.from(base64, 'base64')
     const genAI = new GoogleGenerativeAI(apiKey)
     const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+
+    // ページ数を確認してチャンク分割するか判定
+    const sourcePdf = await PDFDocument.load(pdfBytes)
+    const totalPages = sourcePdf.getPageCount()
+    const CHUNK_SIZE = 5 // 5ページずつ
+
+    if (totalPages <= CHUNK_SIZE) {
+      // 小さいPDFはそのまま1リクエスト
+      return await processSinglePdf(genAI, modelName, base64, totalPages)
+    }
+
+    // 大きいPDF: チャンク分割して並列処理
+    console.log(`OCR-PDF: ${totalPages}ページ → ${Math.ceil(totalPages / CHUNK_SIZE)}チャンクに分割 (${CHUNK_SIZE}ページ/チャンク)`)
+    const startTime = Date.now()
+
+    const chunks: { startPage: number; base64: string }[] = []
+    for (let start = 0; start < totalPages; start += CHUNK_SIZE) {
+      const end = Math.min(start + CHUNK_SIZE, totalPages)
+      const chunkDoc = await PDFDocument.create()
+      const pageIndices = Array.from({ length: end - start }, (_, i) => start + i)
+      const copiedPages = await chunkDoc.copyPages(sourcePdf, pageIndices)
+      for (const p of copiedPages) chunkDoc.addPage(p)
+      const chunkBytes = await chunkDoc.save()
+      chunks.push({ startPage: start, base64: Buffer.from(chunkBytes).toString('base64') })
+    }
+
+    // 並列リクエスト
+    const promises = chunks.map((chunk) => processChunk(genAI, modelName, chunk.base64, chunk.startPage))
+    const results = await Promise.all(promises)
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+    console.log(`OCR-PDF: 全${chunks.length}チャンク完了 ${elapsed}秒`)
+
+    // 結果をマージ
+    const allTransactions: Transaction[] = []
+    for (const r of results) {
+      allTransactions.push(...r)
+    }
+    console.log(`OCR-PDF: 合計 ${allTransactions.length} 件の取引を抽出`)
+
+    const pageGroups: Record<number, Transaction[]> = {}
+    for (const tx of allTransactions) {
+      if (!pageGroups[tx.page]) pageGroups[tx.page] = []
+      pageGroups[tx.page].push(tx)
+    }
+    const pages = Object.entries(pageGroups).map(([pageIdx, txs]) => ({
+      pageIndex: parseInt(pageIdx),
+      transactions: txs.map((t) => ({
+        date: t.date, description: t.description,
+        deposit: t.deposit, withdrawal: t.withdrawal, balance: t.balance,
+      })),
+    }))
+
+    return NextResponse.json({ pages, totalCount: allTransactions.length })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'OCR処理に失敗しました'
+    console.error('OCR-PDF error:', err)
+    return NextResponse.json({ error: `Gemini OCR エラー: ${msg}` }, { status: 500 })
+  }
+}
+
+async function processChunk(
+  genAI: GoogleGenerativeAI,
+  modelName: string,
+  chunkBase64: string,
+  startPage: number,
+): Promise<Transaction[]> {
+  try {
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: { temperature: 0, maxOutputTokens: 64000 },
+    })
+    const result = await model.generateContent([
+      PROMPT,
+      { inlineData: { mimeType: 'application/pdf', data: chunkBase64 } },
+    ])
+    const responseText = result.response.text()
+    const jsonMatch = responseText.match(/\{[\s\S]*"transactions"[\s\S]*\}/)
+    if (!jsonMatch) return []
+    const parsed = JSON.parse(jsonMatch[0])
+    return (parsed.transactions || []).map((tx: {
+      page?: number; date?: string; description?: string;
+      deposit?: number | null; withdrawal?: number | null; balance?: number
+    }) => ({
+      page: (tx.page ?? 0) + startPage,
+      date: tx.date || '',
+      description: tx.description || '',
+      deposit: tx.deposit ?? null,
+      withdrawal: tx.withdrawal ?? null,
+      balance: tx.balance ?? 0,
+    }))
+  } catch (e) {
+    console.error(`OCR-PDF chunk error (startPage=${startPage}):`, e)
+    return []
+  }
+}
+
+async function processSinglePdf(
+  genAI: GoogleGenerativeAI,
+  modelName: string,
+  base64: string,
+  totalPages: number,
+): Promise<NextResponse> {
     const model = genAI.getGenerativeModel({
       model: modelName,
       generationConfig: { temperature: 0, maxOutputTokens: 64000 },
     })
 
-    console.log(`OCR-PDF: sending PDF (${(base64.length / 1024).toFixed(0)} KB base64) to ${modelName}`)
+    console.log(`OCR-PDF: sending PDF (${(base64.length / 1024).toFixed(0)} KB base64, ${totalPages}p) to ${modelName}`)
     const startTime = Date.now()
     const result = await model.generateContent([
       PROMPT,
@@ -95,11 +199,10 @@ export async function POST(request: NextRequest) {
     const responseText = result.response.text()
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
     console.log(`OCR-PDF completed in ${elapsed}s, response length=${responseText.length}`)
-    console.log(`OCR-PDF first 400 chars:`, responseText.substring(0, 400))
 
     const jsonMatch = responseText.match(/\{[\s\S]*"transactions"[\s\S]*\}/)
     if (!jsonMatch) {
-      return NextResponse.json({ error: 'Gemini応答からJSONを抽出できませんでした', rawResponse: responseText.substring(0, 500) }, { status: 500 })
+      return NextResponse.json({ error: 'Gemini応答からJSONを抽出できませんでした' }, { status: 500 })
     }
 
     const parsed = JSON.parse(jsonMatch[0])
@@ -117,7 +220,6 @@ export async function POST(request: NextRequest) {
 
     console.log(`OCR-PDF: extracted ${transactions.length} transactions`)
 
-    // ページごとにグループ化
     const pageGroups: Record<number, Transaction[]> = {}
     for (const tx of transactions) {
       if (!pageGroups[tx.page]) pageGroups[tx.page] = []
@@ -132,9 +234,4 @@ export async function POST(request: NextRequest) {
     }))
 
     return NextResponse.json({ pages, totalCount: transactions.length })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'OCR処理に失敗しました'
-    console.error('OCR-PDF error:', err)
-    return NextResponse.json({ error: msg }, { status: 500 })
-  }
 }
