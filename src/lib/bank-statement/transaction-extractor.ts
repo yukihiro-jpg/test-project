@@ -127,7 +127,52 @@ function generateId(): string {
 }
 
 /**
- * PDFテキスト抽出の空セルずれを解消する
+ * ヘッダキーワードのX座標から直接列を検出する（範囲ベース）
+ * realign不要で、ヘッダ（左寄せ）とデータ（右寄せ）のずれを正しく処理できる
+ */
+function detectColumnsByKeywordPositions(rows: RawTableRow[]): ColumnMapping | null {
+  let dateX = -1, descX = -1, depositX = -1, withdrawX = -1, balanceX = -1
+
+  for (const row of rows) {
+    if (!row.cellPositions || row.cellPositions.length === 0) continue
+    if (row.cells.some((c) => isDateCell(c))) continue
+    for (let i = 0; i < row.cells.length; i++) {
+      const cell = (row.cells[i] || '').replace(/[\s　]/g, '')
+      if (!cell) continue
+      const x = row.cellPositions[i]
+      if (dateX < 0 && matchHeaderKeyword(cell, HEADER_DATE)) dateX = x
+      if (descX < 0 && matchHeaderKeyword(cell, HEADER_DESC)) descX = x
+      if (withdrawX < 0 && matchHeaderKeyword(cell, HEADER_WITHDRAW)) withdrawX = x
+      if (depositX < 0 && matchHeaderKeyword(cell, HEADER_DEPOSIT)) depositX = x
+      if (balanceX < 0 && matchHeaderKeyword(cell, HEADER_BALANCE)) balanceX = x
+    }
+  }
+
+  if (dateX < 0 || balanceX < 0 || (depositX < 0 && withdrawX < 0)) return null
+
+  const cols: { type: string; x: number }[] = []
+  if (dateX >= 0) cols.push({ type: 'date', x: dateX })
+  if (descX >= 0) cols.push({ type: 'desc', x: descX })
+  if (withdrawX >= 0) cols.push({ type: 'withdraw', x: withdrawX })
+  if (depositX >= 0) cols.push({ type: 'deposit', x: depositX })
+  if (balanceX >= 0) cols.push({ type: 'balance', x: balanceX })
+  cols.sort((a, b) => a.x - b.x)
+
+  const xPositions = cols.map((c) => c.x)
+  console.log(`[detectByKeywordPos] ${cols.map((c) => `${c.type}@${Math.round(c.x)}`).join(', ')}`)
+
+  return {
+    dateColumn: cols.findIndex((c) => c.type === 'date'),
+    descriptionColumn: cols.findIndex((c) => c.type === 'desc'),
+    withdrawalColumn: cols.findIndex((c) => c.type === 'withdraw'),
+    depositColumn: cols.findIndex((c) => c.type === 'deposit'),
+    balanceColumn: cols.findIndex((c) => c.type === 'balance'),
+    columnXPositions: xPositions,
+  }
+}
+
+/**
+ * PDFテキスト抽出の空セルずれを解消する（フォールバック用）
  * ヘッダキーワードを含む全行のX座標を集めてクラスタリングし、
  * 列境界を確定してから各行を固定幅配列に再構築する
  */
@@ -643,22 +688,23 @@ function extractTransactions(
   let runningBalance = 0 // 残高列がない場合のために running 集計
   let lastDate: string | null = null // 日付空欄時の引継ぎ用
 
-  // X座標ベースのセル取得関数（PDF空セルのずれ対策）
+  // X座標の範囲ベースでセルを取得（ヘッダ位置から次のヘッダ位置の範囲内を検索）
   const headerXPos = mapping.columnXPositions
   function getCellByColumn(row: RawTableRow, colIdx: number): string {
     if (colIdx < 0) return ''
-    // cellPositionsとcolumnXPositionsの両方がある場合、X座標で最も近いセルを返す
     if (headerXPos && headerXPos[colIdx] != null && row.cellPositions && row.cellPositions.length > 0) {
-      const targetX = headerXPos[colIdx]
-      let bestIdx = 0
-      let bestDist = Math.abs((row.cellPositions[0] || 0) - targetX)
-      for (let i = 1; i < row.cellPositions.length; i++) {
-        const dist = Math.abs((row.cellPositions[i] || 0) - targetX)
-        if (dist < bestDist) { bestDist = dist; bestIdx = i }
+      const leftX = headerXPos[colIdx]
+      const rightX = colIdx + 1 < headerXPos.length ? headerXPos[colIdx + 1] : leftX + 300
+      const prevX = colIdx > 0 ? headerXPos[colIdx - 1] : leftX - 100
+      const leftBound = (prevX + leftX) / 2
+      let result = ''
+      for (let i = 0; i < row.cellPositions.length; i++) {
+        const x = row.cellPositions[i]
+        if (x >= leftBound && x < rightX) {
+          result += (result ? ' ' : '') + (row.cells[i] || '')
+        }
       }
-      // X座標の差が大きすぎる場合は空セル（その列にデータなし）
-      if (bestDist > 50) return ''
-      return row.cells[bestIdx] || ''
+      return result
     }
     return row.cells[colIdx] || ''
   }
@@ -1045,11 +1091,15 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
   // テキストPDF
   const t1 = Date.now()
   const allRawPages = rawPages.map((p) => p.rows)
-  realignPdfRowsToColumns(allRawPages)
-  const t2 = Date.now()
-  const mapping = detectColumnMappingFromAllPages(allRawPages)
+  // まずヘッダキーワードのX座標から直接列検出（範囲ベース、realign不要）
+  let mapping = detectColumnsByKeywordPositions(allRawPages.flat())
+  if (!mapping) {
+    // フォールバック: realign + 従来の列検出
+    realignPdfRowsToColumns(allRawPages)
+    mapping = detectColumnMappingFromAllPages(allRawPages)
+  }
   const t3 = Date.now()
-  console.log(`[timing] テキストPDF: realign=${t2 - t1}ms, detectMapping=${t3 - t2}ms, total=${((t3 - t0) / 1000).toFixed(1)}秒`)
+  console.log(`[timing] テキストPDF: detect=${t3 - t1}ms, total=${((t3 - t0) / 1000).toFixed(1)}秒`)
   console.log(`[parsePdfFile] ${allRawPages.length}ページ, ${allRawPages.reduce((s, p) => s + p.length, 0)}行, 列検出:`, mapping)
 
   if (!mapping) {
