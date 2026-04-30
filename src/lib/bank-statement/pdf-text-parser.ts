@@ -9,6 +9,13 @@ async function getPdfjsLib() {
   return pdfjsLib
 }
 
+// 日本語CIDフォント(常陽銀行等)の解読に必要なCMap/標準フォントの場所
+const PDF_DOC_OPTIONS = {
+  cMapUrl: '/cmaps/',
+  cMapPacked: true,
+  standardFontDataUrl: '/standard_fonts/',
+}
+
 interface TextItem {
   str: string
   transform: number[] // [scaleX, skewX, skewY, scaleY, translateX, translateY]
@@ -28,7 +35,7 @@ export async function parsePdfText(
 ): Promise<{ pages: PdfPageResult[]; isTextPdf: boolean }> {
   const pdfjsLib = await getPdfjsLib()
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer), ...PDF_DOC_OPTIONS }).promise
 
   const pages: PdfPageResult[] = []
   let totalTextItems = 0
@@ -151,7 +158,7 @@ export async function renderPdfPageToImage(
 ): Promise<string> {
   const pdfjsLib = await getPdfjsLib()
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer), ...PDF_DOC_OPTIONS }).promise
   const page = await pdf.getPage(pageNum)
   const viewport = page.getViewport({ scale })
 
@@ -168,6 +175,6 @@ export async function renderPdfPageToImage(
 export async function getPdfPageCount(file: File): Promise<number> {
   const pdfjsLib = await getPdfjsLib()
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer), ...PDF_DOC_OPTIONS }).promise
   return pdf.numPages
 }
