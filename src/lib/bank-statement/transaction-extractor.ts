@@ -761,53 +761,72 @@ function extractTransactions(
         : txTypeText || baseDesc
 
     let balance: number | null = null
-    if (hasBalanceCol) {
-      const balanceText = getCellByColumn(row, mapping.balanceColumn)
-      balance = parseAmount(balanceText)
-      if (balance === null) continue // 残高列があるのに空の行はスキップ
-    }
-
     let deposit: number | null = null
     let withdrawal: number | null = null
 
-    // 受払区分 + 金額1列モード: 受入/払出で方向を判定
-    if (typeof mapping.directionColumn === 'number' && mapping.directionColumn >= 0 &&
-        typeof mapping.signedAmountColumn === 'number' && mapping.signedAmountColumn >= 0) {
-      const dirText = getCellByColumn(row, mapping.directionColumn).trim()
-      const amtText = getCellByColumn(row, mapping.signedAmountColumn)
-      const amt = parseAmount(amtText)
-      if (amt != null && amt > 0) {
-        // 受入/入金/受 → 入金、それ以外（払出/出金/払）→ 出金
-        const isDeposit = /受入|受$|入金|収入/.test(dirText)
-        if (isDeposit) deposit = amt
-        else withdrawal = amt
+    // PDF テキスト抽出（cellPositions あり）: 右から数値スキャンで残高→金額を確定
+    if (headerXPos && row.cellPositions && row.cellPositions.length > 0) {
+      const withdrawX = headerXPos[mapping.withdrawalColumn] ?? 0
+      const depositX = headerXPos[mapping.depositColumn] ?? 0
+      const midX = (withdrawX + depositX) / 2
+      for (let i = row.cells.length - 1; i >= 0; i--) {
+        const val = parseAmount(row.cells[i])
+        if (val === null) continue
+        if (balance === null) {
+          balance = val
+        } else {
+          const x = row.cellPositions[i] ?? 0
+          if (x < midX) withdrawal = val
+          else deposit = val
+          break
+        }
       }
-    }
-    // 符号付き1列モード: 正=入金, 負=出金
-    else if (typeof mapping.signedAmountColumn === 'number' && mapping.signedAmountColumn >= 0) {
-      const signedText = getCellByColumn(row, mapping.signedAmountColumn)
-      const signed = parseSignedAmount(signedText)
-      if (signed != null) {
-        if (signed > 0) deposit = signed
-        else if (signed < 0) withdrawal = Math.abs(signed)
-      }
+      if (balance === null) continue
     } else {
-      const depositText = getCellByColumn(row, mapping.depositColumn)
-      const withdrawalText =
-        mapping.withdrawalColumn !== mapping.depositColumn
-          ? getCellByColumn(row, mapping.withdrawalColumn)
-          : ''
-      deposit = parseAmount(depositText)
-      withdrawal =
-        mapping.withdrawalColumn !== mapping.depositColumn
-          ? parseAmount(withdrawalText)
-          : null
-    }
+      // Excel/CSV: 従来のインデックスベース抽出
+      if (hasBalanceCol) {
+        const balanceText = getCellByColumn(row, mapping.balanceColumn)
+        balance = parseAmount(balanceText)
+        if (balance === null) continue
+      }
 
-    // 残高列が無い場合は running で集計（開始残高0）
-    if (!hasBalanceCol) {
-      runningBalance += (deposit ?? 0) - (withdrawal ?? 0)
-      balance = runningBalance
+      // 受払区分 + 金額1列モード
+      if (typeof mapping.directionColumn === 'number' && mapping.directionColumn >= 0 &&
+          typeof mapping.signedAmountColumn === 'number' && mapping.signedAmountColumn >= 0) {
+        const dirText = getCellByColumn(row, mapping.directionColumn).trim()
+        const amtText = getCellByColumn(row, mapping.signedAmountColumn)
+        const amt = parseAmount(amtText)
+        if (amt != null && amt > 0) {
+          const isDeposit = /受入|受$|入金|収入/.test(dirText)
+          if (isDeposit) deposit = amt
+          else withdrawal = amt
+        }
+      }
+      // 符号付き1列モード
+      else if (typeof mapping.signedAmountColumn === 'number' && mapping.signedAmountColumn >= 0) {
+        const signedText = getCellByColumn(row, mapping.signedAmountColumn)
+        const signed = parseSignedAmount(signedText)
+        if (signed != null) {
+          if (signed > 0) deposit = signed
+          else if (signed < 0) withdrawal = Math.abs(signed)
+        }
+      } else {
+        const depositText = getCellByColumn(row, mapping.depositColumn)
+        const withdrawalText =
+          mapping.withdrawalColumn !== mapping.depositColumn
+            ? getCellByColumn(row, mapping.withdrawalColumn)
+            : ''
+        deposit = parseAmount(depositText)
+        withdrawal =
+          mapping.withdrawalColumn !== mapping.depositColumn
+            ? parseAmount(withdrawalText)
+            : null
+      }
+
+      if (!hasBalanceCol) {
+        runningBalance += (deposit ?? 0) - (withdrawal ?? 0)
+        balance = runningBalance
+      }
     }
 
     // 追加列（複合仕訳用の内訳列）
