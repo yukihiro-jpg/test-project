@@ -189,7 +189,6 @@ function detectColumnsByKeywordPositions(rows: RawTableRow[]): ColumnMapping | n
   cols.sort((a, b) => a.x - b.x)
 
   const xPositions = cols.map((c) => c.x)
-  console.log(`[detectByKeywordPos] ${cols.map((c) => `${c.type}@${Math.round(c.x)}`).join(', ')}`)
 
   return {
     dateColumn: cols.findIndex((c) => c.type === 'date'),
@@ -244,8 +243,6 @@ function realignPdfRowsToColumns(allPages: RawTableRow[][]): void {
   const columnPositions = clusters.map((c) => c.sum / c.count)
   if (columnPositions.length < 3) return
 
-  console.log(`[realignPdfRows] ヘッダキーワード行から${headerPositions.length}座標 → ${columnPositions.length}列:`,
-    columnPositions.map((x) => Math.round(x)).join(', '))
 
   const numCols = columnPositions.length
   for (const page of allPages) {
@@ -587,9 +584,7 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
       else if (withdrawCol2 < 0 && HEADER_WITHDRAW.some((k) => mc.includes(k))) withdrawCol2 = ci
       else if (balanceCol2 < 0 && HEADER_BALANCE.some((k) => mc.includes(k))) balanceCol2 = ci
     }
-    console.log(`[HeaderMerge] ri=${ri} mergedCells:`, mergedCells.slice(0, 12))
     if (dateCol2 >= 0 && balanceCol2 >= 0 && (depositCol2 >= 0 || withdrawCol2 >= 0)) {
-      console.log('[HeaderMerge] 複数行ヘッダを検出:', { dateCol2, descCol2, depositCol2, withdrawCol2, balanceCol2 })
       return {
         dateColumn: dateCol2,
         descriptionColumn: descCol2,
@@ -973,9 +968,7 @@ function parseCsvText(text: string): string[][] {
 
 async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResult> {
   const t0 = Date.now()
-  // まずテキスト抽出を試みる
   const { pages: rawPages, isTextPdf } = await parsePdfText(file)
-  console.log(`[timing] parsePdfText: ${((Date.now() - t0) / 1000).toFixed(1)}秒`)
 
   if (!isTextPdf) {
     // スキャンPDF: まず PDF を直接 Gemini に並列送信（チャンク分割）
@@ -1148,27 +1141,16 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
   }
 
   // テキストPDF
-  const t1 = Date.now()
   const allRawPages = rawPages.map((p) => p.rows)
-  // まずヘッダキーワードのX座標から直接列検出（範囲ベース、realign不要）
   let mapping = detectColumnsByKeywordPositions(allRawPages.flat())
   if (!mapping) {
-    // フォールバック: realign + 従来の列検出
     realignPdfRowsToColumns(allRawPages)
     mapping = detectColumnMappingFromAllPages(allRawPages)
   }
-  const t3 = Date.now()
-  console.log(`[timing] テキストPDF: detect=${t3 - t1}ms, total=${((t3 - t0) / 1000).toFixed(1)}秒`)
-  console.log(`[parsePdfFile] ${allRawPages.length}ページ, ${allRawPages.reduce((s, p) => s + p.length, 0)}行, 列検出:`, mapping)
 
   if (!mapping) {
     // テキスト抽出はできたが列検出に失敗 → Gemini OCRにフォールバック
-    console.log('Text PDF column detection failed, trying PDF-direct Gemini (parallel)')
-    // 失敗時、最初のページの先頭10行を出力してヘッダ構造を確認
-    if (allRawPages[0]) {
-      console.log('[parsePdfFile] 列検出失敗時のページ1先頭10行:',
-        allRawPages[0].slice(0, 10).map((r) => r.cells))
-    }
+    console.log('Text PDF column detection failed, trying PDF-direct Gemini')
 
     // 1段目: PDF を直接 Gemini に並列送信（チャンク分割）
     try {
@@ -1272,27 +1254,8 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
     })
   }
   // 最初のページの画像だけ先に生成
-  const t4 = Date.now()
   if (statementPages.length > 0) {
     statementPages[0].imageDataUrl = await renderPdfPageToImage(file, 1, 2)
-  }
-  console.log(`[timing] page1 image render: ${((Date.now() - t4) / 1000).toFixed(1)}秒, 全体: ${((Date.now() - t0) / 1000).toFixed(1)}秒`)
-
-  // 解析結果のデバッグ出力（ページ1の全取引 + realign後のページ1の生行データ）
-  if (statementPages[0]?.transactions.length > 0) {
-    console.log('[解析結果] ページ1の取引データ:')
-    console.table(statementPages[0].transactions.map((tx) => ({
-      日付: tx.date, 摘要: tx.description,
-      出金: tx.withdrawal, 入金: tx.deposit, 残高: tx.balance,
-    })))
-  }
-  if (allRawPages[0]) {
-    console.log('[解析結果] realign後のページ1の生セル(先頭20行):')
-    console.table(allRawPages[0].slice(0, 20).map((r) => {
-      const obj: Record<string, string> = {}
-      r.cells.forEach((c, i) => { obj[`col${i}`] = c || '' })
-      return obj
-    }))
   }
 
   return {

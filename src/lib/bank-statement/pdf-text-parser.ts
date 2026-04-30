@@ -35,13 +35,10 @@ export async function parsePdfText(
 ): Promise<{ pages: PdfPageResult[]; isTextPdf: boolean }> {
   const pdfjsLib = await getPdfjsLib()
   const arrayBuffer = await file.arrayBuffer()
-  const loadStart = Date.now()
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer), ...PDF_DOC_OPTIONS }).promise
-  console.log(`[parsePdfText] PDF読込: ${Date.now() - loadStart}ms (${pdf.numPages}ページ)`)
 
   const pages: PdfPageResult[] = []
   let totalTextItems = 0
-  const extractStart = Date.now()
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum)
@@ -65,12 +62,6 @@ export async function parsePdfText(
   }
 
   const isTextPdf = totalTextItems > 5
-  console.log(`[parsePdfText] pages=${pages.length}, totalTextItems=${totalTextItems}, isTextPdf=${isTextPdf}, テキスト抽出: ${((Date.now() - extractStart) / 1000).toFixed(1)}秒`)
-  if (isTextPdf && pages.length > 0) {
-    const firstPageRows = pages[0].rows
-    console.log(`[parsePdfText] page1: ${firstPageRows.length}行抽出. 先頭5行のセル:`,
-      firstPageRows.slice(0, 5).map((r) => r.cells))
-  }
   return {
     pages,
     isTextPdf, // テキストがほとんどない場合はスキャンPDF
