@@ -749,10 +749,12 @@ function extractTransactions(
     if (!date) continue // 日付もデータもない行はスキップ（ヘッダー等）
     lastDate = date
 
-    const baseDesc =
+    let baseDesc =
       mapping.descriptionColumn >= 0
         ? getCellByColumn(row, mapping.descriptionColumn)
         : ''
+    // 勘定日が摘要に結合されている場合、先頭の d.d.d を除去
+    baseDesc = baseDesc.replace(/^\d{1,2}\.\s?\d{1,2}\.\s?\d{1,2}/, '').trim()
     const txTypeText = hasTxType ? getCellByColumn(row, txTypeCol!).trim() : ''
     // 取引区分がある場合は「取引区分 摘要」として結合
     const description =
@@ -766,9 +768,7 @@ function extractTransactions(
 
     // PDF テキスト抽出（cellPositions あり）: 右から数値スキャンで残高→金額を確定
     if (headerXPos && row.cellPositions && row.cellPositions.length > 0) {
-      const withdrawX = headerXPos[mapping.withdrawalColumn] ?? 0
       const depositX = headerXPos[mapping.depositColumn] ?? 0
-      const midX = (withdrawX + depositX) / 2
       for (let i = row.cells.length - 1; i >= 0; i--) {
         const val = parseAmount(row.cells[i])
         if (val === null) continue
@@ -776,7 +776,7 @@ function extractTransactions(
           balance = val
         } else {
           const x = row.cellPositions[i] ?? 0
-          if (x < midX) withdrawal = val
+          if (x < depositX) withdrawal = val
           else deposit = val
           break
         }
