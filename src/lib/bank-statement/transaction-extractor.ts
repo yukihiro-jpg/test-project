@@ -758,7 +758,7 @@ function extractTransactions(
     baseDesc = baseDesc.replace(/^\d{1,2}\.\s?\d{1,2}\.\s?\d{1,2}/, '').trim()
     const txTypeText = hasTxType ? getCellByColumn(row, txTypeCol!).trim() : ''
     // 取引区分がある場合は「取引区分 摘要」として結合
-    const description =
+    let description =
       txTypeText && baseDesc.trim()
         ? `${txTypeText} ${baseDesc.trim()}`
         : txTypeText || baseDesc
