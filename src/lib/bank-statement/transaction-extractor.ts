@@ -358,6 +358,45 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
       return mapping
     }
   }
+
+  // フォールバック: 複数行にまたがるヘッダの検出
+  // お取引照合表等で「取引日」と「お支払金額」が別行に分かれている場合
+  for (let ri = 0; ri < Math.min(rows.length, 8); ri++) {
+    const row = rows[ri]
+    if (row.cells.some((c) => isDateCell(c))) continue
+    // この行と前後2行のセルを全て結合して検索
+    const mergedCells: string[] = []
+    for (let ci = 0; ci < Math.max(row.cells.length, 20); ci++) {
+      const parts: string[] = []
+      for (let rj = Math.max(0, ri - 2); rj <= Math.min(rows.length - 1, ri + 2); rj++) {
+        const cell = (rows[rj]?.cells[ci] || '').replace(/[\s　]/g, '')
+        if (cell) parts.push(cell)
+      }
+      mergedCells[ci] = parts.join('')
+    }
+    // マージしたセルでヘッダ検出を試行
+    let dateCol2 = -1, descCol2 = -1, depositCol2 = -1, withdrawCol2 = -1, balanceCol2 = -1
+    for (let ci = 0; ci < mergedCells.length; ci++) {
+      const mc = mergedCells[ci]
+      if (!mc) continue
+      if (dateCol2 < 0 && HEADER_DATE.some((k) => mc.includes(k))) dateCol2 = ci
+      else if (descCol2 < 0 && HEADER_DESC.some((k) => mc.includes(k))) descCol2 = ci
+      else if (depositCol2 < 0 && HEADER_DEPOSIT.some((k) => mc.includes(k))) depositCol2 = ci
+      else if (withdrawCol2 < 0 && HEADER_WITHDRAW.some((k) => mc.includes(k))) withdrawCol2 = ci
+      else if (balanceCol2 < 0 && HEADER_BALANCE.some((k) => mc.includes(k))) balanceCol2 = ci
+    }
+    if (dateCol2 >= 0 && balanceCol2 >= 0 && (depositCol2 >= 0 || withdrawCol2 >= 0)) {
+      console.log('[HeaderMerge] 複数行ヘッダを検出:', { dateCol2, descCol2, depositCol2, withdrawCol2, balanceCol2 })
+      return {
+        dateColumn: dateCol2,
+        descriptionColumn: descCol2,
+        depositColumn: depositCol2 >= 0 ? depositCol2 : withdrawCol2,
+        withdrawalColumn: withdrawCol2 >= 0 ? withdrawCol2 : depositCol2,
+        balanceColumn: balanceCol2,
+      }
+    }
+  }
+
   return null
 }
 
