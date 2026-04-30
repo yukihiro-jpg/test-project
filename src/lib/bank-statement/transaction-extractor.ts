@@ -770,11 +770,12 @@ function extractTransactions(
     // PDF テキスト抽出（cellPositions あり）: 右から数値スキャンで残高→金額を確定
     if (headerXPos && row.cellPositions && row.cellPositions.length > 0) {
       const depositX = headerXPos[mapping.depositColumn] ?? 0
+      const descX = headerXPos[mapping.descriptionColumn] ?? 0
+      const balanceX = headerXPos[mapping.balanceColumn] ?? 9999
       for (let i = row.cells.length - 1; i >= 0; i--) {
         const val = parseAmount(row.cells[i])
         if (val === null) continue
         if (balance === null) {
-          // 残高は符号を保持（当座預金のマイナス残高対応）
           const balCleaned = row.cells[i].replace(/[¥￥,、\s　]/g, '').replace(/[▲△]/g, '-')
           const balNum = parseInt(balCleaned, 10)
           if (isNaN(balNum)) continue
@@ -787,6 +788,22 @@ function extractTransactions(
         }
       }
       if (balance === null) continue
+
+      // 出金/入金列の非数値テキストを摘要に追加（振込先カタカナ等）
+      let extraDesc = ''
+      for (let j = 0; j < row.cells.length; j++) {
+        const cx = row.cellPositions[j] ?? 0
+        if (cx <= descX || cx >= balanceX) continue
+        const cell = (row.cells[j] || '').trim()
+        if (!cell) continue
+        const textPart = cell.replace(/^[\d,.\s]+/, '').trim()
+        if (textPart && !/^\d+$/.test(textPart)) {
+          extraDesc = textPart
+        }
+      }
+      if (extraDesc) {
+        description = description ? `${description} ${extraDesc}` : extraDesc
+      }
     } else {
       // Excel/CSV: 従来のインデックスベース抽出
       if (hasBalanceCol) {
