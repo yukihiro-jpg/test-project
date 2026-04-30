@@ -154,7 +154,7 @@ function realignPdfRowsToColumns(allPages: RawTableRow[][]): void {
 
   // クラスタリング（近い座標を同一列にまとめる）
   headerPositions.sort((a, b) => a - b)
-  const THRESHOLD = 20
+  const THRESHOLD = 55
   const clusters: { sum: number; count: number }[] = [{ sum: headerPositions[0], count: 1 }]
   for (let i = 1; i < headerPositions.length; i++) {
     const last = clusters[clusters.length - 1]
@@ -192,6 +192,7 @@ function realignPdfRowsToColumns(allPages: RawTableRow[][]): void {
         }
       }
       row.cells = newCells
+      row.cellPositions = undefined
     }
   }
 }
