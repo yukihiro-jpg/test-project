@@ -847,8 +847,10 @@ function parseCsvText(text: string): string[][] {
 }
 
 async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResult> {
+  const t0 = Date.now()
   // まずテキスト抽出を試みる
   const { pages: rawPages, isTextPdf } = await parsePdfText(file)
+  console.log(`[timing] parsePdfText: ${((Date.now() - t0) / 1000).toFixed(1)}秒`)
 
   if (!isTextPdf) {
     // スキャンPDF: まず PDF を直接 Gemini に並列送信（チャンク分割）
@@ -1021,12 +1023,14 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
   }
 
   // テキストPDF
+  const t1 = Date.now()
   const allRawPages = rawPages.map((p) => p.rows)
-  // PDF空セル対策: X座標から列境界を検出し、Excel風の固定幅配列に再構築
   realignPdfRowsToColumns(allRawPages)
-  console.log(`[parsePdfFile] テキストPDF経路に入りました: ${allRawPages.length}ページ, 全${allRawPages.reduce((s, p) => s + p.length, 0)}行`)
+  const t2 = Date.now()
   const mapping = detectColumnMappingFromAllPages(allRawPages)
-  console.log(`[parsePdfFile] 列検出結果:`, mapping)
+  const t3 = Date.now()
+  console.log(`[timing] テキストPDF: realign=${t2 - t1}ms, detectMapping=${t3 - t2}ms, total=${((t3 - t0) / 1000).toFixed(1)}秒`)
+  console.log(`[parsePdfFile] ${allRawPages.length}ページ, ${allRawPages.reduce((s, p) => s + p.length, 0)}行, 列検出:`, mapping)
 
   if (!mapping) {
     // テキスト抽出はできたが列検出に失敗 → Gemini OCRにフォールバック
@@ -1139,9 +1143,11 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
     })
   }
   // 最初のページの画像だけ先に生成
+  const t4 = Date.now()
   if (statementPages.length > 0) {
     statementPages[0].imageDataUrl = await renderPdfPageToImage(file, 1, 2)
   }
+  console.log(`[timing] page1 image render: ${((Date.now() - t4) / 1000).toFixed(1)}秒, 全体: ${((Date.now() - t0) / 1000).toFixed(1)}秒`)
 
   return {
     pages: updatePageBalances(statementPages),

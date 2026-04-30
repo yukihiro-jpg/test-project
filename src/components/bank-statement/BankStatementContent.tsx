@@ -238,12 +238,14 @@ export default function BankStatementContent() {
 
       try {
         setLoadingProgress(15)
+        setParseElapsed(null)
         const startTime = Date.now()
         const progressTimer = setInterval(() => {
           const elapsed = (Date.now() - startTime) / 1000
           const progress = Math.min(15 + 80 * (1 - Math.exp(-elapsed / 8)), 95)
           setLoadingProgress(Math.round(progress))
-        }, 200)
+          setParseElapsed(`${elapsed.toFixed(0)}秒`)
+        }, 500)
 
         if (config.documentType === 'credit-card') {
           const fName = config.file.name.toLowerCase()
@@ -828,7 +830,7 @@ export default function BankStatementContent() {
                 style={{ width: `${loadingProgress}%` }}
               />
             </div>
-            <span className="text-xs text-blue-500 w-8 text-right">{loadingProgress}%</span>
+            <span className="text-xs text-blue-500 w-16 text-right">{loadingProgress}% {parseElapsed || ''}</span>
           </div>
         </div>
       )}
