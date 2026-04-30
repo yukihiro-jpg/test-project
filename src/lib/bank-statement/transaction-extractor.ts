@@ -31,9 +31,34 @@ async function processPdfInParallel(
   chunkSize: number = 5,
   concurrency: number = 4,
 ): Promise<{ totalCount: number; pages: OcrPdfPage[] }> {
+  console.log(`[processPdfInParallel] 開始: file=${file.name}, size=${file.size}, chunkSize=${chunkSize}, concurrency=${concurrency}`)
   const pdfBuffer = await file.arrayBuffer()
-  const sourcePdf = await PDFDocument.load(pdfBuffer)
+  let sourcePdf
+  try {
+    sourcePdf = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true })
+  } catch (e) {
+    console.warn('[processPdfInParallel] pdf-lib読込失敗、PDFをそのまま1リクエストで送信:', e)
+    // pdf-libで開けない場合、PDFをまるごと1リクエストで送信
+    const bytes = new Uint8Array(pdfBuffer)
+    let binary = ''
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+    const base64 = btoa(binary)
+    try {
+      const r = await fetch('/api/bank-statement/ocr-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdfData: base64 }),
+      })
+      if (!r.ok) return { totalCount: 0, pages: [] }
+      const data = await r.json()
+      return { totalCount: data.totalCount || 0, pages: data.pages || [] }
+    } catch (err) {
+      console.error('[processPdfInParallel] フォールバック送信も失敗:', err)
+      return { totalCount: 0, pages: [] }
+    }
+  }
   const totalPages = sourcePdf.getPageCount()
+  console.log(`[processPdfInParallel] PDF読込成功: ${totalPages}ページ`)
 
   const chunks: { startPage: number; pdfBase64: string }[] = []
   for (let start = 0; start < totalPages; start += chunkSize) {

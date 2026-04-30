@@ -85,8 +85,16 @@ export async function POST(request: NextRequest) {
     const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 
     // ページ数を確認してチャンク分割するか判定
-    const sourcePdf = await PDFDocument.load(pdfBytes)
-    const totalPages = sourcePdf.getPageCount()
+    let sourcePdf
+    let totalPages
+    try {
+      sourcePdf = await PDFDocument.load(pdfBytes, { ignoreEncryption: true })
+      totalPages = sourcePdf.getPageCount()
+    } catch (loadErr) {
+      // pdf-libで開けない → 分割不可なのでそのまま1リクエストでGeminiへ
+      console.warn('OCR-PDF: pdf-lib load failed, sending whole PDF to Gemini:', loadErr)
+      return await processSinglePdf(genAI, modelName, base64, 0)
+    }
     const CHUNK_SIZE = 5 // 5ページずつ
 
     if (totalPages <= CHUNK_SIZE) {
@@ -109,9 +117,17 @@ export async function POST(request: NextRequest) {
       chunks.push({ startPage: start, base64: Buffer.from(chunkBytes).toString('base64') })
     }
 
-    // 並列リクエスト
-    const promises = chunks.map((chunk) => processChunk(genAI, modelName, chunk.base64, chunk.startPage))
-    const results = await Promise.all(promises)
+    // 並列リクエスト（同時実行数を制限してレート制限を回避）
+    const SERVER_CONCURRENCY = 4
+    const results: Transaction[][] = []
+    for (let i = 0; i < chunks.length; i += SERVER_CONCURRENCY) {
+      const batch = chunks.slice(i, i + SERVER_CONCURRENCY)
+      const batchResults = await Promise.all(
+        batch.map((chunk) => processChunk(genAI, modelName, chunk.base64, chunk.startPage)),
+      )
+      results.push(...batchResults)
+      console.log(`OCR-PDF: バッチ ${Math.floor(i / SERVER_CONCURRENCY) + 1}/${Math.ceil(chunks.length / SERVER_CONCURRENCY)} 完了 (${batch.length}チャンク)`)
+    }
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
     console.log(`OCR-PDF: 全${chunks.length}チャンク完了 ${elapsed}秒`)
 
