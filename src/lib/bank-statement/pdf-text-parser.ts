@@ -54,9 +54,16 @@ export async function parsePdfText(
     })
   }
 
+  const isTextPdf = totalTextItems > 5
+  console.log(`[parsePdfText] pages=${pages.length}, totalTextItems=${totalTextItems}, isTextPdf=${isTextPdf}`)
+  if (isTextPdf && pages.length > 0) {
+    const firstPageRows = pages[0].rows
+    console.log(`[parsePdfText] page1: ${firstPageRows.length}行抽出. 先頭5行のセル:`,
+      firstPageRows.slice(0, 5).map((r) => r.cells))
+  }
   return {
     pages,
-    isTextPdf: totalTextItems > 5, // テキストがほとんどない場合はスキャンPDF
+    isTextPdf, // テキストがほとんどない場合はスキャンPDF
   }
 }
 

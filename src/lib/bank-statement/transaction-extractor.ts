@@ -385,6 +385,7 @@ function detectMappingFromHeaderRow(rows: RawTableRow[]): ColumnMapping | null {
       else if (withdrawCol2 < 0 && HEADER_WITHDRAW.some((k) => mc.includes(k))) withdrawCol2 = ci
       else if (balanceCol2 < 0 && HEADER_BALANCE.some((k) => mc.includes(k))) balanceCol2 = ci
     }
+    console.log(`[HeaderMerge] ri=${ri} mergedCells:`, mergedCells.slice(0, 12))
     if (dateCol2 >= 0 && balanceCol2 >= 0 && (depositCol2 >= 0 || withdrawCol2 >= 0)) {
       console.log('[HeaderMerge] 複数行ヘッダを検出:', { dateCol2, descCol2, depositCol2, withdrawCol2, balanceCol2 })
       return {
@@ -893,11 +894,18 @@ async function parsePdfFile(file: File, accountCode?: string): Promise<ParseResu
 
   // テキストPDF
   const allRawPages = rawPages.map((p) => p.rows)
+  console.log(`[parsePdfFile] テキストPDF経路に入りました: ${allRawPages.length}ページ, 全${allRawPages.reduce((s, p) => s + p.length, 0)}行`)
   const mapping = detectColumnMappingFromAllPages(allRawPages)
+  console.log(`[parsePdfFile] 列検出結果:`, mapping)
 
   if (!mapping) {
     // テキスト抽出はできたが列検出に失敗 → Gemini OCRにフォールバック
     console.log('Text PDF column detection failed, trying PDF-direct Gemini (parallel)')
+    // 失敗時、最初のページの先頭10行を出力してヘッダ構造を確認
+    if (allRawPages[0]) {
+      console.log('[parsePdfFile] 列検出失敗時のページ1先頭10行:',
+        allRawPages[0].slice(0, 10).map((r) => r.cells))
+    }
 
     // 1段目: PDF を直接 Gemini に並列送信（チャンク分割）
     try {
