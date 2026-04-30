@@ -874,6 +874,7 @@ export default function BankStatementContent() {
               clientTaxType={selectedClient?.taxType || 'standard'}
               hideBalance={uploadConfig?.documentType === 'credit-card'}
               onSelectionChange={setSelectedEntryIds}
+              onPageChange={setCurrentPageIndex}
             />
           }
         />

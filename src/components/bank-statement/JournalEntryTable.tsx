@@ -33,12 +33,13 @@ interface Props {
   clientTaxType?: string
   hideBalance?: boolean
   onSelectionChange?: (ids: Set<string>) => void
+  onPageChange?: (pageIndex: number) => void
 }
 
 export default function JournalEntryTable({
   entries, accountMaster, subAccountMaster, selectedEntryId,
   onSelect, onEntriesChange, onSubAccountUpdate, pages, bankAccountCode, clientTaxType,
-  hideBalance, onSelectionChange,
+  hideBalance, onSelectionChange, onPageChange,
 }: Props) {
   const [selectedRange, setSelectedRange] = useState<Set<string>>(new Set())
   const [lastClickedId, setLastClickedId] = useState<string | null>(null)
@@ -763,7 +764,9 @@ export default function JournalEntryTable({
         <div className="px-4 py-2 bg-red-50 border-b border-red-200 shrink-0">
           <div className="text-xs font-bold text-red-700 mb-1">残高不一致の詳細</div>
           {balanceMismatch.map((m) => (
-            <div key={m.pageIndex} className="text-xs text-red-600">
+            <div key={m.pageIndex}
+              className="text-xs text-red-600 cursor-pointer hover:text-red-800 hover:underline"
+              onClick={() => onPageChange?.(m.pageIndex)}>
               P{m.pageIndex + 1}: 計算残高 &yen;{m.calculated.toLocaleString()} / 通帳残高 &yen;{m.expected.toLocaleString()}（差額 &yen;{Math.abs(m.diff).toLocaleString()}）
             </div>
           ))}

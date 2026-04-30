@@ -773,7 +773,11 @@ function extractTransactions(
         const val = parseAmount(row.cells[i])
         if (val === null) continue
         if (balance === null) {
-          balance = val
+          // 残高は符号を保持（当座預金のマイナス残高対応）
+          const balCleaned = row.cells[i].replace(/[¥￥,、\s　]/g, '').replace(/[▲△]/g, '-')
+          const balNum = parseInt(balCleaned, 10)
+          if (isNaN(balNum)) continue
+          balance = balNum
         } else {
           const x = row.cellPositions[i] ?? 0
           if (x < depositX) withdrawal = val
