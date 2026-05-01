@@ -53,6 +53,9 @@ export default function JournalEntryTable({
   const [filterEmptyCredit, setFilterEmptyCredit] = useState(false)
   const [filteredDebitIds, setFilteredDebitIds] = useState<Set<string> | null>(null)
   const [filteredCreditIds, setFilteredCreditIds] = useState<Set<string> | null>(null)
+  // 摘要検索フィルタ（スナップショット方式）
+  const [descSearchText, setDescSearchText] = useState('')
+  const [descFilterIds, setDescFilterIds] = useState<Set<string> | null>(null)
 
   // 未処理トグル: クリック時点の空欄行IDを記録、再クリックで解除
   const toggleFilterEmptyDebit = useCallback(() => {
@@ -323,6 +326,8 @@ export default function JournalEntryTable({
       if (filterEmptyDebit && filteredDebitIds && !filteredDebitIds.has(entry.id)) continue
       // 貸方未処理フィルタ
       if (filterEmptyCredit && filteredCreditIds && !filteredCreditIds.has(entry.id)) continue
+      // 摘要検索フィルタ（スナップショット）
+      if (descFilterIds && !descFilterIds.has(entry.id)) continue
       // 未入力のみ表示フィルタ
       if (showOnlyIncomplete) {
         const debitAcc = accountMasterRef.current.find((a) => a.code === entry.debitCode)
@@ -759,6 +764,42 @@ export default function JournalEntryTable({
         </div>
       </div>
 
+      {/* 摘要検索フィルタ */}
+      <div className="px-4 py-1.5 bg-gray-100 border-b border-gray-300 flex items-center gap-2 shrink-0">
+        <span className="text-xs text-gray-600 shrink-0">摘要検索:</span>
+        <input
+          type="text"
+          value={descSearchText}
+          onChange={(e) => setDescSearchText(e.target.value)}
+          placeholder="キーワードで絞り込み"
+          className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded bg-white max-w-[200px]"
+        />
+        {descSearchText && (
+          <>
+            <button
+              onClick={() => {
+                const keyword = descSearchText.trim()
+                if (!keyword) return
+                const ids = new Set(entries.filter((e) =>
+                  e.description.includes(keyword) || e.originalDescription?.includes(keyword)
+                ).map((e) => e.id))
+                setDescFilterIds(ids)
+              }}
+              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">
+              絞込 ({entries.filter((e) => e.description.includes(descSearchText.trim()) || e.originalDescription?.includes(descSearchText.trim())).length}件)
+            </button>
+            <button
+              onClick={() => { setDescSearchText(''); setDescFilterIds(null) }}
+              className="px-2 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600">
+              解除
+            </button>
+          </>
+        )}
+        {descFilterIds && (
+          <span className="text-xs text-blue-600 font-bold">{descFilterIds.size}件表示中</span>
+        )}
+      </div>
+
       {/* 残高不一致の詳細 */}
       {!hideBalance && balanceMismatch.length > 0 && (
         <div className="px-4 py-2 bg-red-50 border-b border-red-200 shrink-0">
@@ -867,6 +908,8 @@ export default function JournalEntryTable({
               if (filterEmptyDebit && filteredDebitIds && !filteredDebitIds.has(entry.id)) return null
               // 貸方科目の未処理フィルタ: 同上
               if (filterEmptyCredit && filteredCreditIds && !filteredCreditIds.has(entry.id)) return null
+              // 摘要検索フィルタ（スナップショット: 摘要変更後も消えない）
+              if (descFilterIds && !descFilterIds.has(entry.id)) return null
               // 未入力のみ表示フィルタ:
               // 借方CD空 or 貸方CD空 or 消費税CD空(ただしBS同士で—表示の場合は未入力扱いしない)
               if (showOnlyIncomplete) {
