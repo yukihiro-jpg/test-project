@@ -722,6 +722,192 @@ function sendDailySummaryEmail() {
 }
 
 // ============================================================
+// メール添付ファイル自動保存
+// 「メールアドレス対応表」に登録されたアドレスからの添付付きメールを
+// 該当顧問先の「税理士→○○（社長用 or スタッフ用）」フォルダに保存
+// ============================================================
+
+const EMAIL_INTAKE_CONFIG = {
+  PROCESSED_LABEL: '処理済み_顧問先添付',
+  ERROR_LABEL: 'エラー_顧問先添付',
+  PARENT_FOLDER_NAME: '02_顧問先共有フォルダ',
+  SPREADSHEET_NAME: '_書類スキャン管理',
+  EMAIL_SHEET_NAME: 'メールアドレス対応表',
+  SEARCH_DAYS: 7,
+  MAX_THREADS_PER_RUN: 50,
+};
+
+function processClientEmailAttachments() {
+  const mappings = loadEmailMappings_();
+  if (Object.keys(mappings).length === 0) {
+    console.log('メールアドレス対応表が空です。処理を終了します。');
+    return;
+  }
+
+  const parentFolder = findFolderByName_(EMAIL_INTAKE_CONFIG.PARENT_FOLDER_NAME);
+  if (!parentFolder) {
+    throw new Error(`親フォルダが見つかりません: ${EMAIL_INTAKE_CONFIG.PARENT_FOLDER_NAME}`);
+  }
+
+  const processedLabel = getOrCreateLabel_(EMAIL_INTAKE_CONFIG.PROCESSED_LABEL);
+  const errorLabel = getOrCreateLabel_(EMAIL_INTAKE_CONFIG.ERROR_LABEL);
+  const processedName = processedLabel.getName();
+  const errorName = errorLabel.getName();
+
+  const query = `has:attachment newer_than:${EMAIL_INTAKE_CONFIG.SEARCH_DAYS}d`;
+  const threads = GmailApp.search(query, 0, EMAIL_INTAKE_CONFIG.MAX_THREADS_PER_RUN);
+
+  let savedFiles = 0;
+  let processedThreads = 0;
+  let errorThreads = 0;
+
+  for (const thread of threads) {
+    const existingLabels = thread.getLabels().map(l => l.getName());
+    if (existingLabels.includes(processedName) || existingLabels.includes(errorName)) {
+      continue;
+    }
+
+    let threadMatched = false;
+    let threadError = false;
+
+    const messages = thread.getMessages();
+    for (const message of messages) {
+      const fromEmail = extractEmailAddress_(message.getFrom()).toLowerCase();
+      const mapping = mappings[fromEmail];
+      if (!mapping) continue;
+
+      threadMatched = true;
+
+      const attachments = message.getAttachments({
+        includeInlineImages: false,
+        includeAttachments: true,
+      });
+      const valid = attachments.filter(a => a.getSize() > 0 && a.getName());
+      if (valid.length === 0) continue;
+
+      const targetFolder = getTargetFolder_(parentFolder, mapping.clientName, mapping.kbn);
+      if (!targetFolder) {
+        console.warn(`保存先フォルダが見つかりません: ${mapping.clientName} (${mapping.kbn})`);
+        threadError = true;
+        continue;
+      }
+
+      for (const attachment of valid) {
+        const saveName = resolveAvailableFileName_(targetFolder, attachment.getName());
+        const blob = attachment.copyBlob().setName(saveName);
+        targetFolder.createFile(blob);
+        savedFiles++;
+        console.log(`保存: ${mapping.clientName} (${mapping.kbn}) ← ${saveName}`);
+      }
+    }
+
+    if (threadError) {
+      thread.addLabel(errorLabel);
+      errorThreads++;
+    } else if (threadMatched) {
+      thread.addLabel(processedLabel);
+      processedThreads++;
+    }
+  }
+
+  console.log(`処理完了: 処理済み ${processedThreads} スレッド / エラー ${errorThreads} スレッド / 保存 ${savedFiles} ファイル`);
+}
+
+function loadEmailMappings_() {
+  const ss = findSpreadsheetByName_(EMAIL_INTAKE_CONFIG.SPREADSHEET_NAME);
+  if (!ss) {
+    throw new Error(`スプレッドシートが見つかりません: ${EMAIL_INTAKE_CONFIG.SPREADSHEET_NAME}`);
+  }
+  const sheet = ss.getSheetByName(EMAIL_INTAKE_CONFIG.EMAIL_SHEET_NAME);
+  if (!sheet) {
+    throw new Error(`シートが見つかりません: ${EMAIL_INTAKE_CONFIG.EMAIL_SHEET_NAME}`);
+  }
+  const data = sheet.getDataRange().getValues();
+  const mappings = {};
+  for (let i = 1; i < data.length; i++) {
+    const [email, clientName, kbn] = data[i];
+    if (!email || !clientName) continue;
+    const key = String(email).trim().toLowerCase();
+    if (!key) continue;
+    mappings[key] = {
+      clientName: String(clientName).trim(),
+      kbn: kbn ? String(kbn).trim() : '社長',
+    };
+  }
+  return mappings;
+}
+
+function findSpreadsheetByName_(name) {
+  const escaped = name.replace(/'/g, "\\'");
+  const files = DriveApp.searchFiles(
+    `title = '${escaped}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`
+  );
+  if (files.hasNext()) {
+    return SpreadsheetApp.open(files.next());
+  }
+  return null;
+}
+
+function findFolderByName_(name) {
+  const escaped = name.replace(/'/g, "\\'");
+  const folders = DriveApp.searchFolders(`title = '${escaped}' and trashed = false`);
+  if (folders.hasNext()) {
+    return folders.next();
+  }
+  return null;
+}
+
+function getTargetFolder_(parentFolder, clientName, kbn) {
+  const displayName = clientName.replace(/^\d+_/, '');
+  const subfolders = parentFolder.getFolders();
+  let clientFolder = null;
+  while (subfolders.hasNext()) {
+    const folder = subfolders.next();
+    const folderName = folder.getName();
+    if (folderName === clientName ||
+        folderName === displayName ||
+        folderName.replace(/^\d+_/, '') === displayName) {
+      clientFolder = folder;
+      break;
+    }
+  }
+  if (!clientFolder) return null;
+
+  const isStaff = String(kbn).indexOf('スタッフ') >= 0;
+  const suffix = isStaff ? '（スタッフ用）' : '（社長用）';
+  const targetName = `税理士→${displayName}${suffix}`;
+
+  const matches = clientFolder.getFoldersByName(targetName);
+  if (matches.hasNext()) {
+    return matches.next();
+  }
+  return null;
+}
+
+function extractEmailAddress_(fromString) {
+  const match = String(fromString).match(/<([^>]+)>/);
+  if (match) return match[1].trim();
+  return String(fromString).trim();
+}
+
+function resolveAvailableFileName_(folder, fileName) {
+  if (!folder.getFilesByName(fileName).hasNext()) return fileName;
+  const dotIdx = fileName.lastIndexOf('.');
+  const base = dotIdx >= 0 ? fileName.substring(0, dotIdx) : fileName;
+  const ext = dotIdx >= 0 ? fileName.substring(dotIdx) : '';
+  const ts = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMdd_HHmmss');
+  return `${base}_${ts}${ext}`;
+}
+
+function getOrCreateLabel_(labelName) {
+  let label = GmailApp.getUserLabelByName(labelName);
+  if (!label) {
+    label = GmailApp.createLabel(labelName);
+  }
+  return label;
+}
+
+// ============================================================
 // トリガー設定
 // ============================================================
 
@@ -745,9 +931,16 @@ function createTriggers() {
     .inTimezone('Asia/Tokyo')
     .create();
 
+  // 10分ごと - 顧問先メール添付の自動保存
+  ScriptApp.newTrigger('processClientEmailAttachments')
+    .timeBased()
+    .everyMinutes(10)
+    .create();
+
   console.log('トリガー設定完了:');
   console.log('  AM3:00 - Gemini API解析');
   console.log('  AM6:00 - メール通知');
+  console.log('  10分ごと - 顧問先メール添付の自動保存');
 }
 
 // ============================================================
@@ -756,4 +949,8 @@ function createTriggers() {
 
 function testSendEmail() {
   sendDailySummaryEmail();
+}
+
+function testProcessClientEmailAttachments() {
+  processClientEmailAttachments();
 }
