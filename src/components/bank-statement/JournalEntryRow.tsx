@@ -476,8 +476,18 @@ function AccountField({
   )
 }
 
-// 入力速度改善のため memo 化。entry や master の参照が変わらない行は再レンダしない
-const JournalEntryRow = memo(JournalEntryRowInner)
+// 入力速度改善のため memo 化。entry/選択状態のみを比較し、
+// runningBalance等の毎回変わる値は無視して不要な再描画を防ぐ
+const JournalEntryRow = memo(JournalEntryRowInner, (prev, next) => {
+  if (prev.entry !== next.entry) return false
+  if (prev.isSelected !== next.isSelected) return false
+  if (prev.isChecked !== next.isChecked) return false
+  if (prev.isPageBoundary !== next.isPageBoundary) return false
+  if (prev.compoundAutoAmount !== next.compoundAutoAmount) return false
+  // runningBalance, isBalanceMismatch は毎回変わるが表示のみなので
+  // entry自体が変わっていなければ再描画不要（値が古くてもすぐ次の更新で反映される）
+  return true
+})
 export default JournalEntryRow
 
 function RowMenu({ onLearn, onAddBlank, onDelete }: { onLearn: () => void; onAddBlank: () => void; onDelete: () => void }) {
