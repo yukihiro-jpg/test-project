@@ -5,6 +5,7 @@ import UploadDialog from '@/components/bank-statement/UploadDialog'
 import AccountMasterUploader from '@/components/bank-statement/AccountMasterUploader'
 import PatternListDialog from '@/components/bank-statement/PatternListDialog'
 import FixedJournalDialog from '@/components/bank-statement/FixedJournalDialog'
+import InvoiceRegistryDialog from '@/components/bank-statement/InvoiceRegistryDialog'
 import StatementViewer from '@/components/bank-statement/StatementViewer'
 import JournalEntryTable from '@/components/bank-statement/JournalEntryTable'
 import ColumnMappingDialog from '@/components/bank-statement/ColumnMappingDialog'
@@ -70,6 +71,7 @@ export default function BankStatementContent() {
   const [lastPeriodTo, setLastPeriodTo] = useState('')
   const [showPatternList, setShowPatternList] = useState(false)
   const [showFixedJournal, setShowFixedJournal] = useState(false)
+  const [showInvoiceRegistry, setShowInvoiceRegistry] = useState(false)
   const [showQuestionList, setShowQuestionList] = useState(false)
   const [showTempData, setShowTempData] = useState(false)
   const [tempCount, setTempCount] = useState(() => getTempEntryCount())
@@ -332,7 +334,38 @@ export default function BankStatementContent() {
         }
 
         if (config.documentType === 'receipt') {
-          // レシート・領収書処理
+          // レシート・領収書処理: まずテキストPDF解析を試行（無料・高速）
+          const { parseReceiptTextPdf } = await import('@/lib/bank-statement/receipt-parser')
+          const textResult = await parseReceiptTextPdf(config.file, (receipt, pageIdx, totalPages) => {
+            setLoadingProgress(Math.round(15 + 80 * (pageIdx + 1) / totalPages))
+          })
+
+          if (textResult.isTextPdf && textResult.receipts.length > 0) {
+            // テキストPDF: スクリプトのみで解析完了
+            clearInterval(progressTimer)
+            setLoadingProgress(100)
+            const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1)
+            setParseElapsed(`${elapsedSec}秒`)
+            setPages((prev) => [...prev, ...textResult.pages])
+            setCurrentPageIndex(0)
+            const { receiptToEntries } = await import('@/lib/bank-statement/receipt-mapper')
+            const entries = receiptToEntries(textResult.receipts.map((r) => ({
+              receiptIndex: r.pageIndex,
+              storeName: r.storeName,
+              receiptDate: r.date,
+              mainContent: r.description,
+              invoiceNumber: r.invoiceNumber,
+              taxLines: [{ taxRate: '10%', netAmount: 0, taxAmount: 0, totalAmount: r.totalAmount }],
+              pageIndex: r.pageIndex,
+            })), config.creditCode!, config.creditName!)
+            setJournalEntries((prev) => [...prev, ...entries])
+            setInfo(`${textResult.receipts.length}件のレシートをテキスト解析しました（${elapsedSec}秒）`)
+            setIsLoading(false)
+            setLoadingProgress(0)
+            return
+          }
+
+          // 画像PDF: Gemini APIにフォールバック
           const { renderPdfPageToImage, getPdfPageCount } = await import('@/lib/bank-statement/pdf-text-parser')
           const pageCount = await getPdfPageCount(config.file)
           const imageDataUrls: string[] = []
@@ -731,6 +764,10 @@ export default function BankStatementContent() {
             className="px-3 py-1.5 text-xs font-medium bg-white/10 hover:bg-white/20 text-white rounded border border-white/20">
             定型仕訳
           </button>
+          <button onClick={() => setShowInvoiceRegistry(true)}
+            className="px-3 py-1.5 text-xs font-medium bg-white/10 hover:bg-white/20 text-white rounded border border-white/20">
+            インボイス登録簿
+          </button>
           {journalEntries.length > 0 && (
             <>
               <button onClick={handleTempSave}
@@ -928,6 +965,11 @@ export default function BankStatementContent() {
         onClose={() => setShowFixedJournal(false)}
         accountMaster={accountMaster}
         onTempCountChange={setTempCount}
+      />
+
+      <InvoiceRegistryDialog
+        open={showInvoiceRegistry}
+        onClose={() => setShowInvoiceRegistry(false)}
       />
 
       <TempDataDialog
