@@ -88,9 +88,15 @@ function Read-SyncConfig {
     if (-not $cfg.sync_pairs -or $cfg.sync_pairs.Count -eq 0) { throw "config: sync_pairs が必要です" }
 
     # local_folder: 環境変数展開、デフォルトはデスクトップ
+    # %USERPROFILE%\Desktop\... は Known Folder API で解決し、
+    # OneDrive KFM や Dropbox 等でデスクトップが移動されているPCにも対応する
     $localFolder = $cfg.local_folder
-    if ($localFolder -and $localFolder -match '%') {
-        $localFolder = [Environment]::ExpandEnvironmentVariables($localFolder)
+    if ($localFolder) {
+        if ($localFolder -match '^%USERPROFILE%\\Desktop\\(.+)$') {
+            $localFolder = Join-Path ([Environment]::GetFolderPath("Desktop")) $matches[1]
+        } elseif ($localFolder -match '%') {
+            $localFolder = [Environment]::ExpandEnvironmentVariables($localFolder)
+        }
     }
     if (-not $localFolder) {
         $localFolder = Join-Path ([Environment]::GetFolderPath("Desktop")) "日下部税理士事務所"
@@ -917,6 +923,7 @@ function Start-Sync {
     Initialize-Logging $config
 
     Write-SyncLog "INFO" "===== 同期開始: $($config.ClientName) ($($config.DeviceName)) ====="
+    Write-SyncLog "INFO" "ローカルフォルダ: $($config.LocalFolder)"
 
     $script:OperationsLog.Clear()
     $totalUploaded = 0
