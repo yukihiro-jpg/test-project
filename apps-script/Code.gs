@@ -355,18 +355,18 @@ function getOrCreateFolder(parent, name) {
   return parent.createFolder(name);
 }
 
-// 「お客様」や空文字の場合、clientId から顧問先URL一覧シートを引いて実名を取得する
+// clientId（顧問先URL一覧シートのB列）から顧問先名を逆引きする。
+// clientId が引ければ常にそれを正とする（URL の ?name= の値より優先）。
+// 引けない場合は元の clientName をそのまま使い、それも無ければ「お客様」
 function resolveClientName_(clientName, clientId) {
-  const trimmed = (clientName || '').toString().trim();
-  if (trimmed && trimmed !== 'お客様') return trimmed;
-
+  const fallback = (clientName || '').toString().trim() || 'お客様';
   const id = (clientId || '').toString().trim();
-  if (!id || id === 'default') return trimmed || 'お客様';
+  if (!id || id === 'default') return fallback;
 
   try {
     const ss = getOrCreateLogSheet();
     const sheet = ss.getSheetByName('顧問先URL一覧');
-    if (!sheet) return trimmed || 'お客様';
+    if (!sheet) return fallback;
 
     const data = sheet.getDataRange().getValues();
     // ヘッダー: 顧問先名(0), クライアントID(1), URL(2), 登録日(3), QRコード画像URL(4)
@@ -374,7 +374,9 @@ function resolveClientName_(clientName, clientId) {
       if (String(data[i][1] || '').trim() === id) {
         const resolved = String(data[i][0] || '').trim();
         if (resolved) {
-          console.log(`clientId "${id}" → 顧問先名 "${resolved}" に逆引き`);
+          if (resolved !== fallback) {
+            console.log(`clientId "${id}" → "${resolved}" に逆引き（URL の name="${fallback}" を上書き）`);
+          }
           return resolved;
         }
       }
@@ -384,7 +386,7 @@ function resolveClientName_(clientName, clientId) {
     console.error('resolveClientName_ エラー:', e);
   }
 
-  return trimmed || 'お客様';
+  return fallback;
 }
 
 // ============================================================
