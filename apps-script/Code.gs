@@ -120,7 +120,10 @@ function getCandidatesForClient(clientName) {
 // ============================================================
 
 function saveBatchToDrive(data) {
-  const { images, clientId, clientName, docType, bankName, accountNumber, userName, timestamp, pageCount, fileName } = data;
+  let { images, clientId, clientName, docType, bankName, accountNumber, userName, timestamp, pageCount, fileName } = data;
+
+  // clientName が未指定または初期値の場合、clientId から顧問先名を逆引き
+  clientName = resolveClientName_(clientName, clientId);
 
   // 顧問先フォルダを取得 or 作成
   const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
@@ -217,7 +220,10 @@ function saveBatchToDrive(data) {
 // ============================================================
 
 function saveCashEntry(data) {
-  const { clientName, entryType, date, bankName, accountNumber, amount, depositType, timestamp } = data;
+  let { clientName, clientId, entryType, date, bankName, accountNumber, amount, depositType, timestamp } = data;
+
+  // clientName が未指定または初期値の場合、clientId から顧問先名を逆引き
+  clientName = resolveClientName_(clientName, clientId);
 
   const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
   const clientFolder = getOrCreateFolder(rootFolder, clientName);
@@ -347,6 +353,38 @@ function getOrCreateFolder(parent, name) {
   const folders = parent.getFoldersByName(name);
   if (folders.hasNext()) return folders.next();
   return parent.createFolder(name);
+}
+
+// 「お客様」や空文字の場合、clientId から顧問先URL一覧シートを引いて実名を取得する
+function resolveClientName_(clientName, clientId) {
+  const trimmed = (clientName || '').toString().trim();
+  if (trimmed && trimmed !== 'お客様') return trimmed;
+
+  const id = (clientId || '').toString().trim();
+  if (!id || id === 'default') return trimmed || 'お客様';
+
+  try {
+    const ss = getOrCreateLogSheet();
+    const sheet = ss.getSheetByName('顧問先URL一覧');
+    if (!sheet) return trimmed || 'お客様';
+
+    const data = sheet.getDataRange().getValues();
+    // ヘッダー: 顧問先名(0), クライアントID(1), URL(2), 登録日(3), QRコード画像URL(4)
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][1] || '').trim() === id) {
+        const resolved = String(data[i][0] || '').trim();
+        if (resolved) {
+          console.log(`clientId "${id}" → 顧問先名 "${resolved}" に逆引き`);
+          return resolved;
+        }
+      }
+    }
+    console.warn(`clientId "${id}" に該当する顧問先が顧問先URL一覧シートに見つかりません`);
+  } catch (e) {
+    console.error('resolveClientName_ エラー:', e);
+  }
+
+  return trimmed || 'お客様';
 }
 
 // ============================================================
