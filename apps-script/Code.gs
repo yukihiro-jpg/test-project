@@ -948,6 +948,140 @@ function getOrCreateLabel_(labelName) {
 }
 
 // ============================================================
+// ファイル同期 新規アップロード通知
+// _sync_logs フォルダを巡回し、前回チェック以降に追加された
+// 同期ログから upload 操作を抽出してメール通知
+// ============================================================
+
+const SYNC_NOTIFY_CONFIG = {
+  PARENT_FOLDER_NAME: '02_顧問先共有フォルダ',
+  LOGS_FOLDER_NAME: '_sync_logs',
+  PROPERTY_KEY: 'lastSyncNotifyCheckIso',
+  MAX_LOGS_PER_RUN: 200,
+};
+
+function notifyClientSyncUploads() {
+  const parentFolder = findFolderByName_(SYNC_NOTIFY_CONFIG.PARENT_FOLDER_NAME);
+  if (!parentFolder) {
+    console.warn(`親フォルダが見つかりません: ${SYNC_NOTIFY_CONFIG.PARENT_FOLDER_NAME}`);
+    return;
+  }
+
+  const props = PropertiesService.getScriptProperties();
+  const lastCheckIso = props.getProperty(SYNC_NOTIFY_CONFIG.PROPERTY_KEY);
+  const lastCheck = lastCheckIso ? new Date(lastCheckIso) : new Date(Date.now() - 15 * 60 * 1000);
+  const now = new Date();
+
+  const allUploads = [];
+  let logsScanned = 0;
+
+  const clientFolders = parentFolder.getFolders();
+  while (clientFolders.hasNext() && logsScanned < SYNC_NOTIFY_CONFIG.MAX_LOGS_PER_RUN) {
+    const clientFolder = clientFolders.next();
+    const logsFolders = clientFolder.getFoldersByName(SYNC_NOTIFY_CONFIG.LOGS_FOLDER_NAME);
+    if (!logsFolders.hasNext()) continue;
+    const logsFolder = logsFolders.next();
+
+    const logFiles = logsFolder.getFiles();
+    while (logFiles.hasNext() && logsScanned < SYNC_NOTIFY_CONFIG.MAX_LOGS_PER_RUN) {
+      const logFile = logFiles.next();
+      const updated = logFile.getLastUpdated();
+      if (updated <= lastCheck) continue;
+      logsScanned++;
+
+      try {
+        const content = logFile.getBlob().getDataAsString('UTF-8');
+        const data = JSON.parse(content);
+        if (!data.operations || !Array.isArray(data.operations)) continue;
+
+        data.operations.forEach(op => {
+          // upload と update_upload だけを通知対象（download は通知不要）
+          if (op.operation === 'upload' || op.operation === 'update_upload') {
+            allUploads.push({
+              clientName: data.client_name || op.client_name || '(不明)',
+              deviceName: data.device_name || op.device_name || '',
+              filePath: op.file_path || '(ファイル名不明)',
+              sizeBytes: Number(op.size_bytes) || 0,
+              operation: op.operation,
+            });
+          }
+        });
+      } catch (e) {
+        console.error(`同期ログ解析エラー: ${logFile.getName()} - ${e}`);
+      }
+    }
+  }
+
+  // 検査時刻を更新（次回はここから）
+  props.setProperty(SYNC_NOTIFY_CONFIG.PROPERTY_KEY, now.toISOString());
+
+  if (allUploads.length === 0) {
+    console.log(`新規アップロードなし（処理ログ ${logsScanned}件）`);
+    return;
+  }
+
+  // 顧問先・デバイス別にグループ化
+  const grouped = {};
+  allUploads.forEach(u => {
+    const key = u.deviceName ? `${u.clientName}（${u.deviceName}）` : u.clientName;
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(u);
+  });
+
+  // メール本文作成
+  const nowStr = Utilities.formatDate(now, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
+  let html = `
+    <div style="font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif; max-width: 600px;">
+      <h2 style="color: #1a73e8; border-bottom: 2px solid #1a73e8; padding-bottom: 8px;">
+        ファイル同期：新規アップロード通知
+      </h2>
+      <p style="color: #666;">
+        ${nowStr} 時点で <strong>${allUploads.length}件</strong> の新規アップロードがありました。
+      </p>
+  `;
+
+  Object.keys(grouped).sort().forEach(group => {
+    const items = grouped[group];
+    html += `
+      <div style="background: #f8f9fa; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <h3 style="margin: 0 0 12px 0; color: #333;">${escapeHtml_(group)}</h3>
+        <ul style="margin: 0; padding-left: 20px;">
+    `;
+    items.forEach(it => {
+      const sizeKb = it.sizeBytes > 0 ? Math.round(it.sizeBytes / 1024) : 0;
+      const tag = it.operation === 'update_upload' ? '更新' : '新規';
+      const sizeText = sizeKb > 0 ? ` (${sizeKb} KB)` : '';
+      html += `<li style="font-size: 14px; margin: 4px 0;">[${tag}] ${escapeHtml_(it.filePath)}${sizeText}</li>`;
+    });
+    html += '</ul></div>';
+  });
+
+  html += `
+      <p style="color: #999; font-size: 12px; margin-top: 20px;">
+        このメールはファイル同期システムから自動送信されています。
+      </p>
+    </div>
+  `;
+
+  GmailApp.sendEmail(
+    CONFIG.NOTIFICATION_EMAIL,
+    `【ファイル同期】${allUploads.length}件の新規アップロード - ${nowStr}`,
+    `${allUploads.length}件の新規アップロードがあります。`,
+    { htmlBody: html }
+  );
+
+  console.log(`通知メール送信: ${allUploads.length}件`);
+}
+
+function escapeHtml_(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ============================================================
 // トリガー設定
 // ============================================================
 
@@ -977,10 +1111,17 @@ function createTriggers() {
     .everyMinutes(10)
     .create();
 
+  // 10分ごと - ファイル同期 新規アップロード通知
+  ScriptApp.newTrigger('notifyClientSyncUploads')
+    .timeBased()
+    .everyMinutes(10)
+    .create();
+
   console.log('トリガー設定完了:');
   console.log('  AM3:00 - Gemini API解析');
-  console.log('  AM6:00 - メール通知');
+  console.log('  AM6:00 - 日次レポートメール');
   console.log('  10分ごと - 顧問先メール添付の自動保存');
+  console.log('  10分ごと - ファイル同期 新規アップロード通知');
 }
 
 // ============================================================
@@ -993,4 +1134,14 @@ function testSendEmail() {
 
 function testProcessClientEmailAttachments() {
   processClientEmailAttachments();
+}
+
+function testNotifyClientSyncUploads() {
+  notifyClientSyncUploads();
+}
+
+// 「最後にチェックした時刻」をリセット（過去の同期ログを再通知したい時に使う）
+function resetSyncNotifyCheckpoint() {
+  PropertiesService.getScriptProperties().deleteProperty(SYNC_NOTIFY_CONFIG.PROPERTY_KEY);
+  console.log('チェックポイントをリセットしました。次回実行時は過去15分のログを対象にスキャンします。');
 }
