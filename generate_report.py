@@ -127,7 +127,7 @@ stage_labels = ["純売上高", "売上総利益", "営業利益", "経常利益
 
 def fig_to_base64(fig):
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+    fig.savefig(buf, format='png', bbox_inches='tight', dpi=96)
     buf.seek(0)
     img_b64 = base64.b64encode(buf.read()).decode('utf-8')
     plt.close(fig)
