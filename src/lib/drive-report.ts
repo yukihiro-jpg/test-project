@@ -6,11 +6,15 @@ const ROOT_FOLDER_ID = process.env.REPORT_APP_FOLDER_ID || ''
 const CLIENTS_JSON_NAME = 'clients.json'
 
 function getAuth() {
+  const saBase64 = process.env.GCP_SERVICE_ACCOUNT_BASE64
+  if (saBase64) {
+    const credentials = JSON.parse(Buffer.from(saBase64, 'base64').toString('utf-8'))
+    return new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/drive'],
+    })
+  }
   return new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    },
     scopes: ['https://www.googleapis.com/auth/drive'],
   })
 }
