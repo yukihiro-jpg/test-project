@@ -127,7 +127,7 @@ stage_labels = ["純売上高", "売上総利益", "営業利益", "経常利益
 
 def fig_to_base64(fig):
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', bbox_inches='tight', dpi=96)
+    fig.savefig(buf, format='jpeg', bbox_inches='tight', dpi=72)
     buf.seek(0)
     img_b64 = base64.b64encode(buf.read()).decode('utf-8')
     plt.close(fig)
@@ -934,7 +934,7 @@ def generate_html():
   </div>
 
   <div class="chart-box">
-    <img src="data:image/png;base64,{chart1}" alt="3期単月比較グラフ">
+    <img src="data:image/jpeg;base64,{chart1}" alt="3期単月比較グラフ">
   </div>
 
   <div class="section-title">■ ３期 7月単月 損益比較表（単位：千円）</div>
@@ -1045,7 +1045,7 @@ def generate_html():
   </div>
 
   <div class="chart-box">
-    <img src="data:image/png;base64,{chart2}" alt="3期累計比較グラフ">
+    <img src="data:image/jpeg;base64,{chart2}" alt="3期累計比較グラフ">
   </div>
 
   <div class="section-title">■ ３期 9月〜7月 累計損益比較表（単位：千円）</div>
@@ -1132,7 +1132,7 @@ def generate_html():
   </div>
 
   <div class="chart-box">
-    <img src="data:image/png;base64,{chart3}" alt="FCF・運転資本グラフ">
+    <img src="data:image/jpeg;base64,{chart3}" alt="FCF・運転資本グラフ">
   </div>
 
   <div class="section-title">■ 月次 運転資本・FCF 推移表（単位：千円）</div>
@@ -1201,7 +1201,7 @@ def generate_html():
   </div>
 
   <div class="chart-box">
-    <img src="data:image/png;base64,{chart4}" alt="借入金グラフ">
+    <img src="data:image/jpeg;base64,{chart4}" alt="借入金グラフ">
   </div>
 
   <div class="section-title">■ 月次 借入金残高推移表（単位：千円）</div>
@@ -1334,12 +1334,12 @@ def generate_html():
 
   <div class="section-title">■ 7月 単月 段階利益比較</div>
   <div class="chart-box">
-    <img src="data:image/png;base64,{chart5}" alt="段階利益グラフ（単月）">
+    <img src="data:image/jpeg;base64,{chart5}" alt="段階利益グラフ（単月）">
   </div>
 
   <div class="section-title">■ 9月〜7月 累計 段階利益比較</div>
   <div class="chart-box">
-    <img src="data:image/png;base64,{chart6}" alt="段階利益グラフ（累計）">
+    <img src="data:image/jpeg;base64,{chart6}" alt="段階利益グラフ（累計）">
   </div>
 
   <div class="section-title">■ 段階利益サマリ表（単位：千円）</div>
