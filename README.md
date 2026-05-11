@@ -19,22 +19,48 @@
 
 ## 技術スタック
 
-- Tauri 2 + React + TypeScript + Vite
-- TailwindCSS（スタイリング）
-- SQLite（学習データ・テンプレ・途中保存）※Phase 2 以降
-- TanStack Table（Excel風グリッド）
-- Papa Parse（CSV取込）
+- Tauri 2 + React 19 + TypeScript + Vite
+- TailwindCSS v4（スタイリング）
+- IndexedDB（idb ラッパー）— 銀行テンプレ・途中保存・取引先学習履歴
+- Papa Parse + encoding-japanese（CSV取込・文字コード自動判定）
+- TanStack Table / TanStack Virtual（将来の大量行対応用）
 
 ## 開発
 
 ```bash
 pnpm install
-pnpm dev          # Vite単体（ブラウザでUI確認）
-pnpm tauri dev    # Tauri統合（デスクトップアプリ起動）
-pnpm build        # フロントエンドビルド
+pnpm dev          # Vite単体（ブラウザでUI確認、http://localhost:1420）
+pnpm tauri dev    # Tauri統合（デスクトップアプリ起動、要Rustツールチェイン）
+pnpm build        # フロントエンドビルド（dist/に出力）
 pnpm tauri build  # Windows用 msi/exe を生成
 ```
 
+`pnpm dev` はブラウザで動くため Windows でなくても UI 確認・編集作業ができます。
+ファイルシステムへの直接アクセスはなく、ダウンロード/アップロードは
+ブラウザ標準のAPIを使用しています。
+
+## Windowsでのビルド
+
+Windows で `msi` インストーラを生成するには:
+
+1. Rust ツールチェインをインストール (`rustup-init.exe`)
+2. Microsoft C++ Build Tools をインストール
+3. WebView2 ランタイム（Windows 11/最新の10には標準同梱）
+4. プロジェクトルートで:
+
+```powershell
+pnpm install
+pnpm tauri build
+```
+
+生成物は `src-tauri/target/release/bundle/msi/` に出力されます。
+
 ## 配布
 
-Windows 向け msi/exe インストーラ。1顧問先 = 1インストール。
+Windows 向け msi インストーラ。1顧問先 = 1インストール。
+コード署名なしで配布する場合、初回起動時に SmartScreen 警告が表示される可能性が
+あります（「詳細情報」→「実行」で起動可能）。
+
+## サンプル
+
+`samples/sample-bank-shift_jis.csv` に動作確認用のサンプルCSVを置いています。

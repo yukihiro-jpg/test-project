@@ -8,6 +8,9 @@ import type {
 
 interface Props {
   imported: ImportedCsv;
+  initialMapping?: ColumnMapping | null;
+  initialBankInfo?: BankInfo | null;
+  templateMatched?: boolean;
   onConfirm: (mapping: ColumnMapping, info: BankInfo) => void;
   onBack: () => void;
 }
@@ -44,23 +47,38 @@ function ColumnSelect({
   );
 }
 
-export function MappingScreen({ imported, onConfirm, onBack }: Props) {
-  const [date, setDate] = useState<number>(0);
+export function MappingScreen({
+  imported,
+  initialMapping,
+  initialBankInfo,
+  templateMatched,
+  onConfirm,
+  onBack,
+}: Props) {
+  const [date, setDate] = useState<number>(initialMapping?.date ?? 0);
   const [summary, setSummary] = useState<number>(
-    Math.min(2, imported.headers.length - 1),
+    initialMapping?.summary ?? Math.min(2, imported.headers.length - 1),
   );
-  const [balance, setBalance] = useState<number | null>(null);
-  const [amountStyle, setAmountStyle] = useState<AmountStyle>("split");
-  const [amount, setAmount] = useState<number | null>(null);
+  const [balance, setBalance] = useState<number | null>(
+    initialMapping?.balance ?? null,
+  );
+  const [amountStyle, setAmountStyle] = useState<AmountStyle>(
+    initialMapping?.amountStyle ?? "split",
+  );
+  const [amount, setAmount] = useState<number | null>(
+    initialMapping?.amount ?? null,
+  );
   const [incoming, setIncoming] = useState<number | null>(
-    Math.min(3, imported.headers.length - 1),
+    initialMapping?.incoming ?? Math.min(3, imported.headers.length - 1),
   );
   const [outgoing, setOutgoing] = useState<number | null>(
-    Math.min(4, imported.headers.length - 1),
+    initialMapping?.outgoing ?? Math.min(4, imported.headers.length - 1),
   );
 
-  const [bankName, setBankName] = useState("");
-  const [accountName, setAccountName] = useState("");
+  const [bankName, setBankName] = useState(initialBankInfo?.bankName ?? "");
+  const [accountName, setAccountName] = useState(
+    initialBankInfo?.accountName ?? "",
+  );
 
   const previewRows = useMemo(
     () => imported.rawRows.slice(0, PREVIEW_ROW_COUNT),
@@ -97,6 +115,11 @@ export function MappingScreen({ imported, onConfirm, onBack }: Props) {
         <p className="mt-1 text-xs text-gray-600">
           読み込んだCSV「{imported.fileName}」のどの列が何にあたるかを指定してください。
         </p>
+        {templateMatched && (
+          <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-0.5 text-[11px] font-semibold text-emerald-800">
+            登録済みテンプレートを自動適用しました。必要に応じて修正してください。
+          </div>
+        )}
       </header>
 
       <div className="grid flex-1 grid-cols-1 gap-6 overflow-auto p-6 lg:grid-cols-2">

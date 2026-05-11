@@ -5,6 +5,11 @@ import {
   buildOutputFilename,
   downloadCsv,
 } from "../lib/export";
+import {
+  markSessionCompleted,
+  recordCounterparty,
+  saveSession,
+} from "../lib/db";
 import type {
   BankInfo,
   ColumnMapping,
@@ -19,27 +24,82 @@ interface Props {
   imported: ImportedCsv;
   mapping: ColumnMapping;
   bankInfo: BankInfo;
+  initialRows?: TransactionRow[] | null;
+  initialSelectedRow?: number;
+  sessionId?: string | null;
   onBack: () => void;
+  onCompleted: () => void;
 }
 
 const ROW_HEIGHT = 32;
+const AUTOSAVE_DEBOUNCE_MS = 800;
 
-export function EditorScreen({ imported, mapping, bankInfo, onBack }: Props) {
-  const initialRows = useMemo(
+export function EditorScreen({
+  imported,
+  mapping,
+  bankInfo,
+  initialRows,
+  initialSelectedRow = 0,
+  sessionId: initialSessionId = null,
+  onBack,
+  onCompleted,
+}: Props) {
+  const computedRows = useMemo(
     () => applyMapping(imported, mapping),
     [imported, mapping],
   );
-  const [rows, setRows] = useState<TransactionRow[]>(initialRows);
-  const [selectedRow, setSelectedRow] = useState<number>(0);
+
+  const [rows, setRows] = useState<TransactionRow[]>(
+    initialRows && initialRows.length === computedRows.length
+      ? initialRows
+      : computedRows,
+  );
+  const [selectedRow, setSelectedRow] = useState<number>(initialSelectedRow);
+  const [sessionId, setSessionId] = useState<string | null>(initialSessionId);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const [showSource, setShowSource] = useState(false);
 
   const leftRef = useRef<HTMLDivElement>(null);
   const rightRef = useRef<HTMLDivElement>(null);
   const syncingRef = useRef(false);
+  const saveTimerRef = useRef<number | null>(null);
+  const lastSavedHashRef = useRef<string>("");
+
+  function rowsHash(): string {
+    return JSON.stringify(rows.map((r) => r.editedSummary)) + `|${selectedRow}`;
+  }
+
+  async function doSave(): Promise<string> {
+    const session = await saveSession(sessionId, {
+      bankInfo,
+      mapping,
+      imported,
+      rows,
+      selectedRow,
+      originalBytes: imported.originalBytes,
+    });
+    setSessionId(session.id);
+    setSavedAt(session.updatedAt);
+    lastSavedHashRef.current = rowsHash();
+    return session.id;
+  }
 
   useEffect(() => {
-    setRows(initialRows);
-  }, [initialRows]);
+    const hash = rowsHash();
+    if (hash === lastSavedHashRef.current) return;
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = window.setTimeout(() => {
+      void doSave();
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, selectedRow]);
 
   function handleScroll(source: "left" | "right", scrollTop: number) {
     if (syncingRef.current) return;
@@ -74,6 +134,14 @@ export function EditorScreen({ imported, mapping, bankInfo, onBack }: Props) {
     );
   }
 
+  function commitSummary(idx: number, value: string) {
+    const row = rows[idx];
+    if (!row) return;
+    const trimmed = value.trim();
+    if (trimmed === "" || trimmed === row.originalSummary.trim()) return;
+    void recordCounterparty(row.amount, row.date, trimmed);
+  }
+
   const unprocessedCount = useMemo(() => countUnreviewed(rows), [rows]);
 
   function jumpToNextUnprocessed() {
@@ -104,7 +172,11 @@ export function EditorScreen({ imported, mapping, bankInfo, onBack }: Props) {
     }
   }
 
-  function handleExport() {
+  async function handleManualSave() {
+    await doSave();
+  }
+
+  async function handleExport() {
     if (unprocessedCount > 0) {
       const ok = window.confirm(
         `未処理の行が ${unprocessedCount} 件残っています。\n` +
@@ -115,6 +187,10 @@ export function EditorScreen({ imported, mapping, bankInfo, onBack }: Props) {
     const csv = buildOutputCsv(imported, mapping, rows);
     const filename = buildOutputFilename(bankInfo, rows);
     downloadCsv(csv, filename);
+
+    const id = await doSave();
+    await markSessionCompleted(id);
+    onCompleted();
   }
 
   return (
@@ -126,7 +202,7 @@ export function EditorScreen({ imported, mapping, bankInfo, onBack }: Props) {
             onClick={onBack}
             className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
           >
-            戻る
+            ホームへ
           </button>
           <div>
             <div className="text-sm font-semibold text-gray-900">
@@ -139,6 +215,11 @@ export function EditorScreen({ imported, mapping, bankInfo, onBack }: Props) {
             </div>
             <div className="text-[11px] text-gray-500">
               {imported.fileName} · {rows.length}行
+              {savedAt && (
+                <span className="ml-2 text-emerald-600">
+                  保存済 {new Date(savedAt).toLocaleTimeString("ja-JP")}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -150,6 +231,13 @@ export function EditorScreen({ imported, mapping, bankInfo, onBack }: Props) {
             className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
           >
             元CSVを開く
+          </button>
+          <button
+            type="button"
+            onClick={handleManualSave}
+            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          >
+            途中保存
           </button>
           <button
             type="button"
@@ -211,6 +299,7 @@ export function EditorScreen({ imported, mapping, bankInfo, onBack }: Props) {
           selectedRow={selectedRow}
           onSelectRow={selectRow}
           onEditSummary={editSummary}
+          onCommitSummary={commitSummary}
           onScroll={(top) => handleScroll("right", top)}
           rowHeight={ROW_HEIGHT}
         />

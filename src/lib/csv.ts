@@ -55,6 +55,7 @@ export async function importCsvFromFile(file: File): Promise<ImportedCsv> {
       encoding,
       headers: [],
       rawRows: [],
+      originalBytes: buffer,
     };
   }
 
@@ -68,5 +69,6 @@ export async function importCsvFromFile(file: File): Promise<ImportedCsv> {
     encoding,
     headers,
     rawRows,
+    originalBytes: buffer,
   };
 }

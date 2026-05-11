@@ -5,6 +5,7 @@ export interface ImportedCsv {
   encoding: string;
   headers: string[];
   rawRows: string[][];
+  originalBytes: ArrayBuffer | null;
 }
 
 export interface ColumnMapping {

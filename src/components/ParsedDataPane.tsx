@@ -1,12 +1,14 @@
 import { forwardRef } from "react";
 import { needsReview } from "../lib/mapping";
 import type { TransactionRow } from "../types";
+import { SummaryEditCell } from "./SummaryEditCell";
 
 interface Props {
   rows: TransactionRow[];
   selectedRow: number;
   onSelectRow: (idx: number) => void;
   onEditSummary: (idx: number, value: string) => void;
+  onCommitSummary: (idx: number, value: string) => void;
   onScroll: (scrollTop: number) => void;
   rowHeight: number;
 }
@@ -19,7 +21,15 @@ function formatAmount(n: number): string {
 
 export const ParsedDataPane = forwardRef<HTMLDivElement, Props>(
   function ParsedDataPane(
-    { rows, selectedRow, onSelectRow, onEditSummary, onScroll, rowHeight },
+    {
+      rows,
+      selectedRow,
+      onSelectRow,
+      onEditSummary,
+      onCommitSummary,
+      onScroll,
+      rowHeight,
+    },
     ref,
   ) {
     return (
@@ -80,16 +90,15 @@ export const ParsedDataPane = forwardRef<HTMLDivElement, Props>(
                       {row.date}
                     </td>
                     <td className="border-b border-r border-gray-100 p-0">
-                      <input
-                        type="text"
+                      <SummaryEditCell
+                        amount={row.amount}
+                        date={row.date}
                         value={row.editedSummary}
-                        onChange={(e) => onEditSummary(idx, e.target.value)}
+                        rowHeight={rowHeight}
+                        stillEmpty={stillEmpty}
+                        onChange={(v) => onEditSummary(idx, v)}
+                        onCommit={(v) => onCommitSummary(idx, v)}
                         onFocus={() => onSelectRow(idx)}
-                        placeholder={stillEmpty ? "未入力" : ""}
-                        className={`block h-full w-full bg-transparent px-2 py-0 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                          stillEmpty ? "placeholder:text-amber-600" : ""
-                        }`}
-                        style={{ height: rowHeight }}
                       />
                     </td>
                     <td
