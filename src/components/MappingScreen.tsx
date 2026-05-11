@@ -247,9 +247,11 @@ export function MappingScreen({
       <header className="border-b border-gray-200 bg-white px-6 py-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg font-bold text-gray-900">列マッピング</h1>
+            <h1 className="text-lg font-bold text-gray-900">
+              CSVファイルの列を設定
+            </h1>
             <p className="mt-0.5 text-xs text-gray-600">
-              「{imported.fileName}」のどの列が何にあたるかを設定してください。
+              アップロードした「{imported.fileName}」の各列が「日付」「摘要」「金額」などのどれにあたるかを設定してください。
             </p>
           </div>
           {templateMatched && (
@@ -274,13 +276,14 @@ export function MappingScreen({
           </label>
           <label className="md:col-span-3">
             <span className="mb-1 block text-[11px] font-semibold text-gray-700">
-              口座名（任意）
+              口座番号（任意）
             </span>
             <input
               type="text"
+              inputMode="numeric"
               value={accountName}
               onChange={(e) => setAccountName(e.target.value)}
-              placeholder="例: 本店営業部 普通"
+              placeholder="例: 1234567"
               className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </label>
@@ -320,10 +323,13 @@ export function MappingScreen({
             const headerLabel = mapped
               ? imported.headers[value] || "(空)"
               : null;
+            const statusText = mapped
+              ? `${(value ?? 0) + 1}列目「${headerLabel}」`
+              : "未設定";
             return (
-              <div
+              <span
                 key={r.key}
-                className={`inline-flex items-center overflow-hidden rounded-full border text-xs transition ${
+                className={`inline-flex items-stretch rounded-full border text-xs transition ${
                   active
                     ? "border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-300"
                     : mapped
@@ -334,31 +340,26 @@ export function MappingScreen({
                 <button
                   type="button"
                   onClick={() => handleRoleClick(r.key)}
-                  className="flex items-center gap-1 px-3 py-1 hover:bg-black/5"
+                  className="flex items-center gap-1 rounded-l-full px-3 py-1 hover:bg-black/5"
                 >
                   <span className="font-semibold">
                     {r.label}
                     {r.required && <span className="text-red-500">*</span>}
                   </span>
-                  {mapped ? (
-                    <span className="text-[10px] opacity-80">
-                      {(value ?? 0) + 1}列目「{headerLabel}」
-                    </span>
-                  ) : (
-                    <span className="text-[10px]">未設定</span>
-                  )}
+                  <span className="text-[10px] opacity-80">{statusText}</span>
                 </button>
-                {mapped && (
-                  <button
-                    type="button"
-                    onClick={() => clearRole(r.key)}
-                    title="この割当を解除"
-                    className="flex h-full items-center border-l border-black/10 px-2 text-[11px] hover:bg-black/10"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
+                <button
+                  type="button"
+                  aria-label="この割当を解除"
+                  title="この割当を解除"
+                  onClick={() => clearRole(r.key)}
+                  className={`flex items-center border-l border-black/10 px-2 text-[11px] hover:bg-black/10 rounded-r-full ${
+                    mapped ? "" : "invisible w-0 border-l-0 px-0"
+                  }`}
+                >
+                  ×
+                </button>
+              </span>
             );
           })}
         </div>
@@ -402,18 +403,16 @@ export function MappingScreen({
                         {idx + 1}列目
                       </div>
                       <div className="text-gray-800">{h || "(空)"}</div>
-                      {mappedRoles.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {mappedRoles.map((r) => (
-                            <span
-                              key={r.key}
-                              className={`inline-block rounded-full border px-1.5 text-[10px] ${r.color}`}
-                            >
-                              {r.label}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <div className="mt-1 flex min-h-[18px] flex-wrap gap-1">
+                        {mappedRoles.map((r) => (
+                          <span
+                            key={r.key}
+                            className={`inline-block rounded-full border px-1.5 text-[10px] ${r.color}`}
+                          >
+                            {r.label}
+                          </span>
+                        ))}
+                      </div>
                     </th>
                   );
                 })}

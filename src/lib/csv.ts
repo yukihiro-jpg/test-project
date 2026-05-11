@@ -43,7 +43,7 @@ export async function importCsvFromFile(file: File): Promise<ImportedCsv> {
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   const encoding = detectEncoding(bytes);
-  const text = decodeBytes(bytes, encoding);
+  const text = decodeBytes(bytes, encoding).normalize("NFC");
   const parsed = Papa.parse<string[]>(text, {
     skipEmptyLines: true,
   });
@@ -59,9 +59,11 @@ export async function importCsvFromFile(file: File): Promise<ImportedCsv> {
     };
   }
 
-  const headers = rows[0].map((h) => (h ?? "").toString().trim());
+  const headers = rows[0].map((h) =>
+    (h ?? "").toString().trim().normalize("NFC"),
+  );
   const rawRows = rows.slice(1).map((row) =>
-    headers.map((_, idx) => (row[idx] ?? "").toString()),
+    headers.map((_, idx) => (row[idx] ?? "").toString().normalize("NFC")),
   );
 
   return {

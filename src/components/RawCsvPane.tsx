@@ -14,40 +14,35 @@ export const RawCsvPane = forwardRef<HTMLDivElement, Props>(function RawCsvPane(
   ref,
 ) {
   return (
-    <div className="flex h-full min-h-0 flex-col border-r-4 border-slate-300 bg-slate-50">
-      <div className="flex items-center justify-between border-b border-slate-300 bg-slate-200 px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-500 text-[10px] font-bold text-white">
-            L
-          </span>
-          <div>
-            <div className="text-sm font-bold text-slate-800">
-              元CSV（アップロードしたファイル）
-            </div>
-            <div className="text-[10px] text-slate-600">
-              読み取り専用 · {imported.fileName} · {imported.encoding}
-            </div>
+    <div className="flex h-full min-h-0 flex-col border-r-4 border-rose-300 bg-rose-50">
+      <div className="flex items-center justify-between border-b border-rose-300 bg-rose-100 px-4 py-2.5">
+        <div>
+          <div className="text-sm font-bold text-rose-900">
+            元CSV（アップロードしたファイル）
+          </div>
+          <div className="text-[10px] text-rose-700">
+            読み取り専用 · {imported.fileName} · {imported.encoding}
           </div>
         </div>
-        <span className="rounded-full bg-slate-300 px-2.5 py-0.5 text-[10px] font-semibold text-slate-700">
+        <span className="rounded-full bg-rose-200 px-2.5 py-0.5 text-[10px] font-semibold text-rose-800">
           編集不可
         </span>
       </div>
       <div
         ref={ref}
         onScroll={(e) => onScroll((e.target as HTMLDivElement).scrollTop)}
-        className="flex-1 overflow-auto bg-slate-50"
+        className="flex-1 overflow-auto bg-rose-50"
       >
         <table className="min-w-full border-collapse text-xs">
-          <thead className="sticky top-0 z-10 bg-slate-200 text-slate-700">
+          <thead className="sticky top-0 z-10 bg-rose-100 text-rose-900">
             <tr style={{ height: rowHeight }}>
-              <th className="w-12 border-b border-r border-slate-300 px-2 text-right text-[10px] font-medium text-slate-500">
+              <th className="w-12 border-b border-r border-rose-200 px-2 text-right text-[10px] font-medium text-rose-500">
                 #
               </th>
               {imported.headers.map((h, idx) => (
                 <th
                   key={idx}
-                  className="whitespace-nowrap border-b border-r border-slate-300 px-2 text-left font-medium last:border-r-0"
+                  className="whitespace-nowrap border-b border-r border-rose-200 px-2 text-center font-medium last:border-r-0"
                 >
                   {h || "(空)"}
                 </th>
@@ -63,16 +58,16 @@ export const RawCsvPane = forwardRef<HTMLDivElement, Props>(function RawCsvPane(
                 className={
                   selectedRow === idx
                     ? "cursor-pointer bg-blue-100"
-                    : "cursor-pointer hover:bg-slate-100"
+                    : "cursor-pointer hover:bg-rose-100/60"
                 }
               >
-                <td className="border-b border-r border-slate-200 px-2 text-right text-[10px] text-slate-400">
+                <td className="border-b border-r border-rose-100 px-2 text-right text-[10px] text-rose-400">
                   {idx + 1}
                 </td>
                 {imported.headers.map((_, cidx) => (
                   <td
                     key={cidx}
-                    className="whitespace-nowrap border-b border-r border-slate-200 px-2 text-slate-700 last:border-r-0"
+                    className="whitespace-nowrap border-b border-r border-rose-100 px-2 text-slate-700 last:border-r-0"
                   >
                     {row[cidx] ?? ""}
                   </td>
