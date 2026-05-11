@@ -19,10 +19,21 @@
 
 ## 技術スタック
 
-- Tauri 2 + React + TypeScript
-- SQLite（学習データ・テンプレ・途中保存）
+- Tauri 2 + React + TypeScript + Vite
+- TailwindCSS（スタイリング）
+- SQLite（学習データ・テンプレ・途中保存）※Phase 2 以降
 - TanStack Table（Excel風グリッド）
 - Papa Parse（CSV取込）
+
+## 開発
+
+```bash
+pnpm install
+pnpm dev          # Vite単体（ブラウザでUI確認）
+pnpm tauri dev    # Tauri統合（デスクトップアプリ起動）
+pnpm build        # フロントエンドビルド
+pnpm tauri build  # Windows用 msi/exe を生成
+```
 
 ## 配布
 
