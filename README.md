@@ -25,11 +25,27 @@
 - Papa Parse + encoding-japanese（CSV取込・文字コード自動判定）
 - TanStack Table / TanStack Virtual（将来の大量行対応用）
 
+## 起動方法（顧問先利用）
+
+リポジトリルートの `launch.bat` をダブルクリックすると、自動で以下を順に実行します:
+
+1. 最新版を git pull で取得
+2. 依存パッケージを確認（差分があれば自動インストール）
+3. アプリを起動し、ブラウザを自動で開く
+
+デスクトップにショートカットを置いておくと、毎回のダブルクリックで最新版で起動できます。
+
+ショートカット作成手順:
+1. `launch.bat` を右クリック → 「送る」→「デスクトップ（ショートカットを作成）」
+2. デスクトップにできたショートカットを「銀行CSV修正ツール」などに改名
+3. （任意）プロパティ → 「アイコンの変更」 → `src-tauri\icons\icon.ico` を指定
+
 ## 開発
 
 ```bash
 pnpm install
 pnpm dev          # Vite単体（ブラウザでUI確認、http://localhost:1420）
+pnpm launch       # ブラウザ自動オープン付きで起動（launch.bat はこれを呼ぶ）
 pnpm tauri dev    # Tauri統合（デスクトップアプリ起動、要Rustツールチェイン）
 pnpm build        # フロントエンドビルド（dist/に出力）
 pnpm tauri build  # Windows用 msi/exe を生成
