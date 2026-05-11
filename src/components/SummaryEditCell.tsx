@@ -71,7 +71,7 @@ export function SummaryEditCell({
         onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder={stillEmpty ? "未入力" : ""}
-        className={`block h-full w-full bg-transparent px-2 py-0 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+        className={`block h-full w-full bg-transparent px-2 py-0 text-[13px] focus:outline-none focus:ring-1 focus:ring-blue-500 ${
           stillEmpty ? "placeholder:text-amber-600" : ""
         }`}
         style={{ height: rowHeight }}

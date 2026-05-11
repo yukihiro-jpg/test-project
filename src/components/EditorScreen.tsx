@@ -31,7 +31,7 @@ interface Props {
   onCompleted: () => void;
 }
 
-const ROW_HEIGHT = 32;
+const ROW_HEIGHT = 36;
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
 export function EditorScreen({

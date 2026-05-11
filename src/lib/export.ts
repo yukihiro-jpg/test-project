@@ -22,11 +22,15 @@ export function buildOutputCsv(
   return Papa.unparse([imported.headers, ...outputRows]);
 }
 
-function formatDateForFilename(date: string): string {
+function extractYmd(date: string): string {
   if (!date) return "";
   const digits = date.replace(/\D/g, "");
-  if (digits.length >= 8) return digits.slice(0, 8);
-  return digits;
+  return digits.length >= 8 ? digits.slice(0, 8) : "";
+}
+
+function formatJpDate(ymd: string): string {
+  if (ymd.length !== 8) return "";
+  return `${ymd.slice(0, 4)}年${ymd.slice(4, 6)}月${ymd.slice(6, 8)}日`;
 }
 
 function sanitizeForFilename(value: string): string {
@@ -38,15 +42,15 @@ export function buildOutputFilename(
   rows: TransactionRow[],
 ): string {
   const dates = rows
-    .map((r) => formatDateForFilename(r.date))
+    .map((r) => extractYmd(r.date))
     .filter((d) => d.length === 8)
     .sort();
   const from = dates[0] ?? "";
   const to = dates[dates.length - 1] ?? "";
   const bank = sanitizeForFilename(info.bankName || "bank");
-  const account = sanitizeForFilename(info.accountName || "account");
-  const range = from && to ? `_${from}_${to}` : "";
-  return `${bank}_${account}${range}.csv`;
+  const range =
+    from && to ? `_${formatJpDate(from)}-${formatJpDate(to)}` : "";
+  return `${bank}${range}.csv`;
 }
 
 export function downloadCsv(content: string, filename: string): void {
