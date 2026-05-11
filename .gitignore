@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+src-tauri/WixTools/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.log
+*.exe
+*.msi
+
+# Local data (development)
+*.sqlite
+*.sqlite-journal
+*.db
+
+# Env
+.env
+.env.local
+.env.*.local
