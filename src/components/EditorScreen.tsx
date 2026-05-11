@@ -272,7 +272,7 @@ export function EditorScreen({
           <span
             className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
               unprocessedCount > 0
-                ? "bg-amber-100 text-amber-800"
+                ? "bg-red-100 text-red-800"
                 : "bg-emerald-100 text-emerald-800"
             }`}
           >
@@ -283,6 +283,12 @@ export function EditorScreen({
           選択中: {selectedRow + 1} / {rows.length} 行
         </div>
       </div>
+
+      {unprocessedCount > 0 && (
+        <div className="border-b-2 border-red-400 bg-red-50 px-4 py-2 text-center text-sm font-bold text-red-700">
+          未処理の取引が {unprocessedCount} 件残っています。「→」ボタンで未処理行へ移動し、摘要欄を入力してすべて処理してから書き出してください。
+        </div>
+      )}
 
       <div className="grid grid-cols-2 border-b border-gray-200 bg-gray-50 px-4 py-1.5 text-[11px]">
         <div className="text-rose-700">

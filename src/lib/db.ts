@@ -232,6 +232,40 @@ export async function findInProgressByBankAccount(
   );
 }
 
+export interface KnownAccount {
+  bankName: string;
+  accountName: string;
+  lastUsedAt: number;
+  sessionCount: number;
+}
+
+export async function listKnownAccounts(): Promise<KnownAccount[]> {
+  const db = await getDb();
+  const all = await db.getAll("sessions");
+  const map = new Map<string, KnownAccount>();
+  for (const s of all) {
+    const bk = s.bankInfo.bankName.trim();
+    const ac = s.bankInfo.accountName.trim();
+    if (!bk) continue;
+    const key = `${bk}__${ac}`;
+    const existing = map.get(key);
+    if (existing) {
+      existing.sessionCount += 1;
+      if (s.updatedAt > existing.lastUsedAt) existing.lastUsedAt = s.updatedAt;
+    } else {
+      map.set(key, {
+        bankName: bk,
+        accountName: ac,
+        lastUsedAt: s.updatedAt,
+        sessionCount: 1,
+      });
+    }
+  }
+  return Array.from(map.values()).sort(
+    (a, b) => b.lastUsedAt - a.lastUsedAt,
+  );
+}
+
 export async function deleteSession(id: string): Promise<void> {
   const db = await getDb();
   await db.delete("sessions", id);

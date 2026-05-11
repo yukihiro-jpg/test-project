@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { listKnownAccounts, type KnownAccount } from "../lib/db";
 import type {
   AmountStyle,
   BankInfo,
@@ -84,6 +85,11 @@ export function MappingScreen({
   );
 
   const [selectedRole, setSelectedRole] = useState<RoleKey | null>(null);
+  const [knownAccounts, setKnownAccounts] = useState<KnownAccount[]>([]);
+
+  useEffect(() => {
+    void listKnownAccounts().then(setKnownAccounts);
+  }, []);
 
   const previewRows = useMemo(
     () => imported.rawRows.slice(0, PREVIEW_ROW_COUNT),
@@ -221,7 +227,8 @@ export function MappingScreen({
   const requiredOk = roles.every(
     (r) => !r.required || valueForRole(r.key) !== null,
   );
-  const canSubmit = requiredOk && bankName.trim() !== "";
+  const canSubmit =
+    requiredOk && bankName.trim() !== "" && accountName.trim() !== "";
 
   function handleSubmit() {
     if (!canSubmit) return;
@@ -261,6 +268,37 @@ export function MappingScreen({
           )}
         </div>
 
+        {knownAccounts.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
+            <span className="text-[11px] font-semibold text-blue-800">
+              過去に登録した口座から選択:
+            </span>
+            <select
+              value=""
+              onChange={(e) => {
+                const idx = e.target.value;
+                if (idx === "") return;
+                const a = knownAccounts[Number(idx)];
+                if (!a) return;
+                setBankName(a.bankName);
+                setAccountName(a.accountName);
+              }}
+              className="rounded-md border border-blue-300 bg-white px-2 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">選択してください...</option>
+              {knownAccounts.map((a, idx) => (
+                <option key={idx} value={idx}>
+                  {a.bankName}
+                  {a.accountName ? ` / 口座番号 ${a.accountName}` : ""}
+                </option>
+              ))}
+            </select>
+            <span className="text-[10px] text-blue-700">
+              選ぶと銀行名・口座番号が自動入力されます
+            </span>
+          </div>
+        )}
+
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-12">
           <label className="md:col-span-3">
             <span className="mb-1 block text-[11px] font-semibold text-gray-700">
@@ -276,7 +314,7 @@ export function MappingScreen({
           </label>
           <label className="md:col-span-3">
             <span className="mb-1 block text-[11px] font-semibold text-gray-700">
-              口座番号（任意）
+              口座番号 *
             </span>
             <input
               type="text"
@@ -467,7 +505,9 @@ export function MappingScreen({
             <span className="text-[11px] text-gray-500">
               {bankName.trim() === ""
                 ? "銀行名を入力してください"
-                : "必須の役割（*印）を割り当ててください"}
+                : accountName.trim() === ""
+                  ? "口座番号を入力してください"
+                  : "必須の役割（*印）を割り当ててください"}
             </span>
           )}
           <button
