@@ -4,6 +4,7 @@ import { MappingScreen } from "./components/MappingScreen";
 import { EditorScreen } from "./components/EditorScreen";
 import { HomeScreen } from "./components/HomeScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import {
   findTemplateBySignature,
   upsertTemplate,
@@ -18,7 +19,7 @@ import type {
 
 type Step = "home" | "import" | "mapping" | "editor" | "settings";
 
-function App() {
+function AppInner() {
   const [step, setStep] = useState<Step>("home");
   const [imported, setImported] = useState<ImportedCsv | null>(null);
   const [mapping, setMapping] = useState<ColumnMapping | null>(null);
@@ -160,6 +161,14 @@ function App() {
   }
 
   return null;
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <AppInner />
+    </ErrorBoundary>
+  );
 }
 
 export default App;

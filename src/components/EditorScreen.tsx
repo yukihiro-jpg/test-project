@@ -284,6 +284,21 @@ export function EditorScreen({
         </div>
       </div>
 
+      <div className="grid grid-cols-2 border-b border-gray-200 bg-gray-50 px-4 py-1.5 text-[11px]">
+        <div className="flex items-center gap-2 text-slate-600">
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-500 text-[9px] font-bold text-white">
+            L
+          </span>
+          左ペイン:アップロードしたCSVをそのまま表示（編集不可）
+        </div>
+        <div className="flex items-center gap-2 text-blue-700">
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white">
+            R
+          </span>
+          右ペイン:ここで「摘要」を入力・修正します
+        </div>
+      </div>
+
       <div className="grid min-h-0 flex-1 grid-cols-2">
         <RawCsvPane
           ref={leftRef}

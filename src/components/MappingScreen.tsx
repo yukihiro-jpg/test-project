@@ -321,44 +321,44 @@ export function MappingScreen({
               ? imported.headers[value] || "(空)"
               : null;
             return (
-              <button
-                type="button"
+              <div
                 key={r.key}
-                onClick={() => handleRoleClick(r.key)}
-                className={`group inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
+                className={`inline-flex items-center overflow-hidden rounded-full border text-xs transition ${
                   active
                     ? "border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-300"
                     : mapped
                       ? r.color
-                      : "border-dashed border-gray-300 bg-white text-gray-500 hover:border-gray-400"
+                      : "border-dashed border-gray-300 bg-white text-gray-500"
                 }`}
               >
-                <span className="font-semibold">
-                  {r.label}
-                  {r.required && <span className="text-red-500">*</span>}
-                </span>
-                {mapped ? (
-                  <>
+                <button
+                  type="button"
+                  onClick={() => handleRoleClick(r.key)}
+                  className="flex items-center gap-1 px-3 py-1 hover:bg-black/5"
+                >
+                  <span className="font-semibold">
+                    {r.label}
+                    {r.required && <span className="text-red-500">*</span>}
+                  </span>
+                  {mapped ? (
                     <span className="text-[10px] opacity-80">
                       {(value ?? 0) + 1}列目「{headerLabel}」
                     </span>
-                    <span
-                      role="button"
-                      tabIndex={-1}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        clearRole(r.key);
-                      }}
-                      className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-black/10 text-[10px] hover:bg-black/20"
-                      title="この割当を解除"
-                    >
-                      ×
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-[10px]">未設定</span>
+                  ) : (
+                    <span className="text-[10px]">未設定</span>
+                  )}
+                </button>
+                {mapped && (
+                  <button
+                    type="button"
+                    onClick={() => clearRole(r.key)}
+                    title="この割当を解除"
+                    className="flex h-full items-center border-l border-black/10 px-2 text-[11px] hover:bg-black/10"
+                  >
+                    ×
+                  </button>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>
