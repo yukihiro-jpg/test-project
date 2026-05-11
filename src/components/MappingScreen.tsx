@@ -15,37 +15,40 @@ interface Props {
   onBack: () => void;
 }
 
-const PREVIEW_ROW_COUNT = 5;
+const PREVIEW_ROW_COUNT = 10;
 
-function ColumnSelect({
-  value,
-  onChange,
-  headers,
-  allowNone,
-}: {
-  value: number | null;
-  onChange: (v: number | null) => void;
-  headers: string[];
-  allowNone?: boolean;
-}) {
-  return (
-    <select
-      value={value === null ? "" : value.toString()}
-      onChange={(e) => {
-        const v = e.target.value;
-        onChange(v === "" ? null : Number(v));
-      }}
-      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-    >
-      {allowNone && <option value="">（指定なし）</option>}
-      {headers.map((h, idx) => (
-        <option key={idx} value={idx}>
-          {idx + 1}列目: {h || "(空)"}
-        </option>
-      ))}
-    </select>
-  );
+type RoleKey =
+  | "date"
+  | "summary"
+  | "amount"
+  | "incoming"
+  | "outgoing"
+  | "balance";
+
+interface RoleDef {
+  key: RoleKey;
+  label: string;
+  required: boolean;
+  color: string;
 }
+
+const ROLE_COLORS: Record<RoleKey, string> = {
+  date: "bg-sky-100 text-sky-800 border-sky-300",
+  summary: "bg-violet-100 text-violet-800 border-violet-300",
+  amount: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  incoming: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  outgoing: "bg-rose-100 text-rose-800 border-rose-300",
+  balance: "bg-amber-100 text-amber-800 border-amber-300",
+};
+
+const ROLE_LABEL: Record<RoleKey, string> = {
+  date: "日付",
+  summary: "摘要",
+  amount: "金額",
+  incoming: "入金",
+  outgoing: "出金",
+  balance: "残高",
+};
 
 export function MappingScreen({
   imported,
@@ -55,9 +58,9 @@ export function MappingScreen({
   onConfirm,
   onBack,
 }: Props) {
-  const [date, setDate] = useState<number>(initialMapping?.date ?? 0);
-  const [summary, setSummary] = useState<number>(
-    initialMapping?.summary ?? Math.min(2, imported.headers.length - 1),
+  const [date, setDate] = useState<number | null>(initialMapping?.date ?? null);
+  const [summary, setSummary] = useState<number | null>(
+    initialMapping?.summary ?? null,
   );
   const [balance, setBalance] = useState<number | null>(
     initialMapping?.balance ?? null,
@@ -69,10 +72,10 @@ export function MappingScreen({
     initialMapping?.amount ?? null,
   );
   const [incoming, setIncoming] = useState<number | null>(
-    initialMapping?.incoming ?? Math.min(3, imported.headers.length - 1),
+    initialMapping?.incoming ?? null,
   );
   const [outgoing, setOutgoing] = useState<number | null>(
-    initialMapping?.outgoing ?? Math.min(4, imported.headers.length - 1),
+    initialMapping?.outgoing ?? null,
   );
 
   const [bankName, setBankName] = useState(initialBankInfo?.bankName ?? "");
@@ -80,21 +83,152 @@ export function MappingScreen({
     initialBankInfo?.accountName ?? "",
   );
 
+  const [selectedRole, setSelectedRole] = useState<RoleKey | null>(null);
+
   const previewRows = useMemo(
     () => imported.rawRows.slice(0, PREVIEW_ROW_COUNT),
     [imported.rawRows],
   );
 
-  const validAmount =
-    amountStyle === "single" ? amount !== null : incoming !== null || outgoing !== null;
-  const canSubmit = validAmount && bankName.trim() !== "";
+  const roles = useMemo<RoleDef[]>(() => {
+    const base: RoleDef[] = [
+      {
+        key: "date",
+        label: ROLE_LABEL.date,
+        required: true,
+        color: ROLE_COLORS.date,
+      },
+      {
+        key: "summary",
+        label: ROLE_LABEL.summary,
+        required: true,
+        color: ROLE_COLORS.summary,
+      },
+    ];
+    if (amountStyle === "single") {
+      base.push({
+        key: "amount",
+        label: ROLE_LABEL.amount,
+        required: true,
+        color: ROLE_COLORS.amount,
+      });
+    } else {
+      base.push(
+        {
+          key: "incoming",
+          label: ROLE_LABEL.incoming,
+          required: false,
+          color: ROLE_COLORS.incoming,
+        },
+        {
+          key: "outgoing",
+          label: ROLE_LABEL.outgoing,
+          required: false,
+          color: ROLE_COLORS.outgoing,
+        },
+      );
+    }
+    base.push({
+      key: "balance",
+      label: ROLE_LABEL.balance,
+      required: false,
+      color: ROLE_COLORS.balance,
+    });
+    return base;
+  }, [amountStyle]);
+
+  function valueForRole(role: RoleKey): number | null {
+    switch (role) {
+      case "date":
+        return date;
+      case "summary":
+        return summary;
+      case "amount":
+        return amount;
+      case "incoming":
+        return incoming;
+      case "outgoing":
+        return outgoing;
+      case "balance":
+        return balance;
+    }
+  }
+
+  function setRoleValue(role: RoleKey, value: number | null) {
+    switch (role) {
+      case "date":
+        setDate(value);
+        break;
+      case "summary":
+        setSummary(value);
+        break;
+      case "amount":
+        setAmount(value);
+        break;
+      case "incoming":
+        setIncoming(value);
+        break;
+      case "outgoing":
+        setOutgoing(value);
+        break;
+      case "balance":
+        setBalance(value);
+        break;
+    }
+  }
+
+  function rolesForColumn(columnIndex: number): RoleDef[] {
+    return roles.filter((r) => valueForRole(r.key) === columnIndex);
+  }
+
+  function handleRoleClick(role: RoleKey) {
+    setSelectedRole((prev) => (prev === role ? null : role));
+  }
+
+  function handleColumnClick(columnIndex: number) {
+    if (!selectedRole) return;
+    roles.forEach((r) => {
+      if (r.key !== selectedRole && valueForRole(r.key) === columnIndex) {
+        setRoleValue(r.key, null);
+      }
+    });
+    setRoleValue(selectedRole, columnIndex);
+    setSelectedRole(null);
+  }
+
+  function clearRole(role: RoleKey) {
+    setRoleValue(role, null);
+  }
+
+  function changeAmountStyle(style: AmountStyle) {
+    if (style === amountStyle) return;
+    setAmountStyle(style);
+    if (style === "single") {
+      setIncoming(null);
+      setOutgoing(null);
+    } else {
+      setAmount(null);
+    }
+    if (selectedRole === "amount" && style === "split") setSelectedRole(null);
+    if (
+      (selectedRole === "incoming" || selectedRole === "outgoing") &&
+      style === "single"
+    ) {
+      setSelectedRole(null);
+    }
+  }
+
+  const requiredOk = roles.every(
+    (r) => !r.required || valueForRole(r.key) !== null,
+  );
+  const canSubmit = requiredOk && bankName.trim() !== "";
 
   function handleSubmit() {
     if (!canSubmit) return;
     onConfirm(
       {
-        date,
-        summary,
+        date: date ?? 0,
+        summary: summary ?? 0,
         balance,
         amountStyle,
         amount: amountStyle === "single" ? amount : null,
@@ -110,167 +244,216 @@ export function MappingScreen({
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-gray-50">
-      <header className="border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
-        <h1 className="text-lg font-bold text-gray-900">列マッピング</h1>
-        <p className="mt-1 text-xs text-gray-600">
-          読み込んだCSV「{imported.fileName}」のどの列が何にあたるかを指定してください。
-        </p>
-        {templateMatched && (
-          <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-0.5 text-[11px] font-semibold text-emerald-800">
-            登録済みテンプレートを自動適用しました。必要に応じて修正してください。
+      <header className="border-b border-gray-200 bg-white px-6 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-bold text-gray-900">列マッピング</h1>
+            <p className="mt-0.5 text-xs text-gray-600">
+              「{imported.fileName}」のどの列が何にあたるかを設定してください。
+            </p>
           </div>
-        )}
-      </header>
+          {templateMatched && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-0.5 text-[11px] font-semibold text-emerald-800">
+              登録済みテンプレートを自動適用しました
+            </span>
+          )}
+        </div>
 
-      <div className="grid flex-1 grid-cols-1 gap-6 overflow-auto p-6 lg:grid-cols-2">
-        <section className="rounded-lg border border-gray-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-gray-900">マッピング設定</h2>
-
-          <div className="mt-4 grid grid-cols-1 gap-4">
-            <Field label="日付の列">
-              <ColumnSelect
-                value={date}
-                onChange={(v) => setDate(v ?? 0)}
-                headers={imported.headers}
-              />
-            </Field>
-
-            <Field label="摘要の列">
-              <ColumnSelect
-                value={summary}
-                onChange={(v) => setSummary(v ?? 0)}
-                headers={imported.headers}
-              />
-            </Field>
-
-            <Field label="金額の入力方式">
-              <div className="flex gap-3">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="amount-style"
-                    checked={amountStyle === "split"}
-                    onChange={() => setAmountStyle("split")}
-                  />
-                  入金列・出金列の2列
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="amount-style"
-                    checked={amountStyle === "single"}
-                    onChange={() => setAmountStyle("single")}
-                  />
-                  金額1列（正負で区別）
-                </label>
-              </div>
-            </Field>
-
-            {amountStyle === "split" ? (
-              <>
-                <Field label="入金額の列">
-                  <ColumnSelect
-                    value={incoming}
-                    onChange={setIncoming}
-                    headers={imported.headers}
-                    allowNone
-                  />
-                </Field>
-                <Field label="出金額の列">
-                  <ColumnSelect
-                    value={outgoing}
-                    onChange={setOutgoing}
-                    headers={imported.headers}
-                    allowNone
-                  />
-                </Field>
-              </>
-            ) : (
-              <Field label="金額の列">
-                <ColumnSelect
-                  value={amount}
-                  onChange={setAmount}
-                  headers={imported.headers}
-                />
-              </Field>
-            )}
-
-            <Field label="残高の列（任意）">
-              <ColumnSelect
-                value={balance}
-                onChange={setBalance}
-                headers={imported.headers}
-                allowNone
-              />
-            </Field>
-
-            <div className="border-t border-gray-200 pt-4">
-              <Field label="銀行名 *">
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-12">
+          <label className="md:col-span-3">
+            <span className="mb-1 block text-[11px] font-semibold text-gray-700">
+              銀行名 *
+            </span>
+            <input
+              type="text"
+              value={bankName}
+              onChange={(e) => setBankName(e.target.value)}
+              placeholder="例: 楽天銀行"
+              className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </label>
+          <label className="md:col-span-3">
+            <span className="mb-1 block text-[11px] font-semibold text-gray-700">
+              口座名（任意）
+            </span>
+            <input
+              type="text"
+              value={accountName}
+              onChange={(e) => setAccountName(e.target.value)}
+              placeholder="例: 本店営業部 普通"
+              className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </label>
+          <div className="md:col-span-6">
+            <span className="mb-1 block text-[11px] font-semibold text-gray-700">
+              金額の入力方式
+            </span>
+            <div className="flex gap-3 pt-1">
+              <label className="flex items-center gap-2 text-sm">
                 <input
-                  type="text"
-                  value={bankName}
-                  onChange={(e) => setBankName(e.target.value)}
-                  placeholder="例: 三井住友銀行"
-                  className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  type="radio"
+                  name="amount-style"
+                  checked={amountStyle === "split"}
+                  onChange={() => changeAmountStyle("split")}
                 />
-              </Field>
-              <div className="mt-3">
-                <Field label="口座名（任意）">
-                  <input
-                    type="text"
-                    value={accountName}
-                    onChange={(e) => setAccountName(e.target.value)}
-                    placeholder="例: 本店営業部 普通"
-                    className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </Field>
-              </div>
+                入金列・出金列の2列
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="amount-style"
+                  checked={amountStyle === "single"}
+                  onChange={() => changeAmountStyle("single")}
+                />
+                金額1列（正負で区別）
+              </label>
             </div>
           </div>
-        </section>
+        </div>
 
-        <section className="rounded-lg border border-gray-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-gray-900">
-            プレビュー（先頭{PREVIEW_ROW_COUNT}行）
-          </h2>
-          <div className="mt-3 overflow-auto rounded-md border border-gray-200">
-            <table className="min-w-full text-xs">
-              <thead className="bg-gray-100 text-gray-700">
-                <tr>
-                  {imported.headers.map((h, idx) => (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-semibold text-gray-700">役割:</span>
+          {roles.map((r) => {
+            const value = valueForRole(r.key);
+            const mapped = value !== null;
+            const active = selectedRole === r.key;
+            const headerLabel = mapped
+              ? imported.headers[value] || "(空)"
+              : null;
+            return (
+              <button
+                type="button"
+                key={r.key}
+                onClick={() => handleRoleClick(r.key)}
+                className={`group inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
+                  active
+                    ? "border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-300"
+                    : mapped
+                      ? r.color
+                      : "border-dashed border-gray-300 bg-white text-gray-500 hover:border-gray-400"
+                }`}
+              >
+                <span className="font-semibold">
+                  {r.label}
+                  {r.required && <span className="text-red-500">*</span>}
+                </span>
+                {mapped ? (
+                  <>
+                    <span className="text-[10px] opacity-80">
+                      {(value ?? 0) + 1}列目「{headerLabel}」
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearRole(r.key);
+                      }}
+                      className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-black/10 text-[10px] hover:bg-black/20"
+                      title="この割当を解除"
+                    >
+                      ×
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[10px]">未設定</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-2 text-[11px] text-gray-600">
+          {selectedRole ? (
+            <span className="font-semibold text-blue-700">
+              選択中: {ROLE_LABEL[selectedRole]} →
+              下のプレビューの列ヘッダー（または列内のセル）をクリックして割り当ててください。もう一度同じ役割をクリックすると解除できます。
+            </span>
+          ) : (
+            <span>
+              役割ボタンをクリックして選択し、下のプレビューの該当列をクリックすると割り当てられます。
+            </span>
+          )}
+        </div>
+      </header>
+
+      <main className="flex-1 overflow-auto p-4">
+        <div className="overflow-auto rounded-md border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full text-xs">
+            <thead className="sticky top-0 z-10 bg-gray-50">
+              <tr>
+                <th className="w-12 border-b border-r border-gray-200 px-2 py-2 text-right text-[10px] font-medium text-gray-500">
+                  #
+                </th>
+                {imported.headers.map((h, idx) => {
+                  const mappedRoles = rolesForColumn(idx);
+                  const clickable = selectedRole !== null;
+                  return (
                     <th
                       key={idx}
-                      className="whitespace-nowrap border-r border-gray-200 px-2 py-1 text-left font-medium last:border-r-0"
+                      onClick={() => handleColumnClick(idx)}
+                      className={`min-w-[140px] border-b border-r border-gray-200 px-3 py-2 text-left font-medium last:border-r-0 ${
+                        clickable
+                          ? "cursor-pointer bg-blue-50 hover:bg-blue-100"
+                          : "cursor-default"
+                      }`}
                     >
                       <div className="text-[10px] text-gray-500">
                         {idx + 1}列目
                       </div>
-                      <div>{h || "(空)"}</div>
+                      <div className="text-gray-800">{h || "(空)"}</div>
+                      {mappedRoles.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {mappedRoles.map((r) => (
+                            <span
+                              key={r.key}
+                              className={`inline-block rounded-full border px-1.5 text-[10px] ${r.color}`}
+                            >
+                              {r.label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {previewRows.map((row, ridx) => (
-                  <tr
-                    key={ridx}
-                    className="border-t border-gray-100 odd:bg-white even:bg-gray-50"
-                  >
-                    {imported.headers.map((_, cidx) => (
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {previewRows.map((row, ridx) => (
+                <tr
+                  key={ridx}
+                  className="border-t border-gray-100 odd:bg-white even:bg-gray-50"
+                >
+                  <td className="border-r border-gray-100 px-2 py-1 text-right text-[10px] text-gray-400">
+                    {ridx + 1}
+                  </td>
+                  {imported.headers.map((_, cidx) => {
+                    const mappedRoles = rolesForColumn(cidx);
+                    const clickable = selectedRole !== null;
+                    const highlight = mappedRoles.length > 0;
+                    return (
                       <td
                         key={cidx}
-                        className="whitespace-nowrap border-r border-gray-100 px-2 py-1 last:border-r-0"
+                        onClick={() => handleColumnClick(cidx)}
+                        className={`whitespace-nowrap border-r border-gray-100 px-3 py-1 last:border-r-0 ${
+                          clickable
+                            ? "cursor-pointer hover:bg-blue-50"
+                            : highlight
+                              ? "bg-blue-50/40"
+                              : ""
+                        }`}
                       >
                         {row[cidx] ?? ""}
                       </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </main>
 
       <footer className="flex items-center justify-between border-t border-gray-200 bg-white px-6 py-3">
         <button
@@ -280,32 +463,24 @@ export function MappingScreen({
         >
           戻る
         </button>
-        <button
-          type="button"
-          disabled={!canSubmit}
-          onClick={handleSubmit}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          この設定で編集を開始
-        </button>
+        <div className="flex items-center gap-3">
+          {!canSubmit && (
+            <span className="text-[11px] text-gray-500">
+              {bankName.trim() === ""
+                ? "銀行名を入力してください"
+                : "必須の役割（*印）を割り当ててください"}
+            </span>
+          )}
+          <button
+            type="button"
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            この設定で編集を開始
+          </button>
+        </div>
       </footer>
     </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-semibold text-gray-700">
-        {label}
-      </span>
-      {children}
-    </label>
   );
 }

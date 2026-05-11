@@ -244,7 +244,7 @@ export function EditorScreen({
             onClick={handleExport}
             className="rounded-md bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"
           >
-            修正済CSVを書き出し
+            修正済みCSVファイルをダウンロード
           </button>
         </div>
       </header>
