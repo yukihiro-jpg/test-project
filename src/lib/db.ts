@@ -215,6 +215,23 @@ export async function getSession(
   return db.get("sessions", id);
 }
 
+export async function findInProgressByBankAccount(
+  bankName: string,
+  accountName: string,
+): Promise<ImportSession | undefined> {
+  const bk = bankName.trim();
+  const ac = accountName.trim();
+  if (!bk) return undefined;
+  const db = await getDb();
+  const all = await db.getAll("sessions");
+  return all.find(
+    (s) =>
+      s.status === "in_progress" &&
+      s.bankInfo.bankName.trim() === bk &&
+      s.bankInfo.accountName.trim() === ac,
+  );
+}
+
 export async function deleteSession(id: string): Promise<void> {
   const db = await getDb();
   await db.delete("sessions", id);

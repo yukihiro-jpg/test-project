@@ -1,4 +1,5 @@
 import { forwardRef } from "react";
+import { formatDateJa } from "../lib/date";
 import { needsReview } from "../lib/mapping";
 import type { TransactionRow } from "../types";
 import { SummaryEditCell } from "./SummaryEditCell";
@@ -69,7 +70,7 @@ export const ParsedDataPane = forwardRef<HTMLDivElement, Props>(
                 <th className="w-12 border-b border-r border-emerald-200 px-2 text-center text-[10px] font-medium text-emerald-500">
                   #
                 </th>
-                <th className="w-28 border-b border-r border-emerald-200 px-2 text-center font-medium">
+                <th className="w-36 border-b border-r border-emerald-200 px-2 text-center font-medium">
                   日付
                 </th>
                 <th className="border-b-2 border-r border-b-emerald-500 border-r-emerald-200 bg-emerald-100 px-2 text-center font-bold text-emerald-900">
@@ -104,8 +105,8 @@ export const ParsedDataPane = forwardRef<HTMLDivElement, Props>(
                     <td className="border-b border-r border-gray-100 px-2 text-right text-[10px] text-gray-400">
                       {idx + 1}
                     </td>
-                    <td className="whitespace-nowrap border-b border-r border-gray-100 px-2 font-mono text-[13px] tabular-nums text-gray-700">
-                      {row.date}
+                    <td className="whitespace-nowrap border-b border-r border-gray-100 px-2 text-[13px] tabular-nums text-gray-700">
+                      {formatDateJa(row.date)}
                     </td>
                     <td className="border-b border-r-2 border-r-emerald-200 border-b-gray-100 bg-white/60 p-0">
                       <SummaryEditCell
@@ -120,13 +121,13 @@ export const ParsedDataPane = forwardRef<HTMLDivElement, Props>(
                       />
                     </td>
                     <td
-                      className={`whitespace-nowrap border-b border-r border-gray-100 px-2 text-right font-mono text-[13px] tabular-nums font-semibold ${
+                      className={`whitespace-nowrap border-b border-r border-gray-100 px-2 text-right text-[13px] tabular-nums font-semibold ${
                         row.amount < 0 ? "text-red-600" : "text-gray-800"
                       }`}
                     >
                       {formatAmount(row.amount)}
                     </td>
-                    <td className="whitespace-nowrap border-b border-gray-100 px-2 text-right font-mono text-[13px] tabular-nums text-gray-700">
+                    <td className="whitespace-nowrap border-b border-gray-100 px-2 text-right text-[13px] tabular-nums text-gray-700">
                       {formatBalance(row.balance)}
                     </td>
                   </tr>

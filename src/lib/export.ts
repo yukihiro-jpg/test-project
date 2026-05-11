@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { formatDateIso, formatDateJa, dateDigits } from "./date";
 import type {
   BankInfo,
   ColumnMapping,
@@ -16,21 +17,11 @@ export function buildOutputCsv(
     const cloned = [...rawRow];
     if (edited) {
       cloned[mapping.summary] = edited.editedSummary;
+      cloned[mapping.date] = formatDateIso(edited.date);
     }
     return cloned;
   });
   return Papa.unparse([imported.headers, ...outputRows]);
-}
-
-function extractYmd(date: string): string {
-  if (!date) return "";
-  const digits = date.replace(/\D/g, "");
-  return digits.length >= 8 ? digits.slice(0, 8) : "";
-}
-
-function formatJpDate(ymd: string): string {
-  if (ymd.length !== 8) return "";
-  return `${ymd.slice(0, 4)}年${ymd.slice(4, 6)}月${ymd.slice(6, 8)}日`;
 }
 
 function sanitizeForFilename(value: string): string {
@@ -42,14 +33,14 @@ export function buildOutputFilename(
   rows: TransactionRow[],
 ): string {
   const dates = rows
-    .map((r) => extractYmd(r.date))
+    .map((r) => dateDigits(r.date))
     .filter((d) => d.length === 8)
     .sort();
   const from = dates[0] ?? "";
   const to = dates[dates.length - 1] ?? "";
   const bank = sanitizeForFilename(info.bankName || "bank");
   const range =
-    from && to ? `_${formatJpDate(from)}-${formatJpDate(to)}` : "";
+    from && to ? `_${formatDateJa(from)}-${formatDateJa(to)}` : "";
   return `${bank}${range}.csv`;
 }
 
