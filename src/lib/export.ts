@@ -1,32 +1,24 @@
 import Papa from "papaparse";
 import { formatDateIso, formatDateJa, dateDigits } from "./date";
-import type {
-  BankInfo,
-  ColumnMapping,
-  ImportedCsv,
-  TransactionRow,
-} from "../types";
+import type { BankInfo, TransactionRow } from "../types";
 
-export function buildOutputCsv(
-  imported: ImportedCsv,
-  mapping: ColumnMapping,
-  rows: TransactionRow[],
-): string {
-  const outputRows = imported.rawRows.map((rawRow, idx) => {
-    const edited = rows[idx];
-    const cloned = [...rawRow];
-    if (edited) {
-      for (const col of mapping.summary) {
-        cloned[col] = "";
-      }
-      if (mapping.summary.length > 0) {
-        cloned[mapping.summary[0]] = edited.editedSummary;
-      }
-      cloned[mapping.date] = formatDateIso(edited.date);
-    }
-    return cloned;
+function cleanNumberString(s: string): string {
+  if (!s) return "";
+  const cleaned = s.replace(/[\s,¥￥円]/g, "").trim();
+  return cleaned;
+}
+
+export function buildOutputCsv(rows: TransactionRow[]): string {
+  const outputHeaders = ["日付", "摘要", "入金", "出金", "残高"];
+  const outputRows = rows.map((r) => {
+    const date = formatDateIso(r.date);
+    const summary = r.editedSummary;
+    const incoming = r.amount > 0 ? r.amount.toString() : "";
+    const outgoing = r.amount < 0 ? Math.abs(r.amount).toString() : "";
+    const balance = cleanNumberString(r.balance);
+    return [date, summary, incoming, outgoing, balance];
   });
-  return Papa.unparse([imported.headers, ...outputRows]);
+  return Papa.unparse([outputHeaders, ...outputRows]);
 }
 
 function sanitizeForFilename(value: string): string {

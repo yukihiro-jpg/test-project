@@ -184,7 +184,7 @@ export function EditorScreen({
       );
       if (!ok) return;
     }
-    const csv = buildOutputCsv(imported, mapping, rows);
+    const csv = buildOutputCsv(rows);
     const filename = buildOutputFilename(bankInfo, rows);
     downloadCsv(csv, filename);
 
