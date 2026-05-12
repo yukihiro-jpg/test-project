@@ -27,7 +27,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis"],
+    "targets": ["nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -39,11 +39,14 @@
     "shortDescription": "銀行CSVの摘要欄を補完するツール",
     "longDescription": "会計事務所の顧問先向けに、銀行ダウンロードCSVの摘要欄を効率的に補完・修正するためのWindowsデスクトップアプリ",
     "windows": {
-      "wix": {
-        "language": ["ja-JP"]
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
       },
       "nsis": {
-        "languages": ["Japanese"]
+        "languages": ["Japanese"],
+        "displayLanguageSelector": false,
+        "installMode": "currentUser",
+        "installerHooks": "installer-hooks.nsi"
       }
     }
   }

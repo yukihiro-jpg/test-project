@@ -55,21 +55,47 @@ pnpm tauri build  # Windows用 msi/exe を生成
 ファイルシステムへの直接アクセスはなく、ダウンロード/アップロードは
 ブラウザ標準のAPIを使用しています。
 
-## Windowsでのビルド
+## 顧問先への配布（スタンドアロンインストーラのビルド）
 
-Windows で `msi` インストーラを生成するには:
+顧問先の PC には Node.js / Git / pnpm 等を一切インストールしない、単独のインストーラ（exe）を配布する場合の手順です。
 
-1. Rust ツールチェインをインストール (`rustup-init.exe`)
-2. Microsoft C++ Build Tools をインストール
-3. WebView2 ランタイム（Windows 11/最新の10には標準同梱）
-4. プロジェクトルートで:
+### 開発側 PC（インストーラを作る人）に必要なもの
 
-```powershell
+1. **Rust ツールチェイン**: https://rustup.rs から `rustup-init.exe` を実行
+2. **Visual Studio Build Tools**（C++ ワークロード）: https://visualstudio.microsoft.com/visual-cpp-build-tools/ から「Build Tools for Visual Studio」をインストール。インストーラで「C++ によるデスクトップ開発」を選択
+3. WebView2 SDK は Tauri CLI が必要に応じて自動取得します
+
+初回セットアップは合計 5〜8 GB ほどダウンロードがあり、20〜40 分かかります。
+
+### インストーラを生成する
+
+```cmd
 pnpm install
 pnpm tauri build
 ```
 
-生成物は `src-tauri/target/release/bundle/msi/` に出力されます。
+初回ビルドは Rust 依存のコンパイルで 10〜20 分かかります。2 回目以降は数分で完了します。
+
+生成された **インストーラ exe** は次の場所に出力されます:
+
+```
+src-tauri\target\release\bundle\nsis\銀行CSV修正ツール_0.1.0_x64-setup.exe
+```
+
+この `.exe` を 1 ファイルだけ顧問先に渡せばよいです。
+
+### 顧問先での使い方
+
+1. 配布された `銀行CSV修正ツール_0.1.0_x64-setup.exe` をダブルクリック
+2. 言語選択（既定で日本語）→ インストール先（既定で `%LOCALAPPDATA%\Programs`、管理者権限不要）
+3. インストール完了で **デスクトップにアプリアイコンが自動作成**
+4. アイコンをダブルクリックでアプリ起動。cmd 等の黒い画面は表示されません
+
+WebView2 が未導入の PC でも、インストーラに同梱されたブートストラッパが自動でセットアップします（ネット接続が必要）。
+
+### バージョンアップ時
+
+`src-tauri/tauri.conf.json` の `version` を上げてから再ビルドし、新しい `_x64-setup.exe` を顧問先に渡して上書きインストールしてもらえば更新できます。
 
 ## 配布
 
