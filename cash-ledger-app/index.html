@@ -560,15 +560,17 @@ let currentEntryKind='normal';
 function showPage(p) {
   currentPage=p;
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('nav-'+p).classList.add('active');
+  const navBtn=document.getElementById('nav-'+p);
+  if (navBtn) navBtn.classList.add('active');
   renderPage();
 }
 function renderPage() {
   const el=document.getElementById('page-content');
-  if      (currentPage==='dashboard') el.innerHTML=pageDashboard();
-  else if (currentPage==='ledger')    el.innerHTML=pageLedger();
-  else if (currentPage==='advances')  el.innerHTML=pageAdvances();
-  else if (currentPage==='reports')   el.innerHTML=pageReports();
+  if      (currentPage==='dashboard')         el.innerHTML=pageDashboard();
+  else if (currentPage==='ledger')            el.innerHTML=pageLedger();
+  else if (currentPage==='advances')          el.innerHTML=pageAdvances();
+  else if (currentPage==='reports')           el.innerHTML=pageReports();
+  else if (currentPage==='settlement-detail') el.innerHTML=pageSettlementDetail();
 }
 
 function pageDashboard() {
@@ -897,6 +899,15 @@ function pageReports() {
         </div>
       </div>
       <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">📋 仮払精算明細表</div>
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">使用明細を1行ずつ展開した詳細表（仮払いごとに何に使ったかを全件表示）</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="showPage('settlement-detail')">👁️ 表示</button>
+          <button class="btn btn-outline btn-sm" onclick="showPage('settlement-detail');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportSettlementDetailCSV()">📥 CSV出力</button>
+        </div>
+      </div>
+      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
         <div style="font-size:15px;font-weight:700;margin-bottom:6px;">⚠️ 未精算一覧</div>
         <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">精算未完了の仮払い（${pending.length}件）</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -915,6 +926,103 @@ function pageReports() {
       </div>
     </div>
   </div>`;
+}
+
+function buildSettlementDetailRows() {
+  const rows = [];
+  getAdvances().forEach(a => {
+    if (a.settlementItems && a.settlementItems.length > 0) {
+      a.settlementItems.forEach(it => {
+        rows.push({
+          id: a.id, advDate: a.date, employeeName: a.employeeName, purpose: a.purpose,
+          advanceAmount: a.advanceAmount, settlementDate: a.settlementDate,
+          usageDate: it.date||'', storeName: it.storeName||'', itemName: it.itemName||'',
+          amount: Number(it.amount||0), status: a.status,
+          settlementMethod: a.settlementMethod
+        });
+      });
+    } else {
+      rows.push({
+        id: a.id, advDate: a.date, employeeName: a.employeeName, purpose: a.purpose,
+        advanceAmount: a.advanceAmount, settlementDate: a.settlementDate||'',
+        usageDate: '', storeName: '', itemName: '', amount: null, status: a.status,
+        settlementMethod: a.settlementMethod
+      });
+    }
+  });
+  rows.sort((a,b)=>a.advDate!==b.advDate?a.advDate.localeCompare(b.advDate):a.id.localeCompare(b.id));
+  return rows;
+}
+
+function pageSettlementDetail() {
+  const rows = buildSettlementDetailRows();
+  const s = getSettings();
+  const totalAmount = rows.reduce((sum,r)=>sum+(r.amount||0),0);
+  return `
+  <div class="card">
+    <div class="toolbar no-print">
+      <div class="toolbar-l">
+        <button class="btn btn-secondary btn-sm" onclick="showPage('reports')">← 帳票出力に戻る</button>
+      </div>
+      <div class="toolbar-r">
+        <button class="btn btn-secondary btn-sm" onclick="exportSettlementDetailCSV()">📥 CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ 印刷/PDF</button>
+      </div>
+    </div>
+    <div class="print-only" style="text-align:center;margin-bottom:14px;">
+      <div style="font-size:18px;font-weight:700;">仮 払 精 算 明 細 表</div>
+      <div style="font-size:12px;margin-top:4px;">${esc(s.companyName)}　出力日: ${fd(today())}</div>
+    </div>
+    <div class="card-title no-print">📋 仮払精算明細表（使用明細を展開）</div>
+    ${rows.length === 0
+      ? '<div class="empty-state"><div class="icon">📋</div><p>仮払い記録がありません</p></div>'
+      : `<div class="table-wrap"><table>
+          <thead><tr>
+            <th>番号</th><th>仮払日</th><th>氏名</th><th>目的</th>
+            <th class="r">仮払金額</th><th>精算日</th><th>使用日</th>
+            <th>相手先名称</th><th>内容</th><th class="r">金額</th><th>状態</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(r=>`<tr class="${r.status==='pending'?'row-advance':''}">
+              <td><strong>${esc(r.id)}</strong></td>
+              <td style="white-space:nowrap;">${fd(r.advDate)}</td>
+              <td>${esc(r.employeeName)}</td>
+              <td>${esc(r.purpose)}</td>
+              <td class="r mono">${fc(r.advanceAmount)}</td>
+              <td style="white-space:nowrap;">${fd(r.settlementDate)}</td>
+              <td style="white-space:nowrap;">${fd(r.usageDate)}</td>
+              <td>${esc(r.storeName)}</td>
+              <td>${esc(r.itemName)}</td>
+              <td class="r mono">${r.amount!=null?fc(r.amount):'—'}</td>
+              <td><span class="badge badge-${r.status==='pending'?'pending':'settled'}">${r.status==='pending'?'未精算':'精算済'}</span></td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot><tr>
+            <td colspan="9" style="text-align:right;">使用金額 合計</td>
+            <td class="r mono num-bold">${fc(totalAmount)}</td>
+            <td></td>
+          </tr></tfoot>
+        </table></div>`}
+  </div>`;
+}
+
+function exportSettlementDetailCSV() {
+  const s = getSettings();
+  const rows = [
+    [`仮払精算明細表`, s.companyName, `出力日:${today()}`],
+    ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用日','相手先名称','内容','金額','状態']
+  ];
+  buildSettlementDetailRows().forEach(r=>{
+    rows.push([
+      r.id, r.advDate, r.employeeName, r.purpose, r.advanceAmount,
+      r.settlementDate||'',
+      r.settlementMethod==='transfer'?'振込':r.settlementMethod==='cash'?'現金':'',
+      r.usageDate||'', r.storeName||'', r.itemName||'',
+      r.amount!=null?r.amount:'',
+      r.status==='pending'?'未精算':'精算済'
+    ]);
+  });
+  dlCSV(rows, `仮払精算明細表_${today()}.csv`);
 }
 
 function setEntryKind(kind) {
@@ -1336,16 +1444,32 @@ function checkAndRestoreAutoBackup() {
 }
 
 function initApp() {
-  checkAndRestoreAutoBackup();
-  const s=getSettings();
-  if (!s){ document.getElementById('setup-screen').style.display='flex'; return; }
-  document.getElementById('setup-screen').style.display='none';
-  updateHeader(); renderPage();
-  doAutoSave();
+  try {
+    checkAndRestoreAutoBackup();
+    const s=getSettings();
+    if (!s){ document.getElementById('setup-screen').style.display='flex'; return; }
+    document.getElementById('setup-screen').style.display='none';
+    updateHeader(); renderPage();
+    doAutoSave();
+  } catch (err) {
+    console.error('initApp error:', err);
+    const hc=document.getElementById('header-company');
+    if (hc) hc.textContent='読み込みエラー';
+    const pc=document.getElementById('page-content');
+    if (pc) pc.innerHTML=`<div class="card"><div class="card-title">⚠️ 起動エラー</div>
+      <p style="margin-bottom:10px;">アプリの初期化中にエラーが発生しました。</p>
+      <pre style="background:#f8fafc;padding:10px;border-radius:6px;font-size:11px;overflow:auto;">${esc(err&&err.message||err)}</pre>
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp-recover').click()">📤 バックアップから復元</button>
+        <input type="file" id="imp-recover" accept=".json" style="display:none;" onchange="importBackup(event)">
+        <button class="btn btn-danger btn-sm" onclick="if(confirm('全データを削除して初期状態に戻します。よろしいですか？')){localStorage.clear();location.reload();}">🗑️ データを全削除して再起動</button>
+      </div></div>`;
+  }
 }
 
-window.addEventListener('beforeunload', ()=>{ doAutoSave(); });
+window.addEventListener('beforeunload', ()=>{ try { doAutoSave(); } catch{} });
 
-initApp();
+if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', initApp);
+else initApp();
 </script>
 </body>
