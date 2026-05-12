@@ -10,7 +10,7 @@ export interface ImportedCsv {
 
 export interface ColumnMapping {
   date: number;
-  summary: number;
+  summary: number[];
   balance: number | null;
   amountStyle: AmountStyle;
   amount: number | null;

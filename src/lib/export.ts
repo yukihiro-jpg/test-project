@@ -16,7 +16,12 @@ export function buildOutputCsv(
     const edited = rows[idx];
     const cloned = [...rawRow];
     if (edited) {
-      cloned[mapping.summary] = edited.editedSummary;
+      for (const col of mapping.summary) {
+        cloned[col] = "";
+      }
+      if (mapping.summary.length > 0) {
+        cloned[mapping.summary[0]] = edited.editedSummary;
+      }
       cloned[mapping.date] = formatDateIso(edited.date);
     }
     return cloned;

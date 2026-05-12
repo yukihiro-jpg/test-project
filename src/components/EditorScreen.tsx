@@ -299,7 +299,7 @@ export function EditorScreen({
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-2">
+      <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 bg-gray-100 p-3">
         <RawCsvPane
           ref={leftRef}
           imported={imported}

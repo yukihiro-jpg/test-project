@@ -15,13 +15,20 @@ export function needsReview(summary: string): boolean {
   return summary.trim() === "";
 }
 
+function joinSummary(row: string[], indices: number[]): string {
+  const parts = indices
+    .map((idx) => (row[idx] ?? "").toString().trim())
+    .filter((s) => s !== "");
+  return parts.join(" ");
+}
+
 export function applyMapping(
   imported: ImportedCsv,
   mapping: ColumnMapping,
 ): TransactionRow[] {
   return imported.rawRows.map((row, idx) => {
     const date = (row[mapping.date] ?? "").toString().trim();
-    const original = (row[mapping.summary] ?? "").toString();
+    const original = joinSummary(row, mapping.summary);
     const balance =
       mapping.balance !== null ? (row[mapping.balance] ?? "").toString() : "";
 
@@ -40,16 +47,14 @@ export function applyMapping(
       amount = inc - out;
     }
 
-    const summaryStr = original.toString();
-
     return {
       id: idx,
       date,
-      originalSummary: summaryStr,
-      editedSummary: summaryStr,
+      originalSummary: original,
+      editedSummary: original,
       amount,
       balance,
-      needsReview: needsReview(summaryStr),
+      needsReview: needsReview(original),
     };
   });
 }

@@ -67,6 +67,19 @@ interface CsvToolDB extends DBSchema {
   };
 }
 
+function normalizeMapping(m: ColumnMapping): ColumnMapping {
+  const raw = m as unknown as { summary: unknown };
+  let summary: number[];
+  if (Array.isArray(raw.summary)) {
+    summary = raw.summary as number[];
+  } else if (typeof raw.summary === "number") {
+    summary = [raw.summary];
+  } else {
+    summary = [];
+  }
+  return { ...m, summary };
+}
+
 let dbPromise: Promise<IDBPDatabase<CsvToolDB>> | null = null;
 
 function getDb(): Promise<IDBPDatabase<CsvToolDB>> {
@@ -110,7 +123,9 @@ export async function findTemplateBySignature(
 ): Promise<BankTemplate | undefined> {
   const db = await getDb();
   const sig = headerSignature(headers);
-  return db.getFromIndex("templates", "by-signature", sig);
+  const tpl = await db.getFromIndex("templates", "by-signature", sig);
+  if (!tpl) return undefined;
+  return { ...tpl, columnMap: normalizeMapping(tpl.columnMap) };
 }
 
 export async function upsertTemplate(
@@ -202,17 +217,24 @@ export async function markSessionCompleted(id: string): Promise<void> {
   await db.put("sessions", session);
 }
 
+function normalizeSession(s: ImportSession): ImportSession {
+  return { ...s, mapping: normalizeMapping(s.mapping) };
+}
+
 export async function listSessions(): Promise<ImportSession[]> {
   const db = await getDb();
   const all = await db.getAll("sessions");
-  return all.sort((a, b) => b.updatedAt - a.updatedAt);
+  return all
+    .map(normalizeSession)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function getSession(
   id: string,
 ): Promise<ImportSession | undefined> {
   const db = await getDb();
-  return db.get("sessions", id);
+  const s = await db.get("sessions", id);
+  return s ? normalizeSession(s) : undefined;
 }
 
 export async function findInProgressByBankAccount(
@@ -224,12 +246,13 @@ export async function findInProgressByBankAccount(
   if (!bk) return undefined;
   const db = await getDb();
   const all = await db.getAll("sessions");
-  return all.find(
+  const found = all.find(
     (s) =>
       s.status === "in_progress" &&
       s.bankInfo.bankName.trim() === bk &&
       s.bankInfo.accountName.trim() === ac,
   );
+  return found ? normalizeSession(found) : undefined;
 }
 
 export interface KnownAccount {

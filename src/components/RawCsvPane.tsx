@@ -14,8 +14,8 @@ export const RawCsvPane = forwardRef<HTMLDivElement, Props>(function RawCsvPane(
   ref,
 ) {
   return (
-    <div className="flex h-full min-h-0 flex-col border-r-4 border-rose-300 bg-rose-50">
-      <div className="flex items-center justify-between border-b border-rose-300 bg-rose-100 px-4 py-2.5">
+    <div className="flex h-full min-h-0 flex-col rounded-md border border-rose-300 bg-white shadow-sm">
+      <div className="flex items-center justify-between rounded-t-md border-b border-rose-300 bg-rose-100 px-4 py-2.5">
         <div>
           <div className="text-sm font-bold text-rose-900">
             元CSV（アップロードしたファイル）
@@ -31,7 +31,7 @@ export const RawCsvPane = forwardRef<HTMLDivElement, Props>(function RawCsvPane(
       <div
         ref={ref}
         onScroll={(e) => onScroll((e.target as HTMLDivElement).scrollTop)}
-        className="flex-1 overflow-auto bg-rose-50"
+        className="flex-1 overflow-auto bg-white"
       >
         <table className="min-w-full border-collapse text-xs">
           <thead className="sticky top-0 z-10 bg-rose-100 text-rose-900">
@@ -58,16 +58,16 @@ export const RawCsvPane = forwardRef<HTMLDivElement, Props>(function RawCsvPane(
                 className={
                   selectedRow === idx
                     ? "cursor-pointer bg-blue-100"
-                    : "cursor-pointer hover:bg-rose-100/60"
+                    : "cursor-pointer hover:bg-rose-50"
                 }
               >
-                <td className="border-b border-r border-rose-100 px-2 text-right text-[10px] text-rose-400">
+                <td className="border-b border-r border-gray-100 px-2 text-right text-[10px] text-gray-400">
                   {idx + 1}
                 </td>
                 {imported.headers.map((_, cidx) => (
                   <td
                     key={cidx}
-                    className="whitespace-nowrap border-b border-r border-rose-100 px-2 text-slate-700 last:border-r-0"
+                    className="whitespace-nowrap border-b border-r border-gray-100 px-2 text-slate-700 last:border-r-0"
                   >
                     {row[cidx] ?? ""}
                   </td>

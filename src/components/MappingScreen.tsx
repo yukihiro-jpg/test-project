@@ -30,25 +30,54 @@ interface RoleDef {
   key: RoleKey;
   label: string;
   required: boolean;
-  color: string;
+  chip: string;
+  cellBg: string;
+  cellBgHover: string;
 }
 
-const ROLE_COLORS: Record<RoleKey, string> = {
-  date: "bg-sky-100 text-sky-800 border-sky-300",
-  summary: "bg-violet-100 text-violet-800 border-violet-300",
-  amount: "bg-emerald-100 text-emerald-800 border-emerald-300",
-  incoming: "bg-emerald-100 text-emerald-800 border-emerald-300",
-  outgoing: "bg-rose-100 text-rose-800 border-rose-300",
-  balance: "bg-amber-100 text-amber-800 border-amber-300",
-};
-
-const ROLE_LABEL: Record<RoleKey, string> = {
-  date: "日付",
-  summary: "摘要",
-  amount: "金額",
-  incoming: "入金",
-  outgoing: "出金",
-  balance: "残高",
+const ROLE_DEFS: Record<RoleKey, Omit<RoleDef, "key">> = {
+  date: {
+    label: "日付",
+    required: true,
+    chip: "bg-sky-100 text-sky-800 border-sky-300",
+    cellBg: "bg-sky-50",
+    cellBgHover: "bg-sky-100",
+  },
+  summary: {
+    label: "摘要",
+    required: true,
+    chip: "bg-violet-100 text-violet-800 border-violet-300",
+    cellBg: "bg-violet-50",
+    cellBgHover: "bg-violet-100",
+  },
+  amount: {
+    label: "金額",
+    required: true,
+    chip: "bg-emerald-100 text-emerald-800 border-emerald-300",
+    cellBg: "bg-emerald-50",
+    cellBgHover: "bg-emerald-100",
+  },
+  incoming: {
+    label: "入金",
+    required: false,
+    chip: "bg-emerald-100 text-emerald-800 border-emerald-300",
+    cellBg: "bg-emerald-50",
+    cellBgHover: "bg-emerald-100",
+  },
+  outgoing: {
+    label: "出金",
+    required: false,
+    chip: "bg-rose-100 text-rose-800 border-rose-300",
+    cellBg: "bg-rose-50",
+    cellBgHover: "bg-rose-100",
+  },
+  balance: {
+    label: "残高",
+    required: false,
+    chip: "bg-amber-100 text-amber-800 border-amber-300",
+    cellBg: "bg-amber-50",
+    cellBgHover: "bg-amber-100",
+  },
 };
 
 export function MappingScreen({
@@ -60,8 +89,8 @@ export function MappingScreen({
   onBack,
 }: Props) {
   const [date, setDate] = useState<number | null>(initialMapping?.date ?? null);
-  const [summary, setSummary] = useState<number | null>(
-    initialMapping?.summary ?? null,
+  const [summary, setSummary] = useState<number[]>(
+    initialMapping?.summary ?? [],
   );
   const [balance, setBalance] = useState<number | null>(
     initialMapping?.balance ?? null,
@@ -85,6 +114,7 @@ export function MappingScreen({
   );
 
   const [selectedRole, setSelectedRole] = useState<RoleKey | null>(null);
+  const [hoveredColumn, setHoveredColumn] = useState<number | null>(null);
   const [knownAccounts, setKnownAccounts] = useState<KnownAccount[]>([]);
 
   useEffect(() => {
@@ -97,76 +127,34 @@ export function MappingScreen({
   );
 
   const roles = useMemo<RoleDef[]>(() => {
-    const base: RoleDef[] = [
-      {
-        key: "date",
-        label: ROLE_LABEL.date,
-        required: true,
-        color: ROLE_COLORS.date,
-      },
-      {
-        key: "summary",
-        label: ROLE_LABEL.summary,
-        required: true,
-        color: ROLE_COLORS.summary,
-      },
-    ];
-    if (amountStyle === "single") {
-      base.push({
-        key: "amount",
-        label: ROLE_LABEL.amount,
-        required: true,
-        color: ROLE_COLORS.amount,
-      });
-    } else {
-      base.push(
-        {
-          key: "incoming",
-          label: ROLE_LABEL.incoming,
-          required: false,
-          color: ROLE_COLORS.incoming,
-        },
-        {
-          key: "outgoing",
-          label: ROLE_LABEL.outgoing,
-          required: false,
-          color: ROLE_COLORS.outgoing,
-        },
-      );
-    }
-    base.push({
-      key: "balance",
-      label: ROLE_LABEL.balance,
-      required: false,
-      color: ROLE_COLORS.balance,
-    });
-    return base;
+    const order: RoleKey[] =
+      amountStyle === "single"
+        ? ["date", "summary", "amount", "balance"]
+        : ["date", "summary", "incoming", "outgoing", "balance"];
+    return order.map((key) => ({ key, ...ROLE_DEFS[key] }));
   }, [amountStyle]);
 
-  function valueForRole(role: RoleKey): number | null {
+  function getColumnsForRole(role: RoleKey): number[] {
     switch (role) {
       case "date":
-        return date;
+        return date !== null ? [date] : [];
       case "summary":
         return summary;
       case "amount":
-        return amount;
+        return amount !== null ? [amount] : [];
       case "incoming":
-        return incoming;
+        return incoming !== null ? [incoming] : [];
       case "outgoing":
-        return outgoing;
+        return outgoing !== null ? [outgoing] : [];
       case "balance":
-        return balance;
+        return balance !== null ? [balance] : [];
     }
   }
 
-  function setRoleValue(role: RoleKey, value: number | null) {
+  function setSingleRoleValue(role: RoleKey, value: number | null) {
     switch (role) {
       case "date":
         setDate(value);
-        break;
-      case "summary":
-        setSummary(value);
         break;
       case "amount":
         setAmount(value);
@@ -183,8 +171,19 @@ export function MappingScreen({
     }
   }
 
+  function clearOtherRolesOnColumn(columnIndex: number, except: RoleKey) {
+    if (except !== "date" && date === columnIndex) setDate(null);
+    if (except !== "amount" && amount === columnIndex) setAmount(null);
+    if (except !== "incoming" && incoming === columnIndex) setIncoming(null);
+    if (except !== "outgoing" && outgoing === columnIndex) setOutgoing(null);
+    if (except !== "balance" && balance === columnIndex) setBalance(null);
+    if (except !== "summary" && summary.includes(columnIndex)) {
+      setSummary(summary.filter((i) => i !== columnIndex));
+    }
+  }
+
   function rolesForColumn(columnIndex: number): RoleDef[] {
-    return roles.filter((r) => valueForRole(r.key) === columnIndex);
+    return roles.filter((r) => getColumnsForRole(r.key).includes(columnIndex));
   }
 
   function handleRoleClick(role: RoleKey) {
@@ -193,17 +192,28 @@ export function MappingScreen({
 
   function handleColumnClick(columnIndex: number) {
     if (!selectedRole) return;
-    roles.forEach((r) => {
-      if (r.key !== selectedRole && valueForRole(r.key) === columnIndex) {
-        setRoleValue(r.key, null);
+
+    if (selectedRole === "summary") {
+      if (summary.includes(columnIndex)) {
+        setSummary(summary.filter((i) => i !== columnIndex));
+      } else {
+        setSummary([...summary, columnIndex].sort((a, b) => a - b));
+        clearOtherRolesOnColumn(columnIndex, "summary");
       }
-    });
-    setRoleValue(selectedRole, columnIndex);
+      return;
+    }
+
+    clearOtherRolesOnColumn(columnIndex, selectedRole);
+    setSingleRoleValue(selectedRole, columnIndex);
     setSelectedRole(null);
   }
 
   function clearRole(role: RoleKey) {
-    setRoleValue(role, null);
+    if (role === "summary") {
+      setSummary([]);
+    } else {
+      setSingleRoleValue(role, null);
+    }
   }
 
   function changeAmountStyle(style: AmountStyle) {
@@ -224,9 +234,10 @@ export function MappingScreen({
     }
   }
 
-  const requiredOk = roles.every(
-    (r) => !r.required || valueForRole(r.key) !== null,
-  );
+  const requiredOk = roles.every((r) => {
+    if (!r.required) return true;
+    return getColumnsForRole(r.key).length > 0;
+  });
   const canSubmit =
     requiredOk && bankName.trim() !== "" && accountName.trim() !== "";
 
@@ -235,7 +246,7 @@ export function MappingScreen({
     onConfirm(
       {
         date: date ?? 0,
-        summary: summary ?? 0,
+        summary,
         balance,
         amountStyle,
         amount: amountStyle === "single" ? amount : null,
@@ -258,7 +269,7 @@ export function MappingScreen({
               CSVファイルの列を設定
             </h1>
             <p className="mt-0.5 text-xs text-gray-600">
-              アップロードした「{imported.fileName}」の各列が「日付」「摘要」「金額」などのどれにあたるかを設定してください。
+              アップロードした「{imported.fileName}」の各列が「日付」「摘要」「金額」などのどれにあたるかを設定してください。摘要は複数列を割り当てることもできます。
             </p>
           </div>
           {templateMatched && (
@@ -355,14 +366,15 @@ export function MappingScreen({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold text-gray-700">役割:</span>
           {roles.map((r) => {
-            const value = valueForRole(r.key);
-            const mapped = value !== null;
+            const cols = getColumnsForRole(r.key);
+            const mapped = cols.length > 0;
             const active = selectedRole === r.key;
-            const headerLabel = mapped
-              ? imported.headers[value] || "(空)"
-              : null;
             const statusText = mapped
-              ? `${(value ?? 0) + 1}列目「${headerLabel}」`
+              ? cols
+                  .map(
+                    (i) => `${i + 1}列目「${imported.headers[i] || "(空)"}」`,
+                  )
+                  .join(", ")
               : "未設定";
             return (
               <span
@@ -371,7 +383,7 @@ export function MappingScreen({
                   active
                     ? "border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-300"
                     : mapped
-                      ? r.color
+                      ? r.chip
                       : "border-dashed border-gray-300 bg-white text-gray-500"
                 }`}
               >
@@ -383,6 +395,11 @@ export function MappingScreen({
                   <span className="font-semibold">
                     {r.label}
                     {r.required && <span className="text-red-500">*</span>}
+                    {r.key === "summary" && cols.length > 1 && (
+                      <span className="ml-0.5 text-[10px] font-normal opacity-70">
+                        ({cols.length})
+                      </span>
+                    )}
                   </span>
                   <span className="text-[10px] opacity-80">{statusText}</span>
                 </button>
@@ -403,9 +420,14 @@ export function MappingScreen({
         </div>
 
         <div className="mt-2 text-[11px] text-gray-600">
-          {selectedRole ? (
+          {selectedRole === "summary" ? (
+            <span className="font-semibold text-violet-700">
+              選択中: 摘要 →
+              プレビューで列をクリックすると追加されます。複数列を選択でき、もう一度クリックすると外せます。終わったら別の役割を選ぶか「摘要」をもう一度クリック。
+            </span>
+          ) : selectedRole ? (
             <span className="font-semibold text-blue-700">
-              選択中: {ROLE_LABEL[selectedRole]} →
+              選択中: {ROLE_DEFS[selectedRole].label} →
               下のプレビューの列ヘッダー（または列内のセル）をクリックして割り当ててください。もう一度同じ役割をクリックすると解除できます。
             </span>
           ) : (
@@ -431,9 +453,11 @@ export function MappingScreen({
                     <th
                       key={idx}
                       onClick={() => handleColumnClick(idx)}
+                      onMouseEnter={() => setHoveredColumn(idx)}
+                      onMouseLeave={() => setHoveredColumn(null)}
                       className={`min-w-[140px] border-b border-r border-gray-200 px-3 py-2 text-left font-medium last:border-r-0 ${
                         clickable
-                          ? "cursor-pointer bg-blue-50 hover:bg-blue-100"
+                          ? "cursor-pointer hover:bg-blue-100/40"
                           : "cursor-default"
                       }`}
                     >
@@ -445,7 +469,7 @@ export function MappingScreen({
                         {mappedRoles.map((r) => (
                           <span
                             key={r.key}
-                            className={`inline-block rounded-full border px-1.5 text-[10px] ${r.color}`}
+                            className={`inline-block rounded-full border px-1.5 text-[10px] ${r.chip}`}
                           >
                             {r.label}
                           </span>
@@ -458,27 +482,29 @@ export function MappingScreen({
             </thead>
             <tbody>
               {previewRows.map((row, ridx) => (
-                <tr
-                  key={ridx}
-                  className="border-t border-gray-100 odd:bg-white even:bg-gray-50"
-                >
+                <tr key={ridx} className="border-t border-gray-100">
                   <td className="border-r border-gray-100 px-2 py-1 text-right text-[10px] text-gray-400">
                     {ridx + 1}
                   </td>
                   {imported.headers.map((_, cidx) => {
                     const mappedRoles = rolesForColumn(cidx);
+                    const role = mappedRoles[0];
                     const clickable = selectedRole !== null;
-                    const highlight = mappedRoles.length > 0;
+                    const isHovered = hoveredColumn === cidx;
+                    let cellBg = "bg-white";
+                    if (role) {
+                      cellBg = isHovered ? role.cellBgHover : role.cellBg;
+                    } else if (clickable && isHovered) {
+                      cellBg = "bg-blue-100/40";
+                    }
                     return (
                       <td
                         key={cidx}
                         onClick={() => handleColumnClick(cidx)}
-                        className={`whitespace-nowrap border-r border-gray-100 px-3 py-1 last:border-r-0 ${
-                          clickable
-                            ? "cursor-pointer hover:bg-blue-50"
-                            : highlight
-                              ? "bg-blue-50/40"
-                              : ""
+                        onMouseEnter={() => setHoveredColumn(cidx)}
+                        onMouseLeave={() => setHoveredColumn(null)}
+                        className={`whitespace-nowrap border-r border-gray-100 px-3 py-1 last:border-r-0 ${cellBg} ${
+                          clickable ? "cursor-pointer" : ""
                         }`}
                       >
                         {row[cidx] ?? ""}

@@ -45,8 +45,8 @@ export const ParsedDataPane = forwardRef<HTMLDivElement, Props>(
       (r) => r.needsReview && needsReview(r.editedSummary),
     ).length;
     return (
-      <div className="flex h-full min-h-0 flex-col bg-white">
-        <div className="flex items-center justify-between border-b border-emerald-300 bg-emerald-100 px-4 py-2.5">
+      <div className="flex h-full min-h-0 flex-col rounded-md border border-emerald-300 bg-white shadow-sm">
+        <div className="flex items-center justify-between rounded-t-md border-b border-emerald-300 bg-emerald-100 px-4 py-2.5">
           <div>
             <div className="text-sm font-bold text-emerald-900">
               修正データ（あなたが編集する欄）
