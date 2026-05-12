@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>現金出納帳・仮払管理</title>
+  <style>
+    :root {
+      --primary: #1e40af;
+      --primary-light: #dbeafe;
+      --success: #15803d;
+      --success-light: #dcfce7;
+      --danger: #b91c1c;
+      --danger-light: #fee2e2;
+      --warning: #b45309;
+      --warning-light: #fef3c7;
+      --gray-50: #f8fafc;
+      --gray-100: #f1f5f9;
+      --gray-200: #e2e8f0;
+      --gray-300: #cbd5e1;
+      --gray-500: #64748b;
+      --gray-700: #334155;
+      --gray-900: #0f172a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', 'Yu Gothic', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ===== HEADER ===== */
+    #app-header {
+      background: var(--primary);
+      color: white;
+      padding: 10px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+    #app-header h1 { font-size: 17px; font-weight: 700; }
+    #header-company { font-size: 12px; opacity: 0.8; margin-bottom: 2px; }
+    #header-balance { font-size: 18px; font-weight: 700; }
+
+    /* ===== NAV ===== */
+    #app-nav {
+      background: white;
+      border-bottom: 2px solid var(--gray-200);
+      display: flex;
+      padding: 0 20px;
+    }
+    .nav-btn {
+      padding: 11px 18px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--gray-500);
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .nav-btn:hover { color: var(--primary); }
+    .nav-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
+
+    /* ===== MAIN ===== */
+    #app-main { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+
+    /* ===== CARD ===== */
+    .card {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      padding: 20px;
+      margin-bottom: 18px;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--gray-700);
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--gray-100);
+    }
+
+    /* ===== STATS ===== */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .stat-card {
+      background: white;
+      border-radius: 8px;
+      padding: 18px 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    .stat-label { font-size: 11px; color: var(--gray-500); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-value { font-size: 26px; font-weight: 700; color: var(--primary); }
+    .stat-value.danger { color: var(--danger); }
+    .stat-value.success { color: var(--success); }
+    .stat-value.warning { color: var(--warning); }
+    .stat-sub { font-size: 11px; color: var(--gray-500); margin-top: 4px; }
+
+    /* ===== TABLE ===== */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      background: var(--gray-100);
+      padding: 9px 12px;
+      text-align: left;
+      font-weight: 700;
+      color: var(--gray-700);
+      border-bottom: 2px solid var(--gray-200);
+      white-space: nowrap;
+    }
+    th.r, td.r { text-align: right; }
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--gray-100);
+      vertical-align: middle;
+    }
+    tr:hover td { background: var(--gray-50); }
+    tr.row-advance td { background: #fffbeb; }
+    tr.row-settle td { background: #f0fdf4; }
+    tfoot td { font-weight: 700; background: var(--gray-100); border-top: 2px solid var(--gray-300); }
+
+    /* ===== BADGE ===== */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge-pending { background: var(--danger-light); color: var(--danger); }
+    .badge-settled { background: var(--success-light); color: var(--success); }
+    .badge-advance { background: var(--warning-light); color: var(--warning); }
+    .badge-normal  { background: var(--gray-100); color: var(--gray-700); }
+
+    /* ===== FORM ===== */
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group label { font-size: 12px; font-weight: 700; color: var(--gray-700); margin-bottom: 4px; }
+    .form-group.req label::after { content: " *"; color: var(--danger); }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      padding: 8px 10px;
+      border: 1px solid var(--gray-300);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    /* ===== BUTTONS ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .btn-primary  { background: var(--primary); color: white; }
+    .btn-primary:hover  { background: #1d4ed8; }
+    .btn-success  { background: var(--success); color: white; }
+    .btn-success:hover  { background: #16a34a; }
+    .btn-danger   { background: var(--danger);  color: white; }
+    .btn-danger:hover   { background: #dc2626; }
+    .btn-secondary{ background: var(--gray-200); color: var(--gray-700); }
+    .btn-secondary:hover{ background: var(--gray-300); }
+    .btn-outline  { background: white; color: var(--primary); border: 1px solid var(--primary); }
+    .btn-outline:hover  { background: var(--primary-light); }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    /* ===== TOOLBAR ===== */
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .toolbar-l, .toolbar-r { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    /* ===== MODAL ===== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-box {
+      background: white;
+      border-radius: 12px;
+      padding: 26px;
+      width: 92%;
+      max-width: 520px;
+      max-height: 92vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 18px; }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+      padding-top: 14px;
+      border-top: 1px solid var(--gray-200);
+    }
+
+    /* ===== ALERTS ===== */
+    .alert { padding: 10px 14px; border-radius: 7px; margin-bottom: 14px; font-size: 13px; }
+    .alert-warning { background: var(--warning-light); color: var(--warning); border-left: 4px solid #f59e0b; }
+    .alert-info    { background: var(--primary-light); color: var(--primary); border-left: 4px solid var(--primary); }
+    .alert-success { background: var(--success-light); color: var(--success); border-left: 4px solid #22c55e; }
+    .alert-danger  { background: var(--danger-light);  color: var(--danger);  border-left: 4px solid var(--danger); }
+
+    /* ===== MISC ===== */
+    .divider { height: 1px; background: var(--gray-200); margin: 14px 0; }
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--gray-500); }
+    .empty-state .icon { font-size: 42px; margin-bottom: 10px; }
+    .num-pos { color: var(--primary); }
+    .num-neg { color: var(--danger); }
+    .num-bold { font-weight: 700; }
+    .mono { font-variant-numeric: tabular-nums; }
+
+    /* ===== SETUP SCREEN ===== */
+    #setup-screen {
+      position: fixed;
+      inset: 0;
+      background: var(--gray-50);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 900;
+    }
+    .setup-card {
+      background: white;
+      border-radius: 12px;
+      padding: 36px;
+      width: 92%;
+      max-width: 460px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    }
+    .setup-card .logo { font-size: 44px; text-align: center; margin-bottom: 10px; }
+    .setup-card h2 { font-size: 20px; color: var(--primary); text-align: center; margin-bottom: 6px; }
+    .setup-card .sub { font-size: 12px; color: var(--gray-500); text-align: center; margin-bottom: 24px; }
+
+    /* ===== SETTLE CALC BOX ===== */
+    #settle-calc {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      min-height: 44px;
+    }
+
+    /* ===== PRINT ===== */
+    .no-print { }
+    .print-only { display: none; }
+
+    @media print {
+      #app-header, #app-nav, .no-print { display: none !important; }
+      .print-only { display: block; }
+      #app-main { padding: 0; max-width: none; }
+      .card { box-shadow: none; margin-bottom: 12px; page-break-inside: avoid; }
+      body { font-size: 11px; }
+      table { font-size: 10px; }
+      td, th { padding: 5px 8px; }
+      @page { margin: 14mm 12mm; }
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 720px) {
+      #app-main { padding: 12px; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .form-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ========== SETUP SCREEN ========== -->
+<div id="setup-screen" style="display:none;">
+  <div class="setup-card">
+    <div class="logo">💼</div>
+    <h2>現金出納帳・仮払管理</h2>
+    <p class="sub">はじめに初期設定を行ってください</p>
+    <div class="form-group req" style="margin-bottom:14px;">
+      <label>会社名</label>
+      <input type="text" id="s-company" placeholder="株式会社〇〇" />
+    </div>
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div class="form-group req">
+        <label>期首現金残高（円）</label>
+        <input type="number" id="s-balance" value="0" min="0" />
+      </div>
+      <div class="form-group">
+        <label>会計年度開始月</label>
+        <select id="s-fiscal">
+          <option value="1">1月始まり（1〜12月）</option>
+          <option value="4" selected>4月始まり（4〜翌3月）</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:22px;">
+      <label>経理担当者名（任意）</label>
+      <input type="text" id="s-manager" placeholder="経理 太郎" />
+    </div>
+    <button class="btn btn-primary" style="width:100%; justify-content:center; padding:11px 0; font-size:14px;" onclick="completeSetup()">
+      設定を保存してアプリを開始
+    </button>
+  </div>
+</div>
+
+<!-- ========== HEADER ========== -->
+<div id="app-header">
+  <div>
+    <div id="header-company">読み込み中...</div>
+    <h1>現金出納帳・仮払管理システム</h1>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <div id="header-balance" style="font-size:18px; font-weight:700;"></div>
+    <button class="btn btn-outline no-print" style="color:white; border-color:rgba(255,255,255,0.5); font-size:12px; padding:6px 12px;" onclick="showSettings()">⚙ 設定</button>
+  </div>
+</div>
+
+<!-- ========== NAV ========== -->
+<div id="app-nav">
+  <button class="nav-btn active" id="nav-dashboard" onclick="showPage('dashboard')">📊 ダッシュボード</button>
+  <button class="nav-btn" id="nav-ledger"    onclick="showPage('ledger')">📒 現金出納帳</button>
+  <button class="nav-btn" id="nav-advances"  onclick="showPage('advances')">💼 仮払管理</button>
+  <button class="nav-btn" id="nav-reports"   onclick="showPage('reports')">📄 帳票出力</button>
+</div>
+
+<!-- ========== MAIN ========== -->
+<div id="app-main">
+  <div id="page-content"></div>
+</div>
+
+<!-- Modal mount -->
+<div id="modal-mount"></div>
+
+<!-- ========== SCRIPT ========== -->
+<script>
+'use strict';
+
+/* ─────────────────────────────
+   STORAGE
+───────────────────────────── */
+const DB = {
+  get(k)    { try { return JSON.parse(localStorage.getItem('ca_' + k) || 'null'); } catch { return null; } },
+  set(k, v) { localStorage.setItem('ca_' + k, JSON.stringify(v)); },
+};
+const getSettings = ()  => DB.get('settings');
+const getEntries  = ()  => DB.get('entries')  || [];
+const getAdvances = ()  => DB.get('advances') || [];
+const saveEntries = (v) => DB.set('entries',  v);
+const saveAdvances= (v) => DB.set('advances', v);
+
+/* ─────────────────────────────
+   UTILITIES
+───────────────────────────── */
+function fc(n) {
+  if (n == null || n === '') return '—';
+  return '¥' + Number(n).toLocaleString('ja-JP');
+}
+function fd(d) { return d ? d.replace(/-/g, '/') : '—'; }
+function today() { return new Date().toISOString().split('T')[0]; }
+
+function genId(prefix) {
+  const arr = prefix === 'K' ? getAdvances() : getEntries();
+  const max = arr.reduce((m, e) => Math.max(m, parseInt(e.id.slice(prefix.length)) || 0), 0);
+  return prefix + String(max + 1).padStart(3, '0');
+}
+
+function calcBalances(entries) {
+  const s = getSettings();
+  let bal = s ? (s.openingBalance || 0) : 0;
+  return [...entries]
+    .sort((a, b) => a.date !== b.date ? a.date.localeCompare(b.date) : a.id.localeCompare(b.id))
+    .map(e => { bal += (e.receiptAmount || 0) - (e.paymentAmount || 0); return { ...e, balance: bal }; });
+}
+
+function getCurrentBalance() {
+  const s = getSettings();
+  let bal = s ? (s.openingBalance || 0) : 0;
+  getEntries().forEach(e => { bal += (e.receiptAmount || 0) - (e.paymentAmount || 0); });
+  return bal;
+}
+
+function monthlyTotal(type) {
+  const d = new Date();
+  const pfx = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  return getEntries()
+    .filter(e => e.date.startsWith(pfx))
+    .reduce((s, e) => s + (type === 'pay' ? (e.paymentAmount||0) : (e.receiptAmount||0)), 0);
+}
+
+/* ─────────────────────────────
+   BUSINESS LOGIC
+───────────────────────────── */
+function addEntry(entry) {
+  const entries = getEntries();
+  const e = { ...entry, id: entry.id || genId('E'), createdAt: new Date().toISOString() };
+  entries.push(e);
+  entries.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  saveEntries(entries);
+  return e;
+}
+
+function removeEntry(id) {
+  saveEntries(getEntries().filter(e => e.id !== id));
+}
+
+function registerAdvance(d) {
+  const advances = getAdvances();
+  const adv = {
+    id: genId('K'),
+    date: d.date,
+    employeeName: d.employeeName,
+    purpose: d.purpose,
+    advanceAmount: Number(d.advanceAmount),
+    status: 'pending',
+    settlementDate: null, usedAmount: null,
+    returnAmount: null, shortageAmount: null,
+    cashEntryId: null, settlementEntryId: null,
+    createdAt: new Date().toISOString(),
+  };
+  const ce = addEntry({
+    date: d.date,
+    description: `仮払 ${adv.id} ${d.employeeName}／${d.purpose}`,
+    receiptAmount: 0,
+    paymentAmount: Number(d.advanceAmount),
+    type: 'advance',
+    advanceId: adv.id,
+  });
+  adv.cashEntryId = ce.id;
+  advances.push(adv);
+  saveAdvances(advances);
+  return adv;
+}
+
+function settleAdvance(id, d) {
+  const advances = getAdvances();
+  const idx = advances.findIndex(a => a.id === id);
+  if (idx < 0) return;
+  const adv = advances[idx];
+  const used = Number(d.usedAmount);
+  const diff = used - adv.advanceAmount;
+  const ret  = diff < 0 ? Math.abs(diff) : 0;
+  const short= diff > 0 ? diff : 0;
+
+  adv.status = 'settled';
+  adv.settlementDate = d.settlementDate;
+  adv.usedAmount = used;
+  adv.returnAmount = ret;
+  adv.shortageAmount = short;
+
+  let desc, recAmt = 0, payAmt = 0;
+  if (ret > 0) {
+    desc = `精算（返金） ${adv.id} ${adv.employeeName}／${adv.purpose}`;
+    recAmt = ret;
+  } else if (short > 0) {
+    desc = `精算（追加払） ${adv.id} ${adv.employeeName}／${adv.purpose}`;
+    payAmt = short;
+  } else {
+    desc = `精算（過不足なし） ${adv.id} ${adv.employeeName}／${adv.purpose}`;
+  }
+
+  const se = addEntry({
+    date: d.settlementDate,
+    description: desc,
+    receiptAmount: recAmt,
+    paymentAmount: payAmt,
+    type: 'settlement',
+    advanceId: adv.id,
+  });
+  adv.settlementEntryId = se.id;
+  saveAdvances(advances);
+  return adv;
+}
+
+function removeAdvance(id) {
+  const advances = getAdvances();
+  const adv = advances.find(a => a.id === id);
+  if (!adv) return false;
+  if (adv.status === 'settled') { alert('精算済みの記録は削除できません。'); return false; }
+  if (adv.cashEntryId) removeEntry(adv.cashEntryId);
+  saveAdvances(advances.filter(a => a.id !== id));
+  return true;
+}
+
+/* ─────────────────────────────
+   SETUP
+───────────────────────────── */
+function completeSetup() {
+  const company = document.getElementById('s-company').value.trim();
+  const balance = Number(document.getElementById('s-balance').value) || 0;
+  const fiscal  = Number(document.getElementById('s-fiscal').value);
+  const manager = document.getElementById('s-manager').value.trim();
+  if (!company) { alert('会社名を入力してください。'); return; }
+  DB.set('settings', { companyName: company, openingBalance: balance, fiscalMonth: fiscal, manager, setupAt: new Date().toISOString() });
+  document.getElementById('setup-screen').style.display = 'none';
+  initApp();
+}
+
+function showSettings() {
+  const s = getSettings();
+  showModal(`
+    <div class="modal-title">⚙ 設定</div>
+    <div class="form-group req" style="margin-bottom:13px;"><label>会社名</label><input id="cs-co" value="${esc(s.companyName)}" /></div>
+    <div class="form-grid" style="margin-bottom:13px;">
+      <div class="form-group req"><label>期首現金残高（円）</label><input type="number" id="cs-bal" value="${s.openingBalance||0}" /></div>
+      <div class="form-group"><label>会計年度開始月</label>
+        <select id="cs-fiscal">
+          <option value="1" ${s.fiscalMonth===1?'selected':''}>1月始まり</option>
+          <option value="4" ${s.fiscalMonth===4?'selected':''}>4月始まり</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:18px;"><label>経理担当者名</label><input id="cs-mgr" value="${esc(s.manager||'')}" /></div>
+    <div class="divider"></div>
+    <div style="font-size:12px; color:var(--gray-500); margin-bottom:8px; font-weight:700;">データ管理</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
+      <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 バックアップ保存（JSON）</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp-file').click()">📤 バックアップから復元</button>
+      <input type="file" id="imp-file" accept=".json" style="display:none;" onchange="importBackup(event)">
+    </div>
+    <div style="font-size:11px; color:var(--gray-500); margin-top:4px;">定期的なバックアップを推奨します</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveSettings()">保存</button>
+    </div>
+  `);
+}
+
+function saveSettings() {
+  const s = getSettings();
+  const co  = document.getElementById('cs-co').value.trim();
+  const bal = Number(document.getElementById('cs-bal').value) || 0;
+  const fis = Number(document.getElementById('cs-fiscal').value);
+  const mgr = document.getElementById('cs-mgr').value.trim();
+  if (!co) { alert('会社名を入力してください。'); return; }
+  DB.set('settings', { ...s, companyName: co, openingBalance: bal, fiscalMonth: fis, manager: mgr });
+  closeModal();
+  initApp();
+}
+
+/* ─────────────────────────────
+   PAGE ROUTING
+───────────────────────────── */
+let currentPage = 'dashboard';
+let ledgerYear  = new Date().getFullYear();
+let ledgerMonth = new Date().getMonth() + 1;
+let advFilter   = 'all';
+
+function showPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-' + page).classList.add('active');
+  renderPage();
+}
+
+function renderPage() {
+  const el = document.getElementById('page-content');
+  if      (currentPage === 'dashboard') el.innerHTML = pageDashboard();
+  else if (currentPage === 'ledger')    el.innerHTML = pageLedger();
+  else if (currentPage === 'advances')  el.innerHTML = pageAdvances();
+  else if (currentPage === 'reports')   el.innerHTML = pageReports();
+}
+
+/* ─────────────────────────────
+   DASHBOARD
+───────────────────────────── */
+function pageDashboard() {
+  const bal      = getCurrentBalance();
+  const advances = getAdvances();
+  const pending  = advances.filter(a => a.status === 'pending');
+  const pendTot  = pending.reduce((s, a) => s + a.advanceAmount, 0);
+  const recent   = calcBalances(getEntries()).reverse().slice(0, 6);
+  const s        = getSettings();
+
+  return `
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">現在の現金残高</div>
+      <div class="stat-value mono ${bal < 0 ? 'danger' : ''}">${fc(bal)}</div>
+      <div class="stat-sub">期首残高: ${fc(s.openingBalance)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">未精算件数</div>
+      <div class="stat-value ${pending.length > 0 ? 'danger' : 'success'}">${pending.length}<span style="font-size:15px;">件</span></div>
+      <div class="stat-sub">未精算合計: ${fc(pendTot)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">今月の出金</div>
+      <div class="stat-value mono">${fc(monthlyTotal('pay'))}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">今月の入金</div>
+      <div class="stat-value mono success">${fc(monthlyTotal('rec'))}</div>
+    </div>
+  </div>
+
+  ${pending.length > 0 ? `
+  <div class="card">
+    <div class="card-title">⚠️ 未精算の仮払い（${pending.length}件）</div>
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>番号</th><th>仮払日</th><th>氏名</th><th>目的</th><th class="r">仮払金額</th><th class="no-print">操作</th>
+      </tr></thead>
+      <tbody>
+        ${pending.map(a => `<tr>
+          <td><span class="badge badge-pending">${a.id}</span></td>
+          <td>${fd(a.date)}</td>
+          <td><strong>${esc(a.employeeName)}</strong></td>
+          <td>${esc(a.purpose)}</td>
+          <td class="r num-neg mono">${fc(a.advanceAmount)}</td>
+          <td class="no-print"><button class="btn btn-success btn-sm" onclick="showSettleModal('${a.id}')">精算する</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>
+  ` : `<div class="alert alert-success">✅ 未精算の仮払いはありません</div>`}
+
+  <div class="card">
+    <div class="card-title">📒 直近の取引（最新6件）</div>
+    ${recent.length === 0
+      ? '<div class="empty-state"><div class="icon">📒</div><p>まだ取引がありません</p></div>'
+      : `<div class="table-wrap"><table>
+          <thead><tr><th>日付</th><th>摘要</th><th class="r">入金</th><th class="r">出金</th><th class="r">残高</th></tr></thead>
+          <tbody>
+            ${recent.map(e => `<tr class="${e.type==='advance'?'row-advance':e.type==='settlement'?'row-settle':''}">
+              <td>${fd(e.date)}</td>
+              <td>
+                ${e.type==='advance'  ? '<span class="badge badge-advance">仮払</span> ' : ''}
+                ${e.type==='settlement'?'<span class="badge badge-settled">精算</span> ' : ''}
+                ${esc(e.description)}
+              </td>
+              <td class="r mono ${e.receiptAmount>0?'num-pos':''}">${e.receiptAmount>0?fc(e.receiptAmount):''}</td>
+              <td class="r mono ${e.paymentAmount>0?'num-neg':''}">${e.paymentAmount>0?fc(e.paymentAmount):''}</td>
+              <td class="r mono num-bold">${fc(e.balance)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>`
+    }
+  </div>`;
+}
+
+/* ─────────────────────────────
+   LEDGER PAGE
+───────────────────────────── */
+function pageLedger() {
+  const allEntries = getEntries();
+  const years = [...new Set(allEntries.map(e => parseInt(e.date)))].length === 0
+    ? [new Date().getFullYear()]
+    : [...new Set(allEntries.map(e => parseInt(e.date.split('-')[0])))].sort().reverse();
+  if (!years.includes(ledgerYear)) years.unshift(new Date().getFullYear());
+
+  const allWithBal = calcBalances(allEntries);
+  const filtered = allWithBal.filter(e => {
+    if (!e.date.startsWith(String(ledgerYear))) return false;
+    if (ledgerMonth > 0) {
+      const m = String(ledgerMonth).padStart(2,'0');
+      if (!e.date.startsWith(`${ledgerYear}-${m}`)) return false;
+    }
+    return true;
+  });
+
+  // Opening balance for the selected period
+  const s = getSettings();
+  let openBal = s.openingBalance || 0;
+  if (filtered.length > 0) {
+    const firstIdx = allWithBal.findIndex(e => e.id === filtered[0].id);
+    if (firstIdx > 0) openBal = allWithBal[firstIdx - 1].balance;
+  } else {
+    openBal = getCurrentBalance();
+  }
+
+  const totalRec = filtered.reduce((s,e) => s+(e.receiptAmount||0), 0);
+  const totalPay = filtered.reduce((s,e) => s+(e.paymentAmount||0), 0);
+  const closeBal = filtered.length > 0 ? filtered[filtered.length-1].balance : openBal;
+
+  const yearOpts  = years.map(y => `<option value="${y}" ${y===ledgerYear?'selected':''}>${y}年</option>`).join('');
+  const monthOpts = `<option value="0" ${ledgerMonth===0?'selected':''}>全月</option>`
+    + Array.from({length:12},(_,i)=>i+1).map(m=>`<option value="${m}" ${m===ledgerMonth?'selected':''}>${m}月</option>`).join('');
+
+  return `
+  <div class="card">
+    <div class="toolbar no-print">
+      <div class="toolbar-l">
+        <select onchange="ledgerYear=Number(this.value);renderPage()" style="padding:7px 10px;border:1px solid var(--gray-300);border-radius:6px;font-family:inherit;">${yearOpts}</select>
+        <select onchange="ledgerMonth=Number(this.value);renderPage()" style="padding:7px 10px;border:1px solid var(--gray-300);border-radius:6px;font-family:inherit;">${monthOpts}</select>
+      </div>
+      <div class="toolbar-r">
+        <button class="btn btn-outline btn-sm" onclick="showAddEntryModal()">＋ 取引追加</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSV()">📥 CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ 印刷/PDF</button>
+      </div>
+    </div>
+
+    <div class="print-only" style="text-align:center; margin-bottom:14px;">
+      <div style="font-size:18px; font-weight:700;">現 金 出 納 帳</div>
+      <div style="font-size:12px; margin-top:4px;">${esc(s.companyName)}　${ledgerYear}年${ledgerMonth>0?ledgerMonth+'月':'通期'}</div>
+    </div>
+
+    ${filtered.length === 0
+      ? '<div class="empty-state"><div class="icon">📒</div><p>この期間の取引はありません</p></div>'
+      : `<div class="table-wrap"><table>
+          <thead><tr>
+            <th>日付</th><th>摘要</th>
+            <th class="r">入金（円）</th><th class="r">出金（円）</th><th class="r">残高（円）</th>
+            <th class="no-print">操作</th>
+          </tr></thead>
+          <tbody>
+            <tr style="background:#eff6ff;">
+              <td colspan="4" style="color:var(--primary); font-weight:700;">▶ 前期繰越 / 期首残高</td>
+              <td class="r mono num-bold">${fc(openBal)}</td>
+              <td class="no-print"></td>
+            </tr>
+            ${filtered.map(e => `<tr class="${e.type==='advance'?'row-advance':e.type==='settlement'?'row-settle':''}">
+              <td>${fd(e.date)}</td>
+              <td>
+                ${e.type==='advance'  ?'<span class="badge badge-advance">仮払</span> ':''}
+                ${e.type==='settlement'?'<span class="badge badge-settled">精算</span> ':''}
+                ${e.type==='normal'   ?'<span class="badge badge-normal">一般</span> ':''}
+                ${esc(e.description)}
+              </td>
+              <td class="r mono ${e.receiptAmount>0?'num-pos':''}">${e.receiptAmount>0?fc(e.receiptAmount):''}</td>
+              <td class="r mono ${e.paymentAmount>0?'num-neg':''}">${e.paymentAmount>0?fc(e.paymentAmount):''}</td>
+              <td class="r mono num-bold">${fc(e.balance)}</td>
+              <td class="no-print">
+                ${e.type==='normal'?`<button class="btn btn-secondary btn-sm" onclick="confirmDeleteEntry('${e.id}')">削除</button>`:''}
+              </td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot><tr>
+            <td colspan="2" style="text-align:right;">合　計 / 次期繰越</td>
+            <td class="r mono num-pos">${fc(totalRec)}</td>
+            <td class="r mono num-neg">${fc(totalPay)}</td>
+            <td class="r mono num-bold">${fc(closeBal)}</td>
+            <td class="no-print"></td>
+          </tr></tfoot>
+        </table></div>`
+    }
+  </div>`;
+}
+
+/* ─────────────────────────────
+   ADVANCES PAGE
+───────────────────────────── */
+function pageAdvances() {
+  const all      = getAdvances();
+  const filtered = all
+    .filter(a => advFilter==='all' || a.status===advFilter)
+    .sort((a,b) => b.date.localeCompare(a.date));
+  const s = getSettings();
+  const empNames = [...new Set(all.map(a => a.employeeName))];
+
+  return `
+  <div class="card no-print">
+    <div class="card-title">＋ 仮払い登録</div>
+    <div class="form-grid">
+      <div class="form-group req"><label>仮払日</label><input type="date" id="af-date" value="${today()}" /></div>
+      <div class="form-group req">
+        <label>氏名</label>
+        <input type="text" id="af-name" placeholder="山田 太郎" list="emp-list" autocomplete="off" />
+        <datalist id="emp-list">${empNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+      </div>
+      <div class="form-group req"><label>目的・出張先</label><input type="text" id="af-purpose" placeholder="東京出張" /></div>
+      <div class="form-group req"><label>仮払金額（円）</label><input type="number" id="af-amount" placeholder="30000" min="1" /></div>
+    </div>
+    <div style="margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="submitAdvance()">仮払いを登録する</button>
+      <span style="font-size:11px; color:var(--gray-500);">※登録すると現金出納帳に自動記録されます</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <div class="card-title" style="margin:0; border:none; padding:0;">仮払金台帳</div>
+      <div class="toolbar-r no-print">
+        <select onchange="advFilter=this.value;renderPage()" style="padding:7px 10px;border:1px solid var(--gray-300);border-radius:6px;font-family:inherit;">
+          <option value="all"     ${advFilter==='all'    ?'selected':''}>全件</option>
+          <option value="pending" ${advFilter==='pending'?'selected':''}>未精算のみ</option>
+          <option value="settled" ${advFilter==='settled'?'selected':''}>精算済のみ</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="exportAdvancesCSV()">📥 CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ 印刷/PDF</button>
+      </div>
+    </div>
+
+    <div class="print-only" style="text-align:center; margin-bottom:14px;">
+      <div style="font-size:18px; font-weight:700;">仮 払 金 台 帳</div>
+      <div style="font-size:12px; margin-top:4px;">${esc(s.companyName)}</div>
+    </div>
+
+    ${filtered.length === 0
+      ? '<div class="empty-state"><div class="icon">💼</div><p>仮払いの記録がありません</p></div>'
+      : `<div class="table-wrap"><table>
+          <thead><tr>
+            <th>番号</th><th>仮払日</th><th>氏名</th><th>目的</th>
+            <th class="r">仮払額</th><th>精算日</th>
+            <th class="r">使用額</th><th class="r">返金額</th><th class="r">不足額</th>
+            <th>状態</th><th class="no-print">操作</th>
+          </tr></thead>
+          <tbody>
+            ${filtered.map(a => `<tr>
+              <td><strong>${a.id}</strong></td>
+              <td>${fd(a.date)}</td>
+              <td>${esc(a.employeeName)}</td>
+              <td>${esc(a.purpose)}</td>
+              <td class="r mono num-neg">${fc(a.advanceAmount)}</td>
+              <td>${fd(a.settlementDate)}</td>
+              <td class="r mono">${a.usedAmount!=null?fc(a.usedAmount):'—'}</td>
+              <td class="r mono ${a.returnAmount>0?'num-pos':''}">${a.returnAmount>0?fc(a.returnAmount):'—'}</td>
+              <td class="r mono ${a.shortageAmount>0?'num-neg':''}">${a.shortageAmount>0?fc(a.shortageAmount):'—'}</td>
+              <td><span class="badge badge-${a.status==='pending'?'pending':'settled'}">${a.status==='pending'?'未精算':'精算済'}</span></td>
+              <td class="no-print">
+                ${a.status==='pending'?`
+                  <button class="btn btn-success btn-sm" onclick="showSettleModal('${a.id}')">精算</button>
+                  <button class="btn btn-secondary btn-sm" style="margin-left:4px;" onclick="confirmDeleteAdv('${a.id}')">削除</button>
+                `:''}
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>`
+    }
+  </div>`;
+}
+
+/* ─────────────────────────────
+   REPORTS PAGE
+───────────────────────────── */
+function pageReports() {
+  const pending = getAdvances().filter(a => a.status === 'pending');
+  return `
+  <div class="card">
+    <div class="card-title">📄 帳票出力</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px;">
+
+      <div style="border:1px solid var(--gray-200); border-radius:8px; padding:18px;">
+        <div style="font-size:15px; font-weight:700; margin-bottom:6px;">📒 現金出納帳</div>
+        <div style="font-size:12px; color:var(--gray-500); margin-bottom:14px;">月別の入出金明細と残高一覧</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="showPage('ledger');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSV()">📥 CSV出力</button>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--gray-200); border-radius:8px; padding:18px;">
+        <div style="font-size:15px; font-weight:700; margin-bottom:6px;">💼 仮払金台帳</div>
+        <div style="font-size:12px; color:var(--gray-500); margin-bottom:14px;">仮払いの一覧と精算状況</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="showPage('advances');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportAdvancesCSV()">📥 CSV出力</button>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--gray-200); border-radius:8px; padding:18px;">
+        <div style="font-size:15px; font-weight:700; margin-bottom:6px;">⚠️ 未精算一覧</div>
+        <div style="font-size:12px; color:var(--gray-500); margin-bottom:14px;">精算未完了の仮払い（${pending.length}件）</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="advFilter='pending';showPage('advances');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportPendingCSV()">📥 CSV出力</button>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--gray-200); border-radius:8px; padding:18px;">
+        <div style="font-size:15px; font-weight:700; margin-bottom:6px;">💾 データバックアップ</div>
+        <div style="font-size:12px; color:var(--gray-500); margin-bottom:14px;">全データをJSONで保存・復元</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 バックアップ保存</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp2').click()">📤 復元</button>
+          <input type="file" id="imp2" accept=".json" style="display:none;" onchange="importBackup(event)">
+        </div>
+      </div>
+
+    </div>
+  </div>`;
+}
+
+/* ─────────────────────────────
+   FORM ACTIONS
+───────────────────────────── */
+function submitAdvance() {
+  const date    = document.getElementById('af-date').value;
+  const name    = document.getElementById('af-name').value.trim();
+  const purpose = document.getElementById('af-purpose').value.trim();
+  const amount  = document.getElementById('af-amount').value;
+  if (!date || !name || !purpose || !amount) { alert('全ての必須項目を入力してください。'); return; }
+  if (Number(amount) <= 0) { alert('仮払金額は1円以上を入力してください。'); return; }
+  registerAdvance({ date, employeeName: name, purpose, advanceAmount: amount });
+  document.getElementById('af-name').value = '';
+  document.getElementById('af-purpose').value = '';
+  document.getElementById('af-amount').value = '';
+  updateHeader();
+  renderPage();
+  alert(`${name} さんの仮払い（${fc(amount)}）を登録しました。`);
+}
+
+function showSettleModal(id) {
+  const adv = getAdvances().find(a => a.id === id);
+  if (!adv) return;
+  showModal(`
+    <div class="modal-title">✅ 精算入力 — ${adv.id}</div>
+    <div class="alert alert-info">
+      <strong>${esc(adv.employeeName)}</strong> さん ／ ${esc(adv.purpose)}<br>
+      仮払金額: <strong class="mono">${fc(adv.advanceAmount)}</strong>　仮払日: ${fd(adv.date)}
+    </div>
+    <div class="form-group req" style="margin-bottom:13px;">
+      <label>精算日</label>
+      <input type="date" id="st-date" value="${today()}" />
+    </div>
+    <div class="form-group req" style="margin-bottom:13px;">
+      <label>実際の使用金額（円）</label>
+      <input type="number" id="st-used" placeholder="${adv.advanceAmount}" min="0"
+             oninput="calcSettle(${adv.advanceAmount})" />
+    </div>
+    <div id="settle-calc"><span style="color:var(--gray-500);">使用金額を入力すると自動計算されます</span></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-success" onclick="submitSettle('${id}')">精算を確定する</button>
+    </div>
+  `);
+}
+
+function calcSettle(advAmt) {
+  const used = Number(document.getElementById('st-used').value);
+  const el   = document.getElementById('settle-calc');
+  if (!used && used !== 0) { el.innerHTML = '<span style="color:var(--gray-500);">使用金額を入力してください</span>'; return; }
+  const diff = used - advAmt;
+  if (diff > 0)
+    el.innerHTML = `<span style="color:var(--danger); font-weight:700;">⚠ 不足額: ${fc(diff)}（会社から追加払いが必要）</span>`;
+  else if (diff < 0)
+    el.innerHTML = `<span style="color:var(--success); font-weight:700;">↩ 返金額: ${fc(Math.abs(diff))}（従業員から現金を受け取る）</span>`;
+  else
+    el.innerHTML = `<span style="color:var(--primary); font-weight:700;">✅ 過不足なし（現金の受け渡しなし）</span>`;
+}
+
+function submitSettle(id) {
+  const settlementDate = document.getElementById('st-date').value;
+  const usedAmount     = document.getElementById('st-used').value;
+  if (!settlementDate || usedAmount === '') { alert('精算日と使用金額を入力してください。'); return; }
+  if (Number(usedAmount) < 0) { alert('使用金額は0円以上で入力してください。'); return; }
+  settleAdvance(id, { settlementDate, usedAmount });
+  closeModal();
+  updateHeader();
+  renderPage();
+}
+
+function showAddEntryModal() {
+  showModal(`
+    <div class="modal-title">＋ 一般取引を追加</div>
+    <div style="font-size:12px; color:var(--gray-500); margin-bottom:14px;">仮払い以外の取引（備品購入・補充金など）を直接入力します</div>
+    <div class="form-group req" style="margin-bottom:13px;"><label>日付</label><input type="date" id="ae-date" value="${today()}" /></div>
+    <div class="form-group req" style="margin-bottom:13px;"><label>摘要</label><input type="text" id="ae-desc" placeholder="事務用品購入" /></div>
+    <div class="form-grid" style="margin-bottom:6px;">
+      <div class="form-group"><label>入金額（円）</label><input type="number" id="ae-rec" placeholder="0" min="0" /></div>
+      <div class="form-group"><label>出金額（円）</label><input type="number" id="ae-pay" placeholder="0" min="0" /></div>
+    </div>
+    <div style="font-size:11px; color:var(--gray-500); margin-bottom:14px;">入金か出金のどちらか一方を入力してください</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="submitEntry()">追加</button>
+    </div>
+  `);
+}
+
+function submitEntry() {
+  const date = document.getElementById('ae-date').value;
+  const desc = document.getElementById('ae-desc').value.trim();
+  const rec  = Number(document.getElementById('ae-rec').value) || 0;
+  const pay  = Number(document.getElementById('ae-pay').value) || 0;
+  if (!date || !desc) { alert('日付と摘要は必須です。'); return; }
+  if (rec === 0 && pay === 0) { alert('入金か出金のいずれかを入力してください。'); return; }
+  if (rec > 0 && pay > 0)    { alert('入金と出金を同時に入力することはできません。'); return; }
+  addEntry({ date, description: desc, receiptAmount: rec, paymentAmount: pay, type: 'normal' });
+  closeModal();
+  updateHeader();
+  renderPage();
+}
+
+function confirmDeleteEntry(id) {
+  if (confirm('この取引を削除しますか？')) { removeEntry(id); updateHeader(); renderPage(); }
+}
+
+function confirmDeleteAdv(id) {
+  if (confirm('この仮払い記録を削除しますか？\n関連する出納帳の記録も削除されます。')) {
+    if (removeAdvance(id)) { updateHeader(); renderPage(); }
+  }
+}
+
+/* ─────────────────────────────
+   EXPORT
+───────────────────────────── */
+function exportLedgerCSV() {
+  const s = getSettings();
+  const rows = [
+    [`現金出納帳`, s.companyName, `出力日:${today()}`],
+    ['日付','摘要','入金（円）','出金（円）','残高（円）','種別'],
+    ...calcBalances(getEntries()).map(e => [
+      e.date, e.description,
+      e.receiptAmount || '', e.paymentAmount || '', e.balance,
+      e.type==='advance'?'仮払':e.type==='settlement'?'精算':'一般'
+    ])
+  ];
+  dlCSV(rows, `現金出納帳_${today()}.csv`);
+}
+
+function exportAdvancesCSV() {
+  const s = getSettings();
+  const rows = [
+    [`仮払金台帳`, s.companyName, `出力日:${today()}`],
+    ['番号','仮払日','氏名','目的','仮払金額','精算日','使用金額','返金額','不足額','状態'],
+    ...getAdvances().map(a => [
+      a.id, a.date, a.employeeName, a.purpose, a.advanceAmount,
+      a.settlementDate||'', a.usedAmount??'', a.returnAmount??'', a.shortageAmount??'',
+      a.status==='pending'?'未精算':'精算済'
+    ])
+  ];
+  dlCSV(rows, `仮払金台帳_${today()}.csv`);
+}
+
+function exportPendingCSV() {
+  const s = getSettings();
+  const rows = [
+    [`未精算一覧`, s.companyName, `出力日:${today()}`],
+    ['番号','仮払日','氏名','目的','仮払金額'],
+    ...getAdvances().filter(a=>a.status==='pending').map(a=>[a.id,a.date,a.employeeName,a.purpose,a.advanceAmount])
+  ];
+  dlCSV(rows, `未精算一覧_${today()}.csv`);
+}
+
+function dlCSV(rows, filename) {
+  const bom = '﻿';
+  const csv = bom + rows.map(r => r.map(c => `"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8;'})),
+    download: filename
+  });
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ─────────────────────────────
+   BACKUP / RESTORE
+───────────────────────────── */
+function exportBackup() {
+  const data = { settings: getSettings(), entries: getEntries(), advances: getAdvances(), exportedAt: new Date().toISOString(), version: '1.0' };
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {type:'application/json'})),
+    download: `現金管理バックアップ_${today()}.json`
+  });
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importBackup(ev) {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const d = JSON.parse(e.target.result);
+      if (!d.settings || !d.entries || !d.advances) { alert('無効なバックアップファイルです。'); return; }
+      if (confirm('現在のデータをバックアップデータで上書きします。\nこの操作は元に戻せません。よろしいですか？')) {
+        DB.set('settings', d.settings);
+        DB.set('entries',  d.entries);
+        DB.set('advances', d.advances);
+        alert('データを復元しました。');
+        initApp();
+      }
+    } catch { alert('ファイルの読み込みに失敗しました。'); }
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
+}
+
+/* ─────────────────────────────
+   MODAL
+───────────────────────────── */
+function showModal(html) {
+  document.getElementById('modal-mount').innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      <div class="modal-box">${html}</div>
+    </div>`;
+}
+function closeModal() { document.getElementById('modal-mount').innerHTML = ''; }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+/* ─────────────────────────────
+   INIT
+───────────────────────────── */
+function updateHeader() {
+  const s = getSettings();
+  if (!s) return;
+  document.getElementById('header-company').textContent = s.companyName;
+  const bal = getCurrentBalance();
+  document.getElementById('header-balance').textContent = `現金残高: ${fc(bal)}`;
+}
+
+function esc(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function initApp() {
+  const s = getSettings();
+  if (!s) { document.getElementById('setup-screen').style.display = 'flex'; return; }
+  document.getElementById('setup-screen').style.display = 'none';
+  updateHeader();
+  renderPage();
+}
+
+initApp();
+</script>
+</body>
+</html>
