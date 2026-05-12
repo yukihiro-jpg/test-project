@@ -260,7 +260,7 @@
     <p class="sub">はじめに初期設定を行ってください</p>
     <div class="form-group req" style="margin-bottom:14px;">
       <label>会社名</label>
-      <input type="text" id="s-company" placeholder="株式会社○○" />
+      <input type="text" id="s-company" placeholder="株式会社〇〇" />
     </div>
     <div class="form-grid" style="margin-bottom:14px;">
       <div class="form-group req">
@@ -588,7 +588,7 @@ function pageDashboard() {
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-label">現在の現金残高</div>
-      <div class="stat-value mono ${bal<0?'danger':''}">㿝${fc(bal)}</div>
+      <div class="stat-value mono ${bal<0?'danger':''">${fc(bal)}</div>
       <div class="stat-sub">期首残高: ${fc(s.openingBalance)}</div>
     </div>
     <div class="stat-card">
@@ -605,8 +605,747 @@ function pageDashboard() {
       <div class="stat-value mono success">${fc(monthlyTotal('rec'))}</div>
     </div>
   </div>
-  ...`;
+
+  ${pending.length>0?`
+  <div class="card">
+    <div class="card-title">⚠️ 未精算の仮払い（${pending.length}件）</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>番号</th><th>仮払日</th><th>氏名</th><th>目的</th><th class="r">仮払金額</th><th class="no-print">操作</th></tr></thead>
+      <tbody>
+        ${pending.map(a=>`<tr>
+          <td><span class="badge badge-pending">${esc(a.id)}</span></td>
+          <td>${fd(a.date)}</td><td><strong>${esc(a.employeeName)}</strong></td>
+          <td>${esc(a.purpose)}</td>
+          <td class="r mono num-neg">${fc(a.advanceAmount)}</td>
+          <td class="no-print"><button class="btn btn-success btn-sm" onclick="showSettleModal('${esc(a.id)}')">精算する</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>`:`<div class="alert alert-success">✅ 未精算の仮払いはありません</div>`}
+
+  <div class="card">
+    <div class="card-title">📒 直近の取引（最新6件・古い順）</div>
+    ${recent.length===0
+      ?'<div class="empty-state"><div class="icon">📒</div><p>まだ取引がありません</p></div>'
+      :`<div class="table-wrap"><table>
+        <thead><tr><th>日付</th><th>店名・品目／摘要</th><th class="r">入金</th><th class="r">出金</th><th class="r">残高</th></tr></thead>
+        <tbody>
+          ${recent.map(e=>`<tr class="${e.entryKind==='bank_withdraw'?'row-bank-w':e.entryKind==='bank_deposit'?'row-bank-d':e.type==='advance'?'row-advance':e.type==='settlement'?'row-settle':''}">
+            <td>${fd(e.date)}</td>
+            <td>
+              ${entryTypeLabel(e)}
+              ${e.storeName?`<strong>${esc(e.storeName)}</strong> `:''}
+              ${esc(e.itemName||e.description)}
+              ${taxLabel(e.taxRate)}
+              ${e.memo?`<div class="memo-text">📝 ${esc(e.memo)}</div>`:''}
+            </td>
+            <td class="r mono ${e.receiptAmount>0?'num-pos':''}">${e.receiptAmount>0?fc(e.receiptAmount):''}</td>
+            <td class="r mono ${e.paymentAmount>0?'num-neg':''}">${e.paymentAmount>0?fc(e.paymentAmount):''}</td>
+            <td class="r mono num-bold">${fc(e.balance)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>`}
+  </div>`;
 }
+
+function pageLedger() {
+  const allEntries=getEntries();
+  const yearSet=[...new Set(allEntries.map(e=>parseInt(e.date.split('-')[0])))].sort().reverse();
+  const years=yearSet.length?yearSet:[new Date().getFullYear()];
+  if (!years.includes(ledgerYear)) years.unshift(new Date().getFullYear());
+
+  const allWithBal=calcBalances(allEntries);
+  const filtered=allWithBal.filter(e=>{
+    if (!e.date.startsWith(String(ledgerYear))) return false;
+    if (ledgerMonth>0){
+      const m=String(ledgerMonth).padStart(2,'0');
+      if (!e.date.startsWith(`${ledgerYear}-${m}`)) return false;
+    }
+    return true;
+  });
+
+  const s=getSettings();
+  let openBal=s.openingBalance||0;
+  if (filtered.length>0){
+    const fi=allWithBal.findIndex(e=>e.id===filtered[0].id);
+    if (fi>0) openBal=allWithBal[fi-1].balance;
+  } else {
+    openBal=getCurrentBalance();
+  }
+  const totalRec=filtered.reduce((s,e)=>s+(e.receiptAmount||0),0);
+  const totalPay=filtered.reduce((s,e)=>s+(e.paymentAmount||0),0);
+  const closeBal=filtered.length>0?filtered[filtered.length-1].balance:openBal;
+
+  const yearOpts=years.map(y=>`<option value="${y}" ${y===ledgerYear?'selected':''}>${y}年</option>`).join('');
+  const monthOpts=`<option value="0" ${ledgerMonth===0?'selected':''}>全月</option>`
+    +Array.from({length:12},(_,i)=>i+1).map(m=>`<option value="${m}" ${m===ledgerMonth?'selected':''}>${m}月</option>`).join('');
+
+  const kindNormal   = currentEntryKind==='normal'   ?'active-normal'  :'';
+  const kindWithdraw = currentEntryKind==='bank_withdraw'?'active-withdraw':'';
+  const kindDeposit  = currentEntryKind==='bank_deposit' ?'active-deposit' :'';
+
+  const hintHtml = currentEntryKind==='bank_withdraw'
+    ? `<div class="bank-hint bank-hint-withdraw">🏦 <strong>通帳から現金を引き出して手元現金を補充</strong>する場合の入力です。引き出した金額を「入金額」に入力してください。店名欄には取引銀行名を入力します。</div>`
+    : currentEntryKind==='bank_deposit'
+    ? `<div class="bank-hint bank-hint-deposit">🏦 <strong>手元の現金を通帳（銀行口座）へ預け入れ</strong>る場合の入力です。預け入れた金額を「出金額」に入力してください。店名欄には取引銀行名を入力します。</div>`
+    : '';
+
+  const storePlaceholder = currentEntryKind==='bank_withdraw'||currentEntryKind==='bank_deposit' ? '〇〇銀行〇〇支店' : '〇〇スーパー';
+  const itemPlaceholder  = currentEntryKind==='bank_withdraw' ? '通帳より引出し（現金補充）' : currentEntryKind==='bank_deposit' ? '通帳へ預入' : '文房具・コピー用紙';
+  const recLabel = currentEntryKind==='bank_withdraw' ? '入金額（引出し金額）' : '入金額（円）';
+  const payLabel = currentEntryKind==='bank_deposit'  ? '出金額（預入金額）'   : '出金額（円）';
+
+  return `
+  <div class="entry-card no-print">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="entry-card-title" style="margin-bottom:0;">＋ 現金取引を登録する</div>
+      <button class="btn btn-outline btn-sm" onclick="showHowTo('ledger')" style="font-size:12px;">📖 操作方法</button>
+    </div>
+    <div class="bank-type-bar">
+      <button class="bank-type-btn ${kindNormal}"   onclick="setEntryKind('normal')">📝 一般取引</button>
+      <button class="bank-type-btn ${kindWithdraw}" onclick="setEntryKind('bank_withdraw')">🏦 通帳から引出し（現金補充）</button>
+      <button class="bank-type-btn ${kindDeposit}"  onclick="setEntryKind('bank_deposit')">🏦 通帳へ預入（現金を銀行へ）</button>
+    </div>
+    ${hintHtml}
+    <div class="form-grid" style="margin-bottom:10px;">
+      <div class="form-group req"><label>日付</label><input type="date" id="ae-date" value="${today()}" /></div>
+      <div class="form-group req"><label>店名・支払先</label><input type="text" id="ae-store" placeholder="${storePlaceholder}" /></div>
+      <div class="form-group req"><label>購入品・内容</label><input type="text" id="ae-item" placeholder="${itemPlaceholder}" /></div>
+      ${currentEntryKind==='normal'?`<div class="form-group"><label>消費税区分</label>
+        <select id="ae-tax">
+          <option value="">— 選択なし —</option>
+          <option value="10">課税（10%）</option>
+          <option value="8">軽減税率（8%）</option>
+          <option value="0">非課税</option>
+        </select>
+      </div>`:`<div></div>`}
+    </div>
+    <div class="form-grid" style="margin-bottom:10px;">
+      <div class="form-group"><label>${recLabel}</label><input type="number" id="ae-rec" placeholder="0" min="0" ${currentEntryKind==='bank_deposit'?'disabled style="background:#f8fafc;"':''} /></div>
+      <div class="form-group"><label>${payLabel}</label><input type="number" id="ae-pay" placeholder="0" min="0" ${currentEntryKind==='bank_withdraw'?'disabled style="background:#f8fafc;"':''} /></div>
+      <div class="form-group" style="grid-column:span 2;"><label>メモ（任意）</label><input type="text" id="ae-memo" placeholder="担当者メモ・備考など" /></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="submitEntry()">📝 登録する</button>
+      <span style="font-size:11px;color:var(--gray-500);">
+        ${currentEntryKind==='normal'?'入金か出金のどちらか一方を入力してください':
+          currentEntryKind==='bank_withdraw'?'引き出した金額を入金額に入力してください':
+          '預け入れた金額を出金額に入力してください'}
+      </span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar no-print">
+      <div class="toolbar-l">
+        <select onchange="ledgerYear=Number(this.value);renderPage()" style="padding:7px 10px;border:1px solid var(--gray-300);border-radius:6px;font-family:inherit;">${yearOpts}</select>
+        <select onchange="ledgerMonth=Number(this.value);renderPage()" style="padding:7px 10px;border:1px solid var(--gray-300);border-radius:6px;font-family:inherit;">${monthOpts}</select>
+      </div>
+      <div class="toolbar-r">
+        <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSV()">📥 CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ 印刷/PDF</button>
+      </div>
+    </div>
+    <div class="print-only" style="text-align:center;margin-bottom:14px;">
+      <div style="font-size:18px;font-weight:700;">現 金 出 納 帳</div>
+      <div style="font-size:12px;margin-top:4px;">${esc(s.companyName)}　${ledgerYear}年${ledgerMonth>0?ledgerMonth+'月':'通期'}</div>
+    </div>
+    ${filtered.length===0
+      ?'<div class="empty-state"><div class="icon">📒</div><p>この期間の取引はありません</p></div>'
+      :`<div class="table-wrap"><table>
+        <thead><tr>
+          <th>日付</th><th>店名・支払先</th><th>購入品・内容</th><th>税区分</th>
+          <th class="r">入金（円）</th><th class="r">出金（円）</th><th class="r">残高（円）</th>
+          <th>メモ</th><th class="no-print">操作</th>
+        </tr></thead>
+        <tbody>
+          <tr style="background:#eff6ff;">
+            <td colspan="6" style="color:var(--primary);font-weight:700;">▶ 前期繰越 / 期首残高</td>
+            <td class="r mono num-bold">${fc(openBal)}</td>
+            <td></td><td class="no-print"></td>
+          </tr>
+          ${filtered.map(e=>`<tr class="${e.entryKind==='bank_withdraw'?'row-bank-w':e.entryKind==='bank_deposit'?'row-bank-d':e.type==='advance'?'row-advance':e.type==='settlement'?'row-settle':''}">
+            <td style="white-space:nowrap;">${fd(e.date)}</td>
+            <td>${e.storeName?esc(e.storeName):`<span style="color:var(--gray-400);">—</span>`}</td>
+            <td>
+              ${entryTypeLabel(e)}
+              ${esc(e.itemName||e.description||'')}
+            </td>
+            <td>${taxLabel(e.taxRate)}</td>
+            <td class="r mono ${e.receiptAmount>0?'num-pos':''}">${e.receiptAmount>0?fc(e.receiptAmount):''}</td>
+            <td class="r mono ${e.paymentAmount>0?'num-neg':''}">${e.paymentAmount>0?fc(e.paymentAmount):''}</td>
+            <td class="r mono num-bold">${fc(e.balance)}</td>
+            <td style="font-size:12px;color:var(--gray-500);max-width:140px;">${esc(e.memo||'')}</td>
+            <td class="no-print" style="white-space:nowrap;">
+              ${e.type==='normal'||e.entryKind?`<button class="btn btn-secondary btn-sm" onclick="showEditEntryModal('${e.id}')">修正</button> `:''}
+              ${e.type==='normal'||e.entryKind?`<button class="btn btn-secondary btn-sm" onclick="confirmDeleteEntry('${e.id}')">削除</button>`:''}
+            </td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot><tr>
+          <td colspan="4" style="text-align:right;">合　計 / 次期繰越</td>
+          <td class="r mono num-pos">${fc(totalRec)}</td>
+          <td class="r mono num-neg">${fc(totalPay)}</td>
+          <td class="r mono num-bold">${fc(closeBal)}</td>
+          <td></td><td class="no-print"></td>
+        </tr></tfoot>
+      </table></div>`}
+  </div>`;
+}
+
+function pageAdvances() {
+  const all=getAdvances();
+  const filtered=all
+    .filter(a=>advFilter==='all'||a.status===advFilter)
+    .sort((a,b)=>b.date.localeCompare(a.date));
+  const s=getSettings();
+  const empNames=[...new Set(all.map(a=>a.employeeName))];
+
+  return `
+  <div class="card no-print">
+    <div class="card-title">＋ 仮払い登録</div>
+    <div class="form-grid">
+      <div class="form-group req"><label>仮払日</label><input type="date" id="af-date" value="${today()}" /></div>
+      <div class="form-group req">
+        <label>氏名</label>
+        <input type="text" id="af-name" placeholder="山田 太郎" list="emp-list" autocomplete="off" />
+        <datalist id="emp-list">${empNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+      </div>
+      <div class="form-group req"><label>目的・出張先</label><input type="text" id="af-purpose" placeholder="東京出張" /></div>
+      <div class="form-group req"><label>仮払金額（円）</label><input type="number" id="af-amount" placeholder="30000" min="1" /></div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="submitAdvance()">仮払いを登録する</button>
+      <span style="font-size:11px;color:var(--gray-500);">※登録すると現金出納帳に自動記録されます　番号は「氏名-連番」で自動付番されます</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <div class="card-title" style="margin:0;border:none;padding:0;">仮払金台帳</div>
+      <div class="toolbar-r no-print">
+        <select onchange="advFilter=this.value;renderPage()" style="padding:7px 10px;border:1px solid var(--gray-300);border-radius:6px;font-family:inherit;">
+          <option value="all"     ${advFilter==='all'    ?'selected':''}>全件</option>
+          <option value="pending" ${advFilter==='pending'?'selected':''}>未精算のみ</option>
+          <option value="settled" ${advFilter==='settled'?'selected':''}>精算済のみ</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="exportAdvancesCSV()">📥 CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ 印刷/PDF</button>
+      </div>
+    </div>
+    <div class="print-only" style="text-align:center;margin-bottom:14px;">
+      <div style="font-size:18px;font-weight:700;">仮 払 金 台 帳</div>
+      <div style="font-size:12px;margin-top:4px;">${esc(s.companyName)}</div>
+    </div>
+    ${filtered.length===0
+      ?'<div class="empty-state"><div class="icon">💼</div><p>仮払いの記録がありません</p></div>'
+      :`<div class="table-wrap"><table>
+        <thead><tr>
+          <th>番号</th><th>仮払日</th><th>氏名</th><th>目的</th>
+          <th class="r">仮払額</th><th>精算日</th>
+          <th class="r">使用額</th><th class="r">返金額</th><th class="r">不足額</th>
+          <th>精算方法</th><th>精算明細</th><th>状態</th><th class="no-print">操作</th>
+        </tr></thead>
+        <tbody>
+          ${filtered.map(a=>`<tr>
+            <td><strong>${esc(a.id)}</strong></td>
+            <td style="white-space:nowrap;">${fd(a.date)}</td>
+            <td>${esc(a.employeeName)}</td>
+            <td>${esc(a.purpose)}</td>
+            <td class="r mono num-neg">${fc(a.advanceAmount)}</td>
+            <td style="white-space:nowrap;">${fd(a.settlementDate)}</td>
+            <td class="r mono">${a.usedAmount!=null?fc(a.usedAmount):'—'}</td>
+            <td class="r mono ${a.returnAmount>0?'num-pos':''}">${a.returnAmount>0?fc(a.returnAmount):'—'}</td>
+            <td class="r mono ${a.shortageAmount>0?'num-neg':''}">${a.shortageAmount>0?fc(a.shortageAmount):'—'}</td>
+            <td>${a.settlementMethod==='transfer'?'<span class="badge badge-transfer">振込</span>':a.settlementMethod==='cash'?'<span class="badge badge-normal">現金</span>':'—'}</td>
+            <td style="font-size:11px;max-width:200px;">
+              ${(a.settlementItems||[]).map(it=>`<div>${it.date?`<span style="color:var(--gray-500);">${fd(it.date)}</span> `:''}${esc(it.storeName||'')}${it.storeName&&it.itemName?' / ':''}${esc(it.itemName||'')} <span class="mono">${fc(it.amount)}</span></div>`).join('')}
+            </td>
+            <td><span class="badge badge-${a.status==='pending'?'pending':'settled'}">${a.status==='pending'?'未精算':'精算済'}</span></td>
+            <td class="no-print">
+              ${a.status==='pending'?`
+                <button class="btn btn-success btn-sm" onclick="showSettleModal('${esc(a.id)}')">精算</button>
+                <button class="btn btn-secondary btn-sm" style="margin-left:4px;" onclick="confirmDeleteAdv('${esc(a.id)}')">削除</button>
+              `:''}
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>`}
+  </div>`;
+}
+
+function pageReports() {
+  const pending=getAdvances().filter(a=>a.status==='pending');
+  return `
+  <div class="card">
+    <div class="card-title">📄 帳票出力</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;">
+      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">📒 現金出納帳</div>
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">月別の入出金明細と残高一覧</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="showPage('ledger');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSV()">📥 CSV出力</button>
+        </div>
+      </div>
+      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">💼 仮払金台帳</div>
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">仮払いの一覧と精算状況</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="showPage('advances');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportAdvancesCSV()">📥 CSV出力</button>
+        </div>
+      </div>
+      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">⚠️ 未精算一覧</div>
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">精算未完了の仮払い（${pending.length}件）</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="advFilter='pending';showPage('advances');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportPendingCSV()">📥 CSV出力</button>
+        </div>
+      </div>
+      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">💾 データバックアップ</div>
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">全データをJSONで保存・復元（推奨：月1回）</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 バックアップ保存</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp2').click()">📤 復元</button>
+          <input type="file" id="imp2" accept=".json" style="display:none;" onchange="importBackup(event)">
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function setEntryKind(kind) {
+  currentEntryKind=kind;
+  renderPage();
+}
+
+function submitEntry() {
+  const date  = document.getElementById('ae-date').value;
+  const store = document.getElementById('ae-store').value.trim();
+  const item  = document.getElementById('ae-item').value.trim();
+  const taxEl = document.getElementById('ae-tax');
+  const taxV  = taxEl ? taxEl.value : '';
+  const rec   = Number(document.getElementById('ae-rec').value)||0;
+  const pay   = Number(document.getElementById('ae-pay').value)||0;
+  const memo  = document.getElementById('ae-memo').value.trim();
+
+  if (!date||!store||!item){ alert('日付・店名・購入品は必須です。'); return; }
+
+  if (currentEntryKind==='bank_withdraw') {
+    if (rec<=0){ alert('通帳から引き出した金額（入金額）を入力してください。'); return; }
+    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:rec, paymentAmount:0, taxRate:null, memo, type:'normal', entryKind:'bank_withdraw' });
+  } else if (currentEntryKind==='bank_deposit') {
+    if (pay<=0){ alert('通帳へ預け入れた金額（出金額）を入力してください。'); return; }
+    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:0, paymentAmount:pay, taxRate:null, memo, type:'normal', entryKind:'bank_deposit' });
+  } else {
+    if (rec===0&&pay===0){ alert('入金か出金のいずれかを入力してください。'); return; }
+    if (rec>0&&pay>0){ alert('入金と出金を同時に入力することはできません。'); return; }
+    const taxRate = taxV===''?null:Number(taxV);
+    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:rec, paymentAmount:pay, taxRate, memo, type:'normal', entryKind:'normal' });
+  }
+
+  document.getElementById('ae-store').value='';
+  document.getElementById('ae-item').value='';
+  document.getElementById('ae-rec').value='';
+  document.getElementById('ae-pay').value='';
+  document.getElementById('ae-memo').value='';
+  updateHeader(); renderPage();
+}
+
+function showEditEntryModal(id) {
+  const entries = getEntries();
+  const e = entries.find(x=>x.id===id);
+  if (!e) return;
+  const isBank = e.entryKind==='bank_withdraw'||e.entryKind==='bank_deposit';
+  showModal(`
+    <div class="modal-title">✏️ 取引の修正 — ${esc(e.id)}</div>
+    <div class="form-grid" style="margin-bottom:12px;">
+      <div class="form-group req"><label>日付</label><input type="date" id="ed-date" value="${esc(e.date)}" /></div>
+      <div class="form-group req"><label>店名・支払先</label><input type="text" id="ed-store" value="${esc(e.storeName||'')}" /></div>
+    </div>
+    <div class="form-grid" style="margin-bottom:12px;">
+      <div class="form-group req"><label>購入品・内容</label><input type="text" id="ed-item" value="${esc(e.itemName||e.description||'')}" /></div>
+      ${!isBank?`<div class="form-group"><label>消費税区分</label>
+        <select id="ed-tax">
+          <option value="" ${e.taxRate==null?'selected':''}>— 選択なし —</option>
+          <option value="10" ${e.taxRate===10?'selected':''}>課税（10%）</option>
+          <option value="8"  ${e.taxRate===8 ?'selected':''}>軽減税率（8%）</option>
+          <option value="0"  ${e.taxRate===0 ?'selected':''}>非課税</option>
+        </select>
+      </div>`:'<div></div>'}
+    </div>
+    <div class="form-grid" style="margin-bottom:12px;">
+      <div class="form-group"><label>入金額（円）${e.entryKind==='bank_deposit'?'<span style="color:var(--gray-400);font-weight:400;">（預入の場合は変更不可）</span>':''}</label>
+        <input type="number" id="ed-rec" value="${e.receiptAmount||0}" min="0" ${e.entryKind==='bank_deposit'?'disabled style="background:#f8fafc;"':''} />
+      </div>
+      <div class="form-group"><label>出金額（円）${e.entryKind==='bank_withdraw'?'<span style="color:var(--gray-400);font-weight:400;">（引出の場合は変更不可）</span>':''}</label>
+        <input type="number" id="ed-pay" value="${e.paymentAmount||0}" min="0" ${e.entryKind==='bank_withdraw'?'disabled style="background:#f8fafc;"':''} />
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:14px;"><label>メモ</label><input type="text" id="ed-memo" value="${esc(e.memo||'')}" /></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="submitEditEntry('${esc(e.id)}','${esc(e.entryKind||'')}')">修正を保存する</button>
+    </div>
+  `);
+}
+
+function submitEditEntry(id, entryKind) {
+  const date  = document.getElementById('ed-date').value;
+  const store = document.getElementById('ed-store').value.trim();
+  const item  = document.getElementById('ed-item').value.trim();
+  const taxEl = document.getElementById('ed-tax');
+  const taxV  = taxEl ? taxEl.value : '';
+  const recEl = document.getElementById('ed-rec');
+  const payEl = document.getElementById('ed-pay');
+  const rec   = recEl&&!recEl.disabled ? Number(recEl.value)||0 : null;
+  const pay   = payEl&&!payEl.disabled ? Number(payEl.value)||0 : null;
+  const memo  = document.getElementById('ed-memo').value.trim();
+
+  if (!date||!store||!item){ alert('日付・店名・購入品は必須です。'); return; }
+
+  const data = { date, storeName:store, itemName:item, description:`${store} ${item}`, memo };
+  if (taxEl) data.taxRate = taxV===''?null:Number(taxV);
+  if (rec!==null) data.receiptAmount = rec;
+  if (pay!==null) data.paymentAmount = pay;
+
+  if (entryKind==='normal'&&rec===0&&pay===0){ alert('入金か出金のいずれかを入力してください。'); return; }
+  if (entryKind==='normal'&&rec>0&&pay>0){ alert('入金と出金を同時に入力することはできません。'); return; }
+
+  updateEntry(id, data);
+  closeModal(); updateHeader(); renderPage();
+}
+
+function submitAdvance() {
+  const date   =document.getElementById('af-date').value;
+  const name   =document.getElementById('af-name').value.trim();
+  const purpose=document.getElementById('af-purpose').value.trim();
+  const amount =document.getElementById('af-amount').value;
+  if (!date||!name||!purpose||!amount){ alert('全ての必須項目を入力してください。'); return; }
+  if (Number(amount)<=0){ alert('仮払金額は1円以上を入力してください。'); return; }
+  const adv=registerAdvance({date,employeeName:name,purpose,advanceAmount:amount});
+  document.getElementById('af-name').value='';
+  document.getElementById('af-purpose').value='';
+  document.getElementById('af-amount').value='';
+  updateHeader(); renderPage();
+  alert(`仮払いを登録しました。\n番号: ${adv.id}`);
+}
+
+let settleRows=[];
+
+function showSettleModal(id) {
+  const adv=getAdvances().find(a=>a.id===id);
+  if (!adv) return;
+  settleRows=[{date:'',storeName:'',itemName:'',amount:''}];
+  showModal(`
+    <div class="modal-title">✅ 精算入力 — ${esc(adv.id)}</div>
+    <div class="alert alert-info">
+      <strong>${esc(adv.employeeName)}</strong> さん ／ ${esc(adv.purpose)}<br>
+      仮払金額: <strong class="mono">${fc(adv.advanceAmount)}</strong>　仮払日: ${fd(adv.date)}
+    </div>
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div class="form-group req">
+        <label>精算日</label>
+        <input type="date" id="st-date" value="${today()}" />
+      </div>
+      <div class="form-group req">
+        <label>精算方法</label>
+        <select id="st-method">
+          <option value="cash">現金精算（現金で返金・受取）</option>
+          <option value="transfer">振込（通帳に振り込み）</option>
+        </select>
+      </div>
+    </div>
+    <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">使用明細</div>
+    <div id="settle-rows-wrap"></div>
+    <button class="btn btn-secondary btn-sm" style="margin-bottom:14px;" onclick="addSettleRow('${esc(adv.id)}',${adv.advanceAmount})">＋ 明細を追加</button>
+    <div id="settle-summary" style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px;font-size:13px;margin-bottom:4px;">
+      <span style="color:var(--gray-500);">金額を入力すると自動計算されます</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-success" onclick="submitSettle('${esc(adv.id)}',${adv.advanceAmount})">精算を確定する</button>
+    </div>
+  `);
+  renderSettleRows(adv.id, adv.advanceAmount);
+}
+
+function renderSettleRows(advId, advAmt) {
+  const wrap=document.getElementById('settle-rows-wrap');
+  if (!wrap) return;
+  wrap.innerHTML=`
+    <table class="settle-items-table" style="margin-bottom:6px;">
+      <thead><tr>
+        <th style="width:16%">使用日</th>
+        <th style="width:28%">店名・支払先</th>
+        <th style="width:30%">内容・品目</th>
+        <th style="width:18%">金額（円）</th>
+        <th style="width:8%"></th>
+      </tr></thead>
+      <tbody>
+        ${settleRows.map((r,i)=>`<tr>
+          <td><input type="date" value="${esc(r.date)}" oninput="settleRows[${i}].date=this.value" /></td>
+          <td><input type="text" value="${esc(r.storeName)}" placeholder="〇〇ホテル" oninput="settleRows[${i}].storeName=this.value" /></td>
+          <td><input type="text" value="${esc(r.itemName)}"  placeholder="宿泊費" oninput="settleRows[${i}].itemName=this.value" /></td>
+          <td><input type="number" value="${r.amount}" placeholder="0" min="0" oninput="settleRows[${i}].amount=this.value;updateSettleSummary(${advAmt})" /></td>
+          <td style="text-align:center;">${settleRows.length>1?`<button class="btn btn-secondary btn-xs" onclick="removeSettleRow(${i},'${esc(advId)}',${advAmt})">✕</button>`:''}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  updateSettleSummary(advAmt);
+}
+
+function addSettleRow(advId, advAmt) {
+  settleRows.push({date:'',storeName:'',itemName:'',amount:''});
+  renderSettleRows(advId, advAmt);
+}
+
+function removeSettleRow(i, advId, advAmt) {
+  settleRows.splice(i,1);
+  renderSettleRows(advId, advAmt);
+}
+
+function updateSettleSummary(advAmt) {
+  const total=settleRows.reduce((s,r)=>s+Number(r.amount||0),0);
+  const diff=total-advAmt;
+  const el=document.getElementById('settle-summary');
+  if (!el) return;
+  let diffHtml='';
+  if (total>0){
+    if (diff>0)       diffHtml=`<span style="color:var(--danger);font-weight:700;"> → 不足額 ${fc(diff)}（追加払い）</span>`;
+    else if (diff<0)  diffHtml=`<span style="color:var(--success);font-weight:700;"> → 返金額 ${fc(Math.abs(diff))}（返金受取）</span>`;
+    else              diffHtml=`<span style="color:var(--primary);font-weight:700;"> → 過不足なし</span>`;
+  }
+  el.innerHTML=`合計使用金額: <strong class="mono">${fc(total)}</strong>　／　仮払金額: <strong class="mono">${fc(advAmt)}</strong>${diffHtml}`;
+}
+
+function submitSettle(id, advAmt) {
+  const settlementDate=document.getElementById('st-date').value;
+  const settlementMethod=document.getElementById('st-method').value;
+  if (!settlementDate){ alert('精算日を入力してください。'); return; }
+  if (settleRows.every(r=>!r.amount&&!r.storeName&&!r.itemName)){
+    alert('使用明細を1件以上入力してください。'); return;
+  }
+  const items=settleRows.map(r=>({...r,amount:Number(r.amount||0)}));
+  settleAdvance(id,{settlementDate,settlementMethod,items});
+  closeModal(); updateHeader(); renderPage();
+}
+
+function confirmDeleteEntry(id) {
+  if (confirm('この取引を削除しますか？')){ removeEntry(id); updateHeader(); renderPage(); }
+}
+
+function confirmDeleteAdv(id) {
+  if (confirm('この仮払い記録を削除しますか？\n関連する出納帳の記録も削除されます。')){
+    if (removeAdvance(id)){ updateHeader(); renderPage(); }
+  }
+}
+
+function exportLedgerCSV() {
+  const s=getSettings();
+  const rows=[
+    [`現金出納帳`,s.companyName,`出力日:${today()}`],
+    ['日付','店名・支払先','購入品・内容','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
+    ...calcBalances(getEntries()).map(e=>[
+      e.date, e.storeName||'', e.itemName||e.description||'',
+      e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
+      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':'一般',
+      e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
+    ])
+  ];
+  dlCSV(rows,`現金出納帳_${today()}.csv`);
+}
+
+function exportAdvancesCSV() {
+  const s=getSettings();
+  const rows=[
+    [`仮払金台帳`,s.companyName,`出力日:${today()}`],
+    ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用金額','返金額','不足額','状態','精算明細'],
+    ...getAdvances().map(a=>[
+      a.id,a.date,a.employeeName,a.purpose,a.advanceAmount,
+      a.settlementDate||'',
+      a.settlementMethod==='transfer'?'振込':a.settlementMethod==='cash'?'現金':'',
+      a.usedAmount??'',a.returnAmount??'',a.shortageAmount??'',
+      a.status==='pending'?'未精算':'精算済',
+      (a.settlementItems||[]).map(it=>`${it.date?it.date+' ':''}${it.storeName||''} ${it.itemName||''} ${it.amount||0}円`).join(' / ')
+    ])
+  ];
+  dlCSV(rows,`仮払金台帳_${today()}.csv`);
+}
+
+function exportPendingCSV() {
+  const s=getSettings();
+  const rows=[
+    [`未精算一覧`,s.companyName,`出力日:${today()}`],
+    ['番号','仮払日','氏名','目的','仮払金額'],
+    ...getAdvances().filter(a=>a.status==='pending').map(a=>[a.id,a.date,a.employeeName,a.purpose,a.advanceAmount])
+  ];
+  dlCSV(rows,`未精算一覧_${today()}.csv`);
+}
+
+function dlCSV(rows,filename) {
+  const bom='﻿';
+  const csv=bom+rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const a=Object.assign(document.createElement('a'),{
+    href:URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})),
+    download:filename
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+function exportBackup() {
+  const data={settings:getSettings(),entries:getEntries(),advances:getAdvances(),exportedAt:new Date().toISOString(),version:'2.1'};
+  const a=Object.assign(document.createElement('a'),{
+    href:URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),
+    download:`現金管理バックアップ_${today()}.json`
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+function importBackup(ev) {
+  const file=ev.target.files[0]; if (!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try {
+      const d=JSON.parse(e.target.result);
+      if (!d.settings||!d.entries||!d.advances){ alert('無効なバックアップファイルです。'); return; }
+      if (confirm('現在のデータをバックアップデータで上書きします。\nこの操作は元に戻せません。よろしいですか？')){
+        DB.set('settings',d.settings); DB.set('entries',d.entries); DB.set('advances',d.advances);
+        alert('データを復元しました。'); initApp();
+      }
+    } catch { alert('ファイルの読み込みに失敗しました。'); }
+  };
+  reader.readAsText(file); ev.target.value='';
+}
+
+function showHowTo(context) {
+  const isLedger = context==='ledger';
+  showModal(`
+    <div class="modal-title">📖 操作方法ガイド</div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:16px;">現金出納帳・仮払管理システムの使い方</div>
+
+    ${isLedger?`
+    <div class="howto-section">
+      <h3>📒 現金出納帳への入力</h3>
+      <div class="howto-step"><strong>① 取引種別を選ぶ</strong><br>
+        画面上部の3つのボタンで取引の種類を選択します。<br>
+        ・<strong>一般取引</strong>：通常の購入・支払い（備品・経費など）<br>
+        ・<strong>通帳から引出し</strong>：銀行から現金を補充したとき<br>
+        ・<strong>通帳へ預入</strong>：手元現金を銀行に入れたとき
+      </div>
+      <div class="howto-step"><strong>② 通帳から引出しの入力方法</strong><br>
+        店名欄に「〇〇銀行〇〇支店」、購入品欄は自動入力されます。<br>
+        引き出した金額を「入金額」に入力 → 登録ボタンを押す
+      </div>
+      <div class="howto-step"><strong>③ 通帳へ預入の入力方法</strong><br>
+        店名欄に「〇〇銀行〇〇支店」を入力。<br>
+        預け入れた金額を「出金額」に入力 → 登録ボタンを押す
+      </div>
+      <div class="howto-step"><strong>④ 修正・削除</strong><br>
+        表の右端「修正」ボタンを押すと内容を変更できます。<br>
+        「削除」ボタンで取引を削除できます（仮払・精算行は削除不可）。
+      </div>
+    </div>
+    `:`
+    <div class="howto-section">
+      <h3>📊 ダッシュボードの見方</h3>
+      <div class="howto-step">
+        <strong>現在の現金残高</strong>：手元の現金残高です。期首残高＋入金合計－出金合計で自動計算されます。<br>
+        <strong>未精算件数</strong>：まだ精算されていない仮払いの件数です。0件になるよう管理します。<br>
+        <strong>直近の取引</strong>：最新6件の取引が古い順に表示されます。
+      </div>
+    </div>
+    `}
+
+    <div class="howto-section">
+      <h3>💼 仮払いの登録・精算</h3>
+      <div class="howto-step"><strong>① 仮払い登録</strong><br>
+        「仮払管理」タブ → 「＋ 仮払い登録」欄に入力。<br>
+        仮払日・氏名・目的・金額を入力して登録ボタンを押すと、<br>
+        自動的に現金出納帳にも出金として記録されます。
+      </div>
+      <div class="howto-step"><strong>② 精算入力</strong><br>
+        仮払一覧の「精算」ボタンを押す → 精算日・精算方法を選択。<br>
+        ・<strong>現金精算</strong>：現金で返金・受取<br>
+        ・<strong>振込</strong>：通帳に振り込んでもらう場合<br>
+        使用明細を1行ずつ入力します（使用日・店名・内容・金額）。<br>
+        複数の支払先がある場合は「＋ 明細を追加」で行を追加します。
+      </div>
+      <div class="howto-step"><strong>③ 精算結果の自動計算</strong><br>
+        使用合計が仮払金額より少ない場合 → <span style="color:var(--success);">返金額</span>が表示され入金として記録<br>
+        使用合計が仮払金額より多い場合 → <span style="color:var(--danger);">不足額</span>が表示され出金として記録
+      </div>
+    </div>
+
+    <div class="howto-section">
+      <h3>💾 データの保存・バックアップ</h3>
+      <div class="howto-step">
+        データはこのブラウザ（localStorage）に<strong>自動保存</strong>されます。<br>
+        ヘッダーに「自動保存済 HH:MM」と表示されるのが保存の確認です。<br>
+        ブラウザのキャッシュ削除やデータ消去でデータが失われる場合があります。<br>
+        <strong>定期的に「設定」→「バックアップ保存」でJSONファイルを保存することを強くお勧めします。</strong>
+      </div>
+    </div>
+
+    <div class="howto-section">
+      <h3>📄 帳票出力</h3>
+      <div class="howto-step">
+        「帳票出力」タブから現金出納帳・仮払金台帳をCSV出力または印刷（PDF保存）できます。<br>
+        CSVはExcelで開けます（日本語文字化け防止のBOM付き）。
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal()">閉じる</button>
+    </div>
+  `, true);
+}
+
+function showModal(html, wide=false) {
+  document.getElementById('modal-mount').innerHTML=
+    `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-box${wide?' modal-wide':''">${html}</div></div>`;
+}
+function closeModal() { document.getElementById('modal-mount').innerHTML=''; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+
+function updateHeader() {
+  const s=getSettings(); if (!s) return;
+  document.getElementById('header-company').textContent=s.companyName;
+  document.getElementById('header-balance').textContent=`現金残高: ${fc(getCurrentBalance())}`;
+}
+
+function checkAndRestoreAutoBackup() {
+  const mainHasData = getSettings() !== null;
+  if (mainHasData) return;
+  const raw = localStorage.getItem('ca_autobackup');
+  if (!raw) return;
+  try {
+    const d = JSON.parse(raw);
+    if (!d.settings||!d.entries||!d.advances) return;
+    const savedAt = d.savedAt ? new Date(d.savedAt).toLocaleString('ja-JP') : '不明';
+    if (confirm(`前回の自動保存データが見つかりました（${savedAt}）。\nこのデータを復元しますか？`)) {
+      DB.set('settings', d.settings);
+      DB.set('entries',  d.entries);
+      DB.set('advances', d.advances);
+      alert('データを復元しました。');
+    }
+  } catch { }
+}
+
+function initApp() {
+  checkAndRestoreAutoBackup();
+  const s=getSettings();
+  if (!s){ document.getElementById('setup-screen').style.display='flex'; return; }
+  document.getElementById('setup-screen').style.display='none';
+  updateHeader(); renderPage();
+  doAutoSave();
+}
+
+window.addEventListener('beforeunload', ()=>{ doAutoSave(); });
+
+initApp();
 </script>
 </body>
-</html>
