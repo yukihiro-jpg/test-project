@@ -100,6 +100,32 @@
     }
     .bank-hint-withdraw { background: #fffbeb; border-color: #d97706; color: #92400e; }
     .bank-hint-deposit  { background: var(--success-light); border-color: var(--success); color: var(--success); }
+    .acct-section { margin-bottom: 12px; }
+    .acct-section-title {
+      font-size: 11px; font-weight: 700; color: var(--gray-500);
+      margin-bottom: 6px; letter-spacing: 0.3px;
+    }
+    .acct-section-title.recent { color: var(--primary); }
+    .acct-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+      gap: 6px;
+    }
+    .acct-chip {
+      padding: 7px 10px; border: 1.5px solid var(--gray-300); border-radius: 6px;
+      background: white; cursor: pointer; font-size: 12px; font-family: inherit;
+      color: var(--gray-700); text-align: center; transition: all 0.12s;
+      line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .acct-chip:hover { border-color: var(--primary); color: var(--primary); background: #f8fafc; }
+    .acct-chip.recent { border-color: #fbbf24; background: #fef9c3; color: #78350f; }
+    .acct-chip.recent:hover { border-color: #d97706; background: #fef3c7; color: #92400e; }
+    .acct-chip.selected { border-color: var(--primary); background: var(--primary); color: white; font-weight: 700; }
+    .acct-chip.selected:hover { background: #1d4ed8; }
+    .badge-acct {
+      display: inline-block; padding: 1px 7px; border-radius: 10px;
+      font-size: 10px; font-weight: 600; background: #ecfeff; color: #155e75;
+      margin-left: 4px;
+    }
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -253,6 +279,27 @@
 </head>
 <body>
 
+<script>
+/* Bootstrap safety: if main script fails to run (e.g. syntax error in older browser),
+   show a recovery message instead of leaving the user stuck on 読み込み中... */
+(function(){
+  window.__app_boot_error = null;
+  window.addEventListener('error', function(e){ window.__app_boot_error = e && (e.message||e.error||e); });
+  setTimeout(function(){
+    var hc = document.getElementById('header-company');
+    if (hc && hc.textContent === '読み込み中...') {
+      document.body.innerHTML =
+        '<div style="padding:40px;max-width:640px;margin:40px auto;font-family:sans-serif;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">' +
+        '<h2 style="color:#b91c1c;margin-bottom:14px;">⚠️ アプリの起動に失敗しました</h2>' +
+        '<p style="margin-bottom:10px;line-height:1.7;">JavaScriptが正常に実行できませんでした。お使いのブラウザが古い可能性があります。</p>' +
+        '<ul style="margin-left:20px;line-height:1.8;margin-bottom:14px;"><li>Google Chrome、Microsoft Edge、Firefoxの最新版でお試しください</li><li>ファイルをもう一度ダウンロードしてみてください</li></ul>' +
+        '<details style="font-size:12px;color:#64748b;"><summary>エラー詳細</summary><pre style="background:#f1f5f9;padding:8px;border-radius:4px;overflow:auto;">' +
+        String(window.__app_boot_error||'スクリプトの実行が確認できません').replace(/</g,'&lt;') + '</pre></details></div>';
+    }
+  }, 2500);
+})();
+</script>
+
 <div id="setup-screen" style="display:none;">
   <div class="setup-card">
     <div class="logo">💼</div>
@@ -311,10 +358,32 @@
 'use strict';
 
 const DB = {
-  get(k)    { try { return JSON.parse(localStorage.getItem('ca_'+k)||'null'); } catch { return null; } },
+  get(k)    { try { return JSON.parse(localStorage.getItem('ca_'+k)||'null'); } catch (e) { return null; } },
   set(k,v)  { localStorage.setItem('ca_'+k, JSON.stringify(v)); },
   raw(k)    { return localStorage.getItem('ca_'+k); },
 };
+
+const ACCOUNT_CATEGORIES = [
+  '旅費交通費','接待交際費','会議費','通信費',
+  '消耗品費','事務用品費','水道光熱費','地代家賃',
+  '修繕費','広告宣伝費','新聞図書費','福利厚生費',
+  '租税公課','支払手数料','保険料','車両費',
+  '諸会費','外注費','給料手当','法定福利費',
+  '荷造運賃','研修費','寄付金','雑費',
+  '仕入高','売上高','雑収入','現金過不足'
+];
+
+function getRecentAccounts() {
+  const v = DB.get('recent_accounts');
+  return Array.isArray(v) ? v : [];
+}
+function addRecentAccount(name) {
+  if (!name) return;
+  let list = getRecentAccounts().filter(function(x){ return x !== name; });
+  list.unshift(name);
+  if (list.length > 6) list = list.slice(0, 6);
+  DB.set('recent_accounts', list);
+}
 const getSettings  = ()  => DB.get('settings');
 const getEntries   = ()  => DB.get('entries')  || [];
 const getAdvances  = ()  => DB.get('advances') || [];
@@ -351,7 +420,7 @@ function fc(n) {
 function fd(d) { return d ? d.replace(/-/g,'/') : '—'; }
 function today() { return new Date().toISOString().split('T')[0]; }
 function esc(s) {
-  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function genEntryId() {
@@ -590,7 +659,7 @@ function pageDashboard() {
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-label">現在の現金残高</div>
-      <div class="stat-value mono ${bal<0?'danger':''">${fc(bal)}</div>
+      <div class="stat-value mono ${bal<0?'danger':''}">${fc(bal)}</div>
       <div class="stat-sub">期首残高: ${fc(s.openingBalance)}</div>
     </div>
     <div class="stat-card">
@@ -639,6 +708,7 @@ function pageDashboard() {
               ${e.storeName?`<strong>${esc(e.storeName)}</strong> `:''}
               ${esc(e.itemName||e.description)}
               ${taxLabel(e.taxRate)}
+              ${e.account?`<span class="badge-acct">${esc(e.account)}</span>`:''}
               ${e.memo?`<div class="memo-text">📝 ${esc(e.memo)}</div>`:''}
             </td>
             <td class="r mono ${e.receiptAmount>0?'num-pos':''}">${e.receiptAmount>0?fc(e.receiptAmount):''}</td>
@@ -727,6 +797,10 @@ function pageLedger() {
       <div class="form-group"><label>${payLabel}</label><input type="number" id="ae-pay" placeholder="0" min="0" ${currentEntryKind==='bank_withdraw'?'disabled style="background:#f8fafc;"':''} /></div>
       <div class="form-group" style="grid-column:span 2;"><label>メモ（任意）</label><input type="text" id="ae-memo" placeholder="担当者メモ・備考など" /></div>
     </div>
+    ${currentEntryKind==='normal'?`<div style="margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">勘定科目（費目）<span style="color:var(--gray-500);font-weight:400;">　※任意 — 経費の分類を選択できます</span></div>
+      <div id="ae-account-wrap">${renderAccountPicker('ae-account','','ae')}</div>
+    </div>`:''}
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <button class="btn btn-primary" onclick="submitEntry()">📝 登録する</button>
       <span style="font-size:11px;color:var(--gray-500);">
@@ -772,6 +846,7 @@ function pageLedger() {
             <td>
               ${entryTypeLabel(e)}
               ${esc(e.itemName||e.description||'')}
+              ${e.account?`<span class="badge-acct">${esc(e.account)}</span>`:''}
             </td>
             <td>${taxLabel(e.taxRate)}</td>
             <td class="r mono ${e.receiptAmount>0?'num-pos':''}">${e.receiptAmount>0?fc(e.receiptAmount):''}</td>
@@ -1030,6 +1105,42 @@ function setEntryKind(kind) {
   renderPage();
 }
 
+function renderAccountPicker(inputId, selectedValue, prefix) {
+  const recent = getRecentAccounts();
+  const sel = selectedValue || '';
+  const rest = ACCOUNT_CATEGORIES.filter(function(c){ return recent.indexOf(c) < 0; });
+  const chip = function(name, isRecent) {
+    const selClass = name===sel ? ' selected' : (isRecent ? ' recent' : '');
+    return '<div class="acct-chip'+selClass+'" onclick="pickAccount(\''+prefix+'\',\''+esc(name).replace(/'/g,"\\'")+'\')">'+esc(name)+'</div>';
+  };
+  let html = '<input type="hidden" id="'+inputId+'" value="'+esc(sel)+'" />';
+  if (recent.length > 0) {
+    html += '<div class="acct-section">'
+      + '<div class="acct-section-title recent">★ 最近選択した科目</div>'
+      + '<div class="acct-grid">'
+      + recent.map(function(n){ return chip(n, true); }).join('')
+      + '</div></div>';
+  }
+  html += '<div class="acct-section">'
+    + '<div class="acct-section-title">全ての勘定科目</div>'
+    + '<div class="acct-grid">'
+    + rest.map(function(n){ return chip(n, false); }).join('')
+    + '</div></div>';
+  if (sel) {
+    html += '<div style="font-size:11px;color:var(--gray-500);margin-top:4px;">'
+      + '選択中: <strong style="color:var(--primary);">'+esc(sel)+'</strong> '
+      + '<button class="btn btn-xs btn-secondary" onclick="pickAccount(\''+prefix+'\',\'\')">クリア</button></div>';
+  }
+  return html;
+}
+
+function pickAccount(prefix, name) {
+  const input = document.getElementById(prefix+'-account');
+  if (input) input.value = name;
+  const wrap = document.getElementById(prefix+'-account-wrap');
+  if (wrap) wrap.innerHTML = renderAccountPicker(prefix+'-account', name, prefix);
+}
+
 function submitEntry() {
   const date  = document.getElementById('ae-date').value;
   const store = document.getElementById('ae-store').value.trim();
@@ -1039,20 +1150,23 @@ function submitEntry() {
   const rec   = Number(document.getElementById('ae-rec').value)||0;
   const pay   = Number(document.getElementById('ae-pay').value)||0;
   const memo  = document.getElementById('ae-memo').value.trim();
+  const acctEl = document.getElementById('ae-account');
+  const account = acctEl ? acctEl.value : '';
 
   if (!date||!store||!item){ alert('日付・店名・購入品は必須です。'); return; }
 
   if (currentEntryKind==='bank_withdraw') {
     if (rec<=0){ alert('通帳から引き出した金額（入金額）を入力してください。'); return; }
-    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:rec, paymentAmount:0, taxRate:null, memo, type:'normal', entryKind:'bank_withdraw' });
+    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:rec, paymentAmount:0, taxRate:null, account:'', memo, type:'normal', entryKind:'bank_withdraw' });
   } else if (currentEntryKind==='bank_deposit') {
     if (pay<=0){ alert('通帳へ預け入れた金額（出金額）を入力してください。'); return; }
-    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:0, paymentAmount:pay, taxRate:null, memo, type:'normal', entryKind:'bank_deposit' });
+    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:0, paymentAmount:pay, taxRate:null, account:'', memo, type:'normal', entryKind:'bank_deposit' });
   } else {
     if (rec===0&&pay===0){ alert('入金か出金のいずれかを入力してください。'); return; }
     if (rec>0&&pay>0){ alert('入金と出金を同時に入力することはできません。'); return; }
     const taxRate = taxV===''?null:Number(taxV);
-    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:rec, paymentAmount:pay, taxRate, memo, type:'normal', entryKind:'normal' });
+    if (account) addRecentAccount(account);
+    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:rec, paymentAmount:pay, taxRate, account, memo, type:'normal', entryKind:'normal' });
   }
 
   document.getElementById('ae-store').value='';
@@ -1094,6 +1208,10 @@ function showEditEntryModal(id) {
       </div>
     </div>
     <div class="form-group" style="margin-bottom:14px;"><label>メモ</label><input type="text" id="ed-memo" value="${esc(e.memo||'')}" /></div>
+    ${!isBank?`<div style="margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">勘定科目（費目）</div>
+      <div id="ed-account-wrap">${renderAccountPicker('ed-account', e.account||'', 'ed')}</div>
+    </div>`:''}
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="submitEditEntry('${esc(e.id)}','${esc(e.entryKind||'')}')">修正を保存する</button>
@@ -1119,6 +1237,11 @@ function submitEditEntry(id, entryKind) {
   if (taxEl) data.taxRate = taxV===''?null:Number(taxV);
   if (rec!==null) data.receiptAmount = rec;
   if (pay!==null) data.paymentAmount = pay;
+  const acctEl = document.getElementById('ed-account');
+  if (acctEl) {
+    data.account = acctEl.value;
+    if (data.account) addRecentAccount(data.account);
+  }
 
   if (entryKind==='normal'&&rec===0&&pay===0){ alert('入金か出金のいずれかを入力してください。'); return; }
   if (entryKind==='normal'&&rec>0&&pay>0){ alert('入金と出金を同時に入力することはできません。'); return; }
@@ -1256,9 +1379,10 @@ function exportLedgerCSV() {
   const s=getSettings();
   const rows=[
     [`現金出納帳`,s.companyName,`出力日:${today()}`],
-    ['日付','店名・支払先','購入品・内容','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
+    ['日付','店名・支払先','購入品・内容','勘定科目','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
     ...calcBalances(getEntries()).map(e=>[
       e.date, e.storeName||'', e.itemName||e.description||'',
+      e.account||'',
       e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
       e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':'一般',
       e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
@@ -1276,7 +1400,7 @@ function exportAdvancesCSV() {
       a.id,a.date,a.employeeName,a.purpose,a.advanceAmount,
       a.settlementDate||'',
       a.settlementMethod==='transfer'?'振込':a.settlementMethod==='cash'?'現金':'',
-      a.usedAmount??'',a.returnAmount??'',a.shortageAmount??'',
+      a.usedAmount==null?'':a.usedAmount,a.returnAmount==null?'':a.returnAmount,a.shortageAmount==null?'':a.shortageAmount,
       a.status==='pending'?'未精算':'精算済',
       (a.settlementItems||[]).map(it=>`${it.date?it.date+' ':''}${it.storeName||''} ${it.itemName||''} ${it.amount||0}円`).join(' / ')
     ])
@@ -1296,7 +1420,7 @@ function exportPendingCSV() {
 
 function dlCSV(rows,filename) {
   const bom='﻿';
-  const csv=bom+rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const csv=bom+rows.map(r=>r.map(c=>`"${String(c==null?'':c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
   const a=Object.assign(document.createElement('a'),{
     href:URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})),
     download:filename
