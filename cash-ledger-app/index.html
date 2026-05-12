@@ -1306,7 +1306,7 @@ function showHowTo(context) {
 
 function showModal(html, wide=false) {
   document.getElementById('modal-mount').innerHTML=
-    `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-box${wide?' modal-wide':''">${html}</div></div>`;
+    `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-box${wide?' modal-wide':''}">${html}</div></div>`;
 }
 function closeModal() { document.getElementById('modal-mount').innerHTML=''; }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
