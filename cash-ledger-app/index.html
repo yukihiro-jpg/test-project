@@ -260,8 +260,36 @@
     .howto-step strong { color: var(--primary); }
     .no-print { }
     .print-only { display: none; }
+    #acct-sidebar {
+      position: fixed; right: 0; top: 106px;
+      width: 222px; height: calc(100vh - 106px);
+      overflow-y: auto; background: white;
+      border-left: 2px solid var(--primary-light);
+      padding: 12px; z-index: 50;
+      box-shadow: -3px 0 12px rgba(0,0,0,0.07);
+      display: none;
+    }
+    #acct-sidebar.visible { display: block; }
+    .acct-sb-title {
+      font-size: 12px; font-weight: 700; color: var(--primary);
+      margin-bottom: 10px; padding-bottom: 7px;
+      border-bottom: 2px solid var(--primary-light); letter-spacing: 0.3px;
+    }
+    .acct-sb-item {
+      margin-bottom: 6px; padding: 6px 8px;
+      border-radius: 5px; background: var(--gray-50);
+      border: 1px solid var(--gray-100); transition: background 0.1s;
+    }
+    .acct-sb-item:hover { background: var(--primary-light); border-color: var(--primary); }
+    .acct-sb-name { font-size: 12px; font-weight: 700; color: var(--gray-700); margin-bottom: 2px; }
+    .acct-sb-desc { font-size: 10px; color: var(--gray-500); line-height: 1.4; }
+    body.sidebar-open #app-main { padding-right: 238px; }
+    @media (max-width: 1320px) {
+      #acct-sidebar { display: none !important; }
+      body.sidebar-open #app-main { padding-right: 24px; }
+    }
     @media print {
-      #app-header, #app-nav, .no-print { display: none !important; }
+      #app-header, #app-nav, .no-print, #acct-sidebar { display: none !important; }
       .print-only { display: block; }
       #app-main { padding: 0; max-width: none; }
       .card, .entry-card { box-shadow: none; margin-bottom: 12px; page-break-inside: avoid; border: none; background: white; }
@@ -364,6 +392,7 @@
 
 <div id="app-main"><div id="page-content"></div></div>
 <div id="modal-mount"></div>
+<div id="acct-sidebar"></div>
 
 <script>
 'use strict';
@@ -698,6 +727,29 @@ function renderPage() {
   else if (currentPage==='advances')          el.innerHTML=pageAdvances();
   else if (currentPage==='reports')           el.innerHTML=pageReports();
   else if (currentPage==='settlement-detail') el.innerHTML=pageSettlementDetail();
+  renderAccountSidebar();
+}
+
+function renderAccountSidebar() {
+  var sb = document.getElementById('acct-sidebar');
+  if (!sb) return;
+  if (currentPage !== 'ledger') {
+    sb.classList.remove('visible');
+    document.body.classList.remove('sidebar-open');
+    return;
+  }
+  sb.classList.add('visible');
+  document.body.classList.add('sidebar-open');
+  if (sb.dataset.built) return;
+  sb.dataset.built = '1';
+  var html = '<div class="acct-sb-title">📋 勘定科目ガイド</div>';
+  ACCOUNT_CATEGORIES.forEach(function(name) {
+    var desc = ACCOUNT_DESCRIPTIONS[name] || '';
+    html += '<div class="acct-sb-item"><div class="acct-sb-name">'+esc(name)+'</div>'
+          + (desc ? '<div class="acct-sb-desc">'+esc(desc)+'</div>' : '')
+          + '</div>';
+  });
+  sb.innerHTML = html;
 }
 
 function pageDashboard() {
@@ -822,7 +874,10 @@ function pageLedger() {
     ? `<div class="bank-hint bank-hint-deposit">🏦 <strong>手元の現金を通帳（銀行口座）へ預け入れ</strong>る場合の入力です。預け入れた金額を「出金額」に入力してください。店名欄には取引銀行名を入力します。</div>`
     : '';
 
-  const storePlaceholder = currentEntryKind==='bank_withdraw'||currentEntryKind==='bank_deposit' ? '〇〇銀行〇〇支店' : '〇〇スーパー';
+  const isBank = currentEntryKind !== 'normal';
+  const storePlaceholder = isBank ? '〇〇銀行〇〇支店' : '〇〇スーパー';
+  const storeLabel = isBank ? '銀行名' : '店名・支払先';
+  const itemLabel  = isBank ? '内容'   : '購入品・内容';
   const itemFixed = currentEntryKind==='bank_withdraw' ? '通帳より引出し（現金補充）' : currentEntryKind==='bank_deposit' ? '現金へ預入' : '';
   const recLabel = currentEntryKind==='bank_withdraw' ? '入金額（引出し金額）' : '入金額（円）';
   const payLabel = currentEntryKind==='bank_deposit'  ? '出金額（預入金額）'   : '出金額（円）';
@@ -842,11 +897,11 @@ function pageLedger() {
     ${hintHtml}
     <div class="form-grid" style="margin-bottom:10px;">
       <div class="form-group req"><label>日付</label><input type="date" id="ae-date" value="${today()}" /></div>
-      <div class="form-group req"><label>店名・支払先</label>
+      <div class="form-group req"><label>${storeLabel}</label>
         <input type="text" id="ae-store" placeholder="${storePlaceholder}" ${currentEntryKind==='normal'?'list="ae-store-list" autocomplete="off"':''} />
         ${currentEntryKind==='normal'&&recentStores.length>0?`<datalist id="ae-store-list">${recentStores.map(function(n){return '<option value="'+esc(n)+'">';}).join('')}</datalist>`:''}
       </div>
-      <div class="form-group req"><label>購入品・内容</label>
+      <div class="form-group req"><label>${itemLabel}</label>
         <input type="text" id="ae-item" ${itemFixed?`value="${itemFixed}" readonly style="background:#f8fafc;color:var(--gray-500);cursor:not-allowed;"`:''} placeholder="${itemFixed||'文房具・コピー用紙'}" />
       </div>
       ${currentEntryKind==='normal'?`<div class="form-group"><label>消費税区分</label>
@@ -1254,10 +1309,10 @@ function showEditEntryModal(id) {
     <div class="modal-title">✏️ 取引の修正 — ${esc(e.id)}</div>
     <div class="form-grid" style="margin-bottom:12px;">
       <div class="form-group req"><label>日付</label><input type="date" id="ed-date" value="${esc(e.date)}" /></div>
-      <div class="form-group req"><label>店名・支払先</label><input type="text" id="ed-store" value="${esc(e.storeName||'')}" /></div>
+      <div class="form-group req"><label>${isBank?'銀行名':'店名・支払先'}</label><input type="text" id="ed-store" value="${esc(e.storeName||'')}" /></div>
     </div>
     <div class="form-grid" style="margin-bottom:12px;">
-      <div class="form-group req"><label>購入品・内容</label><input type="text" id="ed-item" value="${esc(e.itemName||e.description||'')}" ${isBank?'readonly style="background:#f8fafc;color:var(--gray-500);cursor:not-allowed;"':''} /></div>
+      <div class="form-group req"><label>${isBank?'内容':'購入品・内容'}</label><input type="text" id="ed-item" value="${esc(e.itemName||e.description||'')}" ${isBank?'readonly style="background:#f8fafc;color:var(--gray-500);cursor:not-allowed;"':''} /></div>
       ${!isBank?`<div class="form-group"><label>消費税区分</label>
         <select id="ed-tax">
           <option value="" ${e.taxRate==null?'selected':''}>— 選択なし —</option>
