@@ -22,7 +22,973 @@
       --gray-700: #334155;
       --gray-900: #0f172a;
     }
-    PLACEHOLDER_DO_NOT_USE
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', 'Yu Gothic', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    #app-header {
+      background: var(--primary);
+      color: white;
+      padding: 10px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+    #app-header h1 { font-size: 17px; font-weight: 700; }
+    #header-company { font-size: 12px; opacity: 0.8; margin-bottom: 2px; }
+    #header-balance { font-size: 18px; font-weight: 700; }
+    #header-save { font-size: 11px; opacity: 0.7; margin-top: 2px; }
+    #app-nav {
+      background: white;
+      border-bottom: 2px solid var(--gray-200);
+      display: flex;
+      padding: 0 20px;
+    }
+    .nav-btn {
+      padding: 11px 18px; border: none; background: none; cursor: pointer;
+      font-size: 13px; color: var(--gray-500);
+      border-bottom: 3px solid transparent; margin-bottom: -2px;
+      transition: all 0.15s; font-family: inherit;
+    }
+    .nav-btn:hover { color: var(--primary); }
+    .nav-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
+    #app-content { padding: 20px; max-width: 1200px; margin: 0 auto; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .card {
+      background: white; border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 20px; margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 15px; font-weight: 700; color: var(--gray-700);
+      margin-bottom: 14px; padding-bottom: 10px;
+      border-bottom: 2px solid var(--gray-100);
+    }
+    .form-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+    .form-group label { font-size: 11px; color: var(--gray-500); font-weight: 600; }
+    .form-group input, .form-group select, .form-group textarea {
+      border: 1.5px solid var(--gray-200); border-radius: 6px;
+      padding: 7px 10px; font-size: 13px; font-family: inherit;
+      background: var(--gray-50); transition: border 0.15s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none; border-color: var(--primary); background: white;
+    }
+    .btn {
+      padding: 8px 18px; border-radius: 6px; border: none;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      font-family: inherit; transition: all 0.15s;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: #1e3a8a; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-success:hover { background: #166534; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-danger:hover { background: #991b1b; }
+    .btn-secondary { background: var(--gray-200); color: var(--gray-700); }
+    .btn-secondary:hover { background: var(--gray-300); }
+    .btn-warning { background: #d97706; color: white; }
+    .btn-warning:hover { background: #b45309; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      background: var(--gray-100); padding: 8px 10px;
+      text-align: left; font-weight: 700; color: var(--gray-700);
+      border-bottom: 2px solid var(--gray-200);
+    }
+    td { padding: 7px 10px; border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
+    tr:hover td { background: var(--gray-50); }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 20px;
+      font-size: 11px; font-weight: 700;
+    }
+    .badge-income { background: var(--success-light); color: var(--success); }
+    .badge-expense { background: var(--danger-light); color: var(--danger); }
+    .badge-pending { background: var(--warning-light); color: var(--warning); }
+    .badge-settled { background: var(--success-light); color: var(--success); }
+    .badge-cancelled { background: var(--gray-100); color: var(--gray-500); }
+    .summary-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;
+    }
+    .summary-card {
+      border-radius: 8px; padding: 14px 16px;
+    }
+    .summary-label { font-size: 11px; font-weight: 600; margin-bottom: 4px; }
+    .summary-value { font-size: 20px; font-weight: 700; }
+    .text-income { color: var(--success); }
+    .text-expense { color: var(--danger); }
+    .text-warning { color: var(--warning); }
+    .text-primary { color: var(--primary); }
+    .bg-income { background: var(--success-light); }
+    .bg-expense { background: var(--danger-light); }
+    .bg-warning { background: var(--warning-light); }
+    .bg-primary { background: var(--primary-light); }
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5); z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: white; border-radius: 12px;
+      padding: 24px; max-width: 480px; width: 90%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+    .alert {
+      padding: 10px 14px; border-radius: 6px; margin-bottom: 12px;
+      font-size: 13px;
+    }
+    .alert-danger { background: var(--danger-light); color: var(--danger); }
+    .alert-success { background: var(--success-light); color: var(--success); }
+    .alert-warning { background: var(--warning-light); color: var(--warning); }
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--gray-900); color: white;
+      padding: 10px 20px; border-radius: 8px;
+      font-size: 13px; z-index: 999;
+      opacity: 0; transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+    .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+    .filter-bar input, .filter-bar select {
+      border: 1.5px solid var(--gray-200); border-radius: 6px;
+      padding: 6px 10px; font-size: 13px; font-family: inherit;
+      background: var(--gray-50);
+    }
+    .pagination { display: flex; gap: 4px; align-items: center; margin-top: 12px; }
+    .page-btn {
+      padding: 4px 10px; border: 1.5px solid var(--gray-200);
+      border-radius: 4px; background: white; cursor: pointer;
+      font-size: 12px; font-family: inherit;
+    }
+    .page-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+    .page-btn:disabled { opacity: 0.4; cursor: default; }
+    @media (max-width: 600px) {
+      #app-content { padding: 10px; }
+      .form-row { flex-direction: column; }
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+      table { font-size: 12px; }
+      th, td { padding: 6px 6px; }
+    }
   </style>
 </head>
-<body>STUB</body></html>
+<body>
+<div id="app-header">
+  <div>
+    <div id="header-company">-</div>
+    <h1>現金出納帳・仮払管理</h1>
+  </div>
+  <div style="text-align:right">
+    <div id="header-balance">¥0</div>
+    <div id="header-save">保存中...</div>
+  </div>
+</div>
+<nav id="app-nav">
+  <button class="nav-btn active" onclick="showSection('ledger')">現金出納帳</button>
+  <button class="nav-btn" onclick="showSection('advance')">仮払管理</button>
+  <button class="nav-btn" onclick="showSection('summary')">集計・レポート</button>
+  <button class="nav-btn" onclick="showSection('settings')">設定</button>
+</nav>
+<div id="app-content">
+  <!-- 現金出納帳 -->
+  <div id="section-ledger" class="section active">
+    <div class="card">
+      <div class="card-title">取引入力</div>
+      <div class="form-row">
+        <div class="form-group" style="flex:0 0 130px">
+          <label>日付</label>
+          <input type="date" id="l-date">
+        </div>
+        <div class="form-group" style="flex:0 0 100px">
+          <label>区分</label>
+          <select id="l-type">
+            <option value="income">入金</option>
+            <option value="expense">出金</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:1 1 160px">
+          <label>摘要</label>
+          <input type="text" id="l-desc" placeholder="例: 売上入金、交通費">
+        </div>
+        <div class="form-group" style="flex:0 0 120px">
+          <label>金額</label>
+          <input type="number" id="l-amount" placeholder="0" min="0">
+        </div>
+        <div class="form-group" style="flex:0 0 120px">
+          <label>勘定科目</label>
+          <input type="text" id="l-account" placeholder="例: 売上">
+        </div>
+        <div class="form-group" style="flex:0 0 100px; justify-content:flex-end">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="addLedgerEntry()">追加</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+        <div class="card-title" style="margin:0; border:0; padding:0">取引一覧</div>
+        <div style="display:flex; gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSV()">CSV出力</button>
+          <button class="btn btn-secondary btn-sm" onclick="printLedger()">印刷</button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <input type="month" id="l-filter-month" onchange="renderLedger()">
+        <select id="l-filter-type" onchange="renderLedger()">
+          <option value="">全区分</option>
+          <option value="income">入金</option>
+          <option value="expense">出金</option>
+        </select>
+        <input type="text" id="l-filter-text" placeholder="摘要・科目で検索" oninput="renderLedger()" style="flex:1; min-width:120px">
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:90px">日付</th>
+              <th style="width:60px">区分</th>
+              <th>摘要</th>
+              <th style="width:100px">科目</th>
+              <th style="width:90px; text-align:right">入金</th>
+              <th style="width:90px; text-align:right">出金</th>
+              <th style="width:100px; text-align:right">残高</th>
+              <th style="width:60px">操作</th>
+            </tr>
+          </thead>
+          <tbody id="ledger-body"></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="ledger-pagination"></div>
+    </div>
+  </div>
+  <!-- 仮払管理 -->
+  <div id="section-advance" class="section">
+    <div class="card">
+      <div class="card-title">仮払申請入力</div>
+      <div class="form-row">
+        <div class="form-group" style="flex:0 0 130px">
+          <label>申請日</label>
+          <input type="date" id="a-date">
+        </div>
+        <div class="form-group" style="flex:1 1 140px">
+          <label>申請者</label>
+          <input type="text" id="a-person" placeholder="氏名">
+        </div>
+        <div class="form-group" style="flex:1 1 180px">
+          <label>目的・摘要</label>
+          <input type="text" id="a-purpose" placeholder="例: 出張旅費">
+        </div>
+        <div class="form-group" style="flex:0 0 120px">
+          <label>仮払金額</label>
+          <input type="number" id="a-amount" placeholder="0" min="0">
+        </div>
+        <div class="form-group" style="flex:0 0 100px; justify-content:flex-end">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="addAdvance()">追加</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">仮払一覧</div>
+      <div class="filter-bar">
+        <select id="a-filter-status" onchange="renderAdvance()">
+          <option value="">全ステータス</option>
+          <option value="pending">未精算</option>
+          <option value="settled">精算済</option>
+          <option value="cancelled">キャンセル</option>
+        </select>
+        <input type="text" id="a-filter-text" placeholder="申請者・目的で検索" oninput="renderAdvance()" style="flex:1; min-width:120px">
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:90px">申請日</th>
+              <th>申請者</th>
+              <th>目的・摘要</th>
+              <th style="width:90px; text-align:right">仮払額</th>
+              <th style="width:90px; text-align:right">精算額</th>
+              <th style="width:90px; text-align:right">過不足</th>
+              <th style="width:70px">状態</th>
+              <th style="width:80px">操作</th>
+            </tr>
+          </thead>
+          <tbody id="advance-body"></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="advance-pagination"></div>
+    </div>
+  </div>
+  <!-- 集計・レポート -->
+  <div id="section-summary" class="section">
+    <div class="card">
+      <div class="card-title">期間集計</div>
+      <div class="filter-bar">
+        <label style="font-size:12px;color:var(--gray-500)">集計期間:</label>
+        <input type="date" id="s-from">
+        <span style="font-size:13px">〜</span>
+        <input type="date" id="s-to">
+        <button class="btn btn-primary btn-sm" onclick="calcSummary()">集計</button>
+      </div>
+      <div class="summary-grid" id="summary-grid"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">月別収支</div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr>
+          <th>月</th>
+          <th style="text-align:right">入金合計</th>
+          <th style="text-align:right">出金合計</th>
+          <th style="text-align:right">収支</th>
+        </tr></thead>
+        <tbody id="monthly-body"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="card-title">科目別集計</div>
+      <div style="overflow-x:auto"><table>
+        <thead><tr>
+          <th>勘定科目</th>
+          <th style="text-align:right">入金</th>
+          <th style="text-align:right">出金</th>
+          <th style="text-align:right">件数</th>
+        </tr></thead>
+        <tbody id="account-body"></tbody>
+      </table></div>
+    </div>
+  </div>
+  <!-- 設定 -->
+  <div id="section-settings" class="section">
+    <div class="card">
+      <div class="card-title">基本設定</div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1">
+          <label>会社名・店舗名</label>
+          <input type="text" id="cfg-company" placeholder="例: 株式会社〇〇">
+        </div>
+        <div class="form-group" style="flex:0 0 150px">
+          <label>期首現金残高 (¥)</label>
+          <input type="number" id="cfg-opening" placeholder="0">
+        </div>
+      </div>
+      <div class="form-row" style="margin-top:8px">
+        <button class="btn btn-primary" onclick="saveSettings()">設定保存</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">データ管理</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="exportAll()">全データJSON出力</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()">JSONインポート</button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importAll(event)">
+        <button class="btn btn-danger" onclick="clearAll()">全データ削除</button>
+      </div>
+      <div style="margin-top:12px; font-size:12px; color:var(--gray-500)">
+        データはブラウザのlocalStorageに保存されます。<br>
+        定期的にJSONエクスポートでバックアップしてください。
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Modals -->
+<div class="modal-overlay" id="modal-settle">
+  <div class="modal">
+    <div class="modal-title">精算処理</div>
+    <div id="settle-info" style="margin-bottom:14px; font-size:13px; color:var(--gray-700)"></div>
+    <div class="form-row">
+      <div class="form-group" style="flex:0 0 130px">
+        <label>精算日</label>
+        <input type="date" id="settle-date">
+      </div>
+      <div class="form-group" style="flex:1">
+        <label>実際の使用額 (¥)</label>
+        <input type="number" id="settle-actual" placeholder="0" min="0">
+      </div>
+    </div>
+    <div id="settle-preview" style="margin:10px 0; font-size:13px"></div>
+    <div style="display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeModal('modal-settle')">キャンセル</button>
+      <button class="btn btn-success" onclick="confirmSettle()">精算確定</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-edit-ledger">
+  <div class="modal">
+    <div class="modal-title">取引編集</div>
+    <div class="form-row">
+      <div class="form-group" style="flex:0 0 130px">
+        <label>日付</label>
+        <input type="date" id="edit-l-date">
+      </div>
+      <div class="form-group" style="flex:0 0 100px">
+        <label>区分</label>
+        <select id="edit-l-type">
+          <option value="income">入金</option>
+          <option value="expense">出金</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1 1 160px">
+        <label>摘要</label>
+        <input type="text" id="edit-l-desc">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:0 0 120px">
+        <label>金額</label>
+        <input type="number" id="edit-l-amount" min="0">
+      </div>
+      <div class="form-group" style="flex:0 0 120px">
+        <label>勘定科目</label>
+        <input type="text" id="edit-l-account">
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-ledger')">キャンセル</button>
+      <button class="btn btn-primary" onclick="confirmEditLedger()">保存</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+'use strict';
+// ===================== STATE =====================
+let state = {
+  ledger: [],
+  advances: [],
+  settings: { company: '', openingBalance: 0 },
+  ledgerPage: 1,
+  advancePage: 1,
+  editingLedgerId: null,
+  settlingAdvanceId: null
+};
+const PAGE_SIZE = 20;
+
+// ===================== STORAGE =====================
+function saveState() {
+  try {
+    localStorage.setItem('cashLedgerApp', JSON.stringify(state));
+    document.getElementById('header-save').textContent =
+      '保存: ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit'});
+  } catch(e) {
+    showToast('保存失敗: ストレージ容量不足の可能性があります', 4000);
+  }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem('cashLedgerApp');
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      state.ledger = Array.isArray(parsed.ledger) ? parsed.ledger : [];
+      state.advances = Array.isArray(parsed.advances) ? parsed.advances : [];
+      if (parsed.settings && typeof parsed.settings === 'object') {
+        state.settings = { ...state.settings, ...parsed.settings };
+      }
+      return true;
+    }
+    return false;
+  } catch(e) {
+    console.warn('State load failed:', e);
+    return false;
+  }
+}
+
+// ===================== INIT =====================
+function initApp() {
+  const loaded = loadState();
+  setDefaultDates();
+  applySettings();
+  renderAll();
+  // Only show error screen if localStorage is completely unavailable
+  if (!loaded && !isLocalStorageAvailable()) {
+    showError('このブラウザではlocalStorageが使用できません。プライベートモードを解除するか、別のブラウザをお試しください。');
+  }
+}
+
+function isLocalStorageAvailable() {
+  try {
+    const test = '__ls_test__';
+    localStorage.setItem(test, '1');
+    localStorage.removeItem(test);
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+function showError(msg) {
+  document.getElementById('app-content').innerHTML =
+    '<div class="alert alert-danger" style="margin:40px auto;max-width:500px;font-size:15px">' + msg + '</div>';
+}
+
+function setDefaultDates() {
+  const today = new Date().toISOString().slice(0,10);
+  const el = (id) => document.getElementById(id);
+  if (el('l-date')) el('l-date').value = today;
+  if (el('a-date')) el('a-date').value = today;
+  if (el('settle-date')) el('settle-date').value = today;
+  const now = new Date();
+  const ym = now.toISOString().slice(0,7);
+  if (el('l-filter-month')) el('l-filter-month').value = ym;
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+  const lastDay = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().slice(0,10);
+  if (el('s-from')) el('s-from').value = firstDay;
+  if (el('s-to')) el('s-to').value = lastDay;
+}
+
+function applySettings() {
+  const el = (id) => document.getElementById(id);
+  if (el('cfg-company')) el('cfg-company').value = state.settings.company || '';
+  if (el('cfg-opening')) el('cfg-opening').value = state.settings.openingBalance || 0;
+  if (el('header-company')) el('header-company').textContent = state.settings.company || '会社名未設定';
+  updateHeaderBalance();
+}
+
+function updateHeaderBalance() {
+  const bal = calcCurrentBalance();
+  const el = document.getElementById('header-balance');
+  if (el) el.textContent = '¥' + fmt(bal);
+}
+
+// ===================== UTIL =====================
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+function fmt(n) {
+  return Number(n).toLocaleString('ja-JP');
+}
+function fmtDate(d) {
+  if (!d) return '';
+  return d.replace(/-/g, '/');
+}
+function calcCurrentBalance() {
+  let bal = Number(state.settings.openingBalance) || 0;
+  const sorted = [...state.ledger].sort((a,b)=>a.date.localeCompare(b.date));
+  for (const e of sorted) {
+    if (e.type === 'income') bal += Number(e.amount);
+    else bal -= Number(e.amount);
+  }
+  return bal;
+}
+function showToast(msg, duration=2200) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), duration);
+}
+function showSection(name) {
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  const sec = document.getElementById('section-'+name);
+  if (sec) sec.classList.add('active');
+  const idx = ['ledger','advance','summary','settings'].indexOf(name);
+  const btns = document.querySelectorAll('.nav-btn');
+  if (btns[idx]) btns[idx].classList.add('active');
+  if (name==='summary') calcSummary();
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+function renderAll() {
+  renderLedger();
+  renderAdvance();
+  updateHeaderBalance();
+}
+
+// ===================== LEDGER =====================
+function addLedgerEntry() {
+  const el = (id) => document.getElementById(id);
+  const date = el('l-date').value;
+  const type = el('l-type').value;
+  const desc = el('l-desc').value.trim();
+  const amount = parseFloat(el('l-amount').value);
+  const account = el('l-account').value.trim();
+  if (!date) { showToast('日付を入力してください'); return; }
+  if (!desc) { showToast('摘要を入力してください'); return; }
+  if (!amount || amount <= 0) { showToast('正しい金額を入力してください'); return; }
+  state.ledger.push({ id: uid(), date, type, desc, amount, account });
+  state.ledger.sort((a,b)=>a.date.localeCompare(b.date));
+  el('l-desc').value = '';
+  el('l-amount').value = '';
+  el('l-account').value = '';
+  saveState();
+  renderLedger();
+  updateHeaderBalance();
+  showToast('取引を追加しました');
+}
+
+function renderLedger() {
+  const filterMonth = document.getElementById('l-filter-month')?.value || '';
+  const filterType = document.getElementById('l-filter-type')?.value || '';
+  const filterText = (document.getElementById('l-filter-text')?.value || '').toLowerCase();
+  let entries = [...state.ledger].sort((a,b)=>a.date.localeCompare(b.date));
+  if (filterMonth) entries = entries.filter(e=>e.date.startsWith(filterMonth));
+  if (filterType) entries = entries.filter(e=>e.type===filterType);
+  if (filterText) entries = entries.filter(e=>
+    e.desc.toLowerCase().includes(filterText)||
+    (e.account||'').toLowerCase().includes(filterText)
+  );
+  // Calc running balance
+  let runBal = Number(state.settings.openingBalance)||0;
+  // If filtered by month, calc balance up to start of month
+  if (filterMonth) {
+    const allSorted = [...state.ledger].sort((a,b)=>a.date.localeCompare(b.date));
+    for (const e of allSorted) {
+      if (e.date < filterMonth+'-01') {
+        runBal += e.type==='income' ? Number(e.amount) : -Number(e.amount);
+      }
+    }
+  }
+  const total = entries.length;
+  const pages = Math.max(1, Math.ceil(total/PAGE_SIZE));
+  state.ledgerPage = Math.min(state.ledgerPage, pages);
+  const start = (state.ledgerPage-1)*PAGE_SIZE;
+  const pageEntries = entries.slice(0, start+PAGE_SIZE); // calc balance for all up to current page
+  // Build balance map
+  let balMap = {};
+  let b = runBal;
+  for (const e of entries) {
+    b += e.type==='income' ? Number(e.amount) : -Number(e.amount);
+    balMap[e.id] = b;
+  }
+  const visibleEntries = entries.slice(start, start+PAGE_SIZE);
+  const tbody = document.getElementById('ledger-body');
+  if (!tbody) return;
+  if (visibleEntries.length===0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--gray-500);padding:24px">データがありません</td></tr>';
+  } else {
+    tbody.innerHTML = visibleEntries.map(e => `
+      <tr>
+        <td>${fmtDate(e.date)}</td>
+        <td><span class="badge badge-${e.type}">${e.type==='income'?'入金':'出金'}</span></td>
+        <td>${escHtml(e.desc)}</td>
+        <td>${escHtml(e.account||'')}</td>
+        <td style="text-align:right">${e.type==='income'?'¥'+fmt(e.amount):''}</td>
+        <td style="text-align:right">${e.type==='expense'?'¥'+fmt(e.amount):''}</td>
+        <td style="text-align:right;font-weight:600">${'¥'+fmt(balMap[e.id])}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm" onclick="openEditLedger('${e.id}')">編集</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteLedger('${e.id}')">削除</button>
+        </td>
+      </tr>`).join('');
+  }
+  renderPagination('ledger-pagination', state.ledgerPage, pages, (p)=>{ state.ledgerPage=p; renderLedger(); });
+}
+
+function openEditLedger(id) {
+  const e = state.ledger.find(x=>x.id===id);
+  if (!e) return;
+  state.editingLedgerId = id;
+  document.getElementById('edit-l-date').value = e.date;
+  document.getElementById('edit-l-type').value = e.type;
+  document.getElementById('edit-l-desc').value = e.desc;
+  document.getElementById('edit-l-amount').value = e.amount;
+  document.getElementById('edit-l-account').value = e.account||'';
+  document.getElementById('modal-edit-ledger').classList.add('active');
+}
+function confirmEditLedger() {
+  const id = state.editingLedgerId;
+  const e = state.ledger.find(x=>x.id===id);
+  if (!e) return;
+  e.date = document.getElementById('edit-l-date').value;
+  e.type = document.getElementById('edit-l-type').value;
+  e.desc = document.getElementById('edit-l-desc').value.trim();
+  e.amount = parseFloat(document.getElementById('edit-l-amount').value)||0;
+  e.account = document.getElementById('edit-l-account').value.trim();
+  state.ledger.sort((a,b)=>a.date.localeCompare(b.date));
+  saveState();
+  closeModal('modal-edit-ledger');
+  renderLedger();
+  updateHeaderBalance();
+  showToast('取引を更新しました');
+}
+function deleteLedger(id) {
+  if (!confirm('この取引を削除しますか？')) return;
+  state.ledger = state.ledger.filter(x=>x.id!==id);
+  saveState();
+  renderLedger();
+  updateHeaderBalance();
+  showToast('取引を削除しました');
+}
+
+// ===================== ADVANCE =====================
+function addAdvance() {
+  const el = (id) => document.getElementById(id);
+  const date = el('a-date').value;
+  const person = el('a-person').value.trim();
+  const purpose = el('a-purpose').value.trim();
+  const amount = parseFloat(el('a-amount').value);
+  if (!date) { showToast('申請日を入力してください'); return; }
+  if (!person) { showToast('申請者を入力してください'); return; }
+  if (!purpose) { showToast('目的を入力してください'); return; }
+  if (!amount || amount <= 0) { showToast('正しい金額を入力してください'); return; }
+  state.advances.push({
+    id: uid(), date, person, purpose, amount,
+    status: 'pending', settledAmount: null, settledDate: null
+  });
+  el('a-person').value = '';
+  el('a-purpose').value = '';
+  el('a-amount').value = '';
+  saveState();
+  renderAdvance();
+  showToast('仮払申請を追加しました');
+}
+
+function renderAdvance() {
+  const filterStatus = document.getElementById('a-filter-status')?.value || '';
+  const filterText = (document.getElementById('a-filter-text')?.value || '').toLowerCase();
+  let entries = [...state.advances].sort((a,b)=>b.date.localeCompare(a.date));
+  if (filterStatus) entries = entries.filter(e=>e.status===filterStatus);
+  if (filterText) entries = entries.filter(e=>
+    e.person.toLowerCase().includes(filterText)||
+    e.purpose.toLowerCase().includes(filterText)
+  );
+  const total = entries.length;
+  const pages = Math.max(1, Math.ceil(total/PAGE_SIZE));
+  state.advancePage = Math.min(state.advancePage, pages);
+  const start = (state.advancePage-1)*PAGE_SIZE;
+  const visible = entries.slice(start, start+PAGE_SIZE);
+  const tbody = document.getElementById('advance-body');
+  if (!tbody) return;
+  if (visible.length===0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--gray-500);padding:24px">データがありません</td></tr>';
+  } else {
+    tbody.innerHTML = visible.map(e => {
+      const diff = e.settledAmount!=null ? (e.amount - e.settledAmount) : null;
+      const diffStr = diff!=null ? (diff>=0?'+':'')+fmt(diff) : '-';
+      const diffColor = diff==null?'':diff>0?'var(--success)':diff<0?'var(--danger)':'inherit';
+      return `<tr>
+        <td>${fmtDate(e.date)}</td>
+        <td>${escHtml(e.person)}</td>
+        <td>${escHtml(e.purpose)}</td>
+        <td style="text-align:right">¥${fmt(e.amount)}</td>
+        <td style="text-align:right">${e.settledAmount!=null?'¥'+fmt(e.settledAmount):'-'}</td>
+        <td style="text-align:right;color:${diffColor};font-weight:600">${diffStr}</td>
+        <td><span class="badge badge-${e.status}">${statusLabel(e.status)}</span></td>
+        <td>
+          ${e.status==='pending'?`
+            <button class="btn btn-success btn-sm" onclick="openSettle('${e.id}')">精算</button>
+            <button class="btn btn-secondary btn-sm" onclick="cancelAdvance('${e.id}')">取消</button>
+          `:`<button class="btn btn-danger btn-sm" onclick="deleteAdvance('${e.id}')">削除</button>`}
+        </td>
+      </tr>`;
+    }).join('');
+  }
+  renderPagination('advance-pagination', state.advancePage, pages, (p)=>{ state.advancePage=p; renderAdvance(); });
+}
+
+function statusLabel(s) {
+  return {pending:'未精算', settled:'精算済', cancelled:'取消'}[s]||s;
+}
+function openSettle(id) {
+  const e = state.advances.find(x=>x.id===id);
+  if (!e) return;
+  state.settlingAdvanceId = id;
+  document.getElementById('settle-info').innerHTML =
+    `申請者: <b>${escHtml(e.person)}</b> / 目的: <b>${escHtml(e.purpose)}</b> / 仮払額: <b>¥${fmt(e.amount)}</b>`;
+  document.getElementById('settle-actual').value = '';
+  document.getElementById('settle-preview').textContent = '';
+  document.getElementById('settle-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('modal-settle').classList.add('active');
+  document.getElementById('settle-actual').oninput = function() {
+    const actual = parseFloat(this.value)||0;
+    const diff = e.amount - actual;
+    const el = document.getElementById('settle-preview');
+    if (diff>0) el.innerHTML = `<span style="color:var(--success)">返金: ¥${fmt(diff)}</span>`;
+    else if (diff<0) el.innerHTML = `<span style="color:var(--danger)">追加支払: ¥${fmt(-diff)}</span>`;
+    else el.textContent = '過不足なし';
+  };
+}
+function confirmSettle() {
+  const id = state.settlingAdvanceId;
+  const e = state.advances.find(x=>x.id===id);
+  if (!e) return;
+  const actual = parseFloat(document.getElementById('settle-actual').value);
+  if (isNaN(actual)||actual<0) { showToast('精算額を入力してください'); return; }
+  e.settledAmount = actual;
+  e.settledDate = document.getElementById('settle-date').value;
+  e.status = 'settled';
+  saveState();
+  closeModal('modal-settle');
+  renderAdvance();
+  showToast('精算を完了しました');
+}
+function cancelAdvance(id) {
+  if (!confirm('この仮払をキャンセルしますか？')) return;
+  const e = state.advances.find(x=>x.id===id);
+  if (e) { e.status='cancelled'; saveState(); renderAdvance(); showToast('キャンセルしました'); }
+}
+function deleteAdvance(id) {
+  if (!confirm('この仮払記録を削除しますか？')) return;
+  state.advances = state.advances.filter(x=>x.id!==id);
+  saveState();
+  renderAdvance();
+  showToast('削除しました');
+}
+
+// ===================== SUMMARY =====================
+function calcSummary() {
+  const from = document.getElementById('s-from')?.value||'';
+  const to = document.getElementById('s-to')?.value||'';
+  let entries = [...state.ledger];
+  if (from) entries = entries.filter(e=>e.date>=from);
+  if (to) entries = entries.filter(e=>e.date<=to);
+  const income = entries.filter(e=>e.type==='income').reduce((s,e)=>s+Number(e.amount),0);
+  const expense = entries.filter(e=>e.type==='expense').reduce((s,e)=>s+Number(e.amount),0);
+  const balance = calcCurrentBalance();
+  const pendingAdv = state.advances.filter(e=>e.status==='pending').reduce((s,e)=>s+Number(e.amount),0);
+  const grid = document.getElementById('summary-grid');
+  if (grid) grid.innerHTML = [
+    { label:'入金合計', value:'¥'+fmt(income), cls:'bg-income text-income' },
+    { label:'出金合計', value:'¥'+fmt(expense), cls:'bg-expense text-expense' },
+    { label:'収支', value:'¥'+fmt(income-expense), cls:(income-expense)>=0?'bg-income text-income':'bg-expense text-expense' },
+    { label:'現在残高', value:'¥'+fmt(balance), cls:'bg-primary text-primary' },
+    { label:'未精算仮払合計', value:'¥'+fmt(pendingAdv), cls:'bg-warning text-warning' },
+  ].map(c=>`<div class="summary-card ${c.cls}"><div class="summary-label">${c.label}</div><div class="summary-value">${c.value}</div></div>`).join('');
+
+  // Monthly
+  const monthMap = {};
+  for (const e of state.ledger) {
+    const m = e.date.slice(0,7);
+    if (!monthMap[m]) monthMap[m]={income:0,expense:0};
+    if (e.type==='income') monthMap[m].income+=Number(e.amount);
+    else monthMap[m].expense+=Number(e.amount);
+  }
+  const months = Object.keys(monthMap).sort();
+  const mbody = document.getElementById('monthly-body');
+  if (mbody) mbody.innerHTML = months.length===0
+    ? '<tr><td colspan="4" style="text-align:center;color:var(--gray-500);padding:16px">データがありません</td></tr>'
+    : months.map(m=>{
+        const d=monthMap[m];
+        const diff=d.income-d.expense;
+        return `<tr>
+          <td>${m}</td>
+          <td style="text-align:right;color:var(--success)">¥${fmt(d.income)}</td>
+          <td style="text-align:right;color:var(--danger)">¥${fmt(d.expense)}</td>
+          <td style="text-align:right;font-weight:600;color:${diff>=0?'var(--success)':'var(--danger)'}">${diff>=0?'+':''}¥${fmt(diff)}</td>
+        </tr>`;
+      }).join('');
+
+  // Account
+  const accMap = {};
+  for (const e of state.ledger) {
+    const a = e.account||'(未分類)';
+    if (!accMap[a]) accMap[a]={income:0,expense:0,count:0};
+    if (e.type==='income') accMap[a].income+=Number(e.amount);
+    else accMap[a].expense+=Number(e.amount);
+    accMap[a].count++;
+  }
+  const accounts = Object.keys(accMap).sort();
+  const abody = document.getElementById('account-body');
+  if (abody) abody.innerHTML = accounts.length===0
+    ? '<tr><td colspan="4" style="text-align:center;color:var(--gray-500);padding:16px">データがありません</td></tr>'
+    : accounts.map(a=>{
+        const d=accMap[a];
+        return `<tr>
+          <td>${escHtml(a)}</td>
+          <td style="text-align:right;color:var(--success)">${d.income?'¥'+fmt(d.income):'-'}</td>
+          <td style="text-align:right;color:var(--danger)">${d.expense?'¥'+fmt(d.expense):'-'}</td>
+          <td style="text-align:right">${d.count}</td>
+        </tr>`;
+      }).join('');
+}
+
+// ===================== SETTINGS =====================
+function saveSettings() {
+  state.settings.company = document.getElementById('cfg-company')?.value.trim()||'';
+  state.settings.openingBalance = parseFloat(document.getElementById('cfg-opening')?.value)||0;
+  applySettings();
+  saveState();
+  renderAll();
+  showToast('設定を保存しました');
+}
+
+// ===================== EXPORT/IMPORT =====================
+function exportAll() {
+  const json = JSON.stringify(state, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='cashledger_backup_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click(); URL.revokeObjectURL(url);
+}
+function importAll(ev) {
+  const file = ev.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      if (parsed.ledger) state.ledger = parsed.ledger;
+      if (parsed.advances) state.advances = parsed.advances;
+      if (parsed.settings) state.settings = {...state.settings,...parsed.settings};
+      saveState();
+      applySettings();
+      renderAll();
+      showToast('インポートしました');
+    } catch { showToast('インポート失敗: 不正なJSONファイルです'); }
+  };
+  reader.readAsText(file);
+  ev.target.value='';
+}
+function clearAll() {
+  if (!confirm('全データを削除しますか？この操作は元に戻せません。')) return;
+  state.ledger=[]; state.advances=[];
+  saveState(); renderAll();
+  showToast('全データを削除しました');
+}
+
+// ===================== CSV / PRINT =====================
+function exportLedgerCSV() {
+  let rows=[['日付','区分','摘要','勘定科目','入金','出金','残高']];
+  let bal=Number(state.settings.openingBalance)||0;
+  const sorted=[...state.ledger].sort((a,b)=>a.date.localeCompare(b.date));
+  for (const e of sorted) {
+    const inc=e.type==='income'?Number(e.amount):0;
+    const exp=e.type==='expense'?Number(e.amount):0;
+    bal+=inc-exp;
+    rows.push([e.date, e.type==='income'?'入金':'出金', e.desc, e.account||'', inc||'', exp||'', bal]);
+  }
+  const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download='cashledger_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click(); URL.revokeObjectURL(url);
+}
+function printLedger() { window.print(); }
+
+// ===================== PAGINATION =====================
+function renderPagination(containerId, currentPage, totalPages, onPage) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (totalPages <= 1) { el.innerHTML=''; return; }
+  let html='';
+  html+=`<button class="page-btn" onclick="(${onPage.toString()})(${currentPage-1})" ${currentPage===1?'disabled':''}>&#8249;</button>`;
+  for (let i=1;i<=totalPages;i++) {
+    html+=`<button class="page-btn ${i===currentPage?'active':''}" onclick="(${onPage.toString()})(${i})">${i}</button>`;
+  }
+  html+=`<button class="page-btn" onclick="(${onPage.toString()})(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>&#8250;</button>`;
+  el.innerHTML=html;
+}
+
+// ===================== SECURITY =====================
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', initApp);
+else initApp();
+</script>
+</body>
