@@ -153,10 +153,10 @@
       border-bottom: 2px solid var(--gray-200); white-space: nowrap;
     }
     th.r, td.r { text-align: right; }
-    td { padding: 7px 10px; border-bottom: 1px solid var(--gray-100); vertical-align: top; }
-    .table-grid th, .table-grid td { border-right: 1px solid #eef1f5; }
+    td { padding: 7px 10px; border-bottom: 1px solid var(--gray-200); vertical-align: top; }
+    .table-grid th, .table-grid td { border-right: 1px solid #c8d2de; }
     .table-grid th:last-child, .table-grid td:last-child { border-right: none; }
-    .table-grid { border-left: 1px solid #eef1f5; border-right: 1px solid #eef1f5; }
+    .table-grid { border-left: 1px solid #c8d2de; border-right: 1px solid #c8d2de; }
     .pl-acct-link { text-decoration: none; cursor: pointer; display: inline-block; }
     .pl-acct-link:hover .badge-acct { background: var(--primary); color: white; }
     tr:hover td { background: var(--gray-50); }
@@ -237,7 +237,8 @@
       background: var(--gray-100); padding: 7px 8px;
       text-align: left; font-weight: 700; color: var(--gray-700); font-size: 12px;
     }
-    .settle-items-table td { padding: 5px 4px; border-bottom: 1px solid var(--gray-100); }
+    .settle-items-table td { padding: 5px 4px; border-bottom: 1px solid var(--gray-200); border-right: 1px solid #c8d2de; }
+    .settle-items-table td:last-child { border-right: none; }
     .settle-items-table input {
       width: 100%; padding: 5px 7px; border: 1px solid var(--gray-300);
       border-radius: 5px; font-size: 12px; font-family: inherit;
@@ -807,6 +808,7 @@ let plMonthFrom=0;
 let plMonthTo=0;
 let advFilter='all';
 let currentEntryKind='normal';
+let summaryTab='pl';
 
 const REVENUE_ACCOUNTS = ['売上高','雑収入'];
 
@@ -1249,7 +1251,7 @@ function pageAdvances() {
     </div>
     ${filtered.length===0
       ?'<div class="empty-state"><div class="icon">💼</div><p>仮払いの記録がありません</p></div>'
-      :`<div class="table-wrap"><table>
+      :`<div class="table-wrap"><table class="table-grid">
         <thead><tr>
           <th>番号</th><th>仮払日</th><th>氏名</th><th>目的</th>
           <th class="r">仮払額</th><th>精算日</th>
@@ -1318,12 +1320,13 @@ function pageReports() {
         </div>
       </div>
       <div style="border:1px solid var(--primary);border-radius:8px;padding:18px;background:var(--primary-light);">
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:var(--primary);">📊 損益計算書（P&L集計）</div>
-        <div style="font-size:12px;color:var(--gray-700);margin-bottom:14px;">勘定科目別の収益・費用を集計し、利益／損失を表示します</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-primary btn-sm" onclick="showPage('pl-report')">👁️ 表示</button>
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:var(--primary);">📊 サマリ</div>
+        <div style="font-size:12px;color:var(--gray-700);margin-bottom:12px;">収益・費用・キャッシュフローを集計します</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="summaryTab='pl';showPage('pl-report')">📈 PL（損益）</button>
+          <button class="btn btn-secondary btn-sm" onclick="summaryTab='cf';showPage('pl-report')">💰 CF（キャッシュフロー）</button>
           <button class="btn btn-outline btn-sm" onclick="showPage('pl-report');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
-          <button class="btn btn-secondary btn-sm" onclick="exportPLCSV()">📥 CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="summaryTab='pl';showPage('pl-report');setTimeout(()=>exportPLCSV(),100)">📥 CSV</button>
         </div>
       </div>
       <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
@@ -1511,10 +1514,47 @@ function buildPLData(year, monthFrom, monthTo) {
   return { revenue, expense, totalRev, totalExp, netProfit: totalRev-totalExp, fyStart, fyEnd };
 }
 
+function buildCFData(year, monthFrom, monthTo) {
+  const s = getSettings();
+  const fm = s.fiscalMonth||1;
+  const fyStart = `${year}-${String(fm).padStart(2,'0')}-01`;
+  const fyEndY  = fm===1 ? year : year+1;
+  const fyEndM  = fm===1 ? 12 : fm-1;
+  const fyEnd   = `${fyEndY}-${String(fyEndM).padStart(2,'0')}-${String(new Date(fyEndY,fyEndM,0).getDate()).padStart(2,'0')}`;
+  function inRange(d){
+    if (!d||d<fyStart||d>fyEnd) return false;
+    if (monthFrom===0 && monthTo===0) return true;
+    return isMonthInRange(parseInt(d.split('-')[1]), monthFrom, monthTo, fm);
+  }
+  var operating=[], investing=[], financing=[];
+  var totalOp=0, totalBankIn=0, totalBankOut=0;
+  getEntries().forEach(function(e){
+    if (!inRange(e.date)) return;
+    var net=(e.receiptAmount||0)-(e.paymentAmount||0);
+    if (e.entryKind==='bank_withdraw') {
+      totalBankIn+=e.receiptAmount||0;
+      financing.push({date:e.date, label:'通帳引出（現金補充）', inflow:e.receiptAmount||0, outflow:0});
+    } else if (e.entryKind==='bank_deposit') {
+      totalBankOut+=e.paymentAmount||0;
+      financing.push({date:e.date, label:'通帳預入（現金預け入れ）', inflow:0, outflow:e.paymentAmount||0});
+    } else {
+      var label=(e.account?'['+e.account+'] ':'')+( e.storeName||e.itemName||e.description||'—');
+      if (net>=0) {
+        operating.push({date:e.date, label:label, inflow:net, outflow:0});
+      } else {
+        operating.push({date:e.date, label:label, inflow:0, outflow:-net});
+      }
+      totalOp+=net;
+    }
+  });
+  var totalIn=operating.reduce(function(s,r){return s+r.inflow;},0)+totalBankIn;
+  var totalOut=operating.reduce(function(s,r){return s+r.outflow;},0)+totalBankOut;
+  return {operating, financing, totalOp, totalBankIn, totalBankOut, totalIn, totalOut, netCF:totalIn-totalOut};
+}
+
 function pagePLReport() {
   const s = getSettings();
   const fm = s.fiscalMonth||1;
-
   const allEntries = getEntries();
   const fySet = new Set(allEntries.map(function(e){
     var y=parseInt(e.date.split('-')[0]), m=parseInt(e.date.split('-')[1]);
@@ -1522,27 +1562,30 @@ function pagePLReport() {
   }));
   var now=new Date();
   const curFY = (fm===1||now.getMonth()+1>=fm) ? now.getFullYear() : now.getFullYear()-1;
-  fySet.add(curFY);
-  fySet.add(plYear);
+  fySet.add(curFY); fySet.add(plYear);
   const fyears = [...fySet].sort(function(a,b){return b-a;});
-
   const fyLabel = fm===1 ? `${plYear}年` : `${plYear}年度`;
   const yearOpts = fyears.map(function(y){
     var lbl=fm===1?`${y}年`:`${y}年度`;
     return `<option value="${y}" ${y===plYear?'selected':''}>${lbl}</option>`;
   }).join('');
-
-  const d = buildPLData(plYear, plMonthFrom, plMonthTo);
   const rangeLabel = getMonthRangeLabel(plMonthFrom, plMonthTo, fm);
+  const isPL = summaryTab !== 'cf';
+
+  var tabContent = isPL ? buildPLTabHTML(s, fm, fyLabel, rangeLabel) : buildCFTabHTML(s, fm, fyLabel, rangeLabel);
 
   return `
   <div class="card no-print">
     <div class="toolbar">
-      <div class="toolbar-l">
+      <div class="toolbar-l" style="gap:8px;flex-wrap:wrap;">
         <button class="btn btn-secondary btn-sm" onclick="showPage('reports')">← 帳票出力に戻る</button>
+        <div style="display:flex;border:1px solid var(--gray-300);border-radius:6px;overflow:hidden;">
+          <button style="padding:6px 14px;border:none;font-family:inherit;font-size:13px;cursor:pointer;font-weight:${isPL?'700':'400'};background:${isPL?'var(--primary)':'white'};color:${isPL?'white':'var(--gray-600)'};" onclick="summaryTab='pl';renderPage()">📈 PL（損益）</button>
+          <button style="padding:6px 14px;border:none;border-left:1px solid var(--gray-300);font-family:inherit;font-size:13px;cursor:pointer;font-weight:${!isPL?'700':'400'};background:${!isPL?'var(--primary)':'white'};color:${!isPL?'white':'var(--gray-600)'};" onclick="summaryTab='cf';renderPage()">💰 CF（キャッシュフロー）</button>
+        </div>
       </div>
       <div class="toolbar-r">
-        <button class="btn btn-secondary btn-sm" onclick="exportPLCSV()">📥 CSV</button>
+        ${isPL?'<button class="btn btn-secondary btn-sm" onclick="exportPLCSV()">📥 CSV</button>':''}
         <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ 印刷/PDF</button>
       </div>
     </div>
@@ -1557,15 +1600,44 @@ function pagePLReport() {
       </div>
     </div>
     ${buildMonthBar('pl', fm)}
+    ${tabContent}
+  </div>`;
+}
 
+function buildPLTabHTML(s, fm, fyLabel, rangeLabel) {
+  const d = buildPLData(plYear, plMonthFrom, plMonthTo);
+  const expSorted = [...d.expense].sort(function(a,b){return b.amount-a.amount;});
+  const maxExp = expSorted.length>0 ? expSorted[0].amount : 1;
+  const BAR_COLORS = ['#3b82f6','#6366f1','#8b5cf6','#ec4899','#f43f5e','#f97316','#eab308','#22c55e','#14b8a6','#06b6d4'];
+
+  var chartHTML = '';
+  if (expSorted.length > 0) {
+    chartHTML = `
+    <div style="margin:18px 0 6px;font-size:13px;font-weight:700;color:var(--gray-700);">費目別経費グラフ（金額順）</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;">
+      ${expSorted.map(function(r,i){
+        var pct=maxExp>0?Math.round(r.amount/maxExp*100):0;
+        var col=BAR_COLORS[i%BAR_COLORS.length];
+        return `<div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:90px;text-align:right;font-size:12px;color:var(--gray-700);flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.name)}">${esc(r.name)}</div>
+          <div style="flex:1;background:var(--gray-100);border-radius:4px;height:22px;position:relative;overflow:hidden;">
+            <div style="width:${pct}%;background:${col};height:100%;border-radius:4px;transition:width 0.3s;"></div>
+            <span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;color:${pct>50?'white':'var(--gray-700)'};">${fc(r.amount)}</span>
+          </div>
+          <div style="font-size:11px;color:var(--gray-500);width:28px;flex-shrink:0;">${r.count}件</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  return `
     <div class="print-only" style="text-align:center;margin-bottom:14px;">
       <div style="font-size:18px;font-weight:700;">損 益 計 算 書</div>
       <div style="font-size:12px;margin-top:4px;">${esc(s.companyName)}　${fyLabel}　${rangeLabel}</div>
     </div>
     <div class="no-print" style="font-size:14px;font-weight:700;color:var(--primary);margin-bottom:10px;">
-      📊 ${fyLabel} ${rangeLabel} の損益集計
+      📈 ${fyLabel} ${rangeLabel} の損益集計（PL科目のみ）
     </div>
-
     <div class="stats-grid" style="margin-bottom:18px;">
       <div class="stat-card" style="background:var(--success-light);">
         <div class="stat-label">収益合計</div>
@@ -1580,7 +1652,7 @@ function pagePLReport() {
         <div class="stat-value mono ${d.netProfit<0?'danger':''}">${fc(Math.abs(d.netProfit))}</div>
       </div>
     </div>
-
+    ${chartHTML}
     ${d.revenue.length===0 && d.expense.length===0
       ? '<div class="empty-state"><div class="icon">📊</div><p>選択期間に勘定科目が記録された取引がありません</p><p style="font-size:12px;margin-top:6px;">※ 勘定科目を入力した現金取引と、勘定科目を指定した仮払精算明細が集計対象です</p></div>'
       : `<div class="table-wrap"><table>
@@ -1588,43 +1660,123 @@ function pagePLReport() {
             <th style="width:10%">区分</th>
             <th>勘定科目</th>
             <th class="r" style="width:10%">件数</th>
-            <th class="r" style="width:20%">金額（円）</th>
+            <th class="r" style="width:22%">金額（円）</th>
           </tr></thead>
           <tbody>
             ${d.revenue.length>0 ? `
               <tr><td colspan="4" style="background:var(--success-light);font-weight:700;color:var(--success);">▼ 収益</td></tr>
-              ${d.revenue.map(r=>`<tr>
+              ${d.revenue.map(function(r){return `<tr>
                 <td><span class="badge badge-settled">収益</span></td>
                 <td><a href="javascript:void(0)" onclick="showPLDetail('${esc(r.name)}')" class="pl-acct-link"><span class="badge-acct">${esc(r.name)}</span></a></td>
                 <td class="r mono">${r.count}件</td>
                 <td class="r mono num-pos num-bold">${fc(r.amount)}</td>
-              </tr>`).join('')}
+              </tr>`;}).join('')}
               <tr style="background:var(--gray-50);">
                 <td colspan="3" style="text-align:right;font-weight:700;">収益合計</td>
                 <td class="r mono num-pos num-bold">${fc(d.totalRev)}</td>
-              </tr>
-            `:''}
+              </tr>` : ''}
             ${d.expense.length>0 ? `
-              <tr><td colspan="4" style="background:var(--danger-light);font-weight:700;color:var(--danger);">▼ 費用</td></tr>
-              ${d.expense.map(r=>`<tr>
+              <tr><td colspan="4" style="background:var(--danger-light);font-weight:700;color:var(--danger);">▼ 費用（費目別・金額順）</td></tr>
+              ${expSorted.map(function(r){return `<tr>
                 <td><span class="badge badge-pending">費用</span></td>
                 <td><a href="javascript:void(0)" onclick="showPLDetail('${esc(r.name)}')" class="pl-acct-link"><span class="badge-acct">${esc(r.name)}</span></a></td>
                 <td class="r mono">${r.count}件</td>
                 <td class="r mono num-neg">${fc(r.amount)}</td>
-              </tr>`).join('')}
+              </tr>`;}).join('')}
               <tr style="background:var(--gray-50);">
                 <td colspan="3" style="text-align:right;font-weight:700;">費用合計</td>
                 <td class="r mono num-neg num-bold">${fc(d.totalExp)}</td>
-              </tr>
-            `:''}
+              </tr>` : ''}
           </tbody>
           <tfoot><tr>
             <td colspan="3" style="text-align:right;">${d.netProfit>=0?'当期純利益':'当期純損失'}</td>
             <td class="r mono num-bold ${d.netProfit<0?'num-neg':'num-pos'}">${fc(Math.abs(d.netProfit))}</td>
           </tr></tfoot>
         </table></div>`
-    }
-  </div>`;
+    }`;
+}
+
+function buildCFTabHTML(s, fm, fyLabel, rangeLabel) {
+  const cf = buildCFData(plYear, plMonthFrom, plMonthTo);
+  const allItems = [...cf.operating, ...cf.financing].sort(function(a,b){return a.date.localeCompare(b.date);});
+
+  return `
+    <div class="print-only" style="text-align:center;margin-bottom:14px;">
+      <div style="font-size:18px;font-weight:700;">キャッシュフロー計算書</div>
+      <div style="font-size:12px;margin-top:4px;">${esc(s.companyName)}　${fyLabel}　${rangeLabel}</div>
+    </div>
+    <div class="no-print" style="font-size:14px;font-weight:700;color:var(--primary);margin-bottom:10px;">
+      💰 ${fyLabel} ${rangeLabel} のキャッシュフロー（現金の増減）
+    </div>
+    <div class="stats-grid" style="margin-bottom:18px;">
+      <div class="stat-card" style="background:var(--success-light);">
+        <div class="stat-label">現金流入合計</div>
+        <div class="stat-value mono success">${fc(cf.totalIn)}</div>
+      </div>
+      <div class="stat-card" style="background:var(--danger-light);">
+        <div class="stat-label">現金流出合計</div>
+        <div class="stat-value mono danger">${fc(cf.totalOut)}</div>
+      </div>
+      <div class="stat-card" style="background:${cf.netCF>=0?'#dbeafe':'#fee2e2'};">
+        <div class="stat-label">${cf.netCF>=0?'現金純増':'現金純減'}</div>
+        <div class="stat-value mono ${cf.netCF<0?'danger':''}">${fc(Math.abs(cf.netCF))}</div>
+      </div>
+      <div class="stat-card" style="background:#f0fdf4;">
+        <div class="stat-label">うち事業CF（営業）</div>
+        <div class="stat-value mono ${cf.totalOp>=0?'success':'danger'}">${fc(cf.totalOp)}</div>
+      </div>
+      <div class="stat-card" style="background:#eff6ff;">
+        <div class="stat-label">うち通帳引出（補充）</div>
+        <div class="stat-value mono">${fc(cf.totalBankIn)}</div>
+      </div>
+      <div class="stat-card" style="background:#fefce8;">
+        <div class="stat-label">うち通帳預入（預け入れ）</div>
+        <div class="stat-value mono">${fc(cf.totalBankOut)}</div>
+      </div>
+    </div>
+    ${allItems.length===0
+      ? '<div class="empty-state"><div class="icon">💰</div><p>選択期間の取引がありません</p></div>'
+      : `<div class="table-wrap"><table class="table-grid">
+          <thead><tr>
+            <th style="width:12%">日付</th>
+            <th>摘要</th>
+            <th class="r" style="width:16%">流入（+）</th>
+            <th class="r" style="width:16%">流出（−）</th>
+          </tr></thead>
+          <tbody>
+            ${cf.operating.length>0?`<tr><td colspan="4" style="background:#f0fdf4;font-weight:700;color:#166534;">▼ 営業CF（売上・経費・仮払）</td></tr>`:''}
+            ${cf.operating.map(function(r){return `<tr>
+              <td style="white-space:nowrap;">${fd(r.date)}</td>
+              <td style="font-size:12px;">${esc(r.label)}</td>
+              <td class="r mono ${r.inflow>0?'num-pos':''}">${r.inflow>0?fc(r.inflow):'—'}</td>
+              <td class="r mono ${r.outflow>0?'num-neg':''}">${r.outflow>0?fc(r.outflow):'—'}</td>
+            </tr>`;}).join('')}
+            <tr style="background:var(--gray-50);">
+              <td colspan="2" style="text-align:right;font-weight:700;">営業CF 小計</td>
+              <td class="r mono ${cf.totalOp>=0?'num-pos':''}"></td>
+              <td class="r mono num-bold ${cf.totalOp>=0?'num-pos':'num-neg'}">${cf.totalOp>=0?fc(cf.totalOp):'▲'+fc(-cf.totalOp)}</td>
+            </tr>
+            ${cf.financing.length>0?`<tr><td colspan="4" style="background:#eff6ff;font-weight:700;color:#1e40af;">▼ 財務CF（通帳との資金移動）</td></tr>`:''}
+            ${cf.financing.map(function(r){return `<tr>
+              <td style="white-space:nowrap;">${fd(r.date)}</td>
+              <td style="font-size:12px;">${esc(r.label)}</td>
+              <td class="r mono ${r.inflow>0?'num-pos':''}">${r.inflow>0?fc(r.inflow):'—'}</td>
+              <td class="r mono ${r.outflow>0?'num-neg':''}">${r.outflow>0?fc(r.outflow):'—'}</td>
+            </tr>`;}).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" style="text-align:right;">合計流入 / 合計流出</td>
+              <td class="r mono num-pos num-bold">${fc(cf.totalIn)}</td>
+              <td class="r mono num-neg num-bold">${fc(cf.totalOut)}</td>
+            </tr>
+            <tr>
+              <td colspan="2" style="text-align:right;">${cf.netCF>=0?'現金純増':'現金純減'}</td>
+              <td colspan="2" class="r mono num-bold ${cf.netCF>=0?'num-pos':'num-neg'}">${cf.netCF>=0?'+ '+fc(cf.netCF):'▲ '+fc(-cf.netCF)}</td>
+            </tr>
+          </tfoot>
+        </table></div>`
+    }`;
 }
 
 function exportPLCSV() {
@@ -2158,10 +2310,11 @@ function exportTaxAccountantBundle() {
   // 1. 現金出納帳（全件 — 期首から最新まで）
   var ledgerRows=[
     [`現金出納帳`,s.companyName,`出力日:${today()}`],
-    ['日付','店名・支払先','購入品・内容','勘定科目','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
+    ['日付','勘定科目','店名・支払先','購入品・内容','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
     ...calcBalances(getEntries()).map(function(e){return [
-      e.date, e.storeName||'', e.itemName||e.description||'',
+      e.date,
       e.account||'',
+      e.storeName||'', e.itemName||e.description||'',
       e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
       e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':'一般',
       e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
@@ -2216,10 +2369,11 @@ function exportLedgerCSV() {
   const s=getSettings();
   const rows=[
     [`現金出納帳`,s.companyName,`出力日:${today()}`],
-    ['日付','店名・支払先','購入品・内容','勘定科目','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
+    ['日付','勘定科目','店名・支払先','購入品・内容','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
     ...calcBalances(getEntries()).map(e=>[
-      e.date, e.storeName||'', e.itemName||e.description||'',
+      e.date,
       e.account||'',
+      e.storeName||'', e.itemName||e.description||'',
       e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
       e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':'一般',
       e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
