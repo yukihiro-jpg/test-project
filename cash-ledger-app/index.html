@@ -1334,8 +1334,17 @@ function pageReports() {
           <button class="btn btn-secondary btn-sm" onclick="exportPendingCSV()">📥 CSV出力</button>
         </div>
       </div>
-      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">💾 データバックアップ</div>
+      <div style="border:2px solid #d97706;border-radius:8px;padding:18px;background:#fffbeb;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:#92400e;">📁 税理士提出用</div>
+        <div style="font-size:12px;color:#78350f;margin-bottom:6px;">下記4ファイルをまとめて一括ダウンロードします</div>
+        <ul style="font-size:12px;color:#92400e;margin:0 0 14px 16px;padding:0;line-height:1.8;">
+          <li>現金出納帳（期首〜最新）</li>
+          <li>仮払金台帳</li>
+          <li>仮払精算明細表</li>
+          <li>未精算一覧</li>
+        </ul>
+        <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="exportTaxAccountantBundle()">📦 一括ダウンロード</button>
+      </div>
         <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">全データをJSONで保存・復元（推奨：月1回）</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 バックアップ保存</button>
@@ -2135,6 +2144,72 @@ function confirmDeleteAdv(id) {
   if (confirm('この仮払い記録を削除しますか？\n関連する出納帳の記録も削除されます。')){
     if (removeAdvance(id)){ updateHeader(); renderPage(); }
   }
+}
+
+function todayJP() {
+  var d=new Date();
+  return d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日';
+}
+
+function exportTaxAccountantBundle() {
+  var s=getSettings();
+  var jp=todayJP();
+
+  // 1. 現金出納帳（全件 — 期首から最新まで）
+  var ledgerRows=[
+    [`現金出納帳`,s.companyName,`出力日:${today()}`],
+    ['日付','店名・支払先','購入品・内容','勘定科目','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
+    ...calcBalances(getEntries()).map(function(e){return [
+      e.date, e.storeName||'', e.itemName||e.description||'',
+      e.account||'',
+      e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
+      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':'一般',
+      e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
+    ];})
+  ];
+  dlCSV(ledgerRows, '現金出納帳_'+jp+'.csv');
+
+  // 2. 仮払金台帳
+  var advRows=[
+    [`仮払金台帳`,s.companyName,`出力日:${today()}`],
+    ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用金額','返金額','不足額','状態','精算明細'],
+    ...getAdvances().map(function(a){return [
+      a.id,a.date,a.employeeName,a.purpose,a.advanceAmount,
+      a.settlementDate||'',
+      a.settlementMethod==='transfer'?'振込':a.settlementMethod==='cash'?'現金':'',
+      a.usedAmount==null?'':a.usedAmount, a.returnAmount==null?'':a.returnAmount, a.shortageAmount==null?'':a.shortageAmount,
+      a.status==='pending'?'未精算':'精算済',
+      (a.settlementItems||[]).map(function(it){return (it.date?it.date+' ':'')+( it.storeName||'')+' '+(it.itemName||'')+' '+(it.amount||0)+'円';}).join(' / ')
+    ];})
+  ];
+  dlCSV(advRows, '仮払金台帳_'+jp+'.csv');
+
+  // 3. 仮払精算明細表
+  var detRows=[
+    [`仮払精算明細表`,s.companyName,`出力日:${today()}`],
+    ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用日','相手先名称','内容','金額','状態']
+  ];
+  buildSettlementDetailRows().forEach(function(r){
+    detRows.push([
+      r.id, r.advDate, r.employeeName, r.purpose, r.advanceAmount,
+      r.settlementDate||'',
+      r.settlementMethod==='transfer'?'振込':r.settlementMethod==='cash'?'現金':'',
+      r.usageDate||'', r.storeName||'', r.itemName||'',
+      r.amount!=null?r.amount:'',
+      r.status==='pending'?'未精算':'精算済'
+    ]);
+  });
+  dlCSV(detRows, '仮払精算明細表_'+jp+'.csv');
+
+  // 4. 未精算一覧
+  var pendRows=[
+    [`未精算一覧`,s.companyName,`出力日:${today()}`],
+    ['番号','仮払日','氏名','目的','仮払金額'],
+    ...getAdvances().filter(function(a){return a.status==='pending';}).map(function(a){
+      return [a.id,a.date,a.employeeName,a.purpose,a.advanceAmount];
+    })
+  ];
+  dlCSV(pendRows, '未精算一覧_'+jp+'.csv');
 }
 
 function exportLedgerCSV() {
