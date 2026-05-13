@@ -162,6 +162,7 @@
     tr:hover td { background: var(--gray-50); }
     tr.row-advance  td { background: #fffbeb; }
     tr.row-settle   td { background: #f0fdf4; }
+    tr.row-reim     td { background: #fff7ed; }
     tr.row-bank-w   td { background: #fefce8; }
     tr.row-bank-d   td { background: #f0fdf4; }
     tfoot td { font-weight: 700; background: var(--gray-100); border-top: 2px solid var(--gray-300); }
@@ -444,6 +445,7 @@
   <button class="nav-btn active" id="nav-dashboard" onclick="showPage('dashboard')">📊 ダッシュボード</button>
   <button class="nav-btn" id="nav-ledger"   onclick="showPage('ledger')">📒 現金出納帳</button>
   <button class="nav-btn" id="nav-advances" onclick="showPage('advances')">💼 仮払管理</button>
+  <button class="nav-btn" id="nav-reimbursements" onclick="showPage('reimbursements')">🧾 立替経費</button>
   <button class="nav-btn" id="nav-reports"  onclick="showPage('reports')">📄 帳票出力</button>
   <div id="nav-fiscal-bar" style="margin-left:auto;align-items:center;gap:4px;padding:0 8px;display:none;"></div>
 </div>
@@ -545,8 +547,9 @@ function doAutoSave() {
     settings: getSettings(),
     entries: getEntries(),
     advances: getAdvances(),
+    reimbursements: getReimbursements(),
     savedAt: new Date().toISOString(),
-    version: '2.1'
+    version: '2.2'
   };
   localStorage.setItem('ca_autobackup', JSON.stringify(snapshot));
   const el = document.getElementById('header-save');
@@ -613,8 +616,9 @@ function taxLabel(rate) {
 function entryTypeLabel(e) {
   if (e.entryKind==='bank_withdraw') return '<span class="badge badge-bank-w">🏦 通帳引出</span> ';
   if (e.entryKind==='bank_deposit')  return '<span class="badge badge-bank-d">🏦 通帳預入</span> ';
-  if (e.type==='advance')    return '<span class="badge badge-advance">仮払</span> ';
-  if (e.type==='settlement') return '<span class="badge badge-settled">精算</span> ';
+  if (e.type==='advance')      return '<span class="badge badge-advance">仮払</span> ';
+  if (e.type==='settlement')   return '<span class="badge badge-settled">精算</span> ';
+  if (e.type==='reimbursement') return '<span class="badge badge-pending" style="background:#fed7aa;color:#9a3412;">立替返金</span> ';
   return '';
 }
 
@@ -742,6 +746,126 @@ function removeAdvance(id) {
   return true;
 }
 
+const getReimbursements = () => DB.get('reimbursements') || [];
+function saveReimbursements(v) { DB.set('reimbursements', v); scheduleAutoSave(); }
+
+function genReimbursementId(name) {
+  const clean = (name||'').replace(/\s+/g,'');
+  const max = getReimbursements().reduce(function(m,r){
+    const n = parseInt((r.id||'').split('-').pop()||'0');
+    return Math.max(m, isNaN(n)?0:n);
+  },0);
+  return 'R-'+clean+'-'+String(max+1).padStart(3,'0');
+}
+
+function registerReimbursement(d) {
+  const items = (d.items||[]).map(function(it){return {
+    date: it.date||'',
+    storeName: it.storeName||'',
+    itemName: it.itemName||'',
+    amount: Number(it.amount||0),
+    account: it.account||'',
+    taxRate: it.taxRate==null?null:Number(it.taxRate)
+  };});
+  const total = items.reduce(function(s,it){return s+(it.amount||0);},0);
+  const rei = {
+    id: genReimbursementId(d.employeeName),
+    registeredDate: d.registeredDate,
+    employeeName: d.employeeName,
+    purpose: d.purpose||'',
+    items: items,
+    totalAmount: total,
+    status: 'pending',
+    reimbursementDate: null,
+    reimbursementMethod: null,
+    reimbursementEntryId: null,
+    notes: d.notes||'',
+    createdAt: new Date().toISOString()
+  };
+  const list = getReimbursements();
+  list.push(rei);
+  saveReimbursements(list);
+  return rei;
+}
+
+function updateReimbursementItems(id, d) {
+  const list = getReimbursements();
+  const idx = list.findIndex(function(r){return r.id===id;});
+  if (idx<0) return false;
+  const rei = list[idx];
+  const items = (d.items||[]).map(function(it){return {
+    date: it.date||'', storeName: it.storeName||'', itemName: it.itemName||'',
+    amount: Number(it.amount||0), account: it.account||'',
+    taxRate: it.taxRate==null?null:Number(it.taxRate)
+  };});
+  rei.items = items;
+  rei.totalAmount = items.reduce(function(s,it){return s+(it.amount||0);},0);
+  if (d.registeredDate) rei.registeredDate = d.registeredDate;
+  if (d.employeeName)   rei.employeeName   = d.employeeName;
+  if (d.purpose!=null)  rei.purpose        = d.purpose;
+  if (d.notes!=null)    rei.notes          = d.notes;
+  rei.updatedAt = new Date().toISOString();
+
+  // If already reimbursed, update the cash entry (date/amount may have changed)
+  if (rei.status==='reimbursed' && rei.reimbursementEntryId) {
+    updateEntry(rei.reimbursementEntryId, {
+      date: rei.reimbursementDate,
+      paymentAmount: rei.totalAmount,
+      description: '立替経費精算（'+(rei.reimbursementMethod==='transfer'?'振込':'現金')+'） '+rei.id+' '+rei.employeeName+(rei.purpose?'／'+rei.purpose:'')
+    });
+  }
+  saveReimbursements(list);
+  return rei;
+}
+
+function reimburseExpense(id, d) {
+  const list = getReimbursements();
+  const idx = list.findIndex(function(r){return r.id===id;});
+  if (idx<0) return null;
+  const rei = list[idx];
+  if (rei.reimbursementEntryId) { removeEntry(rei.reimbursementEntryId); rei.reimbursementEntryId=null; }
+  const method = d.reimbursementMethod==='transfer' ? '振込' : '現金';
+  const ce = addEntry({
+    date: d.reimbursementDate,
+    storeName:'', itemName:'',
+    description: '立替経費精算（'+method+'） '+rei.id+' '+rei.employeeName+(rei.purpose?'／'+rei.purpose:''),
+    receiptAmount: 0,
+    paymentAmount: rei.totalAmount,
+    taxRate: null, memo: '',
+    type: 'reimbursement', reimbursementId: rei.id
+  });
+  rei.status='reimbursed';
+  rei.reimbursementDate=d.reimbursementDate;
+  rei.reimbursementMethod=d.reimbursementMethod||'cash';
+  rei.reimbursementEntryId=ce.id;
+  rei.updatedAt=new Date().toISOString();
+  saveReimbursements(list);
+  return rei;
+}
+
+function unreimburseExpense(id) {
+  const list = getReimbursements();
+  const idx = list.findIndex(function(r){return r.id===id;});
+  if (idx<0) return false;
+  const rei = list[idx];
+  if (rei.reimbursementEntryId) { removeEntry(rei.reimbursementEntryId); rei.reimbursementEntryId=null; }
+  rei.status='pending';
+  rei.reimbursementDate=null;
+  rei.reimbursementMethod=null;
+  rei.updatedAt=new Date().toISOString();
+  saveReimbursements(list);
+  return true;
+}
+
+function removeReimbursement(id) {
+  const list = getReimbursements();
+  const rei = list.find(function(r){return r.id===id;});
+  if (!rei) return false;
+  if (rei.reimbursementEntryId) removeEntry(rei.reimbursementEntryId);
+  saveReimbursements(list.filter(function(r){return r.id!==id;}));
+  return true;
+}
+
 function completeSetup() {
   const co=document.getElementById('s-company').value.trim();
   if (!co){ alert('会社名を入力してください。'); return; }
@@ -807,8 +931,10 @@ let plYear=new Date().getFullYear();
 let plMonthFrom=0;
 let plMonthTo=0;
 let advFilter='all';
+let reimFilter='all';
 let currentEntryKind='normal';
 let summaryTab='pl';
+let reimburseRows=[];
 
 const REVENUE_ACCOUNTS = ['売上高','雑収入'];
 
@@ -909,11 +1035,13 @@ function renderPage() {
   if      (currentPage==='dashboard')         el.innerHTML=pageDashboard();
   else if (currentPage==='ledger')            el.innerHTML=pageLedger();
   else if (currentPage==='advances')          el.innerHTML=pageAdvances();
+  else if (currentPage==='reimbursements')    el.innerHTML=pageReimbursements();
   else if (currentPage==='reports')           el.innerHTML=pageReports();
   else if (currentPage==='settlement-detail') el.innerHTML=pageSettlementDetail();
   else if (currentPage==='pl-report')         el.innerHTML=pagePLReport();
   renderAccountSidebar();
   renderNavFiscalBar();
+  if (currentPage==='reimbursements' && typeof renderReimRows==='function') renderReimRows();
 }
 
 function renderAccountSidebar() {
@@ -1161,11 +1289,12 @@ function pageLedger() {
             <td></td><td class="no-print"></td>
           </tr>
           ${filtered.map(function(e){
-            var rowCls=e.entryKind==='bank_withdraw'?'row-bank-w':e.entryKind==='bank_deposit'?'row-bank-d':e.type==='advance'?'row-advance':e.type==='settlement'?'row-settle':'';
-            var isAdvOrSettle=(e.type==='advance'||e.type==='settlement');
+            var rowCls=e.entryKind==='bank_withdraw'?'row-bank-w':e.entryKind==='bank_deposit'?'row-bank-d':e.type==='advance'?'row-advance':e.type==='settlement'?'row-settle':e.type==='reimbursement'?'row-reim':'';
+            var isAdvOrSettle=(e.type==='advance'||e.type==='settlement'||e.type==='reimbursement');
             var itemMain;
             if (isAdvOrSettle) {
-              itemMain = '<strong style="color:var(--gray-700);">'+esc(e.advanceId||'—')+'</strong>'
+              var refId = e.advanceId || e.reimbursementId || '—';
+              itemMain = '<strong style="color:var(--gray-700);">'+esc(refId)+'</strong>'
                 + (e.description?'<button class="row-toggle-details no-print" onclick="toggleDetails(\''+e.id+'\')" title="詳細を表示">詳細 ▼</button>':'');
             } else {
               itemMain = '<span style="overflow:hidden;text-overflow:ellipsis;max-width:260px;display:inline-block;vertical-align:middle;">'+esc(e.itemName||e.description||'')+'</span>';
@@ -1288,6 +1417,313 @@ function pageAdvances() {
   </div>`;
 }
 
+function pageReimbursements() {
+  const all=getReimbursements();
+  const filtered=all
+    .filter(function(r){return reimFilter==='all'||r.status===reimFilter;})
+    .sort(function(a,b){return (b.registeredDate||'').localeCompare(a.registeredDate||'');});
+  const s=getSettings();
+  const empNames=[...new Set(all.map(function(r){return r.employeeName;}))];
+  const pendingTotal=all.filter(function(r){return r.status==='pending';}).reduce(function(s,r){return s+(r.totalAmount||0);},0);
+
+  return `
+  <div class="card no-print">
+    <div class="card-title">＋ 立替経費を登録</div>
+    <div class="alert alert-info" style="margin-bottom:14px;font-size:12px;">
+      💡 従業員が個人で立替えた経費（個人カードや現金で支払ったもの）を登録します。レシートの日付・店名・科目を入力し、後日まとめて現金で返金します。
+    </div>
+    <div class="form-grid" style="margin-bottom:12px;">
+      <div class="form-group req"><label>登録日</label>${dateInputs('rf-date', today(), 'rf-name')}</div>
+      <div class="form-group req">
+        <label>氏名</label>
+        <input type="text" id="rf-name" placeholder="山田 太郎" list="rf-emp-list" autocomplete="off" />
+        <datalist id="rf-emp-list">${empNames.map(function(n){return '<option value="'+esc(n)+'">';}).join('')}</datalist>
+      </div>
+      <div class="form-group"><label>目的・備考</label><input type="text" id="rf-purpose" placeholder="〇月分立替経費" /></div>
+    </div>
+    <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">立替明細（レシートごとに1行）</div>
+    <div id="reim-rows-wrap"></div>
+    <button class="btn btn-secondary btn-sm" style="margin-bottom:12px;" onclick="addReimRow()">＋ 明細を追加</button>
+    <div id="reim-summary" style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px;font-size:13px;margin-bottom:14px;">
+      <span style="color:var(--gray-500);">金額を入力すると自動計算されます</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="submitReimbursement()">📝 立替経費を登録する</button>
+      <span style="font-size:11px;color:var(--gray-500);">※登録時は現金出納帳には反映されません。「返金確定」した時点で出金1行が追加されます。</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <div class="card-title" style="margin:0;border:none;padding:0;">立替経費台帳</div>
+      <div class="toolbar-r no-print">
+        <span style="font-size:12px;color:var(--gray-600);margin-right:6px;">未返金合計: <strong class="num-neg mono">${fc(pendingTotal)}</strong></span>
+        <select onchange="reimFilter=this.value;renderPage()" style="padding:7px 10px;border:1px solid var(--gray-300);border-radius:6px;font-family:inherit;">
+          <option value="all"        ${reimFilter==='all'        ?'selected':''}>全件</option>
+          <option value="pending"    ${reimFilter==='pending'    ?'selected':''}>未返金のみ</option>
+          <option value="reimbursed" ${reimFilter==='reimbursed' ?'selected':''}>返金済のみ</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="exportReimbursementsCSV()">📥 CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ 印刷/PDF</button>
+      </div>
+    </div>
+    <div class="print-only" style="text-align:center;margin-bottom:14px;">
+      <div style="font-size:18px;font-weight:700;">立 替 経 費 台 帳</div>
+      <div style="font-size:12px;margin-top:4px;">${esc(s.companyName)}</div>
+    </div>
+    ${filtered.length===0
+      ? '<div class="empty-state"><div class="icon">🧾</div><p>立替経費の記録がありません</p></div>'
+      : `<div class="table-wrap"><table class="table-grid">
+        <thead><tr>
+          <th>番号</th><th>登録日</th><th>氏名</th><th>目的</th>
+          <th class="r">合計金額</th><th>立替明細</th>
+          <th>返金日</th><th>方法</th><th>状態</th><th class="no-print">操作</th>
+        </tr></thead>
+        <tbody>
+          ${filtered.map(function(r){return `<tr class="${r.status==='pending'?'row-advance':'row-settle'}">
+            <td><strong>${esc(r.id)}</strong></td>
+            <td style="white-space:nowrap;">${fd(r.registeredDate)}</td>
+            <td>${esc(r.employeeName)}</td>
+            <td>${esc(r.purpose||'')}</td>
+            <td class="r mono num-neg num-bold">${fc(r.totalAmount)}</td>
+            <td style="font-size:11px;max-width:240px;">
+              ${(r.items||[]).map(function(it){return '<div>'+(it.date?'<span style="color:var(--gray-500);">'+fd(it.date)+'</span> ':'')+(it.account?'<span class="badge-acct" style="font-size:10px;">'+esc(it.account)+'</span> ':'')+esc(it.storeName||'')+(it.storeName&&it.itemName?' / ':'')+esc(it.itemName||'')+' <span class="mono">'+fc(it.amount)+'</span></div>';}).join('')}
+            </td>
+            <td style="white-space:nowrap;">${fd(r.reimbursementDate)}</td>
+            <td>${r.reimbursementMethod==='transfer'?'<span class="badge badge-transfer">振込</span>':r.reimbursementMethod==='cash'?'<span class="badge badge-normal">現金</span>':'—'}</td>
+            <td><span class="badge badge-${r.status==='pending'?'pending':'settled'}">${r.status==='pending'?'未返金':'返金済'}</span></td>
+            <td class="no-print">
+              ${r.status==='pending'?`
+                <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+                  <button class="btn btn-success btn-sm" onclick="showReimburseConfirmModal('${esc(r.id)}')">返金確定</button>
+                  <button class="btn btn-outline btn-sm" onclick="showReimburseEditModal('${esc(r.id)}')">✏️ 修正</button>
+                  <button class="btn btn-secondary btn-sm" onclick="confirmDeleteReim('${esc(r.id)}')">削除</button>
+                </div>
+              `:`<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+                  <button class="btn btn-outline btn-sm" onclick="showReimburseEditModal('${esc(r.id)}')">✏️ 修正</button>
+                  <button class="btn btn-secondary btn-sm" onclick="confirmUnreimburse('${esc(r.id)}')">↩ 返金取消</button>
+                </div>`}
+            </td>
+          </tr>`;}).join('')}
+        </tbody>
+      </table></div>`}
+  </div>`;
+}
+
+function renderReimRows() {
+  const wrap=document.getElementById('reim-rows-wrap');
+  if (!wrap) return;
+  if (reimburseRows.length===0) reimburseRows.push({date:'',storeName:'',itemName:'',amount:'',account:''});
+  wrap.innerHTML=`
+    <table class="settle-items-table" style="margin-bottom:6px;">
+      <thead><tr>
+        <th style="width:14%">使用日</th>
+        <th style="width:20%">店名・支払先</th>
+        <th style="width:22%">内容・品目</th>
+        <th style="width:20%">勘定科目</th>
+        <th style="width:16%">金額（円）</th>
+        <th style="width:8%"></th>
+      </tr></thead>
+      <tbody>
+        ${reimburseRows.map(function(r,i){return `<tr>
+          <td><input type="date" value="${esc(r.date)}" oninput="reimburseRows[${i}].date=this.value" /></td>
+          <td><input type="text" value="${esc(r.storeName)}" placeholder="〇〇商店" oninput="reimburseRows[${i}].storeName=this.value" /></td>
+          <td><input type="text" value="${esc(r.itemName)}" placeholder="文房具" oninput="reimburseRows[${i}].itemName=this.value" /></td>
+          <td><select onchange="reimburseRows[${i}].account=this.value" style="width:100%;padding:5px;border:1px solid var(--gray-300);border-radius:5px;font-size:12px;font-family:inherit;">${acctSelectHtml(r.account)}</select></td>
+          <td><input type="number" value="${r.amount}" placeholder="0" min="0" oninput="reimburseRows[${i}].amount=this.value;updateReimSummary()" /></td>
+          <td style="text-align:center;">${reimburseRows.length>1?`<button class="btn btn-secondary btn-xs" onclick="removeReimRow(${i})">✕</button>`:''}</td>
+        </tr>`;}).join('')}
+      </tbody>
+    </table>`;
+  updateReimSummary();
+}
+
+function addReimRow() {
+  reimburseRows.push({date:'',storeName:'',itemName:'',amount:'',account:''});
+  renderReimRows();
+}
+function removeReimRow(i) {
+  reimburseRows.splice(i,1);
+  renderReimRows();
+}
+function updateReimSummary() {
+  const total=reimburseRows.reduce(function(s,r){return s+Number(r.amount||0);},0);
+  const el=document.getElementById('reim-summary');
+  if (!el) return;
+  el.innerHTML='立替合計金額: <strong class="mono num-neg">'+fc(total)+'</strong>　('+reimburseRows.length+'件)';
+}
+
+function submitReimbursement() {
+  const date=readDateGroup('rf-date');
+  const name=document.getElementById('rf-name').value.trim();
+  const purpose=document.getElementById('rf-purpose').value.trim();
+  if (!date||!name) { alert('登録日・氏名は必須です。'); return; }
+  const items=reimburseRows.filter(function(r){return r.amount||r.storeName||r.itemName;});
+  if (items.length===0) { alert('明細を1件以上入力してください。'); return; }
+  if (items.some(function(r){return !r.amount||Number(r.amount)<=0;})) {
+    alert('全ての明細に金額（1円以上）を入力してください。'); return;
+  }
+  const rei=registerReimbursement({registeredDate:date, employeeName:name, purpose:purpose, items:items});
+  reimburseRows=[];
+  document.getElementById('rf-name').value='';
+  document.getElementById('rf-purpose').value='';
+  updateHeader(); renderPage();
+  alert('立替経費を登録しました。\n番号: '+rei.id+'\n合計: '+fc(rei.totalAmount)+'\n\n返金時に「返金確定」ボタンから現金出納帳へ反映されます。');
+}
+
+function showReimburseConfirmModal(id) {
+  const rei=getReimbursements().find(function(r){return r.id===id;});
+  if (!rei) return;
+  showModal(`
+    <div class="modal-title">💴 返金確定 — ${esc(rei.id)}</div>
+    <div class="alert alert-info">
+      <strong>${esc(rei.employeeName)}</strong> さん ／ ${esc(rei.purpose||'—')}<br>
+      返金額: <strong class="mono num-neg">${fc(rei.totalAmount)}</strong>　明細: ${(rei.items||[]).length}件
+    </div>
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div class="form-group req"><label>返金日</label>${dateInputs('rc-date', today(), 'rc-method')}</div>
+      <div class="form-group req">
+        <label>返金方法</label>
+        <select id="rc-method">
+          <option value="cash">現金で返金</option>
+          <option value="transfer">振込で返金</option>
+        </select>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">
+      ※ 確定すると現金出納帳に出金1行が追加されます。PL集計では各レシート日付ベースで該当する勘定科目に経費計上されます。
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-success" onclick="submitReimburseConfirm('${esc(id)}')">返金を確定する</button>
+    </div>
+  `);
+}
+
+function submitReimburseConfirm(id) {
+  const date=readDateGroup('rc-date');
+  const method=document.getElementById('rc-method').value;
+  if (!date) { alert('返金日を入力してください。'); return; }
+  const rei=reimburseExpense(id,{reimbursementDate:date, reimbursementMethod:method});
+  closeModal(); updateHeader(); renderPage();
+  if (rei) {
+    const ch=method==='cash'?'現金':'振込';
+    alert('✅ 返金を確定しました。\n\n📌 '+rei.employeeName+' さんに '+ch+'で '+fc(rei.totalAmount)+' を支払ってください。\n\n現金出納帳に出金1行が追加されました。');
+  }
+}
+
+function confirmUnreimburse(id) {
+  if (!confirm('返金確定を取り消しますか？\n現金出納帳の関連行も削除されます。')) return;
+  if (unreimburseExpense(id)) { updateHeader(); renderPage(); }
+}
+
+function confirmDeleteReim(id) {
+  if (!confirm('この立替経費を削除しますか？')) return;
+  if (removeReimbursement(id)) { updateHeader(); renderPage(); }
+}
+
+let _reimEditId=null;
+function showReimburseEditModal(id) {
+  const rei=getReimbursements().find(function(r){return r.id===id;});
+  if (!rei) return;
+  _reimEditId=id;
+  reimburseRows=(rei.items||[]).map(function(it){return {
+    date:it.date||'', storeName:it.storeName||'', itemName:it.itemName||'',
+    amount:String(it.amount||''), account:it.account||''
+  };});
+  if (reimburseRows.length===0) reimburseRows=[{date:'',storeName:'',itemName:'',amount:'',account:''}];
+  const isReimbursed = rei.status==='reimbursed';
+
+  showModal(`
+    <div class="modal-title">✏️ 立替経費の修正 — ${esc(rei.id)}</div>
+    <div class="alert alert-info">
+      ${esc(rei.employeeName)} さん／${esc(rei.purpose||'—')}　${isReimbursed?'<strong>返金済</strong>（'+fd(rei.reimbursementDate)+' '+(rei.reimbursementMethod==='transfer'?'振込':'現金')+'）':'<strong>未返金</strong>'}
+      ${isReimbursed?'<br><span style="font-size:12px;">※ 修正すると現金出納帳の返金行が自動的に上書きされます。</span>':''}
+    </div>
+    <div class="form-grid" style="margin-bottom:12px;">
+      <div class="form-group req"><label>登録日</label>${dateInputs('re-date', rei.registeredDate, 're-name')}</div>
+      <div class="form-group req"><label>氏名</label><input type="text" id="re-name" value="${esc(rei.employeeName)}" /></div>
+      <div class="form-group"><label>目的・備考</label><input type="text" id="re-purpose" value="${esc(rei.purpose||'')}" /></div>
+    </div>
+    <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">立替明細</div>
+    <div id="reim-edit-rows-wrap"></div>
+    <button class="btn btn-secondary btn-sm" style="margin-bottom:12px;" onclick="addReimRow();renderReimEditRows()">＋ 明細を追加</button>
+    <div id="reim-edit-summary" style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px;font-size:13px;margin-bottom:14px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="_reimEditId=null;reimburseRows=[];closeModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="submitReimEdit()">修正を保存</button>
+    </div>
+  `, true);
+  renderReimEditRows();
+}
+
+function renderReimEditRows() {
+  const wrap=document.getElementById('reim-edit-rows-wrap');
+  if (!wrap) return;
+  wrap.innerHTML=`
+    <table class="settle-items-table" style="margin-bottom:6px;">
+      <thead><tr>
+        <th style="width:14%">使用日</th><th style="width:20%">店名・支払先</th><th style="width:22%">内容・品目</th>
+        <th style="width:20%">勘定科目</th><th style="width:16%">金額（円）</th><th style="width:8%"></th>
+      </tr></thead>
+      <tbody>
+        ${reimburseRows.map(function(r,i){return `<tr>
+          <td><input type="date" value="${esc(r.date)}" oninput="reimburseRows[${i}].date=this.value" /></td>
+          <td><input type="text" value="${esc(r.storeName)}" oninput="reimburseRows[${i}].storeName=this.value" /></td>
+          <td><input type="text" value="${esc(r.itemName)}" oninput="reimburseRows[${i}].itemName=this.value" /></td>
+          <td><select onchange="reimburseRows[${i}].account=this.value" style="width:100%;padding:5px;border:1px solid var(--gray-300);border-radius:5px;font-size:12px;font-family:inherit;">${acctSelectHtml(r.account)}</select></td>
+          <td><input type="number" value="${r.amount}" min="0" oninput="reimburseRows[${i}].amount=this.value;updateReimEditSummary()" /></td>
+          <td style="text-align:center;">${reimburseRows.length>1?`<button class="btn btn-secondary btn-xs" onclick="reimburseRows.splice(${i},1);renderReimEditRows()">✕</button>`:''}</td>
+        </tr>`;}).join('')}
+      </tbody>
+    </table>`;
+  updateReimEditSummary();
+}
+function updateReimEditSummary() {
+  const el=document.getElementById('reim-edit-summary');
+  if (!el) return;
+  const total=reimburseRows.reduce(function(s,r){return s+Number(r.amount||0);},0);
+  el.innerHTML='立替合計金額: <strong class="mono num-neg">'+fc(total)+'</strong>　('+reimburseRows.length+'件)';
+}
+
+function submitReimEdit() {
+  if (!_reimEditId) return;
+  const date=readDateGroup('re-date');
+  const name=document.getElementById('re-name').value.trim();
+  const purpose=document.getElementById('re-purpose').value.trim();
+  if (!date||!name) { alert('登録日・氏名は必須です。'); return; }
+  const items=reimburseRows.filter(function(r){return r.amount||r.storeName||r.itemName;});
+  if (items.length===0) { alert('明細を1件以上入力してください。'); return; }
+  updateReimbursementItems(_reimEditId,{registeredDate:date,employeeName:name,purpose:purpose,items:items});
+  _reimEditId=null; reimburseRows=[];
+  closeModal(); updateHeader(); renderPage();
+}
+
+function exportReimbursementsCSV() {
+  const s=getSettings();
+  const jp=todayJP();
+  const rows=[
+    [`立替経費台帳`,s.companyName,`出力日:${today()}`],
+    ['番号','登録日','氏名','目的','使用日','店名・支払先','内容','勘定科目','金額（円）','合計','返金日','返金方法','状態']
+  ];
+  getReimbursements().forEach(function(r){
+    if (!r.items||r.items.length===0) {
+      rows.push([r.id,r.registeredDate,r.employeeName,r.purpose||'','','','','','',r.totalAmount,r.reimbursementDate||'',r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':'',r.status==='pending'?'未返金':'返金済']);
+    } else {
+      r.items.forEach(function(it,idx){
+        rows.push([
+          r.id, idx===0?r.registeredDate:'', idx===0?r.employeeName:'', idx===0?(r.purpose||''):'',
+          it.date||'', it.storeName||'', it.itemName||'', it.account||'', it.amount||0,
+          idx===0?r.totalAmount:'',
+          idx===0?(r.reimbursementDate||''):'', idx===0?(r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':''):'',
+          idx===0?(r.status==='pending'?'未返金':'返金済'):''
+        ]);
+      });
+    }
+  });
+  dlCSV(rows,'立替経費台帳_'+jp+'.csv');
+}
+
 function pageReports() {
   const pending=getAdvances().filter(a=>a.status==='pending');
   return `
@@ -1345,6 +1781,7 @@ function pageReports() {
           <li>仮払金台帳</li>
           <li>仮払精算明細表</li>
           <li>未精算一覧</li>
+          <li>立替経費台帳</li>
         </ul>
         <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="exportTaxAccountantBundle()">📦 一括ダウンロード</button>
       </div>
@@ -1492,6 +1929,17 @@ function buildPLData(year, monthFrom, monthTo) {
     (a.settlementItems||[]).forEach(function(it){
       if (!it.account) return;
       var d = it.date || a.settlementDate;
+      if (!inRange(d)) return;
+      bump(it.account, -Number(it.amount||0));
+    });
+  });
+
+  // Reimbursement items (返金確定済みのみ — 発生主義: レシート日付で経費認識)
+  getReimbursements().forEach(function(r){
+    if (r.status !== 'reimbursed') return;
+    (r.items||[]).forEach(function(it){
+      if (!it.account) return;
+      var d = it.date || r.reimbursementDate;
       if (!inRange(d)) return;
       bump(it.account, -Number(it.amount||0));
     });
@@ -1834,9 +2282,24 @@ function showPLDetail(account) {
       rows.push({
         date: d,
         store: it.storeName || a.recipient || '—',
-        desc: it.description || '—',
+        desc: it.itemName || it.description || '—',
         amount: Number(it.amount||0),
-        src: '仮払精算 '+(a.advanceId||'')
+        src: '仮払精算 '+(a.id||'')
+      });
+    });
+  });
+  getReimbursements().forEach(function(r){
+    if (r.status !== 'reimbursed') return;
+    (r.items||[]).forEach(function(it){
+      if (it.account !== account) return;
+      var d = it.date || r.reimbursementDate;
+      if (!inRange(d)) return;
+      rows.push({
+        date: d,
+        store: it.storeName || r.employeeName || '—',
+        desc: it.itemName || '—',
+        amount: Number(it.amount||0),
+        src: '立替経費 '+(r.id||'')
       });
     });
   });
@@ -2316,7 +2779,7 @@ function exportTaxAccountantBundle() {
       e.account||'',
       e.storeName||'', e.itemName||e.description||'',
       e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
-      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':'一般',
+      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':e.type==='reimbursement'?'立替返金':'一般',
       e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
     ];})
   ];
@@ -2363,6 +2826,28 @@ function exportTaxAccountantBundle() {
     })
   ];
   dlCSV(pendRows, '未精算一覧_'+jp+'.csv');
+
+  // 5. 立替経費台帳
+  var reimRows=[
+    [`立替経費台帳`,s.companyName,`出力日:${today()}`],
+    ['番号','登録日','氏名','目的','使用日','店名・支払先','内容','勘定科目','金額（円）','合計','返金日','返金方法','状態']
+  ];
+  getReimbursements().forEach(function(r){
+    if (!r.items||r.items.length===0) {
+      reimRows.push([r.id,r.registeredDate,r.employeeName,r.purpose||'','','','','','',r.totalAmount,r.reimbursementDate||'',r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':'',r.status==='pending'?'未返金':'返金済']);
+    } else {
+      r.items.forEach(function(it,idx){
+        reimRows.push([
+          r.id, idx===0?r.registeredDate:'', idx===0?r.employeeName:'', idx===0?(r.purpose||''):'',
+          it.date||'', it.storeName||'', it.itemName||'', it.account||'', it.amount||0,
+          idx===0?r.totalAmount:'',
+          idx===0?(r.reimbursementDate||''):'', idx===0?(r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':''):'',
+          idx===0?(r.status==='pending'?'未返金':'返金済'):''
+        ]);
+      });
+    }
+  });
+  dlCSV(reimRows, '立替経費台帳_'+jp+'.csv');
 }
 
 function exportLedgerCSV() {
@@ -2375,7 +2860,7 @@ function exportLedgerCSV() {
       e.account||'',
       e.storeName||'', e.itemName||e.description||'',
       e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
-      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':'一般',
+      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':e.type==='reimbursement'?'立替返金':'一般',
       e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
     ])
   ];
@@ -2420,7 +2905,7 @@ function dlCSV(rows,filename) {
 }
 
 function exportBackup() {
-  const data={settings:getSettings(),entries:getEntries(),advances:getAdvances(),exportedAt:new Date().toISOString(),version:'2.1'};
+  const data={settings:getSettings(),entries:getEntries(),advances:getAdvances(),reimbursements:getReimbursements(),exportedAt:new Date().toISOString(),version:'2.2'};
   const a=Object.assign(document.createElement('a'),{
     href:URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),
     download:`現金管理バックアップ_${today()}.json`
@@ -2437,6 +2922,7 @@ function importBackup(ev) {
       if (!d.settings||!d.entries||!d.advances){ alert('無効なバックアップファイルです。'); return; }
       if (confirm('現在のデータをバックアップデータで上書きします。\nこの操作は元に戻せません。よろしいですか？')){
         DB.set('settings',d.settings); DB.set('entries',d.entries); DB.set('advances',d.advances);
+        DB.set('reimbursements', d.reimbursements||[]);
         alert('データを復元しました。'); initApp();
       }
     } catch (e) { alert('ファイルの読み込みに失敗しました。'); }
