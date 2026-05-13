@@ -401,7 +401,7 @@ const ACCOUNT_DESCRIPTIONS = {
   '保険料':      '損害保険・生命保険等の保険料',
   '車両費':      '社有車の維持費（ガソリン・車検・駐車料金・修理代）',
   '諸会費':      '業界団体・組合・協会等の年会費・入会金',
-  '外注費':      '外部委託費用(フリーランス・業務委託・下請け費用）',
+  '外注費':      '外部委託費用（フリーランス・業務委託・下請け費用）',
   '給料手当':    '従業員への給与・各種手当・賞与',
   '法定福利費':  '社会保険料の会社負担分（健保・厚生年金・雇用保険）',
   '荷造運賃':    '商品の梱包・発送・運送費用',
@@ -1654,4 +1654,13 @@ function initApp() {
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp-recover').click()">📤 バックアップから復元</button>
         <input type="file" id="imp-recover" accept=".json" style="display:none;" onchange="importBackup(event)">
         <button class="btn btn-danger btn-sm" onclick="if(confirm('全データを削除して初期状態に戻します。よろしいですか？')){localStorage.clear();location.reload();}">🗑️ データを全削除して再起動</button>
-      </div></div>
+      </div></div>`;
+  }
+}
+
+window.addEventListener('beforeunload', function(){ try { doAutoSave(); } catch(e){} });
+
+if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', initApp);
+else initApp();
+</script>
+</body>
