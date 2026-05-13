@@ -307,6 +307,29 @@
     .month-chip.active { background: var(--primary); color: white; }
     .month-chip.active:hover { background: #1d4ed8; }
     .month-hint { font-size: 11px; color: var(--gray-500); margin-bottom: 10px; }
+    .date-group {
+      display: inline-flex; align-items: center; gap: 2px;
+      border: 1px solid var(--gray-300); border-radius: 6px;
+      padding: 0; background: white; transition: border-color 0.15s;
+    }
+    .date-group:focus-within {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+    .date-group input {
+      border: none !important; outline: none;
+      padding: 8px 4px; font-size: 13px; font-family: inherit;
+      text-align: center; background: transparent;
+      box-shadow: none !important;
+    }
+    .date-group .date-sep { color: var(--gray-500); user-select: none; font-size: 13px; }
+    .row-toggle-details {
+      font-size: 10px; padding: 1px 5px; margin-left: 6px;
+      background: var(--gray-100); border: 1px solid var(--gray-300);
+      border-radius: 4px; cursor: pointer; color: var(--gray-700);
+      font-family: inherit;
+    }
+    .row-toggle-details:hover { background: var(--gray-200); }
     @media print {
       #app-header, #app-nav, .no-print, #acct-sidebar { display: none !important; }
       .print-only { display: block; }
@@ -1012,7 +1035,7 @@ function pageLedger() {
     </div>
     ${hintHtml}
     <div class="form-grid" style="margin-bottom:10px;">
-      <div class="form-group req"><label>日付</label><input type="date" id="ae-date" value="${today()}" onkeydown="formEnterNext(event,this)" data-next="ae-store" /></div>
+      <div class="form-group req"><label>日付</label>${dateInputs('ae-date', today(), 'ae-store')}</div>
       <div class="form-group req"><label>${storeLabel}</label>
         <input type="text" id="ae-store" placeholder="${storePlaceholder}" ${currentEntryKind==='normal'?'list="ae-store-list" autocomplete="off"':''} lang="ja" style="ime-mode:active;" onkeydown="formEnterNext(event,this)" data-next="ae-item" />
         ${currentEntryKind==='normal'&&recentStores.length>0?`<datalist id="ae-store-list">${recentStores.map(function(n){return '<option value="'+esc(n)+'">';}).join('')}</datalist>`:''}
@@ -1082,25 +1105,39 @@ function pageLedger() {
             <td class="r mono num-bold">${fc(openBal)}</td>
             <td></td><td class="no-print"></td>
           </tr>
-          ${filtered.map(e=>`<tr class="${e.entryKind==='bank_withdraw'?'row-bank-w':e.entryKind==='bank_deposit'?'row-bank-d':e.type==='advance'?'row-advance':e.type==='settlement'?'row-settle':''}">
+          ${filtered.map(function(e){
+            var rowCls=e.entryKind==='bank_withdraw'?'row-bank-w':e.entryKind==='bank_deposit'?'row-bank-d':e.type==='advance'?'row-advance':e.type==='settlement'?'row-settle':'';
+            var isAdvOrSettle=(e.type==='advance'||e.type==='settlement');
+            var itemMain;
+            if (isAdvOrSettle) {
+              itemMain = '<strong style="color:var(--gray-700);">'+esc(e.advanceId||'—')+'</strong>'
+                + (e.description?'<button class="row-toggle-details no-print" onclick="toggleDetails(\''+e.id+'\')" title="詳細を表示">詳細 ▼</button>':'');
+            } else {
+              itemMain = '<span style="overflow:hidden;text-overflow:ellipsis;max-width:260px;display:inline-block;vertical-align:middle;">'+esc(e.itemName||e.description||'')+'</span>';
+            }
+            var detailsBox = (isAdvOrSettle && e.description)
+              ? '<div id="details-'+e.id+'" style="display:none;font-size:11px;color:var(--gray-700);margin-top:4px;white-space:normal;">'+esc(e.description)+'</div>'
+              : '';
+            return `<tr class="${rowCls}">
             <td style="white-space:nowrap;">${fd(e.date)}</td>
-            <td>${e.storeName?esc(e.storeName):`<span style="color:var(--gray-400);">—</span>`}</td>
-            <td>
-              <div style="display:flex;align-items:baseline;gap:6px;">
+            <td style="white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${e.storeName?esc(e.storeName):`<span style="color:var(--gray-400);">—</span>`}</td>
+            <td style="white-space:nowrap;">
+              <div style="display:flex;align-items:center;gap:6px;">
                 <span style="min-width:80px;flex-shrink:0;">${e.account?`<span class="badge-acct">${esc(e.account)}</span>`:entryTypeLabel(e)}</span>
-                <span>${esc(e.itemName||e.description||'')}</span>
+                <span>${itemMain}</span>
               </div>
+              ${detailsBox}
             </td>
-            <td>${taxLabel(e.taxRate)}</td>
-            <td class="r mono ${e.receiptAmount>0?'num-pos':''}">${e.receiptAmount>0?fc(e.receiptAmount):''}</td>
-            <td class="r mono ${e.paymentAmount>0?'num-neg':''}">${e.paymentAmount>0?fc(e.paymentAmount):''}</td>
-            <td class="r mono num-bold">${fc(e.balance)}</td>
-            <td>${e.memo?`<button class="btn btn-xs btn-secondary" onclick="toggleMemo('${e.id}')" title="${esc(e.memo)}">📝</button><div id="memo-${e.id}" style="display:none;font-size:11px;color:var(--gray-500);margin-top:3px;max-width:160px;">${esc(e.memo)}</div>`:''}</td>
+            <td style="white-space:nowrap;">${taxLabel(e.taxRate)}</td>
+            <td class="r mono ${e.receiptAmount>0?'num-pos':''}" style="white-space:nowrap;">${e.receiptAmount>0?fc(e.receiptAmount):''}</td>
+            <td class="r mono ${e.paymentAmount>0?'num-neg':''}" style="white-space:nowrap;">${e.paymentAmount>0?fc(e.paymentAmount):''}</td>
+            <td class="r mono num-bold" style="white-space:nowrap;">${fc(e.balance)}</td>
+            <td style="white-space:nowrap;">${e.memo?`<button class="btn btn-xs btn-secondary" onclick="toggleMemo('${e.id}')" title="${esc(e.memo)}">📝</button><div id="memo-${e.id}" style="display:none;font-size:11px;color:var(--gray-500);margin-top:3px;max-width:160px;white-space:normal;">${esc(e.memo)}</div>`:''}</td>
             <td class="no-print" style="white-space:nowrap;">
               ${e.type==='normal'||e.entryKind?`<button class="btn btn-secondary btn-sm" onclick="showEditEntryModal('${e.id}')">修正</button> `:''}
               ${e.type==='normal'||e.entryKind?`<button class="btn btn-secondary btn-sm" onclick="confirmDeleteEntry('${e.id}')">削除</button>`:''}
             </td>
-          </tr>`).join('')}
+          </tr>`;}).join('')}
         </tbody>
         <tfoot><tr>
           <td colspan="4" style="text-align:right;">合　計 / 次期繰越</td>
@@ -1125,7 +1162,7 @@ function pageAdvances() {
   <div class="card no-print">
     <div class="card-title">＋ 仮払い登録</div>
     <div class="form-grid">
-      <div class="form-group req"><label>仮払日</label><input type="date" id="af-date" value="${today()}" /></div>
+      <div class="form-group req"><label>仮払日</label>${dateInputs('af-date', today(), 'af-name')}</div>
       <div class="form-group req">
         <label>氏名</label>
         <input type="text" id="af-name" placeholder="山田 太郎" list="emp-list" autocomplete="off" />
@@ -1556,6 +1593,42 @@ function toggleMemo(id) {
   if (el) el.style.display = el.style.display==='none' ? 'block' : 'none';
 }
 
+function toggleDetails(id) {
+  const el=document.getElementById('details-'+id);
+  if (el) el.style.display = el.style.display==='none' ? 'block' : 'none';
+}
+
+function dateInputs(prefix, isoDate, nextFieldId) {
+  var parts=(isoDate||'').split('-');
+  var y=parts[0]||'';
+  var m=parts[1]?String(Number(parts[1])):'';
+  var d=parts[2]?String(Number(parts[2])):'';
+  return '<div class="date-group">'
+    + '<input type="number" id="'+prefix+'-y" value="'+y+'" placeholder="年" min="2000" max="2100" style="width:72px;" onkeydown="dateEnter(event,\''+prefix+'-m\')" onfocus="this.select()" />'
+    + '<span class="date-sep">/</span>'
+    + '<input type="number" id="'+prefix+'-m" value="'+m+'" placeholder="月" min="1" max="12" style="width:48px;" onkeydown="dateEnter(event,\''+prefix+'-d\')" onfocus="this.select()" />'
+    + '<span class="date-sep">/</span>'
+    + '<input type="number" id="'+prefix+'-d" value="'+d+'" placeholder="日" min="1" max="31" style="width:48px;" onkeydown="dateEnter(event,\''+nextFieldId+'\')" onfocus="this.select()" />'
+    + '</div>';
+}
+
+function dateEnter(e, nextId) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  var next=document.getElementById(nextId);
+  if (next && !next.disabled) { next.focus(); if (next.select) next.select(); }
+}
+
+function readDateGroup(prefix) {
+  var y=document.getElementById(prefix+'-y');
+  var m=document.getElementById(prefix+'-m');
+  var d=document.getElementById(prefix+'-d');
+  if (!y||!m||!d) return '';
+  var ys=y.value, ms=m.value, ds=d.value;
+  if (!ys||!ms||!ds) return '';
+  return ys+'-'+String(ms).padStart(2,'0')+'-'+String(ds).padStart(2,'0');
+}
+
 function performYearClose() {
   const s=getSettings();
   const fm=s.fiscalMonth||1;
@@ -1638,7 +1711,7 @@ function fmtAmtInput(el) {
 }
 
 function submitEntry() {
-  const date  = document.getElementById('ae-date').value;
+  const date  = readDateGroup('ae-date');
   const store = document.getElementById('ae-store').value.trim();
   const item  = document.getElementById('ae-item').value.trim();
   const taxEl = document.getElementById('ae-tax');
@@ -1681,7 +1754,7 @@ function showEditEntryModal(id) {
   showModal(`
     <div class="modal-title">✏️ 取引の修正 — ${esc(e.id)}</div>
     <div class="form-grid" style="margin-bottom:12px;">
-      <div class="form-group req"><label>日付</label><input type="date" id="ed-date" value="${esc(e.date)}" /></div>
+      <div class="form-group req"><label>日付</label>${dateInputs('ed-date', e.date, 'ed-store')}</div>
       <div class="form-group req"><label>${isBank?'銀行名':'店名・支払先'}</label><input type="text" id="ed-store" value="${esc(e.storeName||'')}" /></div>
     </div>
     <div class="form-grid" style="margin-bottom:12px;">
@@ -1716,7 +1789,7 @@ function showEditEntryModal(id) {
 }
 
 function submitEditEntry(id, entryKind) {
-  const date  = document.getElementById('ed-date').value;
+  const date  = readDateGroup('ed-date');
   const store = document.getElementById('ed-store').value.trim();
   const item  = document.getElementById('ed-item').value.trim();
   const taxEl = document.getElementById('ed-tax');
@@ -1747,7 +1820,7 @@ function submitEditEntry(id, entryKind) {
 }
 
 function submitAdvance() {
-  const date   =document.getElementById('af-date').value;
+  const date   =readDateGroup('af-date');
   const name   =document.getElementById('af-name').value.trim();
   const purpose=document.getElementById('af-purpose').value.trim();
   const amount =document.getElementById('af-amount').value;
@@ -1791,7 +1864,7 @@ function showSettleModal(id) {
     <div class="form-grid" style="margin-bottom:14px;">
       <div class="form-group req">
         <label>精算日</label>
-        <input type="date" id="st-date" value="${esc(initDate)}" />
+        ${dateInputs('st-date', initDate, 'st-method')}
       </div>
       <div class="form-group req">
         <label>精算方法</label>
@@ -1887,7 +1960,7 @@ function updateSettleSummary(advAmt) {
 }
 
 function submitSettle(id, advAmt) {
-  const settlementDate=document.getElementById('st-date').value;
+  const settlementDate=readDateGroup('st-date');
   const settlementMethod=document.getElementById('st-method').value;
   if (!settlementDate){ alert('精算日を入力してください。'); return; }
   if (settleRows.every(r=>!r.amount&&!r.storeName&&!r.itemName)){
