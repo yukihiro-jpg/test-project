@@ -60,6 +60,11 @@
     }
     .nav-btn:hover { color: var(--primary); }
     .nav-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
+    .nav-fiscal-btn { padding:5px 10px; border:1px solid var(--gray-300); background:white; cursor:pointer; font-size:12px; font-family:inherit; border-radius:5px; color:var(--gray-600); font-weight:600; transition:all 0.1s; }
+    .nav-fiscal-btn:hover { background:var(--gray-100); color:var(--primary); }
+    .nav-fiscal-label { font-size:13px; font-weight:700; color:var(--gray-700); padding:0 6px; white-space:nowrap; }
+    .nav-fiscal-close { padding:5px 10px; border:1px solid #fcd34d; background:#fef3c7; cursor:pointer; font-size:12px; font-family:inherit; border-radius:5px; color:#92400e; font-weight:700; transition:all 0.1s; white-space:nowrap; }
+    .nav-fiscal-close:hover { background:#fde68a; }
     #app-main { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
     .card {
       background: white; border-radius: 8px;
@@ -430,6 +435,7 @@
   <button class="nav-btn" id="nav-ledger"   onclick="showPage('ledger')">📒 現金出納帳</button>
   <button class="nav-btn" id="nav-advances" onclick="showPage('advances')">💼 仮払管理</button>
   <button class="nav-btn" id="nav-reports"  onclick="showPage('reports')">📄 帳票出力</button>
+  <div id="nav-fiscal-bar" style="margin-left:auto;align-items:center;gap:4px;padding:0 8px;display:none;"></div>
 </div>
 
 <div id="app-main"><div id="page-content"></div></div>
@@ -801,15 +807,25 @@ function isMonthInRange(m, from, to, fm) {
   return mi>=Math.min(fi,ti) && mi<=Math.max(fi,ti);
 }
 function selectMonth(scope, m, shiftKey) {
-  if (scope==='ledger') {
-    if (m===0)                                  { ledgerMonthFrom=0; ledgerMonthTo=0; }
-    else if (shiftKey && ledgerMonthFrom!==0)   { ledgerMonthTo=m; }
-    else                                        { ledgerMonthFrom=m; ledgerMonthTo=m; }
-  } else if (scope==='pl') {
-    if (m===0)                                  { plMonthFrom=0; plMonthTo=0; }
-    else if (shiftKey && plMonthFrom!==0)       { plMonthTo=m; }
-    else                                        { plMonthFrom=m; plMonthTo=m; }
+  var fr = scope==='ledger' ? ledgerMonthFrom : plMonthFrom;
+  var to = scope==='ledger' ? ledgerMonthTo   : plMonthTo;
+  var newFr, newTo;
+  if (m === 0) {
+    newFr=0; newTo=0;
+  } else if (shiftKey && fr!==0) {
+    newFr=fr; newTo=m;
+  } else if (fr===0 && to===0) {
+    // 全月 → 単月
+    newFr=m; newTo=m;
+  } else if (fr===to) {
+    if (fr===m) { newFr=0; newTo=0; }  // 同じ月をクリック → 全月に戻す
+    else { newFr=fr; newTo=m; }        // 単月 → 範囲
+  } else {
+    // 範囲選択中 → 新しい単月選択
+    newFr=m; newTo=m;
   }
+  if (scope==='ledger') { ledgerMonthFrom=newFr; ledgerMonthTo=newTo; }
+  else { plMonthFrom=newFr; plMonthTo=newTo; }
   renderPage();
 }
 function buildMonthBar(scope, fm) {
@@ -823,7 +839,7 @@ function buildMonthBar(scope, fm) {
         return '<button class="month-chip '+(act?'active':'')+'" onclick="selectMonth(\''+scope+'\','+m+',event.shiftKey)">'+m+'月</button>';
       }).join('')
     +'</div>'
-    +'<div class="month-hint no-print">💡 月をクリックで個別選択、Shift+クリックで範囲選択</div>';
+    +'<div class="month-hint no-print">💡 クリックで月選択、もう一度クリックで範囲選択</div>';
 }
 function getMonthRangeLabel(from, to, fm) {
   if (from===0 && to===0) return '通期';
@@ -839,6 +855,27 @@ function showPage(p) {
   if (navBtn) navBtn.classList.add('active');
   renderPage();
 }
+function renderNavFiscalBar() {
+  var bar = document.getElementById('nav-fiscal-bar');
+  if (!bar) return;
+  if (currentPage !== 'ledger') { bar.style.display='none'; return; }
+  bar.style.display='flex';
+  var s=getSettings();
+  var fm=s.fiscalMonth||1;
+  var closedYears=s.closedYears||{};
+  var isClosed=!!closedYears[ledgerYear];
+  var fyLabel=fm===1?ledgerYear+'年':ledgerYear+'年度';
+  var closeBtn = isClosed
+    ? '<span style="font-size:12px;color:#059669;font-weight:700;padding:4px 8px;background:#d1fae5;border-radius:5px;white-space:nowrap;">✔ 締め済み</span>'
+    : '<button class="nav-fiscal-close" onclick="performYearClose()">🔒 決算・繰越</button>';
+  bar.innerHTML =
+    '<button class="nav-fiscal-btn" onclick="ledgerYear--;ledgerMonthFrom=0;ledgerMonthTo=0;renderPage()">← 前期</button>'
+    + '<span class="nav-fiscal-label">'+fyLabel+'</span>'
+    + '<button class="nav-fiscal-btn" onclick="ledgerYear++;ledgerMonthFrom=0;ledgerMonthTo=0;renderPage()">翌期 →</button>'
+    + '<span style="width:1px;background:var(--gray-200);height:22px;margin:0 4px;"></span>'
+    + closeBtn;
+}
+
 function renderPage() {
   const el=document.getElementById('page-content');
   if      (currentPage==='dashboard')         el.innerHTML=pageDashboard();
@@ -848,6 +885,7 @@ function renderPage() {
   else if (currentPage==='settlement-detail') el.innerHTML=pageSettlementDetail();
   else if (currentPage==='pl-report')         el.innerHTML=pagePLReport();
   renderAccountSidebar();
+  renderNavFiscalBar();
 }
 
 function renderAccountSidebar() {
@@ -963,8 +1001,8 @@ function pageLedger() {
   var now=new Date();
   const curFY = (fm===1||now.getMonth()+1>=fm) ? now.getFullYear() : now.getFullYear()-1;
   fySet.add(curFY);
+  fySet.add(ledgerYear);
   const fyears=[...fySet].sort(function(a,b){return b-a;});
-  if (!fyears.includes(ledgerYear)) ledgerYear=curFY;
 
   // Fiscal year date range
   const fyStart = `${ledgerYear}-${String(fm).padStart(2,'0')}-01`;
@@ -996,12 +1034,6 @@ function pageLedger() {
 
   const closedYears = s.closedYears||{};
   const isClosed = !!closedYears[ledgerYear];
-
-  const yearOpts=fyears.map(function(y){
-    var lbl=fm===1?`${y}年`:`${y}年度`;
-    return `<option value="${y}" ${y===ledgerYear?'selected':''}>${lbl}${closedYears[y]?' ✔':''}</option>`;
-  }).join('');
-
 
   const kindNormal   = currentEntryKind==='normal'   ?'active-normal'  :'';
   const kindWithdraw = currentEntryKind==='bank_withdraw'?'active-withdraw':'';
@@ -1074,12 +1106,7 @@ function pageLedger() {
   <div class="card">
     <div class="toolbar no-print">
       <div class="toolbar-l" style="flex-wrap:wrap;gap:6px;">
-        <button class="btn btn-secondary btn-sm" onclick="ledgerYear--;ledgerMonthFrom=0;ledgerMonthTo=0;renderPage()">← 前期</button>
-        <select onchange="ledgerYear=Number(this.value);ledgerMonthFrom=0;ledgerMonthTo=0;renderPage()" style="padding:7px 10px;border:1px solid var(--gray-300);border-radius:6px;font-family:inherit;">${yearOpts}</select>
-        <button class="btn btn-secondary btn-sm" onclick="ledgerYear++;ledgerMonthFrom=0;ledgerMonthTo=0;renderPage()">翌期 →</button>
-        ${isClosed
-          ? `<span class="badge badge-settled" style="align-self:center;padding:5px 10px;">✔ 締め済み ${fc(closedYears[ledgerYear].closingBalance)}</span>`
-          : `<button class="btn btn-sm no-print" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-weight:700;" onclick="performYearClose()">🔒 決算・繰越</button>`}
+        <span class="badge ${isClosed?'badge-settled':''}" style="align-self:center;font-size:13px;font-weight:700;color:var(--gray-700);">${fyLabel}${isClosed?` ✔ 締め済み（繰越 ${fc(closedYears[ledgerYear].closingBalance)}）`:''}</span>
       </div>
       <div class="toolbar-r">
         <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSV()">📥 CSV</button>
@@ -1461,8 +1488,8 @@ function pagePLReport() {
   var now=new Date();
   const curFY = (fm===1||now.getMonth()+1>=fm) ? now.getFullYear() : now.getFullYear()-1;
   fySet.add(curFY);
+  fySet.add(plYear);
   const fyears = [...fySet].sort(function(a,b){return b-a;});
-  if (!fyears.includes(plYear)) plYear = curFY;
 
   const fyLabel = fm===1 ? `${plYear}年` : `${plYear}年度`;
   const yearOpts = fyears.map(function(y){
