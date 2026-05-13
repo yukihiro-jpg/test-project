@@ -65,6 +65,9 @@
     .nav-fiscal-label { font-size:13px; font-weight:700; color:var(--gray-700); padding:0 6px; white-space:nowrap; }
     .nav-fiscal-close { padding:5px 10px; border:1px solid #fcd34d; background:#fef3c7; cursor:pointer; font-size:12px; font-family:inherit; border-radius:5px; color:#92400e; font-weight:700; transition:all 0.1s; white-space:nowrap; }
     .nav-fiscal-close:hover { background:#fde68a; }
+    .acct-row-btn { padding:4px 8px; border:1px solid var(--gray-300); background:white; cursor:pointer; font-size:12px; font-family:inherit; border-radius:5px; color:var(--gray-700); transition:all 0.1s; white-space:nowrap; min-width:80px; text-align:left; display:flex; align-items:center; gap:4px; }
+    .acct-row-btn:hover { border-color:var(--primary); background:var(--primary-light); }
+    #acct-row-popup { font-family:'Hiragino Kaku Gothic ProN','Meiryo','Yu Gothic',sans-serif; }
     #app-main { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
     .card {
       background: white; border-radius: 8px;
@@ -1018,9 +1021,9 @@ function renderNavFiscalBar() {
   var fm=s.fiscalMonth||1;
   var closedYears=s.closedYears||{};
   var isClosed=!!closedYears[ledgerYear];
-  var fyLabel=fm===1?ledgerYear+'年':ledgerYear+'年度';
+  var fyLabel=fyRangeLabel(ledgerYear,fm);
   var closeBtn = isClosed
-    ? '<span style="font-size:12px;color:#059669;font-weight:700;padding:4px 8px;background:#d1fae5;border-radius:5px;white-space:nowrap;">✔ 締め済み</span>'
+    ? '<button class="nav-fiscal-close" onclick="performYearUnlock()" style="background:#d1fae5;border-color:#6ee7b7;color:#065f46;">🔓 決算解除</button>'
     : '<button class="nav-fiscal-close" onclick="performYearClose()">🔒 決算・繰越</button>';
   bar.innerHTML =
     '<button class="nav-fiscal-btn" onclick="ledgerYear--;ledgerMonthFrom=0;ledgerMonthTo=0;renderPage()">← 前期</button>'
@@ -1165,7 +1168,7 @@ function pageLedger() {
   const fyEndY  = fm===1 ? ledgerYear : ledgerYear+1;
   const fyEndM  = fm===1 ? 12 : fm-1;
   const fyEnd   = `${fyEndY}-${String(fyEndM).padStart(2,'0')}-${String(new Date(fyEndY,fyEndM,0).getDate()).padStart(2,'0')}`;
-  const fyLabel = fm===1 ? `${ledgerYear}年` : `${ledgerYear}年度`;
+  const fyLabel = fyRangeLabel(ledgerYear, fm);
 
   const allWithBal=calcBalances(allEntries);
   const filtered=allWithBal.filter(function(e){
@@ -1211,7 +1214,14 @@ function pageLedger() {
   const recentStores = getRecentStores();
 
   return `
-  <div class="entry-card no-print">
+  ${isClosed ? `<div class="alert" style="background:#fff7ed;border:2px solid #fb923c;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <strong style="color:#c2410c;">⚠️ 決算締め済みです。</strong>
+      <span style="color:#78350f;margin-left:6px;">入力や修正は決算を解除してからにしてください。</span>
+    </div>
+    <button class="btn" onclick="performYearUnlock()" style="background:#d1fae5;border:1px solid #6ee7b7;color:#065f46;font-weight:700;font-size:13px;">🔓 決算解除</button>
+  </div>` : ''}
+  <div class="entry-card no-print" ${isClosed ? 'style="display:none;"' : ''}>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div class="entry-card-title" style="margin-bottom:0;">＋ 現金取引を登録する</div>
       <button class="btn btn-outline btn-sm" onclick="showHowTo('ledger')" style="font-size:12px;">📖 操作方法</button>
@@ -1223,7 +1233,7 @@ function pageLedger() {
     </div>
     ${hintHtml}
     <div class="form-grid" style="margin-bottom:10px;">
-      <div class="form-group req"><label>日付</label>${dateInputs('ae-date', today(), 'ae-store')}</div>
+      <div class="form-group req"><label>日付</label>${dateInputsMD('ae-date', today(), 'ae-store')}</div>
       <div class="form-group req"><label>${storeLabel}</label>
         <input type="text" id="ae-store" placeholder="${storePlaceholder}" ${currentEntryKind==='normal'?'list="ae-store-list" autocomplete="off"':''} lang="ja" style="ime-mode:active;" onkeydown="formEnterNext(event,this)" data-next="ae-item" />
         ${currentEntryKind==='normal'&&recentStores.length>0?`<datalist id="ae-store-list">${recentStores.map(function(n){return '<option value="'+esc(n)+'">';}).join('')}</datalist>`:''}
@@ -1262,7 +1272,7 @@ function pageLedger() {
   <div class="card">
     <div class="toolbar no-print">
       <div class="toolbar-l" style="flex-wrap:wrap;gap:6px;">
-        <span class="badge ${isClosed?'badge-settled':''}" style="align-self:center;font-size:13px;font-weight:700;color:var(--gray-700);">${fyLabel}${isClosed?` ✔ 締め済み（繰越 ${fc(closedYears[ledgerYear].closingBalance)}）`:''}</span>
+        <span class="badge ${isClosed?'badge-settled':''}" style="align-self:center;font-size:12px;font-weight:700;color:var(--gray-700);">${fyLabel}${isClosed?` ✔ 締め済み（繰越 ${fc(closedYears[ledgerYear].closingBalance)}）`:''}</span>
       </div>
       <div class="toolbar-r">
         <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSV()">📥 CSV</button>
@@ -1346,14 +1356,14 @@ function pageAdvances() {
   <div class="card no-print">
     <div class="card-title">＋ 仮払い登録</div>
     <div class="form-grid">
-      <div class="form-group req"><label>仮払日</label>${dateInputs('af-date', today(), 'af-name')}</div>
+      <div class="form-group req"><label>仮払日</label>${dateInputsMD('af-date', today(), 'af-name')}</div>
       <div class="form-group req">
         <label>氏名</label>
         <input type="text" id="af-name" placeholder="山田 太郎" list="emp-list" autocomplete="off" />
         <datalist id="emp-list">${empNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
       </div>
       <div class="form-group req"><label>目的・出張先</label><input type="text" id="af-purpose" placeholder="東京出張" /></div>
-      <div class="form-group req"><label>仮払金額（円）</label><input type="number" id="af-amount" placeholder="30000" min="1" /></div>
+      <div class="form-group req"><label>仮払金額（円）</label><input type="text" inputmode="numeric" id="af-amount" placeholder="30,000" oninput="fmtAmtInput(this)" /></div>
     </div>
     <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <button class="btn btn-primary" onclick="submitAdvance()">仮払いを登録する</button>
@@ -1433,7 +1443,7 @@ function pageReimbursements() {
       💡 従業員が個人で立替えた経費（個人カードや現金で支払ったもの）を登録します。レシートの日付・店名・科目を入力し、後日まとめて現金で返金します。
     </div>
     <div class="form-grid" style="margin-bottom:12px;">
-      <div class="form-group req"><label>登録日</label>${dateInputs('rf-date', today(), 'rf-name')}</div>
+      <div class="form-group req"><label>登録日</label>${dateInputsMD('rf-date', today(), 'rf-name')}</div>
       <div class="form-group req">
         <label>氏名</label>
         <input type="text" id="rf-name" placeholder="山田 太郎" list="rf-emp-list" autocomplete="off" />
@@ -1525,12 +1535,16 @@ function renderReimRows() {
         <th style="width:8%"></th>
       </tr></thead>
       <tbody>
-        ${reimburseRows.map(function(r,i){return `<tr>
-          <td><input type="date" value="${esc(r.date)}" oninput="reimburseRows[${i}].date=this.value" /></td>
+        ${reimburseRows.map(function(r,i){
+          var mp=r.date?r.date.split('-')[1]?String(Number(r.date.split('-')[1])):'':'';
+          var dp=r.date?r.date.split('-')[2]?String(Number(r.date.split('-')[2])):'':'';
+          var fmtAmt=r.amount?Number(r.amount).toLocaleString('ja-JP'):'';
+          return `<tr>
+          <td style="white-space:nowrap;"><input type="number" id="rr-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('rr-${i}')" onfocus="this.select()" />/<input type="number" id="rr-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('rr-${i}')" onfocus="this.select()" /></td>
           <td><input type="text" value="${esc(r.storeName)}" placeholder="〇〇商店" oninput="reimburseRows[${i}].storeName=this.value" /></td>
           <td><input type="text" value="${esc(r.itemName)}" placeholder="文房具" oninput="reimburseRows[${i}].itemName=this.value" /></td>
-          <td><select onchange="reimburseRows[${i}].account=this.value" style="width:100%;padding:5px;border:1px solid var(--gray-300);border-radius:5px;font-size:12px;font-family:inherit;">${acctSelectHtml(r.account)}</select></td>
-          <td><input type="number" value="${r.amount}" placeholder="0" min="0" oninput="reimburseRows[${i}].amount=this.value;updateReimSummary()" /></td>
+          <td><button class="acct-row-btn" onclick="showAcctRowPicker('reim',${i},'',0,this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
+          <td><input type="text" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);reimburseRows[${i}].amount=this.value.replace(/,/g,'');updateReimSummary()" /></td>
           <td style="text-align:center;">${reimburseRows.length>1?`<button class="btn btn-secondary btn-xs" onclick="removeReimRow(${i})">✕</button>`:''}</td>
         </tr>`;}).join('')}
       </tbody>
@@ -1547,23 +1561,24 @@ function removeReimRow(i) {
   renderReimRows();
 }
 function updateReimSummary() {
-  const total=reimburseRows.reduce(function(s,r){return s+Number(r.amount||0);},0);
+  const total=reimburseRows.reduce(function(s,r){return s+Number((r.amount||'').toString().replace(/,/g,'')||0);},0);
   const el=document.getElementById('reim-summary');
   if (!el) return;
   el.innerHTML='立替合計金額: <strong class="mono num-neg">'+fc(total)+'</strong>　('+reimburseRows.length+'件)';
 }
 
 function submitReimbursement() {
-  const date=readDateGroup('rf-date');
+  const date=readDateGroupMD('rf-date');
   const name=document.getElementById('rf-name').value.trim();
   const purpose=document.getElementById('rf-purpose').value.trim();
   if (!date||!name) { alert('登録日・氏名は必須です。'); return; }
   const items=reimburseRows.filter(function(r){return r.amount||r.storeName||r.itemName;});
   if (items.length===0) { alert('明細を1件以上入力してください。'); return; }
-  if (items.some(function(r){return !r.amount||Number(r.amount)<=0;})) {
+  if (items.some(function(r){return !r.amount||Number((r.amount||'').toString().replace(/,/g,''))<=0;})) {
     alert('全ての明細に金額（1円以上）を入力してください。'); return;
   }
-  const rei=registerReimbursement({registeredDate:date, employeeName:name, purpose:purpose, items:items});
+  const cleanItems=items.map(function(r){return {...r, amount:Number((r.amount||'').toString().replace(/,/g,'')||0)};});
+  const rei=registerReimbursement({registeredDate:date, employeeName:name, purpose:purpose, items:cleanItems});
   reimburseRows=[];
   document.getElementById('rf-name').value='';
   document.getElementById('rf-purpose').value='';
@@ -1581,7 +1596,7 @@ function showReimburseConfirmModal(id) {
       返金額: <strong class="mono num-neg">${fc(rei.totalAmount)}</strong>　明細: ${(rei.items||[]).length}件
     </div>
     <div class="form-grid" style="margin-bottom:14px;">
-      <div class="form-group req"><label>返金日</label>${dateInputs('rc-date', today(), 'rc-method')}</div>
+      <div class="form-group req"><label>返金日</label>${dateInputsMD('rc-date', today(), 'rc-method')}</div>
       <div class="form-group req">
         <label>返金方法</label>
         <select id="rc-method">
@@ -1601,7 +1616,7 @@ function showReimburseConfirmModal(id) {
 }
 
 function submitReimburseConfirm(id) {
-  const date=readDateGroup('rc-date');
+  const date=readDateGroupMD('rc-date');
   const method=document.getElementById('rc-method').value;
   if (!date) { alert('返金日を入力してください。'); return; }
   const rei=reimburseExpense(id,{reimbursementDate:date, reimbursementMethod:method});
@@ -1641,7 +1656,7 @@ function showReimburseEditModal(id) {
       ${isReimbursed?'<br><span style="font-size:12px;">※ 修正すると現金出納帳の返金行が自動的に上書きされます。</span>':''}
     </div>
     <div class="form-grid" style="margin-bottom:12px;">
-      <div class="form-group req"><label>登録日</label>${dateInputs('re-date', rei.registeredDate, 're-name')}</div>
+      <div class="form-group req"><label>登録日</label>${dateInputsMD('re-date', rei.registeredDate, 're-name')}</div>
       <div class="form-group req"><label>氏名</label><input type="text" id="re-name" value="${esc(rei.employeeName)}" /></div>
       <div class="form-group"><label>目的・備考</label><input type="text" id="re-purpose" value="${esc(rei.purpose||'')}" /></div>
     </div>
@@ -1667,12 +1682,16 @@ function renderReimEditRows() {
         <th style="width:20%">勘定科目</th><th style="width:16%">金額（円）</th><th style="width:8%"></th>
       </tr></thead>
       <tbody>
-        ${reimburseRows.map(function(r,i){return `<tr>
-          <td><input type="date" value="${esc(r.date)}" oninput="reimburseRows[${i}].date=this.value" /></td>
+        ${reimburseRows.map(function(r,i){
+          var mp=r.date?r.date.split('-')[1]?String(Number(r.date.split('-')[1])):'':'';
+          var dp=r.date?r.date.split('-')[2]?String(Number(r.date.split('-')[2])):'':'';
+          var fmtAmt=r.amount?Number(r.amount).toLocaleString('ja-JP'):'';
+          return `<tr>
+          <td style="white-space:nowrap;"><input type="number" id="er-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('er-${i}')" onfocus="this.select()" />/<input type="number" id="er-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('er-${i}')" onfocus="this.select()" /></td>
           <td><input type="text" value="${esc(r.storeName)}" oninput="reimburseRows[${i}].storeName=this.value" /></td>
           <td><input type="text" value="${esc(r.itemName)}" oninput="reimburseRows[${i}].itemName=this.value" /></td>
-          <td><select onchange="reimburseRows[${i}].account=this.value" style="width:100%;padding:5px;border:1px solid var(--gray-300);border-radius:5px;font-size:12px;font-family:inherit;">${acctSelectHtml(r.account)}</select></td>
-          <td><input type="number" value="${r.amount}" min="0" oninput="reimburseRows[${i}].amount=this.value;updateReimEditSummary()" /></td>
+          <td><button class="acct-row-btn" onclick="showAcctRowPicker('reimEdit',${i},'',0,this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
+          <td><input type="text" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);reimburseRows[${i}].amount=this.value.replace(/,/g,'');updateReimEditSummary()" /></td>
           <td style="text-align:center;">${reimburseRows.length>1?`<button class="btn btn-secondary btn-xs" onclick="reimburseRows.splice(${i},1);renderReimEditRows()">✕</button>`:''}</td>
         </tr>`;}).join('')}
       </tbody>
@@ -1682,19 +1701,20 @@ function renderReimEditRows() {
 function updateReimEditSummary() {
   const el=document.getElementById('reim-edit-summary');
   if (!el) return;
-  const total=reimburseRows.reduce(function(s,r){return s+Number(r.amount||0);},0);
+  const total=reimburseRows.reduce(function(s,r){return s+Number((r.amount||'').toString().replace(/,/g,'')||0);},0);
   el.innerHTML='立替合計金額: <strong class="mono num-neg">'+fc(total)+'</strong>　('+reimburseRows.length+'件)';
 }
 
 function submitReimEdit() {
   if (!_reimEditId) return;
-  const date=readDateGroup('re-date');
+  const date=readDateGroupMD('re-date');
   const name=document.getElementById('re-name').value.trim();
   const purpose=document.getElementById('re-purpose').value.trim();
   if (!date||!name) { alert('登録日・氏名は必須です。'); return; }
   const items=reimburseRows.filter(function(r){return r.amount||r.storeName||r.itemName;});
   if (items.length===0) { alert('明細を1件以上入力してください。'); return; }
-  updateReimbursementItems(_reimEditId,{registeredDate:date,employeeName:name,purpose:purpose,items:items});
+  const cleanItems=items.map(function(r){return {...r, amount:Number((r.amount||'').toString().replace(/,/g,'')||0)};});
+  updateReimbursementItems(_reimEditId,{registeredDate:date,employeeName:name,purpose:purpose,items:cleanItems});
   _reimEditId=null; reimburseRows=[];
   closeModal(); updateHeader(); renderPage();
 }
@@ -2012,7 +2032,7 @@ function pagePLReport() {
   const curFY = (fm===1||now.getMonth()+1>=fm) ? now.getFullYear() : now.getFullYear()-1;
   fySet.add(curFY); fySet.add(plYear);
   const fyears = [...fySet].sort(function(a,b){return b-a;});
-  const fyLabel = fm===1 ? `${plYear}年` : `${plYear}年度`;
+  const fyLabel = fyRangeLabel(plYear, fm);
   const yearOpts = fyears.map(function(y){
     var lbl=fm===1?`${y}年`:`${y}年度`;
     return `<option value="${y}" ${y===plYear?'selected':''}>${lbl}</option>`;
@@ -2231,7 +2251,7 @@ function exportPLCSV() {
   const s = getSettings();
   const fm = s.fiscalMonth||1;
   const d = buildPLData(plYear, plMonthFrom, plMonthTo);
-  const fyLabel = fm===1 ? `${plYear}年` : `${plYear}年度`;
+  const fyLabel = fyRangeLabel(plYear, fm);
   const rangeLabel = getMonthRangeLabel(plMonthFrom, plMonthTo, fm);
   const rows = [
     ['損益計算書', s.companyName, `${fyLabel} ${rangeLabel}`, `出力日:${today()}`],
@@ -2305,7 +2325,7 @@ function showPLDetail(account) {
   });
   rows.sort(function(a,b){return a.date.localeCompare(b.date);});
   const total = rows.reduce(function(s,r){return s+r.amount;},0);
-  const fyLabel = fm===1 ? `${plYear}年` : `${plYear}年度`;
+  const fyLabel = fyRangeLabel(plYear, fm);
   const rangeLabel = getMonthRangeLabel(plMonthFrom, plMonthTo, fm);
   showModal(`
     <div class="modal-title">📋 ${esc(account)} の明細</div>
@@ -2366,6 +2386,39 @@ function dateInputs(prefix, isoDate, nextFieldId) {
     + '</div>';
 }
 
+function dateInputsMD(prefix, isoDate, nextFieldId) {
+  var parts=(isoDate||'').split('-');
+  var m=parts[1]?String(Number(parts[1])):'';
+  var d=parts[2]?String(Number(parts[2])):'';
+  return '<div class="date-group">'
+    + '<input type="number" id="'+prefix+'-m" value="'+m+'" placeholder="月" min="1" max="12" style="width:48px;" onkeydown="dateEnter(event,\''+prefix+'-d\')" onfocus="this.select()" />'
+    + '<span class="date-sep">/</span>'
+    + '<input type="number" id="'+prefix+'-d" value="'+d+'" placeholder="日" min="1" max="31" style="width:48px;" onkeydown="dateEnter(event,\''+nextFieldId+'\')" onfocus="this.select()" />'
+    + '</div>';
+}
+
+function readDateGroupMD(prefix) {
+  var m=document.getElementById(prefix+'-m');
+  var d=document.getElementById(prefix+'-d');
+  if (!m||!d) return '';
+  var mo=Number(m.value), da=Number(d.value);
+  if (!mo||!da) return '';
+  var s=getSettings(); var fm=s.fiscalMonth||1;
+  var yr=(fm===1||mo>=fm)?ledgerYear:ledgerYear+1;
+  return yr+'-'+String(mo).padStart(2,'0')+'-'+String(da).padStart(2,'0');
+}
+
+function computeRowDate(prefix) {
+  var mEl=document.getElementById(prefix+'-m');
+  var dEl=document.getElementById(prefix+'-d');
+  if (!mEl||!dEl) return '';
+  var mo=Number(mEl.value), da=Number(dEl.value);
+  if (!mo||!da) return '';
+  var s=getSettings(); var fm=s.fiscalMonth||1;
+  var yr=(fm===1||mo>=fm)?ledgerYear:ledgerYear+1;
+  return yr+'-'+String(mo).padStart(2,'0')+'-'+String(da).padStart(2,'0');
+}
+
 function dateEnter(e, nextId) {
   if (e.key !== 'Enter') return;
   e.preventDefault();
@@ -2383,11 +2436,29 @@ function readDateGroup(prefix) {
   return ys+'-'+String(ms).padStart(2,'0')+'-'+String(ds).padStart(2,'0');
 }
 
+function fyRangeLabel(year, fm) {
+  if (fm===1) return year+'年1月1日〜'+year+'年12月31日';
+  const endY=year+1, endM=fm-1;
+  const endD=new Date(endY,endM,0).getDate();
+  return year+'年'+fm+'月1日〜'+endY+'年'+endM+'月'+endD+'日';
+}
+
+function performYearUnlock() {
+  const s=getSettings();
+  const fm=s.fiscalMonth||1;
+  const label=fyRangeLabel(ledgerYear,fm);
+  if (!confirm(label+'の決算を解除しますか？\n\n解除後は入力・修正が可能になります。')) return;
+  const closedYears=s.closedYears||{};
+  delete closedYears[ledgerYear];
+  DB.set('settings',{...s,closedYears});
+  renderPage();
+}
+
 function performYearClose() {
   const s=getSettings();
   const fm=s.fiscalMonth||1;
   const closedYears=s.closedYears||{};
-  const fyLabel=fm===1?`${ledgerYear}年`:`${ledgerYear}年度`;
+  const fyLabel=fyRangeLabel(ledgerYear,fm);
   if (closedYears[ledgerYear]) {
     if (!confirm(`${fyLabel}は既に締め済みです（${fd(closedYears[ledgerYear].closedAt)}）。\n再締めしますか？`)) return;
   }
@@ -2398,7 +2469,7 @@ function performYearClose() {
   const beforeEnd=allWithBal.filter(function(e){return e.date<=fyEnd;});
   const closingBal=beforeEnd.length>0?beforeEnd[beforeEnd.length-1].balance:(s.openingBalance||0);
   DB.set('settings',{...s, closedYears:{...closedYears,[ledgerYear]:{closedAt:today(),closingBalance:closingBal}}});
-  const nextFyLabel=fm===1?`${ledgerYear+1}年`:`${ledgerYear+1}年度`;
+  const nextFyLabel=fyRangeLabel(ledgerYear+1,fm);
   alert(`✅ ${fyLabel}の決算・繰越が完了しました。\n\n次期繰越額（次期期首残高）: ${fc(closingBal)}\n\n${nextFyLabel}に移動します。`);
   ledgerYear++;
   ledgerMonthFrom=0;
@@ -2465,7 +2536,7 @@ function fmtAmtInput(el) {
 }
 
 function submitEntry() {
-  const date  = readDateGroup('ae-date');
+  const date  = readDateGroupMD('ae-date');
   const store = document.getElementById('ae-store').value.trim();
   const item  = document.getElementById('ae-item').value.trim();
   const taxEl = document.getElementById('ae-tax');
@@ -2508,7 +2579,7 @@ function showEditEntryModal(id) {
   showModal(`
     <div class="modal-title">✏️ 取引の修正 — ${esc(e.id)}</div>
     <div class="form-grid" style="margin-bottom:12px;">
-      <div class="form-group req"><label>日付</label>${dateInputs('ed-date', e.date, 'ed-store')}</div>
+      <div class="form-group req"><label>日付</label>${dateInputsMD('ed-date', e.date, 'ed-store')}</div>
       <div class="form-group req"><label>${isBank?'銀行名':'店名・支払先'}</label><input type="text" id="ed-store" value="${esc(e.storeName||'')}" /></div>
     </div>
     <div class="form-grid" style="margin-bottom:12px;">
@@ -2543,7 +2614,7 @@ function showEditEntryModal(id) {
 }
 
 function submitEditEntry(id, entryKind) {
-  const date  = readDateGroup('ed-date');
+  const date  = readDateGroupMD('ed-date');
   const store = document.getElementById('ed-store').value.trim();
   const item  = document.getElementById('ed-item').value.trim();
   const taxEl = document.getElementById('ed-tax');
@@ -2574,10 +2645,10 @@ function submitEditEntry(id, entryKind) {
 }
 
 function submitAdvance() {
-  const date   =readDateGroup('af-date');
+  const date   =readDateGroupMD('af-date');
   const name   =document.getElementById('af-name').value.trim();
   const purpose=document.getElementById('af-purpose').value.trim();
-  const amount =document.getElementById('af-amount').value;
+  const amount =document.getElementById('af-amount').value.replace(/,/g,'');
   if (!date||!name||!purpose||!amount){ alert('全ての必須項目を入力してください。'); return; }
   if (Number(amount)<=0){ alert('仮払金額は1円以上を入力してください。'); return; }
   const adv=registerAdvance({date,employeeName:name,purpose,advanceAmount:amount});
@@ -2618,7 +2689,7 @@ function showSettleModal(id) {
     <div class="form-grid" style="margin-bottom:14px;">
       <div class="form-group req">
         <label>精算日</label>
-        ${dateInputs('st-date', initDate, 'st-method')}
+        ${dateInputsMD('st-date', initDate, 'st-method')}
       </div>
       <div class="form-group req">
         <label>精算方法</label>
@@ -2647,6 +2718,50 @@ function showSettleModal(id) {
   renderSettleRows(adv.id, adv.advanceAmount);
 }
 
+function showAcctRowPicker(rowType, rowIndex, advId, advAmt, triggerEl) {
+  const existing=document.getElementById('acct-row-popup');
+  if (existing) { existing.remove(); return; }
+  const rows=(rowType==='settle')?settleRows:reimburseRows;
+  const current=(rows[rowIndex]&&rows[rowIndex].account)||'';
+  const recent=getRecentAccounts();
+  const popup=document.createElement('div');
+  popup.id='acct-row-popup';
+  popup.style.cssText='position:fixed;z-index:10000;background:white;border:1px solid var(--gray-300);border-radius:10px;padding:12px;width:320px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.2);font-size:12px;';
+  const rect=triggerEl.getBoundingClientRect();
+  const top=Math.min(rect.bottom+4, window.innerHeight-340);
+  const left=Math.min(rect.left, window.innerWidth-330);
+  popup.style.top=top+'px'; popup.style.left=left+'px';
+  const chipHtml=function(name){
+    const sel=name===current;
+    return '<div class="acct-chip'+(sel?' selected':'').replace(/'/g,"\\'")+'" onclick="applyAcctRowPicker(\''+rowType+'\','+rowIndex+',\''+encodeURIComponent(advId)+'\','+advAmt+',\''+encodeURIComponent(name)+'\')">'+esc(name)+'</div>';
+  };
+  let html='<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">勘定科目を選択</div>';
+  if (current) html+='<div style="margin-bottom:8px;"><span style="font-size:11px;color:var(--gray-500);">現在: </span><span class="badge-acct">'+esc(current)+'</span> <button class="btn btn-xs btn-secondary" onclick="applyAcctRowPicker(\''+rowType+'\','+rowIndex+',\''+encodeURIComponent(advId)+'\','+advAmt+',\'\')">クリア</button></div>';
+  if (recent.length>0) {
+    html+='<div style="font-size:11px;color:var(--gray-500);margin-bottom:4px;">★ 最近</div><div class="acct-grid">'+recent.map(chipHtml).join('')+'</div>';
+  }
+  const rest=ACCOUNT_CATEGORIES.filter(function(n){return recent.indexOf(n)<0;});
+  html+='<div style="font-size:11px;color:var(--gray-500);margin-top:8px;margin-bottom:4px;">全ての勘定科目</div><div class="acct-grid">'+rest.map(chipHtml).join('')+'</div>';
+  popup.innerHTML=html;
+  document.body.appendChild(popup);
+  setTimeout(function(){
+    function closePopup(e){ if (!popup.contains(e.target)&&e.target!==triggerEl){ popup.remove(); document.removeEventListener('click',closePopup); } }
+    document.addEventListener('click',closePopup);
+  },10);
+}
+
+function applyAcctRowPicker(rowType, rowIndex, advIdEnc, advAmt, acctEnc) {
+  const advId=decodeURIComponent(advIdEnc);
+  const acct=decodeURIComponent(acctEnc);
+  const rows=(rowType==='settle')?settleRows:reimburseRows;
+  if (rows[rowIndex]!=null) { rows[rowIndex].account=acct; if (acct) addRecentAccount(acct); }
+  const popup=document.getElementById('acct-row-popup');
+  if (popup) popup.remove();
+  if (rowType==='settle') renderSettleRows(advId,advAmt);
+  else if (rowType==='reim') renderReimRows();
+  else if (rowType==='reimEdit') renderReimEditRows();
+}
+
 function acctSelectHtml(selected) {
   var sel = selected || '';
   return '<option value="" '+(sel===''?'selected':'')+'>— 未分類 —</option>'
@@ -2669,14 +2784,18 @@ function renderSettleRows(advId, advAmt) {
         <th style="width:8%"></th>
       </tr></thead>
       <tbody>
-        ${settleRows.map((r,i)=>`<tr>
-          <td><input type="date" value="${esc(r.date)}" oninput="settleRows[${i}].date=this.value" /></td>
+        ${settleRows.map((r,i)=>{
+          const mp=r.date?r.date.split('-')[1]?String(Number(r.date.split('-')[1])):'':'';
+          const dp=r.date?r.date.split('-')[2]?String(Number(r.date.split('-')[2])):'':'';
+          const fmtAmt=r.amount?Number(r.amount).toLocaleString('ja-JP'):'';
+          return `<tr>
+          <td style="white-space:nowrap;"><input type="number" id="sr-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="settleRows[${i}].date=computeRowDate('sr-${i}')" onfocus="this.select()" />/<input type="number" id="sr-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="settleRows[${i}].date=computeRowDate('sr-${i}')" onfocus="this.select()" /></td>
           <td><input type="text" value="${esc(r.storeName)}" placeholder="〇〇ホテル" oninput="settleRows[${i}].storeName=this.value" /></td>
           <td><input type="text" value="${esc(r.itemName)}"  placeholder="宿泊費" oninput="settleRows[${i}].itemName=this.value" /></td>
-          <td><select onchange="settleRows[${i}].account=this.value" style="width:100%;padding:5px;border:1px solid var(--gray-300);border-radius:5px;font-size:12px;font-family:inherit;">${acctSelectHtml(r.account)}</select></td>
-          <td><input type="number" value="${r.amount}" placeholder="0" min="0" oninput="settleRows[${i}].amount=this.value;updateSettleSummary(${advAmt})" /></td>
+          <td><button class="acct-row-btn" onclick="showAcctRowPicker('settle',${i},'${esc(advId)}',${advAmt},this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
+          <td><input type="text" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);settleRows[${i}].amount=this.value.replace(/,/g,'');updateSettleSummary(${advAmt})" /></td>
           <td style="text-align:center;">${settleRows.length>1?`<button class="btn btn-secondary btn-xs" onclick="removeSettleRow(${i},'${esc(advId)}',${advAmt})">✕</button>`:''}</td>
-        </tr>`).join('')}
+        </tr>`;}).join('')}
       </tbody>
     </table>`;
   updateSettleSummary(advAmt);
@@ -2693,7 +2812,7 @@ function removeSettleRow(i, advId, advAmt) {
 }
 
 function updateSettleSummary(advAmt) {
-  const total=settleRows.reduce((s,r)=>s+Number(r.amount||0),0);
+  const total=settleRows.reduce((s,r)=>s+Number((r.amount||'').toString().replace(/,/g,'')||0),0);
   const diff=total-advAmt;
   const el=document.getElementById('settle-summary');
   if (!el) return;
@@ -2714,13 +2833,13 @@ function updateSettleSummary(advAmt) {
 }
 
 function submitSettle(id, advAmt) {
-  const settlementDate=readDateGroup('st-date');
+  const settlementDate=readDateGroupMD('st-date');
   const settlementMethod=document.getElementById('st-method').value;
   if (!settlementDate){ alert('精算日を入力してください。'); return; }
   if (settleRows.every(r=>!r.amount&&!r.storeName&&!r.itemName)){
     alert('使用明細を1件以上入力してください。'); return;
   }
-  const items=settleRows.map(r=>({...r,amount:Number(r.amount||0)}));
+  const items=settleRows.map(r=>({...r,amount:Number((r.amount||'').toString().replace(/,/g,'')||0)}));
   const actEl = document.getElementById('st-actual');
   const actStr = actEl ? (actEl.value||'').replace(/,/g,'').trim() : '';
   const actualReturn = actStr === '' ? null : Number(actStr);
