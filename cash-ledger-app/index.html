@@ -618,20 +618,36 @@ function settleAdvance(id, d) {
   const idx = advances.findIndex(a=>a.id===id);
   if (idx<0) return;
   const adv = advances[idx];
+
+  if (adv.settlementEntryId)  { removeEntry(adv.settlementEntryId);  adv.settlementEntryId=null; }
+  if (adv.discrepancyEntryId) { removeEntry(adv.discrepancyEntryId); adv.discrepancyEntryId=null; }
+
   const used  = d.items.reduce((s,it)=>s+Number(it.amount||0),0);
   const diff  = used - adv.advanceAmount;
-  const ret   = diff<0 ? Math.abs(diff) : 0;
+  const expectedReturn = diff<0 ? Math.abs(diff) : 0;
   const short = diff>0 ? diff : 0;
 
-  adv.status='settled'; adv.settlementDate=d.settlementDate;
-  adv.usedAmount=used; adv.returnAmount=ret; adv.shortageAmount=short;
-  adv.settlementItems=d.items; adv.settlementMethod=d.settlementMethod||'cash';
+  const isCash = (d.settlementMethod||'cash') === 'cash';
+  const actualReturn = (isCash && expectedReturn>0 && d.actualReturn!=null && d.actualReturn!=='' && !isNaN(Number(d.actualReturn)))
+    ? Number(d.actualReturn) : expectedReturn;
+  const discrepancy = expectedReturn - actualReturn;
+
+  adv.status='settled';
+  adv.settlementDate=d.settlementDate;
+  adv.usedAmount=used;
+  adv.expectedReturn=expectedReturn;
+  adv.actualReturn=actualReturn;
+  adv.returnAmount=expectedReturn;
+  adv.discrepancy=discrepancy;
+  adv.shortageAmount=short;
+  adv.settlementItems=d.items;
+  adv.settlementMethod=d.settlementMethod||'cash';
 
   const method = d.settlementMethod==='transfer' ? '（振込）' : '（現金）';
   let desc, recAmt=0, payAmt=0;
-  if (ret>0)        { desc=`精算・返金${method} ${adv.id} ${adv.employeeName}／${adv.purpose}`; recAmt=ret; }
-  else if (short>0) { desc=`精算・追加払${method} ${adv.id} ${adv.employeeName}／${adv.purpose}`; payAmt=short; }
-  else              { desc=`精算・過不足なし${method} ${adv.id} ${adv.employeeName}／${adv.purpose}`; }
+  if (expectedReturn>0) { desc=`精算・返金${method} ${adv.id} ${adv.employeeName}／${adv.purpose}`; recAmt=expectedReturn; }
+  else if (short>0)     { desc=`精算・追加払${method} ${adv.id} ${adv.employeeName}／${adv.purpose}`; payAmt=short; }
+  else                  { desc=`精算・過不足なし${method} ${adv.id} ${adv.employeeName}／${adv.purpose}`; }
 
   const se = addEntry({
     date: d.settlementDate, storeName:'', itemName:'',
@@ -639,6 +655,24 @@ function settleAdvance(id, d) {
     taxRate: null, memo: '', type: 'settlement', advanceId: adv.id,
   });
   adv.settlementEntryId=se.id;
+
+  if (discrepancy !== 0) {
+    let dDesc, dRec=0, dPay=0;
+    if (discrepancy > 0) {
+      dDesc = `現金過不足（返金不足分） ${adv.id} ${adv.employeeName}`;
+      dPay = discrepancy;
+    } else {
+      dDesc = `現金過不足（返金超過分） ${adv.id} ${adv.employeeName}`;
+      dRec = -discrepancy;
+    }
+    const de = addEntry({
+      date: d.settlementDate, storeName:'', itemName:'',
+      description: dDesc, receiptAmount: dRec, paymentAmount: dPay,
+      taxRate: null, account: '現金過不足', memo: '', type: 'settlement', advanceId: adv.id,
+    });
+    adv.discrepancyEntryId = de.id;
+  }
+
   saveAdvances(advances);
   return adv;
 }
@@ -1066,9 +1100,11 @@ function pageAdvances() {
             <td><span class="badge badge-${a.status==='pending'?'pending':'settled'}">${a.status==='pending'?'未精算':'精算済'}</span></td>
             <td class="no-print">
               ${a.status==='pending'?`
-                <button class="btn btn-success btn-sm" onclick="showSettleModal('${esc(a.id)}')">精算</button>
-                <button class="btn btn-secondary btn-sm" style="margin-left:4px;" onclick="confirmDeleteAdv('${esc(a.id)}')">削除</button>
-              `:''}
+                <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;">
+                  <button class="btn btn-success btn-sm" onclick="showSettleModal('${esc(a.id)}')">精算</button>
+                  <button class="btn btn-secondary btn-sm" onclick="confirmDeleteAdv('${esc(a.id)}')">削除</button>
+                </div>
+              `:`<button class="btn btn-outline btn-sm" onclick="showSettleModal('${esc(a.id)}')">✏️ 修正</button>`}
             </td>
           </tr>`).join('')}
         </tbody>
@@ -1417,35 +1453,54 @@ let settleRows=[];
 function showSettleModal(id) {
   const adv=getAdvances().find(a=>a.id===id);
   if (!adv) return;
-  settleRows=[{date:'',storeName:'',itemName:'',amount:''}];
+  const isReedit = adv.status === 'settled';
+  if (isReedit && adv.settlementItems && adv.settlementItems.length>0) {
+    settleRows = adv.settlementItems.map(it=>({
+      date: it.date||'', storeName: it.storeName||'',
+      itemName: it.itemName||'', amount: String(it.amount||'')
+    }));
+  } else {
+    settleRows=[{date:'',storeName:'',itemName:'',amount:''}];
+  }
+  const initDate   = isReedit && adv.settlementDate ? adv.settlementDate : today();
+  const initMethod = isReedit ? (adv.settlementMethod||'cash') : 'cash';
+  const initActual = (isReedit && adv.actualReturn!=null && adv.actualReturn!==adv.expectedReturn)
+    ? Number(adv.actualReturn).toLocaleString('ja-JP') : '';
+
   showModal(`
-    <div class="modal-title">✅ 精算入力 — ${esc(adv.id)}</div>
+    <div class="modal-title">${isReedit?'✏️ 精算内容の修正':'✅ 精算入力'} — ${esc(adv.id)}</div>
     <div class="alert alert-info">
       <strong>${esc(adv.employeeName)}</strong> さん ／ ${esc(adv.purpose)}<br>
       仮払金額: <strong class="mono">${fc(adv.advanceAmount)}</strong>　仮払日: ${fd(adv.date)}
+      ${isReedit?'<br><span style="font-size:12px;">※ 既存の精算記録（出納帳含む）は上書きされます。</span>':''}
     </div>
     <div class="form-grid" style="margin-bottom:14px;">
       <div class="form-group req">
         <label>精算日</label>
-        <input type="date" id="st-date" value="${today()}" />
+        <input type="date" id="st-date" value="${esc(initDate)}" />
       </div>
       <div class="form-group req">
         <label>精算方法</label>
-        <select id="st-method">
-          <option value="cash">現金精算（現金で返金・受取）</option>
-          <option value="transfer">振込（通帳に振り込み）</option>
+        <select id="st-method" onchange="updateSettleSummary(${adv.advanceAmount})">
+          <option value="cash"     ${initMethod==='cash'?'selected':''}>現金精算（現金で返金・受取）</option>
+          <option value="transfer" ${initMethod==='transfer'?'selected':''}>振込（通帳に振り込み）</option>
         </select>
       </div>
     </div>
     <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">使用明細</div>
     <div id="settle-rows-wrap"></div>
     <button class="btn btn-secondary btn-sm" style="margin-bottom:14px;" onclick="addSettleRow('${esc(adv.id)}',${adv.advanceAmount})">＋ 明細を追加</button>
-    <div id="settle-summary" style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px;font-size:13px;margin-bottom:4px;">
+    <div id="settle-summary" style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px;font-size:13px;margin-bottom:10px;">
       <span style="color:var(--gray-500);">金額を入力すると自動計算されます</span>
+    </div>
+    <div id="actual-return-wrap" style="display:none;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px;">💴 実際の受取額（円）— 期待返金額と異なる場合のみ入力</div>
+      <input type="text" inputmode="numeric" id="st-actual" value="${esc(initActual)}" placeholder="期待返金額どおりの場合は空欄でOK" oninput="fmtAmtInput(this)" style="width:100%;padding:8px 10px;border:1px solid #fcd34d;border-radius:6px;font-size:13px;font-family:inherit;" />
+      <div style="font-size:11px;color:#92400e;margin-top:6px;line-height:1.5;">※ 期待返金額と異なる金額を入力した場合、差額は自動的に「現金過不足」として現金出納帳に記録されます。</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
-      <button class="btn btn-success" onclick="submitSettle('${esc(adv.id)}',${adv.advanceAmount})">精算を確定する</button>
+      <button class="btn btn-success" onclick="submitSettle('${esc(adv.id)}',${adv.advanceAmount})">${isReedit?'修正を保存する':'精算を確定する'}</button>
     </div>
   `);
   renderSettleRows(adv.id, adv.advanceAmount);
@@ -1494,10 +1549,17 @@ function updateSettleSummary(advAmt) {
   let diffHtml='';
   if (total>0){
     if (diff>0)       diffHtml=`<span style="color:var(--danger);font-weight:700;"> → 不足額 ${fc(diff)}（追加払い）</span>`;
-    else if (diff<0)  diffHtml=`<span style="color:var(--success);font-weight:700;"> → 返金額 ${fc(Math.abs(diff))}（返金受取）</span>`;
+    else if (diff<0)  diffHtml=`<span style="color:var(--success);font-weight:700;"> → 期待返金額 ${fc(Math.abs(diff))}（返金受取）</span>`;
     else              diffHtml=`<span style="color:var(--primary);font-weight:700;"> → 過不足なし</span>`;
   }
   el.innerHTML=`合計使用金額: <strong class="mono">${fc(total)}</strong>　／　仮払金額: <strong class="mono">${fc(advAmt)}</strong>${diffHtml}`;
+
+  const wrap = document.getElementById('actual-return-wrap');
+  if (wrap) {
+    const methodEl = document.getElementById('st-method');
+    const isCash = methodEl ? methodEl.value === 'cash' : true;
+    wrap.style.display = (diff < 0 && isCash) ? 'block' : 'none';
+  }
 }
 
 function submitSettle(id, advAmt) {
@@ -1508,8 +1570,34 @@ function submitSettle(id, advAmt) {
     alert('使用明細を1件以上入力してください。'); return;
   }
   const items=settleRows.map(r=>({...r,amount:Number(r.amount||0)}));
-  settleAdvance(id,{settlementDate,settlementMethod,items});
+  const actEl = document.getElementById('st-actual');
+  const actStr = actEl ? (actEl.value||'').replace(/,/g,'').trim() : '';
+  const actualReturn = actStr === '' ? null : Number(actStr);
+  const adv = settleAdvance(id,{settlementDate,settlementMethod,items,actualReturn});
   closeModal(); updateHeader(); renderPage();
+
+  if (adv) {
+    const yen = function(n){ return '¥'+Number(n).toLocaleString('ja-JP'); };
+    const ch = settlementMethod==='cash' ? '現金' : '振込';
+    let msg = '✅ 精算を確定しました。\n\n';
+    if (adv.expectedReturn > 0) {
+      const receive = adv.actualReturn != null ? adv.actualReturn : adv.expectedReturn;
+      msg += `📌 ${adv.employeeName} さんから ${ch}で ${yen(receive)} を受け取ってください。\n`;
+      if (adv.discrepancy && adv.discrepancy !== 0) {
+        msg += `（期待返金額: ${yen(adv.expectedReturn)}）\n\n`;
+        if (adv.discrepancy > 0) {
+          msg += `⚠️ 差額 ${yen(adv.discrepancy)}（不足分）は「現金過不足」として現金出納帳に自動計上されました。`;
+        } else {
+          msg += `⚠️ 差額 ${yen(Math.abs(adv.discrepancy))}（超過分）は「現金過不足」として現金出納帳に自動計上されました。`;
+        }
+      }
+    } else if (adv.shortageAmount > 0) {
+      msg += `📌 ${adv.employeeName} さんに ${ch}で ${yen(adv.shortageAmount)} を追加で支払ってください。`;
+    } else {
+      msg += `📌 仮払金額と使用金額が一致しています。過不足はありません。`;
+    }
+    alert(msg);
+  }
 }
 
 function confirmDeleteEntry(id) {
