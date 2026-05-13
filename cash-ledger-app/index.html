@@ -154,6 +154,11 @@
     }
     th.r, td.r { text-align: right; }
     td { padding: 7px 10px; border-bottom: 1px solid var(--gray-100); vertical-align: top; }
+    .table-grid th, .table-grid td { border-right: 1px solid #eef1f5; }
+    .table-grid th:last-child, .table-grid td:last-child { border-right: none; }
+    .table-grid { border-left: 1px solid #eef1f5; border-right: 1px solid #eef1f5; }
+    .pl-acct-link { text-decoration: none; cursor: pointer; display: inline-block; }
+    .pl-acct-link:hover .badge-acct { background: var(--primary); color: white; }
     tr:hover td { background: var(--gray-50); }
     tr.row-advance  td { background: #fffbeb; }
     tr.row-settle   td { background: #f0fdf4; }
@@ -292,15 +297,19 @@
     .acct-sb-name { font-size: 14px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; }
     .acct-sb-desc { font-size: 12px; color: var(--gray-700); line-height: 1.5; }
     body.sidebar-open #app-main { padding-right: 286px; }
+    body.sidebar-open #app-nav { padding-right: 286px; }
     @media (max-width: 1380px) {
       #acct-sidebar { display: none !important; }
       body.sidebar-open #app-main { padding-right: 24px; }
+      body.sidebar-open #app-nav { padding-right: 20px; }
     }
     .month-bar {
       display: flex; gap: 2px; flex-wrap: nowrap;
       border: 1px solid var(--gray-300); border-radius: 7px;
       background: white; padding: 3px; margin-bottom: 10px;
       overflow-x: auto;
+      user-select: none; -webkit-user-select: none;
+      touch-action: none;
     }
     .month-chip {
       padding: 7px 11px; border: none; background: transparent; cursor: pointer;
@@ -806,40 +815,57 @@ function isMonthInRange(m, from, to, fm) {
   const fi=(from-fm+12)%12, ti=(to-fm+12)%12, mi=(m-fm+12)%12;
   return mi>=Math.min(fi,ti) && mi<=Math.max(fi,ti);
 }
-function selectMonth(scope, m, shiftKey) {
-  var fr = scope==='ledger' ? ledgerMonthFrom : plMonthFrom;
-  var to = scope==='ledger' ? ledgerMonthTo   : plMonthTo;
-  var newFr, newTo;
+function selectMonth(scope, m) {
+  // 全月リセット（または同じ単月をもう一度クリック）
   if (m === 0) {
-    newFr=0; newTo=0;
-  } else if (shiftKey && fr!==0) {
-    newFr=fr; newTo=m;
-  } else if (fr===0 && to===0) {
-    // 全月 → 単月
-    newFr=m; newTo=m;
-  } else if (fr===to) {
-    if (fr===m) { newFr=0; newTo=0; }  // 同じ月をクリック → 全月に戻す
-    else { newFr=fr; newTo=m; }        // 単月 → 範囲
-  } else {
-    // 範囲選択中 → 新しい単月選択
-    newFr=m; newTo=m;
+    if (scope==='ledger') { ledgerMonthFrom=0; ledgerMonthTo=0; }
+    else { plMonthFrom=0; plMonthTo=0; }
+    renderPage();
+    return;
   }
-  if (scope==='ledger') { ledgerMonthFrom=newFr; ledgerMonthTo=newTo; }
-  else { plMonthFrom=newFr; plMonthTo=newTo; }
+  if (scope==='ledger') { ledgerMonthFrom=m; ledgerMonthTo=m; }
+  else { plMonthFrom=m; plMonthTo=m; }
   renderPage();
 }
+
+// ドラッグによる範囲選択
+var _monthDrag = { active:false, scope:null, anchor:0 };
+function startMonthDrag(scope, m, ev) {
+  if (m===0) { selectMonth(scope, 0); return; }
+  if (ev && ev.preventDefault) ev.preventDefault();
+  _monthDrag.active = true;
+  _monthDrag.scope = scope;
+  _monthDrag.anchor = m;
+  if (scope==='ledger') { ledgerMonthFrom=m; ledgerMonthTo=m; }
+  else { plMonthFrom=m; plMonthTo=m; }
+  renderPage();
+}
+function dragMonthTo(scope, m) {
+  if (!_monthDrag.active || _monthDrag.scope!==scope || m===0) return;
+  if (scope==='ledger') { ledgerMonthFrom=_monthDrag.anchor; ledgerMonthTo=m; }
+  else { plMonthFrom=_monthDrag.anchor; plMonthTo=m; }
+  renderPage();
+}
+function endMonthDrag() {
+  _monthDrag.active = false;
+  _monthDrag.scope = null;
+}
+document.addEventListener('pointerup', endMonthDrag);
+document.addEventListener('pointercancel', endMonthDrag);
 function buildMonthBar(scope, fm) {
   const fiscalMonths = Array.from({length:12},function(_,i){ return ((fm-1+i)%12)+1; });
   const from = scope==='ledger' ? ledgerMonthFrom : plMonthFrom;
   const to   = scope==='ledger' ? ledgerMonthTo   : plMonthTo;
   return '<div class="month-bar">'
-    +'<button class="month-chip '+(from===0?'active':'')+'" onclick="selectMonth(\''+scope+'\',0,event.shiftKey)">全月</button>'
+    +'<button class="month-chip '+(from===0?'active':'')+'" onpointerdown="selectMonth(\''+scope+'\',0)">全月</button>'
     + fiscalMonths.map(function(m){
         var act = from!==0 && isMonthInRange(m, from, to, fm);
-        return '<button class="month-chip '+(act?'active':'')+'" onclick="selectMonth(\''+scope+'\','+m+',event.shiftKey)">'+m+'月</button>';
+        return '<button class="month-chip '+(act?'active':'')+'"'
+          +' onpointerdown="startMonthDrag(\''+scope+'\','+m+',event)"'
+          +' onpointerenter="dragMonthTo(\''+scope+'\','+m+')">'+m+'月</button>';
       }).join('')
     +'</div>'
-    +'<div class="month-hint no-print">💡 クリックで月選択、もう一度クリックで範囲選択</div>';
+    +'<div class="month-hint no-print">💡 クリックで単月、ドラッグで範囲選択</div>';
 }
 function getMonthRangeLabel(from, to, fm) {
   if (from===0 && to===0) return '通期';
@@ -1120,7 +1146,7 @@ function pageLedger() {
     </div>
     ${filtered.length===0
       ?'<div class="empty-state"><div class="icon">📒</div><p>この期間の取引はありません</p></div>'
-      :`<div class="table-wrap"><table>
+      :`<div class="table-wrap"><table class="table-grid">
         <thead><tr>
           <th>日付</th><th>店名・支払先</th><th>購入品・内容</th><th>税区分</th>
           <th class="r">入金（円）</th><th class="r">出金（円）</th><th class="r">残高（円）</th>
@@ -1560,7 +1586,7 @@ function pagePLReport() {
               <tr><td colspan="4" style="background:var(--success-light);font-weight:700;color:var(--success);">▼ 収益</td></tr>
               ${d.revenue.map(r=>`<tr>
                 <td><span class="badge badge-settled">収益</span></td>
-                <td><span class="badge-acct">${esc(r.name)}</span></td>
+                <td><a href="javascript:void(0)" onclick="showPLDetail('${esc(r.name)}')" class="pl-acct-link"><span class="badge-acct">${esc(r.name)}</span></a></td>
                 <td class="r mono">${r.count}件</td>
                 <td class="r mono num-pos num-bold">${fc(r.amount)}</td>
               </tr>`).join('')}
@@ -1573,7 +1599,7 @@ function pagePLReport() {
               <tr><td colspan="4" style="background:var(--danger-light);font-weight:700;color:var(--danger);">▼ 費用</td></tr>
               ${d.expense.map(r=>`<tr>
                 <td><span class="badge badge-pending">費用</span></td>
-                <td><span class="badge-acct">${esc(r.name)}</span></td>
+                <td><a href="javascript:void(0)" onclick="showPLDetail('${esc(r.name)}')" class="pl-acct-link"><span class="badge-acct">${esc(r.name)}</span></a></td>
                 <td class="r mono">${r.count}件</td>
                 <td class="r mono num-neg">${fc(r.amount)}</td>
               </tr>`).join('')}
@@ -1608,6 +1634,83 @@ function exportPLCSV() {
   rows.push(['', '費用合計', '', d.totalExp]);
   rows.push(['', d.netProfit>=0?'当期純利益':'当期純損失', '', Math.abs(d.netProfit)]);
   dlCSV(rows, `損益計算書_${plYear}_${today()}.csv`);
+}
+
+function showPLDetail(account) {
+  const s = getSettings();
+  const fm = s.fiscalMonth||1;
+  const fyStart = `${plYear}-${String(fm).padStart(2,'0')}-01`;
+  const fyEndY  = fm===1 ? plYear : plYear+1;
+  const fyEndM  = fm===1 ? 12 : fm-1;
+  const fyEnd   = `${fyEndY}-${String(fyEndM).padStart(2,'0')}-${String(new Date(fyEndY,fyEndM,0).getDate()).padStart(2,'0')}`;
+  function inRange(d){
+    if (!d) return false;
+    if (d<fyStart||d>fyEnd) return false;
+    if (plMonthFrom===0 && plMonthTo===0) return true;
+    var m=parseInt(d.split('-')[1]);
+    return isMonthInRange(m, plMonthFrom, plMonthTo, fm);
+  }
+  const isRevenue = REVENUE_ACCOUNTS.includes(account);
+  const rows = [];
+  getEntries().forEach(function(e){
+    if (e.account !== account) return;
+    if (!inRange(e.date)) return;
+    var net = (e.receiptAmount||0) - (e.paymentAmount||0);
+    var amount = isRevenue ? net : -net;
+    rows.push({
+      date: e.date,
+      store: e.storeName || '—',
+      desc: e.itemName || e.description || '—',
+      amount: amount,
+      src: '現金出納帳'
+    });
+  });
+  getAdvances().forEach(function(a){
+    (a.settlementItems||[]).forEach(function(it){
+      if (it.account !== account) return;
+      var d = it.date || a.settlementDate;
+      if (!inRange(d)) return;
+      rows.push({
+        date: d,
+        store: it.storeName || a.recipient || '—',
+        desc: it.description || '—',
+        amount: Number(it.amount||0),
+        src: '仮払精算 '+(a.advanceId||'')
+      });
+    });
+  });
+  rows.sort(function(a,b){return a.date.localeCompare(b.date);});
+  const total = rows.reduce(function(s,r){return s+r.amount;},0);
+  const fyLabel = fm===1 ? `${plYear}年` : `${plYear}年度`;
+  const rangeLabel = getMonthRangeLabel(plMonthFrom, plMonthTo, fm);
+  showModal(`
+    <div class="modal-title">📋 ${esc(account)} の明細</div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:10px;">${fyLabel} ${rangeLabel}　${rows.length}件　合計 <strong class="${isRevenue?'num-pos':'num-neg'}">${fc(total)}</strong></div>
+    ${rows.length===0
+      ? '<div class="empty-state"><p>該当する取引がありません</p></div>'
+      : `<div class="table-wrap" style="max-height:60vh;overflow:auto;"><table class="table-grid">
+          <thead><tr>
+            <th>日付</th><th>店名・支払先</th><th>内容</th><th>区分</th><th class="r">金額（円）</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(function(r){return `<tr>
+              <td style="white-space:nowrap;">${fd(r.date)}</td>
+              <td>${esc(r.store)}</td>
+              <td>${esc(r.desc)}</td>
+              <td><span class="badge" style="background:var(--gray-100);color:var(--gray-700);">${esc(r.src)}</span></td>
+              <td class="r mono ${isRevenue?'num-pos':'num-neg'} num-bold">${fc(r.amount)}</td>
+            </tr>`;}).join('')}
+          </tbody>
+          <tfoot><tr>
+            <td colspan="4" style="text-align:right;">合計</td>
+            <td class="r mono num-bold ${isRevenue?'num-pos':'num-neg'}">${fc(total)}</td>
+          </tr></tfoot>
+        </table></div>`
+    }
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">閉じる</button>
+    </div>
+  `);
 }
 
 function setEntryKind(kind) {
