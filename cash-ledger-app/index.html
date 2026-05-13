@@ -877,7 +877,7 @@ function calcSummary() {
           <td>${m}</td>
           <td style="text-align:right;color:var(--success)">¥${fmt(d.income)}</td>
           <td style="text-align:right;color:var(--danger)">¥${fmt(d.expense)}</td>
-          <td style="text-align:right;font-weight:600;color:${diff>=0?'var(--success)':'var(--danger)'}">${diff>=0?'+':''}¥${fmt(diff)}</td>
+          <td style="text-align:right;font-weight:600;color:${diff>=0?'var(--success)':'var(--danger)'">${diff>=0?'+':''}¥${fmt(diff)}</td>
         </tr>`;
       }).join('');
 
