@@ -287,7 +287,8 @@
   window.addEventListener('error', function(e){ window.__app_boot_error = e && (e.message||e.error||e); });
   setTimeout(function(){
     var hc = document.getElementById('header-company');
-    if (hc && hc.textContent === '読み込み中...') {
+    var setupVisible = document.getElementById('setup-screen') && document.getElementById('setup-screen').style.display !== 'none';
+    if (hc && hc.textContent === '読み込み中...' && !setupVisible) {
       document.body.innerHTML =
         '<div style="padding:40px;max-width:640px;margin:40px auto;font-family:sans-serif;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">' +
         '<h2 style="color:#b91c1c;margin-bottom:14px;">⚠️ アプリの起動に失敗しました</h2>' +
@@ -1638,7 +1639,12 @@ function initApp() {
   try {
     checkAndRestoreAutoBackup();
     const s=getSettings();
-    if (!s){ document.getElementById('setup-screen').style.display='flex'; return; }
+    if (!s){
+      var hcEl=document.getElementById('header-company');
+      if (hcEl) hcEl.textContent='初期設定';
+      document.getElementById('setup-screen').style.display='flex';
+      return;
+    }
     document.getElementById('setup-screen').style.display='none';
     updateHeader(); renderPage();
     doAutoSave();
