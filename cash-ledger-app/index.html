@@ -616,17 +616,35 @@ function genAdvanceId(name) {
   return clean+'-'+String(max+1).padStart(3,'0');
 }
 
-function calcBalances(entries) {
-  const s = getSettings();
-  let bal = s ? (s.openingBalance||0) : 0;
+function calcBalancesFrom(entries, openBal) {
+  let bal = openBal || 0;
   return [...entries]
     .sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):a.id.localeCompare(b.id))
     .map(e=>{ bal+=(e.receiptAmount||0)-(e.paymentAmount||0); return {...e,balance:bal}; });
 }
+function calcBalances(entries) {
+  const s = getSettings();
+  return calcBalancesFrom(entries, s ? (s.openingBalance||0) : 0);
+}
+
+function getLocationOpenBalance(loc) {
+  const s = getSettings();
+  if (!s) return 0;
+  const locs = s.locations||[];
+  if (locs.length===0) return Number(s.openingBalance||0);
+  if (loc && locs.indexOf(loc)!==-1) return Number((s.locationOpeningBalances||{})[loc]||0);
+  return locs.reduce(function(sum,l){return sum+Number((s.locationOpeningBalances||{})[l]||0);},0);
+}
 
 function getCurrentBalance() {
   const s = getSettings();
-  let bal = s ? (s.openingBalance||0) : 0;
+  const locs = s ? (s.locations||[]) : [];
+  if (currentLocation && locs.indexOf(currentLocation)!==-1) {
+    let bal = getLocationOpenBalance(currentLocation);
+    getEntries().filter(e=>(e.location||'')===currentLocation).forEach(e=>{ bal+=(e.receiptAmount||0)-(e.paymentAmount||0); });
+    return bal;
+  }
+  let bal = locs.length>0 ? getLocationOpenBalance('') : (s ? (s.openingBalance||0) : 0);
   getEntries().forEach(e=>{ bal+=(e.receiptAmount||0)-(e.paymentAmount||0); });
   return bal;
 }
@@ -1004,6 +1022,8 @@ function saveSettings() {
 }
 
 let currentPage='dashboard';
+let currentLocation='';
+let _monthFirstClick={ledger:0, pl:0};
 let ledgerYear=new Date().getFullYear();
 let ledgerMonthFrom=0;
 let ledgerMonthTo=0;
@@ -1076,20 +1096,59 @@ function endMonthDrag() {
 }
 document.addEventListener('pointerup', endMonthDrag);
 document.addEventListener('pointercancel', endMonthDrag);
+function monthBarClick(scope, m, ev) {
+  if (m===0) {
+    if (scope==='ledger') { ledgerMonthFrom=0; ledgerMonthTo=0; }
+    else { plMonthFrom=0; plMonthTo=0; }
+    _monthFirstClick[scope]=0;
+    renderPage();
+    return;
+  }
+  var first=_monthFirstClick[scope]||0;
+  if (ev && ev.shiftKey && first!==0) {
+    var s=getSettings(); var fm=s.fiscalMonth||1;
+    var fiscalMonths=Array.from({length:12},function(_,i){return ((fm-1+i)%12)+1;});
+    var ai=fiscalMonths.indexOf(first), bi=fiscalMonths.indexOf(m);
+    if (ai!==-1 && bi!==-1) {
+      var lo=Math.min(ai,bi), hi=Math.max(ai,bi);
+      if (scope==='ledger') { ledgerMonthFrom=fiscalMonths[lo]; ledgerMonthTo=fiscalMonths[hi]; }
+      else { plMonthFrom=fiscalMonths[lo]; plMonthTo=fiscalMonths[hi]; }
+    }
+  } else {
+    if (scope==='ledger') { ledgerMonthFrom=m; ledgerMonthTo=m; }
+    else { plMonthFrom=m; plMonthTo=m; }
+    _monthFirstClick[scope]=m;
+  }
+  renderPage();
+}
 function buildMonthBar(scope, fm) {
   const fiscalMonths = Array.from({length:12},function(_,i){ return ((fm-1+i)%12)+1; });
   const from = scope==='ledger' ? ledgerMonthFrom : plMonthFrom;
   const to   = scope==='ledger' ? ledgerMonthTo   : plMonthTo;
   return '<div class="month-bar">'
-    +'<button class="month-chip '+(from===0?'active':'')+'" onpointerdown="selectMonth(\''+scope+'\',0)">全月</button>'
+    +'<button class="month-chip '+(from===0?'active':'')+'" onclick="monthBarClick(\''+scope+'\',0,event)">全月</button>'
     + fiscalMonths.map(function(m){
         var act = from!==0 && isMonthInRange(m, from, to, fm);
-        return '<button class="month-chip '+(act?'active':'')+'"'
-          +' onpointerdown="startMonthDrag(\''+scope+'\','+m+',event)"'
-          +' onpointerenter="dragMonthTo(\''+scope+'\','+m+')">'+m+'月</button>';
+        return '<button class="month-chip '+(act?'active':'')+'" onclick="monthBarClick(\''+scope+'\','+m+',event)">'+m+'月</button>';
       }).join('')
     +'</div>'
-    +'<div class="month-hint no-print">💡 クリックで単月、ドラッグで範囲選択</div>';
+    +'<div class="month-hint no-print">💡 クリックで単月、Shift+クリックで範囲選択</div>';
+}
+function buildLocationBar() {
+  var s=getSettings(); var locs=s?(s.locations||[]):[];
+  if (locs.length===0) return '';
+  var html='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">'
+    +'<span style="font-size:12px;font-weight:700;color:var(--primary);margin-right:4px;">🏢 拠点:</span>'
+    +'<button class="btn btn-xs '+(currentLocation===''?'btn-primary':'btn-secondary')+'" onclick="currentLocation=\'\';renderPage()">全拠点</button>';
+  locs.forEach(function(loc){
+    var act=currentLocation===loc;
+    html+='<button class="btn btn-xs '+(act?'btn-primary':'btn-secondary')+'" onclick="currentLocation=this.dataset.loc;renderPage()" data-loc="'+loc.replace(/"/g,'&quot;')+'">'+loc+'</button>';
+  });
+  if (locs.length<2) {
+    html+='<span style="font-size:11px;color:var(--gray-500);margin-left:8px;">💡 設定で拠点を追加すると複数拠点を切替できます</span>';
+  }
+  html+='</div>';
+  return html;
 }
 function getMonthRangeLabel(from, to, fm) {
   if (from===0 && to===0) return '通期';
@@ -1263,7 +1322,13 @@ function pageLedger() {
   const fyEnd   = `${fyEndY}-${String(fyEndM).padStart(2,'0')}-${String(new Date(fyEndY,fyEndM,0).getDate()).padStart(2,'0')}`;
   const fyLabel = fyRangeLabel(ledgerYear, fm);
 
-  const allWithBal=calcBalances(allEntries);
+  const locs=s.locations||[];
+  const locEntries = (currentLocation && locs.indexOf(currentLocation)!==-1)
+    ? allEntries.filter(function(e){return (e.location||'')===currentLocation;})
+    : allEntries;
+  const locOpenBal = locs.length>0 ? getLocationOpenBalance(currentLocation) : (s.openingBalance||0);
+
+  const allWithBal=calcBalancesFrom(locEntries, locOpenBal);
   const filtered=allWithBal.filter(function(e){
     if (e.date<fyStart||e.date>fyEnd) return false;
     if (ledgerMonthFrom!==0 || ledgerMonthTo!==0){
@@ -1273,12 +1338,10 @@ function pageLedger() {
     return true;
   });
 
-  let openBal=s.openingBalance||0;
+  let openBal=locOpenBal;
   if (filtered.length>0){
     const fi=allWithBal.findIndex(function(e){return e.id===filtered[0].id;});
     if (fi>0) openBal=allWithBal[fi-1].balance;
-  } else {
-    openBal=getCurrentBalance();
   }
   const totalRec=filtered.reduce((acc,e)=>acc+(e.receiptAmount||0),0);
   const totalPay=filtered.reduce((acc,e)=>acc+(e.paymentAmount||0),0);
@@ -1305,6 +1368,10 @@ function pageLedger() {
   const recLabel = currentEntryKind==='bank_withdraw' ? '入金額（引出し金額）' : '入金額（円）';
   const payLabel = currentEntryKind==='bank_deposit'  ? '出金額（預入金額）'   : '出金額（円）';
   const recentStores = getRecentStores();
+  const locSelectHtml = (locs.length>=1) ? `<div class="form-group"><label>拠点</label>
+    <select id="ae-loc">
+      ${locs.map(function(l){ return '<option value="'+l.replace(/"/g,'&quot;')+'" '+((currentLocation===l||(currentLocation===''&&l===locs[0]))?'selected':'')+'>'+l+'</option>'; }).join('')}
+    </select></div>` : '';
 
   return `
   ${isClosed ? `<div class="alert" style="background:#fff7ed;border:2px solid #fb923c;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
@@ -1327,6 +1394,7 @@ function pageLedger() {
     ${hintHtml}
     <div class="form-grid" style="margin-bottom:10px;">
       <div class="form-group req"><label>日付</label>${dateInputsMD('ae-date', today(), 'ae-store')}</div>
+      ${locSelectHtml}
       <div class="form-group req"><label>${storeLabel}</label>
         <input type="text" id="ae-store" placeholder="${storePlaceholder}" ${currentEntryKind==='normal'?'list="ae-store-list" autocomplete="off"':''} lang="ja" style="ime-mode:active;" onkeydown="formEnterNext(event,this)" data-next="ae-item" onblur="if(currentEntryKind==='normal')applyStoreMemory()" />
         ${currentEntryKind==='normal'&&recentStores.length>0?`<datalist id="ae-store-list">${recentStores.map(function(n){return '<option value="'+esc(n)+'">';}).join('')}</datalist>`:''}
@@ -1373,6 +1441,7 @@ function pageLedger() {
         <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ 印刷/PDF</button>
       </div>
     </div>
+    ${buildLocationBar()}
     ${buildMonthBar('ledger', fm)}
     <div class="print-only" style="text-align:center;margin-bottom:14px;">
       <div style="font-size:18px;font-weight:700;">現 金 出 納 帳</div>
@@ -1445,6 +1514,11 @@ function pageAdvances() {
     .sort((a,b)=>b.date.localeCompare(a.date));
   const s=getSettings();
   const empNames=[...new Set(all.map(a=>a.employeeName))];
+  const locs=s.locations||[];
+  const advLocHtml = (locs.length>=1) ? `<div class="form-group"><label>拠点</label>
+    <select id="af-loc">
+      ${locs.map(function(l){ return '<option value="'+l.replace(/"/g,'&quot;')+'" '+((currentLocation===l||(currentLocation===''&&l===locs[0]))?'selected':'')+'>'+l+'</option>'; }).join('')}
+    </select></div>` : '';
 
   return `
   <div class="card no-print">
@@ -1454,6 +1528,7 @@ function pageAdvances() {
     </div>
     <div class="form-grid">
       <div class="form-group req"><label>仮払日</label>${dateInputsMD('af-date', today(), 'af-name')}</div>
+      ${advLocHtml}
       <div class="form-group req">
         <label>氏名</label>
         <input type="text" id="af-name" placeholder="山田 太郎" list="emp-list" autocomplete="off" onkeydown="formEnterNext(event,this)" data-next="af-purpose" />
@@ -1533,7 +1608,7 @@ function pageReimbursements() {
   const empNames=[...new Set(all.map(function(r){return r.employeeName;}))];
   const pendingTotal=all.filter(function(r){return r.status==='pending';}).reduce(function(s,r){return s+(r.totalAmount||0);},0);
   const locs = s.locations||[];
-  const reimLocHtml = (locs.length>=2) ? `<div class="form-group"><label>拠点</label>
+  const reimLocHtml = (locs.length>=1) ? `<div class="form-group"><label>拠点</label>
     <select id="rf-loc">
       ${locs.map(function(l){ return '<option value="'+l.replace(/"/g,'&quot;')+'" '+(currentLocation===l?'selected':'')+'>'+l+'</option>'; }).join('')}
     </select></div>` : '';
@@ -2748,23 +2823,26 @@ function submitEntry() {
   const memo  = document.getElementById('ae-memo').value.trim();
   const acctEl = document.getElementById('ae-account');
   const account = acctEl ? acctEl.value : '';
+  const locEl = document.getElementById('ae-loc');
+  const location = locEl ? locEl.value : '';
 
   if (!date||!store||!item){ alert('日付・店名・購入品は必須です。'); return; }
 
   if (currentEntryKind==='bank_withdraw') {
     if (rec<=0){ alert('通帳から引き出した金額（入金額）を入力してください。'); return; }
     const bwItem = `${store}より引出し（現金補充）`;
-    addEntry({ date, storeName:store, itemName:bwItem, description:`${store} ${bwItem}`, receiptAmount:rec, paymentAmount:0, taxRate:null, account:'', memo, type:'normal', entryKind:'bank_withdraw' });
+    addEntry({ date, storeName:store, itemName:bwItem, description:`${store} ${bwItem}`, receiptAmount:rec, paymentAmount:0, taxRate:null, account:'', memo, type:'normal', entryKind:'bank_withdraw', location });
   } else if (currentEntryKind==='bank_deposit') {
     if (pay<=0){ alert('通帳へ預け入れた金額（出金額）を入力してください。'); return; }
     const bdItem = `${store}へ預入`;
-    addEntry({ date, storeName:store, itemName:bdItem, description:`${store} ${bdItem}`, receiptAmount:0, paymentAmount:pay, taxRate:null, account:'', memo, type:'normal', entryKind:'bank_deposit' });
+    addEntry({ date, storeName:store, itemName:bdItem, description:`${store} ${bdItem}`, receiptAmount:0, paymentAmount:pay, taxRate:null, account:'', memo, type:'normal', entryKind:'bank_deposit', location });
   } else {
     if (rec===0&&pay===0){ alert('入金か出金のいずれかを入力してください。'); return; }
     if (rec>0&&pay>0){ alert('入金と出金を同時に入力することはできません。'); return; }
     const taxRate = taxV===''?null:Number(taxV);
     if (account) addRecentAccount(account);
-    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:rec, paymentAmount:pay, taxRate, account, memo, type:'normal', entryKind:'normal' });
+    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:rec, paymentAmount:pay, taxRate, account, memo, type:'normal', entryKind:'normal', location });
+    if (typeof learnStore==='function') learnStore(store, account, taxRate, item);
   }
 
   document.getElementById('ae-store').value='';
