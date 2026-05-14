@@ -270,12 +270,30 @@
     .setup-card .logo { font-size: 44px; text-align: center; margin-bottom: 10px; }
     .setup-card h2 { font-size: 20px; color: var(--primary); text-align: center; margin-bottom: 6px; }
     .setup-card .sub { font-size: 12px; color: var(--gray-500); text-align: center; margin-bottom: 24px; }
-    .howto-section { margin-bottom: 20px; }
-    .howto-section h3 { font-size: 14px; font-weight: 700; color: var(--primary); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid var(--primary-light); }
-    .howto-section p, .howto-section li { font-size: 13px; color: var(--gray-700); margin-bottom: 5px; line-height: 1.6; }
-    .howto-section ul, .howto-section ol { padding-left: 18px; }
-    .howto-step { background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 7px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; }
-    .howto-step strong { color: var(--primary); }
+    .howto-section { margin-bottom:18px; }
+    .howto-section h3 { font-size:14px;font-weight:700;color:var(--primary);margin-bottom:10px;border-bottom:1px solid var(--primary-light);padding-bottom:6px; }
+    .howto-step { background:var(--gray-50);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;line-height:1.7; }
+    .howto-visual { border:2px solid var(--gray-200);border-radius:10px;padding:14px;margin:10px 0;background:white;font-size:12px; }
+    .howto-callout { background:#fef3c7;border-left:3px solid #d97706;padding:6px 10px;border-radius:0 6px 6px 0;margin:6px 0;font-size:12px;line-height:1.6; }
+    .howto-callout-ok { background:#dcfce7;border-left:3px solid #16a34a;padding:6px 10px;border-radius:0 6px 6px 0;margin:6px 0;font-size:12px;line-height:1.6; }
+    .howto-badge { display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--primary);color:white;font-size:11px;font-weight:700;margin-right:4px;flex-shrink:0; }
+    .howto-mock-bar { display:flex;gap:4px;background:#1e40af;padding:8px 12px;border-radius:8px 8px 0 0; }
+    .howto-mock-tab { padding:5px 10px;border-radius:4px;font-size:11px;color:rgba(255,255,255,0.7);font-weight:600; }
+    .howto-mock-tab.active { background:white;color:var(--primary); }
+    .howto-mock-form { background:#eff6ff;border:2px solid #bfdbfe;border-radius:8px;padding:12px;margin:8px 0; }
+    .howto-mock-field { margin-bottom:8px; }
+    .howto-mock-label { font-size:10px;font-weight:700;color:var(--gray-700);margin-bottom:2px; }
+    .howto-mock-input { border:1px solid #93c5fd;border-radius:5px;padding:5px 8px;font-size:11px;background:white;width:100%;display:block; }
+    .howto-mock-input.highlight { border:2px solid var(--primary);box-shadow:0 0 0 3px rgba(30,64,175,0.15); }
+    .howto-mock-btn { display:inline-block;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:default; }
+    .howto-mock-btn.primary { background:var(--primary);color:white; }
+    .howto-mock-btn.secondary { background:var(--gray-100);color:var(--gray-700);border:1px solid var(--gray-300); }
+    .howto-mock-btn.active-normal { background:var(--primary);color:white; }
+    .howto-mock-table { width:100%;border-collapse:collapse;font-size:11px;margin-top:6px; }
+    .howto-mock-table th { background:var(--gray-100);padding:4px 6px;border:1px solid var(--gray-200);font-weight:700; }
+    .howto-mock-table td { padding:4px 6px;border:1px solid var(--gray-200); }
+    .howto-ann { position:relative;display:inline-block; }
+    .howto-tag { position:absolute;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;white-space:nowrap;z-index:1; }
     .no-print { }
     .print-only { display: none; }
     #acct-sidebar {
@@ -937,6 +955,7 @@ let advFilter='all';
 let reimFilter='all';
 let currentEntryKind='normal';
 let summaryTab='pl';
+let reportMonthFrom=0, reportMonthTo=0;
 let reimburseRows=[];
 
 const REVENUE_ACCOUNTS = ['売上高','雑収入'];
@@ -1354,16 +1373,19 @@ function pageAdvances() {
 
   return `
   <div class="card no-print">
-    <div class="card-title">＋ 仮払い登録</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="card-title" style="margin-bottom:0;border:none;padding:0;">＋ 仮払い登録</div>
+      <button class="btn btn-outline btn-sm" onclick="showHowTo('advances')" style="font-size:12px;">📖 操作方法</button>
+    </div>
     <div class="form-grid">
       <div class="form-group req"><label>仮払日</label>${dateInputsMD('af-date', today(), 'af-name')}</div>
       <div class="form-group req">
         <label>氏名</label>
-        <input type="text" id="af-name" placeholder="山田 太郎" list="emp-list" autocomplete="off" />
+        <input type="text" id="af-name" placeholder="山田 太郎" list="emp-list" autocomplete="off" onkeydown="formEnterNext(event,this)" data-next="af-purpose" />
         <datalist id="emp-list">${empNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
       </div>
-      <div class="form-group req"><label>目的・出張先</label><input type="text" id="af-purpose" placeholder="東京出張" /></div>
-      <div class="form-group req"><label>仮払金額（円）</label><input type="text" inputmode="numeric" id="af-amount" placeholder="30,000" oninput="fmtAmtInput(this)" /></div>
+      <div class="form-group req"><label>目的・出張先</label><input type="text" id="af-purpose" placeholder="東京出張" onkeydown="formEnterNext(event,this)" data-next="af-amount" /></div>
+      <div class="form-group req"><label>仮払金額（円）</label><input type="text" inputmode="numeric" id="af-amount" placeholder="30,000" oninput="fmtAmtInput(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();submitAdvance();}" /></div>
     </div>
     <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <button class="btn btn-primary" onclick="submitAdvance()">仮払いを登録する</button>
@@ -1438,7 +1460,10 @@ function pageReimbursements() {
 
   return `
   <div class="card no-print">
-    <div class="card-title">＋ 立替経費を登録</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="card-title" style="margin-bottom:0;border:none;padding:0;">＋ 立替経費を登録</div>
+      <button class="btn btn-outline btn-sm" onclick="showHowTo('reimbursements')" style="font-size:12px;">📖 操作方法</button>
+    </div>
     <div class="alert alert-info" style="margin-bottom:14px;font-size:12px;">
       💡 従業員が個人で立替えた経費（個人カードや現金で支払ったもの）を登録します。レシートの日付・店名・科目を入力し、後日まとめて現金で返金します。
     </div>
@@ -1446,10 +1471,10 @@ function pageReimbursements() {
       <div class="form-group req"><label>登録日</label>${dateInputsMD('rf-date', today(), 'rf-name')}</div>
       <div class="form-group req">
         <label>氏名</label>
-        <input type="text" id="rf-name" placeholder="山田 太郎" list="rf-emp-list" autocomplete="off" />
+        <input type="text" id="rf-name" placeholder="山田 太郎" list="rf-emp-list" autocomplete="off" onkeydown="formEnterNext(event,this)" data-next="rf-purpose" />
         <datalist id="rf-emp-list">${empNames.map(function(n){return '<option value="'+esc(n)+'">';}).join('')}</datalist>
       </div>
-      <div class="form-group"><label>目的・備考</label><input type="text" id="rf-purpose" placeholder="〇月分立替経費" /></div>
+      <div class="form-group"><label>目的・備考</label><input type="text" id="rf-purpose" placeholder="〇月分立替経費" onkeydown="if(event.key==='Enter'){event.preventDefault();submitReimbursement();}" /></div>
     </div>
     <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">立替明細（レシートごとに1行）</div>
     <div id="reim-rows-wrap"></div>
@@ -1748,14 +1773,35 @@ function pageReports() {
   const pending=getAdvances().filter(a=>a.status==='pending');
   return `
   <div class="card">
-    <div class="card-title">📄 帳票出力</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="card-title" style="margin-bottom:0;border:none;padding:0;">📄 帳票出力</div>
+      <button class="btn btn-outline btn-sm" onclick="showHowTo('reports')" style="font-size:12px;">📖 操作方法</button>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;">
       <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
         <div style="font-size:15px;font-weight:700;margin-bottom:6px;">📒 現金出納帳</div>
-        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">月別の入出金明細と残高一覧</div>
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:10px;">月別の入出金明細と残高一覧</div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">出力月範囲</div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-xs ${reportMonthFrom===0?'btn-primary':'btn-secondary'}" onclick="reportMonthFrom=0;reportMonthTo=0;renderPage()">全月</button>
+            ${(function(){
+              const s=getSettings(); const fm=s.fiscalMonth||1;
+              const fiscalMonths=Array.from({length:12},function(_,i){return ((fm-1+i)%12)+1;});
+              const prev=new Date(); prev.setMonth(prev.getMonth()-1); const prevM=prev.getMonth()+1;
+              return fiscalMonths.map(function(m){
+                const act=reportMonthFrom!==0&&isMonthInRange(m,reportMonthFrom,reportMonthTo,fm);
+                return '<button class="btn btn-xs '+(act?'btn-primary':'btn-secondary')+'" onclick="reportMonthFrom='+m+';reportMonthTo='+m+';renderPage()">'+m+'月</button>';
+              }).join('');
+            })()}
+          </div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:4px;">
+            現在: <strong>${reportMonthFrom===0?'全月（通期）':reportMonthFrom+'月'+(reportMonthFrom!==reportMonthTo?'〜'+reportMonthTo+'月':'')}</strong>
+          </div>
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-outline btn-sm" onclick="showPage('ledger');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
-          <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSV()">📥 CSV出力</button>
+          <button class="btn btn-outline btn-sm" onclick="exportLedgerReportPrint()">🖨️ 印刷/PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSVReport()">📥 CSV出力</button>
         </div>
       </div>
       <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
@@ -2391,9 +2437,10 @@ function dateInputsMD(prefix, isoDate, nextFieldId) {
   var m=parts[1]?String(Number(parts[1])):'';
   var d=parts[2]?String(Number(parts[2])):'';
   return '<div class="date-group">'
-    + '<input type="number" id="'+prefix+'-m" value="'+m+'" placeholder="月" min="1" max="12" style="width:48px;" onkeydown="dateEnter(event,\''+prefix+'-d\')" onfocus="this.select()" />'
-    + '<span class="date-sep">/</span>'
-    + '<input type="number" id="'+prefix+'-d" value="'+d+'" placeholder="日" min="1" max="31" style="width:48px;" onkeydown="dateEnter(event,\''+nextFieldId+'\')" onfocus="this.select()" />'
+    + '<input type="number" id="'+prefix+'-m" value="'+m+'" placeholder="月" min="1" max="12" style="width:44px;" onkeydown="dateEnter(event,\''+prefix+'-d\')" onfocus="this.select()" />'
+    + '<span class="date-sep" style="font-weight:600;padding:0 2px;">月</span>'
+    + '<input type="number" id="'+prefix+'-d" value="'+d+'" placeholder="日" min="1" max="31" style="width:44px;" onkeydown="dateEnter(event,\''+nextFieldId+'\')" onfocus="this.select()" />'
+    + '<span class="date-sep" style="font-weight:600;padding:0 2px;">日</span>'
     + '</div>';
 }
 
@@ -2969,6 +3016,40 @@ function exportTaxAccountantBundle() {
   dlCSV(reimRows, '立替経費台帳_'+jp+'.csv');
 }
 
+function exportLedgerReportPrint() {
+  ledgerMonthFrom=reportMonthFrom; ledgerMonthTo=reportMonthTo;
+  showPage('ledger'); setTimeout(function(){window.print();},300);
+}
+
+function exportLedgerCSVReport() {
+  const s=getSettings();
+  const fm=s.fiscalMonth||1;
+  const curFY=ledgerYear;
+  const fyStart=curFY+'-'+String(fm).padStart(2,'0')+'-01';
+  const fyEndY=fm===1?curFY:curFY+1, fyEndM=fm===1?12:fm-1;
+  const fyEnd=fyEndY+'-'+String(fyEndM).padStart(2,'0')+'-'+String(new Date(fyEndY,fyEndM,0).getDate()).padStart(2,'0');
+  const allWithBal=calcBalances(getEntries());
+  let filtered=allWithBal.filter(function(e){ return e.date>=fyStart&&e.date<=fyEnd; });
+  if (reportMonthFrom!==0) {
+    filtered=filtered.filter(function(e){
+      var m=parseInt(e.date.split('-')[1]);
+      return isMonthInRange(m,reportMonthFrom,reportMonthTo,fm);
+    });
+  }
+  const rangeLabel=reportMonthFrom===0?'通期':(reportMonthFrom===reportMonthTo?reportMonthFrom+'月':reportMonthFrom+'月〜'+reportMonthTo+'月');
+  const rows=[
+    ['現金出納帳',s.companyName,fyRangeLabel(curFY,fm),rangeLabel,'出力日:'+today()],
+    ['日付','勘定科目','店名・支払先','購入品・内容','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
+    ...filtered.map(function(e){return [
+      e.date, e.account||'', e.storeName||'', e.itemName||e.description||'',
+      e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
+      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':e.type==='reimbursement'?'立替返金':'一般',
+      e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
+    ];})
+  ];
+  dlCSV(rows,'現金出納帳_'+rangeLabel+'_'+today()+'.csv');
+}
+
 function exportLedgerCSV() {
   const s=getSettings();
   const rows=[
@@ -3050,81 +3131,268 @@ function importBackup(ev) {
 }
 
 function showHowTo(context) {
-  const isLedger = context==='ledger';
+  const isLedger=context==='ledger';
+  const isAdv=context==='advances';
+  const isReim=context==='reimbursements';
+  const isReports=context==='reports';
   showModal(`
     <div class="modal-title">📖 操作方法ガイド</div>
-    <div style="font-size:12px;color:var(--gray-500);margin-bottom:16px;">現金出納帳・仮払管理システムの使い方</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+      <button class="btn btn-xs ${isLedger?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('ledger')">📒 現金出納帳</button>
+      <button class="btn btn-xs ${isAdv?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('advances')">💼 仮払管理</button>
+      <button class="btn btn-xs ${isReim?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('reimbursements')">🧾 立替経費</button>
+      <button class="btn btn-xs ${isReports?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('reports')">📄 帳票出力</button>
+    </div>
 
     ${isLedger?`
     <div class="howto-section">
-      <h3>📒 現金出納帳への入力</h3>
-      <div class="howto-step"><strong>① 取引種別を選ぶ</strong><br>
-        画面上部の3つのボタンで取引の種類を選択します。<br>
-        ・<strong>一般取引</strong>：通常の購入・支払い（備品・経費など）<br>
-        ・<strong>通帳から引出し</strong>：銀行から現金を補充したとき<br>
-        ・<strong>通帳へ預入</strong>：手元現金を銀行に入れたとき
+      <h3>📒 現金出納帳の使い方</h3>
+
+      <!-- VISUAL: 取引種別バー -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:6px;">▼ 画面上部：取引種別ボタン</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+          <span class="howto-mock-btn active-normal" style="position:relative;">📝 一般取引
+            <span class="howto-tag" style="top:-8px;right:-8px;">①</span>
+          </span>
+          <span class="howto-mock-btn secondary">🏦 通帳から引出し</span>
+          <span class="howto-mock-btn secondary">🏦 通帳へ預入</span>
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge">①</span>
+          取引の種類をクリックで選びます。<strong>青く反転</strong>しているのが現在の選択です。<br>
+          ・<strong>一般取引</strong>：スーパー・備品購入・経費支払いなど<br>
+          ・<strong>通帳から引出し</strong>：ATMで現金を引き出して手元補充した場合<br>
+          ・<strong>通帳へ預入</strong>：手元現金を銀行口座へ入れた場合
+        </div>
       </div>
-      <div class="howto-step"><strong>② 通帳から引出しの入力方法</strong><br>
-        店名欄に「〇〇銀行〇〇支店」、購入品欄は自動入力されます。<br>
-        引き出した金額を「入金額」に入力 → 登録ボタンを押す
+
+      <!-- VISUAL: 入力フォーム -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 入力フォーム（一般取引の場合）</div>
+        <div class="howto-mock-form">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">日付 <span style="color:var(--danger);">*必須</span> <span class="howto-badge" style="background:#d97706;">②</span></div>
+              <div style="display:flex;align-items:center;gap:2px;">
+                <div class="howto-mock-input highlight" style="width:44px;">5</div>
+                <span style="font-weight:700;padding:0 2px;">月</span>
+                <div class="howto-mock-input highlight" style="width:44px;">14</div>
+                <span style="font-weight:700;padding:0 2px;">日</span>
+              </div>
+            </div>
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">店名・支払先 <span style="color:var(--danger);">*必須</span> <span class="howto-badge" style="background:#d97706;">③</span></div>
+              <div class="howto-mock-input">〇〇スーパー</div>
+            </div>
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">購入品・内容 <span style="color:var(--danger);">*必須</span> <span class="howto-badge" style="background:#d97706;">④</span></div>
+              <div class="howto-mock-input">文房具</div>
+            </div>
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">消費税区分 <span class="howto-badge" style="background:#059669;">⑤</span></div>
+              <div class="howto-mock-input">課税（10%）</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">入金額（円） <span class="howto-badge" style="background:#059669;">⑥</span></div>
+              <div class="howto-mock-input" style="color:var(--gray-400);">0</div>
+            </div>
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">出金額（円） <span class="howto-badge" style="background:#059669;">⑥</span></div>
+              <div class="howto-mock-input">1,500</div>
+            </div>
+          </div>
+          <div class="howto-mock-field">
+            <div class="howto-mock-label">勘定科目 <span class="howto-badge" style="background:#059669;">⑦</span></div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+              <span style="background:var(--primary);color:white;padding:3px 8px;border-radius:12px;font-size:10px;font-weight:700;">消耗品費</span>
+              <span style="border:1px solid var(--gray-300);padding:3px 8px;border-radius:12px;font-size:10px;">旅費交通費</span>
+              <span style="border:1px solid var(--gray-300);padding:3px 8px;border-radius:12px;font-size:10px;">交際費</span>
+              <span style="border:1px solid var(--gray-300);padding:3px 8px;border-radius:12px;font-size:10px;">…</span>
+            </div>
+          </div>
+          <div style="margin-top:10px;"><span class="howto-mock-btn primary">📝 登録する</span></div>
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge" style="background:#d97706;">②</span>
+          <strong>日付</strong>：月と日だけ入力します。年は会計年度から自動で決まります。Enterで日付欄に移動します。
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge" style="background:#d97706;">③</span>
+          <strong>店名・支払先</strong>：過去に入力した店名が候補として表示されます。
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge" style="background:#d97706;">④</span>
+          <strong>購入品・内容</strong>：何を買ったか・何の支払いかを入力します。
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">⑤</span>
+          <strong>消費税区分</strong>：軽減税率（食品など8%）・通常課税（10%）・非課税から選択。分からなければ空欄でもOK。
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">⑥</span>
+          <strong>入金/出金</strong>：支払いは「出金額」に、受け取りは「入金額」に入力。どちらか片方だけ入力してください。
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">⑦</span>
+          <strong>勘定科目</strong>：チップ（ボタン）をクリックして経費の種類を選択。PL集計・帳票出力で科目別に集計されます。省略可。
+        </div>
       </div>
-      <div class="howto-step"><strong>③ 通帳へ預入の入力方法</strong><br>
-        店名欄に「〇〇銀行〇〇支店」を入力。<br>
-        預け入れた金額を「出金額」に入力 → 登録ボタンを押す
+
+      <!-- VISUAL: 出納帳テーブル -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 現金出納帳テーブル</div>
+        <div style="overflow-x:auto;">
+          <table class="howto-mock-table">
+            <thead><tr>
+              <th>日付</th><th>店名・支払先</th><th>内容</th><th>入金</th><th>出金</th><th>残高</th><th>操作</th>
+            </tr></thead>
+            <tbody>
+              <tr style="background:#eff6ff;"><td colspan="3" style="color:var(--primary);font-weight:700;">▶ 前期繰越</td><td></td><td></td><td class="r" style="font-weight:700;">50,000</td><td></td></tr>
+              <tr>
+                <td>5月14日</td>
+                <td>〇〇スーパー</td>
+                <td><span style="background:#dbeafe;color:var(--primary);padding:1px 5px;border-radius:4px;font-size:10px;">消耗品費</span> 文房具</td>
+                <td></td><td style="color:var(--danger);">1,500</td>
+                <td style="font-weight:700;">48,500</td>
+                <td><span class="howto-mock-btn secondary" style="padding:2px 6px;font-size:10px;">修正</span> <span class="howto-mock-btn secondary" style="padding:2px 6px;font-size:10px;">削除</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="howto-callout-ok" style="margin-top:8px;">
+          <strong>修正ボタン</strong>：登録済みの取引内容を変更します。<br>
+          <strong>削除ボタン</strong>：取引を削除します（仮払・精算行は操作不可）。<br>
+          <strong>残高</strong>：自動計算されます。期首残高＋入金－出金の累計です。
+        </div>
       </div>
-      <div class="howto-step"><strong>④ 修正・削除</strong><br>
-        表の右端「修正」ボタンを押すと内容を変更できます。<br>
-        「削除」ボタンで取引を削除できます（仮払・精算行は削除不可）。
+
+      <!-- 決算締め -->
+      <div class="howto-step">
+        <strong>🔒 決算締め・解除</strong><br>
+        年度ナビバー右端の「🔒 決算・繰越」ボタンで、その年度の決算を締めます。締め後は入力がブロックされます。<br>
+        再び入力・修正したい場合は「🔓 決算解除」で解除できます。
       </div>
     </div>
-    `:`
+    `:''}
+
+    ${isAdv?`
+    <div class="howto-section">
+      <h3>💼 仮払管理の使い方</h3>
+      <div class="howto-step">
+        <strong>① 仮払い登録</strong><br>
+        「仮払管理」タブ上部の登録フォームに、仮払日・氏名・目的・金額を入力して「仮払いを登録する」ボタンを押します。<br>
+        ✅ 登録すると、現金出納帳に<strong>出金として自動記録</strong>されます。<br>
+        ✅ 番号は「氏名-連番」形式（例: 山田太郎-001）で自動付番されます。
+      </div>
+      <div class="howto-step">
+        <strong>② 精算入力</strong><br>
+        仮払金台帳の「精算」ボタンを押すと精算入力モーダルが開きます。<br>
+        ・<strong>精算日</strong>と<strong>精算方法</strong>（現金 or 振込）を選択<br>
+        ・<strong>使用明細</strong>を1行ずつ入力（使用日・店名・内容・勘定科目・金額）<br>
+        ・「＋ 明細を追加」で複数行入力できます<br>
+        ・使用合計が自動計算され、返金額または不足額が表示されます
+      </div>
+      <div class="howto-step">
+        <strong>③ 精算結果と出納帳への反映</strong><br>
+        ・使用額 ＜ 仮払額 → <span style="color:var(--success);">返金</span>として現金出納帳に入金記録<br>
+        ・使用額 ＞ 仮払額 → <span style="color:var(--danger);">追加払い</span>として出金記録<br>
+        ・現金精算で返金額がある場合、実際の受取額が違う場合は「実際の受取額」欄に入力してください
+      </div>
+      <div class="howto-step">
+        <strong>④ 修正・削除</strong><br>
+        精算済みの仮払いも「修正」ボタンで内容を変更できます（出納帳の関連記録も自動更新）。<br>
+        「削除」ボタンで仮払い記録と関連出納帳行をまとめて削除します。
+      </div>
+    </div>
+    `:''}
+
+    ${isReim?`
+    <div class="howto-section">
+      <h3>🧾 立替経費の使い方</h3>
+      <div class="howto-step">
+        <strong>立替経費とは</strong><br>
+        従業員が個人のクレジットカードや現金で立替払いした経費を管理します。<br>
+        後日、会社から従業員に現金や振込で返金します。
+      </div>
+      <div class="howto-step">
+        <strong>① 立替経費の登録</strong><br>
+        「立替経費」タブ上部の登録フォームに入力します。<br>
+        ・<strong>登録日</strong>：経費を登録する日（今日など）<br>
+        ・<strong>氏名</strong>：立替した従業員名<br>
+        ・<strong>目的・備考</strong>：「5月分立替」など<br>
+        ・<strong>立替明細</strong>：レシートごとに1行。使用日・店名・内容・勘定科目・金額を入力<br>
+        ✅ この時点では現金出納帳には記録されません。
+      </div>
+      <div class="howto-step">
+        <strong>② 返金確定</strong><br>
+        立替経費台帳の「返金確定」ボタンを押すと、返金確定モーダルが開きます。<br>
+        ・<strong>返金日</strong>と<strong>返金方法</strong>（現金 or 振込）を選択<br>
+        ✅ 確定すると、現金出納帳に<strong>出金として自動記録</strong>されます。<br>
+        ✅ PL集計では各レシートの<strong>使用日</strong>ベースで経費計上されます（発生主義）。
+      </div>
+      <div class="howto-step">
+        <strong>③ 修正・返金取消</strong><br>
+        ・「✏️ 修正」：登録内容（明細・氏名等）を変更します<br>
+        ・「↩ 返金取消」：返金確定を取り消し、未返金状態に戻します（出納帳の関連行も削除）<br>
+        ・返金済みの場合も修正可能です（出納帳行が自動更新されます）
+      </div>
+    </div>
+    `:''}
+
+    ${isReports?`
+    <div class="howto-section">
+      <h3>📄 帳票出力の使い方</h3>
+      <div class="howto-step">
+        <strong>📒 現金出納帳</strong><br>
+        月範囲ボタンで出力する期間を選択します。「全月」で通期全件、月ボタンで特定月のみ。<br>
+        ・「🖨️ 印刷/PDF」：ブラウザの印刷機能でPDF保存もできます<br>
+        ・「📥 CSV出力」：Excel等で開けるCSVファイルをダウンロードします
+      </div>
+      <div class="howto-step">
+        <strong>💼 仮払金台帳 / 📋 仮払精算明細表</strong><br>
+        仮払金台帳は仮払いの一覧。精算明細表は使用明細を1行ずつ展開した詳細表です。
+      </div>
+      <div class="howto-step">
+        <strong>📊 サマリ（PL/CF）</strong><br>
+        ・<strong>PL（損益計算書）</strong>：売上高・経費を勘定科目別に集計。費目別グラフ付き<br>
+        ・<strong>CF（キャッシュフロー）</strong>：現金の増減をすべての取引を含めて集計<br>
+        月範囲での絞り込みが可能です。
+      </div>
+      <div class="howto-step">
+        <strong>📁 税理士提出用（一括ダウンロード）</strong><br>
+        現金出納帳（期首〜最新・全件固定）・仮払金台帳・仮払精算明細表・未精算一覧・立替経費台帳の<br>
+        5ファイルをまとめてZIPではなく個別にダウンロードします。ファイル名に日付が入ります。
+      </div>
+      <div class="howto-step">
+        <strong>💾 バックアップ・復元</strong><br>
+        「バックアップ保存」で全データをJSONファイルに保存します。月1回の定期保存を推奨します。<br>
+        「復元」で保存したJSONを読み込んでデータを復元できます（現在のデータは上書きされます）。
+      </div>
+    </div>
+    `:''}
+
+    ${!isLedger&&!isAdv&&!isReim&&!isReports?`
     <div class="howto-section">
       <h3>📊 ダッシュボードの見方</h3>
       <div class="howto-step">
         <strong>現在の現金残高</strong>：手元の現金残高です。期首残高＋入金合計－出金合計で自動計算されます。<br>
         <strong>未精算件数</strong>：まだ精算されていない仮払いの件数です。0件になるよう管理します。<br>
-        <strong>直近の取引</strong>：最新6件の取引が古い順に表示されます。
-      </div>
-    </div>
-    `}
-
-    <div class="howto-section">
-      <h3>💼 仮払いの登録・精算</h3>
-      <div class="howto-step"><strong>① 仮払い登録</strong><br>
-        「仮払管理」タブ → 「＋ 仮払い登録」欄に入力。<br>
-        仮払日・氏名・目的・金額を入力して登録ボタンを押すと、<br>
-        自動的に現金出納帳にも出金として記録されます。
-      </div>
-      <div class="howto-step"><strong>② 精算入力</strong><br>
-        仮払一覧の「精算」ボタンを押す → 精算日・精算方法を選択。<br>
-        ・<strong>現金精算</strong>：現金で返金・受取<br>
-        ・<strong>振込</strong>：通帳に振り込んでもらう場合<br>
-        使用明細を1行ずつ入力します（使用日・店名・内容・金額）。<br>
-        複数の支払先がある場合は「＋ 明細を追加」で行を追加します。
-      </div>
-      <div class="howto-step"><strong>③ 精算結果の自動計算</strong><br>
-        使用合計が仮払金額より少ない場合 → <span style="color:var(--success);">返金額</span>が表示され入金として記録<br>
-        使用合計が仮払金額より多い場合 → <span style="color:var(--danger);">不足額</span>が表示され出金として記録
+        <strong>直近の取引</strong>：最新6件の取引が表示されます。
       </div>
     </div>
 
     <div class="howto-section">
-      <h3>💾 データの保存・バックアップ</h3>
+      <h3>💾 データの保存について</h3>
       <div class="howto-step">
         データはこのブラウザ（localStorage）に<strong>自動保存</strong>されます。<br>
-        ヘッダーに「自動保存済 HH:MM」と表示されるのが保存の確認です。<br>
-        ブラウザのキャッシュ削除やデータ消去でデータが失われる場合があります。<br>
-        <strong>定期的に「設定」→「バックアップ保存」でJSONファイルを保存することを強くお勧めします。</strong>
+        ブラウザのキャッシュ削除でデータが失われる場合があります。<br>
+        <strong>定期的に「帳票出力」→「バックアップ保存」でJSONファイルを保存してください。</strong>
       </div>
     </div>
-
-    <div class="howto-section">
-      <h3>📄 帳票出力</h3>
-      <div class="howto-step">
-        「帳票出力」タブから現金出納帳・仮払金台帳をCSV出力または印刷（PDF保存）できます。<br>
-        CSVはExcelで開けます（日本語文字化け防止のBOM付き）。
-      </div>
-    </div>
+    `:''}
 
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="closeModal()">閉じる</button>
