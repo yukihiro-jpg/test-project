@@ -1025,6 +1025,8 @@ function saveSettings() {
 let currentPage='dashboard';
 let currentLocation='';
 let _monthFirstClick={ledger:0, pl:0};
+let searchMode=false;
+let searchFilters={account:'',store:'',item:'',amtMin:'',amtMax:''};
 let ledgerYear=new Date().getFullYear();
 let ledgerMonthFrom=0;
 let ledgerMonthTo=0;
@@ -1156,6 +1158,67 @@ function getMonthRangeLabel(from, to, fm) {
   if (from===to) return from+'月';
   const fi=(from-fm+12)%12, ti=(to-fm+12)%12;
   return (fi<=ti?from:to)+'月〜'+(fi<=ti?to:from)+'月';
+}
+
+function toggleSearchMode() {
+  searchMode=!searchMode;
+  if (!searchMode) searchFilters={account:'',store:'',item:'',amtMin:'',amtMax:''};
+  renderPage();
+}
+function updateSearchFilter(field, val) {
+  searchFilters[field]=val;
+}
+function applySearch() {
+  searchFilters.account=document.getElementById('sf-account').value;
+  searchFilters.store  =document.getElementById('sf-store').value.trim();
+  searchFilters.item   =document.getElementById('sf-item').value.trim();
+  searchFilters.amtMin =document.getElementById('sf-amt-min').value.replace(/,/g,'');
+  searchFilters.amtMax =document.getElementById('sf-amt-max').value.replace(/,/g,'');
+  renderPage();
+}
+function clearSearch() {
+  searchFilters={account:'',store:'',item:'',amtMin:'',amtMax:''};
+  renderPage();
+}
+function buildSearchPanel() {
+  var sf=searchFilters;
+  var accOpts='<option value="">— すべて —</option>'+ACCOUNT_CATEGORIES.map(function(a){
+    return '<option value="'+esc(a)+'" '+(sf.account===a?'selected':'')+'>'+esc(a)+'</option>';
+  }).join('');
+  var active=sf.account||sf.store||sf.item||sf.amtMin||sf.amtMax;
+  var summary='';
+  if (active) {
+    var parts=[];
+    if (sf.account) parts.push('勘定科目='+sf.account);
+    if (sf.store) parts.push('店名:'+sf.store);
+    if (sf.item) parts.push('内容:'+sf.item);
+    if (sf.amtMin!=='') parts.push('金額≧'+Number(sf.amtMin).toLocaleString('ja-JP'));
+    if (sf.amtMax!=='') parts.push('金額≦'+Number(sf.amtMax).toLocaleString('ja-JP'));
+    summary='<div style="font-size:12px;color:var(--primary);font-weight:700;margin-top:8px;">🔎 検索中: '+parts.join('　／　')+'</div>';
+  }
+  return '<div class="no-print" style="background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:14px;margin-bottom:12px;">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:10px;">🔍 検索条件（複数条件で絞込／空欄は条件なし）</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px;">'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--gray-700);display:block;margin-bottom:3px;">勘定科目</label>'
+    +'<select id="sf-account" style="width:100%;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;">'+accOpts+'</select></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--gray-700);display:block;margin-bottom:3px;">店名・支払先（部分一致）</label>'
+    +'<input type="text" id="sf-store" value="'+esc(sf.store)+'" placeholder="〇〇商店" style="width:100%;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" /></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--gray-700);display:block;margin-bottom:3px;">内容（部分一致）</label>'
+    +'<input type="text" id="sf-item" value="'+esc(sf.item)+'" placeholder="文房具" style="width:100%;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" /></div>'
+    +'<div><label style="font-size:11px;font-weight:700;color:var(--gray-700);display:block;margin-bottom:3px;">金額（円）</label>'
+    +'<div style="display:flex;gap:4px;align-items:center;">'
+    +'<input type="text" inputmode="numeric" id="sf-amt-min" value="'+(sf.amtMin!==''?Number(sf.amtMin).toLocaleString('ja-JP'):'')+'" placeholder="最低額" oninput="fmtAmtInput(this)" style="width:50%;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" />'
+    +'<span style="font-size:12px;color:var(--gray-500);">〜</span>'
+    +'<input type="text" inputmode="numeric" id="sf-amt-max" value="'+(sf.amtMax!==''?Number(sf.amtMax).toLocaleString('ja-JP'):'')+'" placeholder="最高額" oninput="fmtAmtInput(this)" style="width:50%;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" />'
+    +'</div></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;">'
+    +'<button class="btn btn-primary btn-sm" onclick="applySearch()">🔎 検索実行</button>'
+    +'<button class="btn btn-secondary btn-sm" onclick="clearSearch()">クリア</button>'
+    +'<button class="btn btn-outline btn-sm" onclick="toggleSearchMode()">検索モード終了</button>'
+    +'</div>'
+    +summary
+    +'</div>';
 }
 
 function showPage(p) {
@@ -1336,6 +1399,25 @@ function pageLedger() {
       var m=parseInt(e.date.split('-')[1]);
       if (!isMonthInRange(m, ledgerMonthFrom, ledgerMonthTo, fm)) return false;
     }
+    if (searchMode) {
+      var sf=searchFilters;
+      if (sf.account && (e.account||'')!==sf.account) return false;
+      if (sf.store && (e.storeName||'').indexOf(sf.store)===-1) return false;
+      if (sf.item) {
+        var itemTxt=(e.itemName||'')+' '+(e.description||'');
+        if (itemTxt.indexOf(sf.item)===-1) return false;
+      }
+      if (sf.amtMin!=='') {
+        var minN=Number(String(sf.amtMin).replace(/,/g,''))||0;
+        var amt=Math.max(e.receiptAmount||0, e.paymentAmount||0);
+        if (amt<minN) return false;
+      }
+      if (sf.amtMax!=='') {
+        var maxN=Number(String(sf.amtMax).replace(/,/g,''))||0;
+        var amt2=Math.max(e.receiptAmount||0, e.paymentAmount||0);
+        if (amt2>maxN) return false;
+      }
+    }
     return true;
   });
 
@@ -1435,10 +1517,12 @@ function pageLedger() {
         <span class="badge ${isClosed?'badge-settled':''}" style="align-self:center;font-size:12px;font-weight:700;color:var(--gray-700);">${fyLabel}${isClosed?` ✔ 締め済み（繰越 ${fc(closedYears[ledgerYear].closingBalance)}）`:''}</span>
       </div>
       <div class="toolbar-r">
+        <button class="btn btn-sm ${searchMode?'btn-primary':'btn-secondary'}" onclick="toggleSearchMode()">🔍 検索${searchMode?' ON':''}</button>
         <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSV()">📥 CSV</button>
         <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ 印刷/PDF</button>
       </div>
     </div>
+    ${searchMode?buildSearchPanel():''}
     ${buildMonthBar('ledger', fm)}
     <div class="print-only" style="text-align:center;margin-bottom:14px;">
       <div style="font-size:18px;font-weight:700;">現 金 出 納 帳</div>
