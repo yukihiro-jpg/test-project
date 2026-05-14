@@ -688,6 +688,7 @@ function registerAdvance(d) {
     returnAmount: null, shortageAmount: null,
     settlementItems: [], settlementMethod: null,
     cashEntryId: null, settlementEntryId: null,
+    location: d.location||'',
     createdAt: new Date().toISOString(),
   };
   const ce = addEntry({
@@ -697,6 +698,7 @@ function registerAdvance(d) {
     receiptAmount: 0, paymentAmount: Number(d.advanceAmount),
     taxRate: null, memo: '',
     type: 'advance', advanceId: adv.id,
+    location: d.location||'',
   });
   adv.cashEntryId = ce.id;
   const advances = getAdvances();
@@ -813,6 +815,7 @@ function registerReimbursement(d) {
     reimbursementMethod: null,
     reimbursementEntryId: null,
     notes: d.notes||'',
+    location: d.location||'',
     createdAt: new Date().toISOString()
   };
   const list = getReimbursements();
@@ -930,6 +933,21 @@ function showSettings() {
     </div>
     <div class="form-group" style="margin-bottom:16px;"><label>経理担当者名</label><input id="cs-mgr" value="${esc(s.manager||'')}" /></div>
     <div class="divider"></div>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">🏢 拠点管理</div>
+    <div style="font-size:11px;color:var(--gray-500);margin-bottom:10px;">複数拠点（本社・支社等）を登録すると、入力時に拠点を選択して拠点別に帳簿を管理できます。1拠点の場合は空欄のままでOKです。</div>
+    <div id="cs-locs">
+      ${(s.locations||[]).map(function(loc,i){
+        var bal=(s.locationOpeningBalances||{})[loc]||0;
+        return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">'
+          +'<input type="text" id="cs-loc-n'+i+'" value="'+esc(loc)+'" placeholder="本社" style="flex:1;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" />'
+          +'<span style="font-size:12px;white-space:nowrap;color:var(--gray-700);">期首残高</span>'
+          +'<input type="text" inputmode="numeric" id="cs-loc-b'+i+'" value="'+Number(bal).toLocaleString("ja-JP")+'" style="width:110px;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" oninput="fmtAmtInput(this)" />'
+          +'<button type="button" onclick="removeSettingsLoc('+i+')" style="padding:6px 10px;border:1px solid var(--danger);background:white;color:var(--danger);border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;">✕</button>'
+          +'</div>';
+      }).join('')}
+    </div>
+    <button type="button" onclick="addSettingsLoc()" style="margin-bottom:12px;padding:6px 12px;border:1px solid var(--gray-300);background:white;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;">＋ 拠点を追加</button>
+    <div class="divider"></div>
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">データ管理</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
       <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 バックアップ保存（JSON）</button>
@@ -944,14 +962,43 @@ function showSettings() {
   `);
 }
 
+function addSettingsLoc() {
+  var wrap=document.getElementById('cs-locs'); if(!wrap) return;
+  var i=wrap.querySelectorAll('input[id^="cs-loc-n"]').length;
+  var d=document.createElement('div'); d.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:6px;';
+  d.innerHTML='<input type="text" id="cs-loc-n'+i+'" placeholder="支社A" style="flex:1;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" />'
+    +'<span style="font-size:12px;white-space:nowrap;color:var(--gray-700);">期首残高</span>'
+    +'<input type="text" inputmode="numeric" id="cs-loc-b'+i+'" value="0" style="width:110px;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" oninput="fmtAmtInput(this)" />'
+    +'<button type="button" onclick="this.closest(\'div\').remove()" style="padding:6px 10px;border:1px solid var(--danger);background:white;color:var(--danger);border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;">✕</button>';
+  wrap.appendChild(d);
+}
+function removeSettingsLoc(i) {
+  var wrap=document.getElementById('cs-locs'); if(!wrap) return;
+  var rows=wrap.children; if(rows[i]) rows[i].remove();
+}
+
 function saveSettings() {
   const s=getSettings();
   const co=document.getElementById('cs-co').value.trim();
   if (!co){ alert('会社名を入力してください。'); return; }
+  var locWrap=document.getElementById('cs-locs');
+  var newLocs=[], newLocBals={};
+  if (locWrap) {
+    var nameInputs=locWrap.querySelectorAll('input[id^="cs-loc-n"]');
+    nameInputs.forEach(function(inp,idx){
+      var name=inp.value.trim();
+      if (name) {
+        newLocs.push(name);
+        var balInp=locWrap.querySelector('#cs-loc-b'+idx);
+        newLocBals[name]=Number((balInp?balInp.value:'0').replace(/,/g,''))||0;
+      }
+    });
+  }
   DB.set('settings',{...s,
     companyName:co, openingBalance:Number(document.getElementById('cs-bal').value)||0,
     fiscalMonth:Number(document.getElementById('cs-fis').value),
-    manager:document.getElementById('cs-mgr').value.trim()
+    manager:document.getElementById('cs-mgr').value.trim(),
+    locations: newLocs, locationOpeningBalances: newLocBals
   });
   closeModal(); initApp();
 }
@@ -1281,8 +1328,9 @@ function pageLedger() {
     <div class="form-grid" style="margin-bottom:10px;">
       <div class="form-group req"><label>日付</label>${dateInputsMD('ae-date', today(), 'ae-store')}</div>
       <div class="form-group req"><label>${storeLabel}</label>
-        <input type="text" id="ae-store" placeholder="${storePlaceholder}" ${currentEntryKind==='normal'?'list="ae-store-list" autocomplete="off"':''} lang="ja" style="ime-mode:active;" onkeydown="formEnterNext(event,this)" data-next="ae-item" />
+        <input type="text" id="ae-store" placeholder="${storePlaceholder}" ${currentEntryKind==='normal'?'list="ae-store-list" autocomplete="off"':''} lang="ja" style="ime-mode:active;" onkeydown="formEnterNext(event,this)" data-next="ae-item" onblur="if(currentEntryKind==='normal')applyStoreMemory()" />
         ${currentEntryKind==='normal'&&recentStores.length>0?`<datalist id="ae-store-list">${recentStores.map(function(n){return '<option value="'+esc(n)+'">';}).join('')}</datalist>`:''}
+        <span id="ae-store-hint" style="display:none;font-size:11px;color:#6d28d9;margin-top:2px;font-weight:600;"></span>
       </div>
       <div class="form-group req"><label>${itemLabel}</label>
         <input type="text" id="ae-item" ${itemFixed?`value="${itemFixed}" readonly style="background:#f8fafc;color:var(--gray-500);cursor:not-allowed;"`:` lang="ja" style="ime-mode:active;"`} placeholder="${itemFixed||'文房具・コピー用紙'}" onkeydown="formEnterNext(event,this)" data-next="${currentEntryKind==='normal'?'ae-tax':'ae-rec'}" />
@@ -1484,6 +1532,11 @@ function pageReimbursements() {
   const s=getSettings();
   const empNames=[...new Set(all.map(function(r){return r.employeeName;}))];
   const pendingTotal=all.filter(function(r){return r.status==='pending';}).reduce(function(s,r){return s+(r.totalAmount||0);},0);
+  const locs = s.locations||[];
+  const reimLocHtml = (locs.length>=2) ? `<div class="form-group"><label>拠点</label>
+    <select id="rf-loc">
+      ${locs.map(function(l){ return '<option value="'+l.replace(/"/g,'&quot;')+'" '+(currentLocation===l?'selected':'')+'>'+l+'</option>'; }).join('')}
+    </select></div>` : '';
 
   return `
   <div class="card no-print">
@@ -1502,6 +1555,7 @@ function pageReimbursements() {
         <datalist id="rf-emp-list">${empNames.map(function(n){return '<option value="'+esc(n)+'">';}).join('')}</datalist>
       </div>
       <div class="form-group"><label>目的・備考</label><input type="text" id="rf-purpose" placeholder="〇月分立替経費" onkeydown="if(event.key==='Enter'){event.preventDefault();submitReimbursement();}" /></div>
+      ${reimLocHtml}
     </div>
     <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">立替明細（レシートごとに1行）</div>
     <div id="reim-rows-wrap"></div>
@@ -1593,7 +1647,7 @@ function renderReimRows() {
           var fmtAmt=r.amount?Number(r.amount).toLocaleString('ja-JP'):'';
           return `<tr>
           <td style="white-space:nowrap;"><input type="number" id="rr-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('rr-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'rr',${i},'m')" />月<input type="number" id="rr-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('rr-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'rr',${i},'d')" />日</td>
-          <td><input type="text" id="rr-${i}-store" value="${esc(r.storeName)}" placeholder="〇〇商店" oninput="reimburseRows[${i}].storeName=this.value" onkeydown="rowFieldEnter(event,'rr',${i},'store')" /></td>
+          <td><input type="text" id="rr-${i}-store" value="${esc(r.storeName)}" placeholder="〇〇商店" oninput="reimburseRows[${i}].storeName=this.value" onkeydown="rowFieldEnter(event,'rr',${i},'store')" onblur="recallAndFillRow('rr',${i})" /></td>
           <td><input type="text" id="rr-${i}-item" value="${esc(r.itemName)}" placeholder="文房具" oninput="reimburseRows[${i}].itemName=this.value" onkeydown="rowFieldEnter(event,'rr',${i},'item')" /></td>
           <td><button id="rr-${i}-acct" class="acct-row-btn" onclick="showAcctRowPicker('reim',${i},'',0,this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
           <td><input type="text" id="rr-${i}-amt" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);reimburseRows[${i}].amount=this.value.replace(/,/g,'');updateReimSummary()" onkeydown="rowFieldEnter(event,'rr',${i},'amt')" /></td>
@@ -1630,7 +1684,10 @@ function submitReimbursement() {
     alert('全ての明細に金額（1円以上）を入力してください。'); return;
   }
   const cleanItems=items.map(function(r){return {...r, amount:Number((r.amount||'').toString().replace(/,/g,'')||0)};});
-  const rei=registerReimbursement({registeredDate:date, employeeName:name, purpose:purpose, items:cleanItems});
+  cleanItems.forEach(function(it){ if(it.storeName) learnStore(it.storeName, it.account, null, it.itemName); });
+  const reimLocEl = document.getElementById('rf-loc');
+  const reimLocation = reimLocEl ? reimLocEl.value : '';
+  const rei=registerReimbursement({registeredDate:date, employeeName:name, purpose:purpose, items:cleanItems, location:reimLocation});
   reimburseRows=[];
   document.getElementById('rf-name').value='';
   document.getElementById('rf-purpose').value='';
@@ -1740,7 +1797,7 @@ function renderReimEditRows() {
           var fmtAmt=r.amount?Number(r.amount).toLocaleString('ja-JP'):'';
           return `<tr>
           <td style="white-space:nowrap;"><input type="number" id="er-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('er-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'er',${i},'m')" />月<input type="number" id="er-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('er-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'er',${i},'d')" />日</td>
-          <td><input type="text" id="er-${i}-store" value="${esc(r.storeName)}" oninput="reimburseRows[${i}].storeName=this.value" onkeydown="rowFieldEnter(event,'er',${i},'store')" /></td>
+          <td><input type="text" id="er-${i}-store" value="${esc(r.storeName)}" oninput="reimburseRows[${i}].storeName=this.value" onkeydown="rowFieldEnter(event,'er',${i},'store')" onblur="recallAndFillRow('er',${i})" /></td>
           <td><input type="text" id="er-${i}-item" value="${esc(r.itemName)}" oninput="reimburseRows[${i}].itemName=this.value" onkeydown="rowFieldEnter(event,'er',${i},'item')" /></td>
           <td><button id="er-${i}-acct" class="acct-row-btn" onclick="showAcctRowPicker('reimEdit',${i},'',0,this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
           <td><input type="text" id="er-${i}-amt" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);reimburseRows[${i}].amount=this.value.replace(/,/g,'');updateReimEditSummary()" onkeydown="rowFieldEnter(event,'er',${i},'amt')" /></td>
@@ -2624,6 +2681,62 @@ function fmtAmtInput(el) {
   el.value = raw ? Number(raw).toLocaleString('ja-JP') : '';
 }
 
+function learnStore(storeName, account, taxRate, itemName) {
+  if (!storeName) return;
+  var mem=JSON.parse(localStorage.getItem('ca_store_memory')||'{}');
+  if (!mem[storeName]) mem[storeName]={account:'',taxRate:null,itemName:'',count:0};
+  if (account) mem[storeName].account=account;
+  if (taxRate!==null&&taxRate!==undefined) mem[storeName].taxRate=taxRate;
+  if (itemName) mem[storeName].itemName=itemName;
+  mem[storeName].count=(mem[storeName].count||0)+1;
+  localStorage.setItem('ca_store_memory',JSON.stringify(mem));
+}
+
+function recallStore(storeName) {
+  if (!storeName) return null;
+  var mem=JSON.parse(localStorage.getItem('ca_store_memory')||'{}');
+  return mem[storeName]||null;
+}
+
+function applyStoreMemory() {
+  var storeEl=document.getElementById('ae-store');
+  if (!storeEl) return;
+  var recalled=recallStore(storeEl.value.trim());
+  if (!recalled) return;
+  var hint=[];
+  if (recalled.account) {
+    var acctEl=document.getElementById('ae-account');
+    if (acctEl&&!acctEl.value) { acctEl.value=recalled.account; hint.push('勘定科目: '+recalled.account); }
+  }
+  if (recalled.taxRate!==null&&recalled.taxRate!==undefined) {
+    var taxEl=document.getElementById('ae-tax');
+    if (taxEl&&taxEl.value==='') { taxEl.value=String(recalled.taxRate); hint.push('税区分: '+(recalled.taxRate===10?'10%':recalled.taxRate===8?'軽8%':'非課税')); }
+  }
+  if (recalled.itemName) {
+    var itemEl=document.getElementById('ae-item');
+    if (itemEl&&!itemEl.value&&!itemEl.readOnly) { itemEl.value=recalled.itemName; hint.push('品目: '+recalled.itemName); }
+  }
+  if (hint.length>0) {
+    var hintEl=document.getElementById('ae-store-hint');
+    if (hintEl) { hintEl.textContent='📚 学習データを自動入力: '+hint.join('、'); hintEl.style.display='block'; }
+  }
+}
+
+function recallAndFillRow(prefix, i) {
+  var storeEl=document.getElementById(prefix+'-'+i+'-store');
+  if (!storeEl||!storeEl.value.trim()) return;
+  var recalled=recallStore(storeEl.value.trim());
+  if (!recalled) return;
+  if (recalled.itemName) {
+    var itemEl=document.getElementById(prefix+'-'+i+'-item');
+    if (itemEl&&!itemEl.value) {
+      itemEl.value=recalled.itemName;
+      var arr=prefix==='sr'?settleRows:reimburseRows;
+      if (arr[i]) arr[i].itemName=recalled.itemName;
+    }
+  }
+}
+
 function submitEntry() {
   const date  = readDateGroupMD('ae-date');
   const store = document.getElementById('ae-store').value.trim();
@@ -2742,7 +2855,9 @@ function submitAdvance() {
   const amount =document.getElementById('af-amount').value.replace(/,/g,'');
   if (!date||!name||!purpose||!amount){ alert('全ての必須項目を入力してください。'); return; }
   if (Number(amount)<=0){ alert('仮払金額は1円以上を入力してください。'); return; }
-  const adv=registerAdvance({date,employeeName:name,purpose,advanceAmount:amount});
+  const advLocEl = document.getElementById('af-loc');
+  const advLocation = advLocEl ? advLocEl.value : '';
+  const adv=registerAdvance({date,employeeName:name,purpose,advanceAmount:amount,location:advLocation});
   document.getElementById('af-name').value='';
   document.getElementById('af-purpose').value='';
   document.getElementById('af-amount').value='';
@@ -2894,7 +3009,7 @@ function renderSettleRows(advId, advAmt) {
           const fmtAmt=r.amount?Number(r.amount).toLocaleString('ja-JP'):'';
           return `<tr>
           <td style="white-space:nowrap;"><input type="number" id="sr-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="settleRows[${i}].date=computeRowDate('sr-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'sr',${i},'m')" />月<input type="number" id="sr-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="settleRows[${i}].date=computeRowDate('sr-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'sr',${i},'d')" />日</td>
-          <td><input type="text" id="sr-${i}-store" value="${esc(r.storeName)}" placeholder="〇〇ホテル" oninput="settleRows[${i}].storeName=this.value" onkeydown="rowFieldEnter(event,'sr',${i},'store')" /></td>
+          <td><input type="text" id="sr-${i}-store" value="${esc(r.storeName)}" placeholder="〇〇ホテル" oninput="settleRows[${i}].storeName=this.value" onkeydown="rowFieldEnter(event,'sr',${i},'store')" onblur="recallAndFillRow('sr',${i})" /></td>
           <td><input type="text" id="sr-${i}-item" value="${esc(r.itemName)}"  placeholder="宿泊費" oninput="settleRows[${i}].itemName=this.value" onkeydown="rowFieldEnter(event,'sr',${i},'item')" /></td>
           <td><button id="sr-${i}-acct" class="acct-row-btn" onclick="showAcctRowPicker('settle',${i},'${esc(advId)}',${advAmt},this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
           <td><input type="text" id="sr-${i}-amt" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);settleRows[${i}].amount=this.value.replace(/,/g,'');updateSettleSummary(${advAmt})" onkeydown="rowFieldEnter(event,'sr',${i},'amt')" /></td>
@@ -2971,6 +3086,7 @@ function submitSettle(id, advAmt) {
     alert('使用明細を1件以上入力してください。'); return;
   }
   const items=settleRows.map(r=>({...r,amount:Number((r.amount||'').toString().replace(/,/g,'')||0)}));
+  items.forEach(function(it){ if(it.storeName) learnStore(it.storeName, it.account, null, it.itemName); });
   const actEl = document.getElementById('st-actual');
   const actStr = actEl ? (actEl.value||'').replace(/,/g,'').trim() : '';
   const actualReturn = actStr === '' ? null : Number(actStr);
