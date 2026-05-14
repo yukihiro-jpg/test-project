@@ -956,6 +956,7 @@ let reimFilter='all';
 let currentEntryKind='normal';
 let summaryTab='pl';
 let reportMonthFrom=0, reportMonthTo=0;
+let _reportFirstClick=0;
 let reimburseRows=[];
 
 const REVENUE_ACCOUNTS = ['売上高','雑収入'];
@@ -964,6 +965,20 @@ function isMonthInRange(m, from, to, fm) {
   if (from===0 && to===0) return true;
   const fi=(from-fm+12)%12, ti=(to-fm+12)%12, mi=(m-fm+12)%12;
   return mi>=Math.min(fi,ti) && mi<=Math.max(fi,ti);
+}
+function reportMonthClick(m, event) {
+  if (event.shiftKey && _reportFirstClick !== 0 && m !== 0) {
+    var s=getSettings(); var fm=s.fiscalMonth||1;
+    var fiscalMonths=Array.from({length:12},function(_,i){return ((fm-1+i)%12)+1;});
+    var ai=fiscalMonths.indexOf(_reportFirstClick), bi=fiscalMonths.indexOf(m);
+    if (ai!==-1 && bi!==-1) {
+      var lo=Math.min(ai,bi), hi=Math.max(ai,bi);
+      reportMonthFrom=fiscalMonths[lo]; reportMonthTo=fiscalMonths[hi];
+    }
+  } else {
+    reportMonthFrom=m; reportMonthTo=m; _reportFirstClick=m;
+  }
+  renderPage();
 }
 function selectMonth(scope, m) {
   // 全月リセット（または同じ単月をもう一度クリック）
@@ -1565,11 +1580,11 @@ function renderReimRows() {
           var dp=r.date?r.date.split('-')[2]?String(Number(r.date.split('-')[2])):'':'';
           var fmtAmt=r.amount?Number(r.amount).toLocaleString('ja-JP'):'';
           return `<tr>
-          <td style="white-space:nowrap;"><input type="number" id="rr-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('rr-${i}')" onfocus="this.select()" />/<input type="number" id="rr-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('rr-${i}')" onfocus="this.select()" /></td>
-          <td><input type="text" value="${esc(r.storeName)}" placeholder="〇〇商店" oninput="reimburseRows[${i}].storeName=this.value" /></td>
-          <td><input type="text" value="${esc(r.itemName)}" placeholder="文房具" oninput="reimburseRows[${i}].itemName=this.value" /></td>
-          <td><button class="acct-row-btn" onclick="showAcctRowPicker('reim',${i},'',0,this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
-          <td><input type="text" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);reimburseRows[${i}].amount=this.value.replace(/,/g,'');updateReimSummary()" /></td>
+          <td style="white-space:nowrap;"><input type="number" id="rr-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('rr-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'rr',${i},'m')" />月<input type="number" id="rr-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('rr-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'rr',${i},'d')" />日</td>
+          <td><input type="text" id="rr-${i}-store" value="${esc(r.storeName)}" placeholder="〇〇商店" oninput="reimburseRows[${i}].storeName=this.value" onkeydown="rowFieldEnter(event,'rr',${i},'store')" /></td>
+          <td><input type="text" id="rr-${i}-item" value="${esc(r.itemName)}" placeholder="文房具" oninput="reimburseRows[${i}].itemName=this.value" onkeydown="rowFieldEnter(event,'rr',${i},'item')" /></td>
+          <td><button id="rr-${i}-acct" class="acct-row-btn" onclick="showAcctRowPicker('reim',${i},'',0,this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
+          <td><input type="text" id="rr-${i}-amt" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);reimburseRows[${i}].amount=this.value.replace(/,/g,'');updateReimSummary()" onkeydown="rowFieldEnter(event,'rr',${i},'amt')" /></td>
           <td style="text-align:center;">${reimburseRows.length>1?`<button class="btn btn-secondary btn-xs" onclick="removeReimRow(${i})">✕</button>`:''}</td>
         </tr>`;}).join('')}
       </tbody>
@@ -1712,11 +1727,11 @@ function renderReimEditRows() {
           var dp=r.date?r.date.split('-')[2]?String(Number(r.date.split('-')[2])):'':'';
           var fmtAmt=r.amount?Number(r.amount).toLocaleString('ja-JP'):'';
           return `<tr>
-          <td style="white-space:nowrap;"><input type="number" id="er-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('er-${i}')" onfocus="this.select()" />/<input type="number" id="er-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('er-${i}')" onfocus="this.select()" /></td>
-          <td><input type="text" value="${esc(r.storeName)}" oninput="reimburseRows[${i}].storeName=this.value" /></td>
-          <td><input type="text" value="${esc(r.itemName)}" oninput="reimburseRows[${i}].itemName=this.value" /></td>
-          <td><button class="acct-row-btn" onclick="showAcctRowPicker('reimEdit',${i},'',0,this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
-          <td><input type="text" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);reimburseRows[${i}].amount=this.value.replace(/,/g,'');updateReimEditSummary()" /></td>
+          <td style="white-space:nowrap;"><input type="number" id="er-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('er-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'er',${i},'m')" />月<input type="number" id="er-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="reimburseRows[${i}].date=computeRowDate('er-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'er',${i},'d')" />日</td>
+          <td><input type="text" id="er-${i}-store" value="${esc(r.storeName)}" oninput="reimburseRows[${i}].storeName=this.value" onkeydown="rowFieldEnter(event,'er',${i},'store')" /></td>
+          <td><input type="text" id="er-${i}-item" value="${esc(r.itemName)}" oninput="reimburseRows[${i}].itemName=this.value" onkeydown="rowFieldEnter(event,'er',${i},'item')" /></td>
+          <td><button id="er-${i}-acct" class="acct-row-btn" onclick="showAcctRowPicker('reimEdit',${i},'',0,this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
+          <td><input type="text" id="er-${i}-amt" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);reimburseRows[${i}].amount=this.value.replace(/,/g,'');updateReimEditSummary()" onkeydown="rowFieldEnter(event,'er',${i},'amt')" /></td>
           <td style="text-align:center;">${reimburseRows.length>1?`<button class="btn btn-secondary btn-xs" onclick="reimburseRows.splice(${i},1);renderReimEditRows()">✕</button>`:''}</td>
         </tr>`;}).join('')}
       </tbody>
@@ -1784,19 +1799,18 @@ function pageReports() {
         <div style="margin-bottom:12px;">
           <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">出力月範囲</div>
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <button class="btn btn-xs ${reportMonthFrom===0?'btn-primary':'btn-secondary'}" onclick="reportMonthFrom=0;reportMonthTo=0;renderPage()">全月</button>
+            <button class="btn btn-xs ${reportMonthFrom===0?'btn-primary':'btn-secondary'}" onclick="reportMonthFrom=0;reportMonthTo=0;_reportFirstClick=0;renderPage()">全月</button>
             ${(function(){
               const s=getSettings(); const fm=s.fiscalMonth||1;
               const fiscalMonths=Array.from({length:12},function(_,i){return ((fm-1+i)%12)+1;});
-              const prev=new Date(); prev.setMonth(prev.getMonth()-1); const prevM=prev.getMonth()+1;
               return fiscalMonths.map(function(m){
                 const act=reportMonthFrom!==0&&isMonthInRange(m,reportMonthFrom,reportMonthTo,fm);
-                return '<button class="btn btn-xs '+(act?'btn-primary':'btn-secondary')+'" onclick="reportMonthFrom='+m+';reportMonthTo='+m+';renderPage()">'+m+'月</button>';
+                return '<button class="btn btn-xs '+(act?'btn-primary':'btn-secondary')+'" onclick="reportMonthClick('+m+',event)">'+m+'月</button>';
               }).join('');
             })()}
           </div>
           <div style="font-size:11px;color:var(--gray-500);margin-top:4px;">
-            現在: <strong>${reportMonthFrom===0?'全月（通期）':reportMonthFrom+'月'+(reportMonthFrom!==reportMonthTo?'〜'+reportMonthTo+'月':'')}</strong>
+            現在: <strong>${reportMonthFrom===0?'全月（通期）':reportMonthFrom+'月'+(reportMonthFrom!==reportMonthTo?'〜'+reportMonthTo+'月':'')}</strong>　<span style="color:var(--gray-400);">💡 Shiftキー＋クリックで範囲選択</span>
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -1851,10 +1865,12 @@ function pageReports() {
         </ul>
         <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="exportTaxAccountantBundle()">📦 一括ダウンロード</button>
       </div>
+      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">💾 バックアップ・復元</div>
         <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">全データをJSONで保存・復元（推奨：月1回）</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 バックアップ保存</button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp2').click()">📤 復元</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp2').click()">📤 バックアップから復元</button>
           <input type="file" id="imp2" accept=".json" style="display:none;" onchange="importBackup(event)">
         </div>
       </div>
@@ -2577,6 +2593,20 @@ function formEnterNext(e, el) {
   }
 }
 
+function rowFieldEnter(e, rowPrefix, rowIdx, fieldKey) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  var nextMap = {m:'d', d:'store', store:'item', item:'acct'};
+  var nextKey = nextMap[fieldKey];
+  var nextEl;
+  if (nextKey) {
+    nextEl = document.getElementById(rowPrefix+'-'+rowIdx+'-'+nextKey);
+  } else if (fieldKey === 'amt') {
+    nextEl = document.getElementById(rowPrefix+'-'+(rowIdx+1)+'-m');
+  }
+  if (nextEl) { nextEl.focus(); if (nextEl.select) nextEl.select(); }
+}
+
 function fmtAmtInput(el) {
   var raw = el.value.replace(/[^\d]/g, '');
   el.value = raw ? Number(raw).toLocaleString('ja-JP') : '';
@@ -2754,10 +2784,23 @@ function showSettleModal(id) {
     <div id="settle-summary" style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px;font-size:13px;margin-bottom:10px;">
       <span style="color:var(--gray-500);">金額を入力すると自動計算されます</span>
     </div>
-    <div id="actual-return-wrap" style="display:none;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:14px;">
-      <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px;">💴 実際の受取額（円）— 期待返金額と異なる場合のみ入力</div>
-      <input type="text" inputmode="numeric" id="st-actual" value="${esc(initActual)}" placeholder="期待返金額どおりの場合は空欄でOK" oninput="fmtAmtInput(this)" style="width:100%;padding:8px 10px;border:1px solid #fcd34d;border-radius:6px;font-size:13px;font-family:inherit;" />
-      <div style="font-size:11px;color:#92400e;margin-top:6px;line-height:1.5;">※ 期待返金額と異なる金額を入力した場合、差額は自動的に「現金過不足」として現金出納帳に記録されます。</div>
+    <div id="actual-return-wrap" style="display:none;background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:16px;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:12px;">💴 ステップ 3：返金の確認</div>
+      <div style="background:white;border:2px solid #bbf7d0;border-radius:8px;padding:14px;margin-bottom:14px;text-align:center;">
+        <div style="font-size:12px;color:#4b5563;margin-bottom:6px;">精算結果 — 社員から受け取る返金額</div>
+        <div class="mono" id="return-expected-display" style="font-size:28px;font-weight:700;color:#166534;">—</div>
+      </div>
+      <div style="font-size:14px;font-weight:700;color:#1f2937;margin-bottom:10px;">この金額を現金で受け取りましたか？</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button type="button" id="return-yes-btn" onclick="setActualReturnMode(false)" style="flex:1;padding:10px 8px;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:700;background:${initActual?'white':'#16a34a'};color:${initActual?'#374151':'white'};border:${initActual?'2px solid #d1d5db':'2px solid #16a34a'};">✓ はい、受け取りました</button>
+        <button type="button" id="return-no-btn" onclick="setActualReturnMode(true)" style="flex:1;padding:10px 8px;border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:700;background:${initActual?'#fef3c7':'white'};color:${initActual?'#92400e':'#374151'};border:${initActual?'2px solid #fcd34d':'2px solid #d1d5db'};">⚠️ 金額が違います</button>
+      </div>
+      <div id="actual-ok-wrap" style="display:${initActual?'none':'block'};padding:10px;background:#dcfce7;border-radius:6px;font-size:13px;color:#166534;font-weight:700;">✓ 返金額どおり受取 — 追加入力は不要です</div>
+      <div id="actual-input-wrap" style="display:${initActual?'block':'none'};">
+        <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px;">実際に受け取った金額（円）を入力してください：</div>
+        <input type="text" inputmode="numeric" id="st-actual" value="${esc(initActual)}" placeholder="例: 3,500" oninput="fmtAmtInput(this)" style="width:100%;padding:10px;border:2px solid #fcd34d;border-radius:6px;font-size:16px;font-family:inherit;font-weight:700;" />
+        <div style="font-size:11px;color:#92400e;margin-top:6px;line-height:1.5;">※ 差額は「現金過不足」として自動的に現金出納帳に記録されます</div>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
@@ -2838,11 +2881,11 @@ function renderSettleRows(advId, advAmt) {
           const dp=r.date?r.date.split('-')[2]?String(Number(r.date.split('-')[2])):'':'';
           const fmtAmt=r.amount?Number(r.amount).toLocaleString('ja-JP'):'';
           return `<tr>
-          <td style="white-space:nowrap;"><input type="number" id="sr-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="settleRows[${i}].date=computeRowDate('sr-${i}')" onfocus="this.select()" />/<input type="number" id="sr-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="settleRows[${i}].date=computeRowDate('sr-${i}')" onfocus="this.select()" /></td>
-          <td><input type="text" value="${esc(r.storeName)}" placeholder="〇〇ホテル" oninput="settleRows[${i}].storeName=this.value" /></td>
-          <td><input type="text" value="${esc(r.itemName)}"  placeholder="宿泊費" oninput="settleRows[${i}].itemName=this.value" /></td>
-          <td><button class="acct-row-btn" onclick="showAcctRowPicker('settle',${i},'${esc(advId)}',${advAmt},this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
-          <td><input type="text" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);settleRows[${i}].amount=this.value.replace(/,/g,'');updateSettleSummary(${advAmt})" /></td>
+          <td style="white-space:nowrap;"><input type="number" id="sr-${i}-m" value="${mp}" placeholder="月" min="1" max="12" style="width:40px;" oninput="settleRows[${i}].date=computeRowDate('sr-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'sr',${i},'m')" />月<input type="number" id="sr-${i}-d" value="${dp}" placeholder="日" min="1" max="31" style="width:40px;" oninput="settleRows[${i}].date=computeRowDate('sr-${i}')" onfocus="this.select()" onkeydown="rowFieldEnter(event,'sr',${i},'d')" />日</td>
+          <td><input type="text" id="sr-${i}-store" value="${esc(r.storeName)}" placeholder="〇〇ホテル" oninput="settleRows[${i}].storeName=this.value" onkeydown="rowFieldEnter(event,'sr',${i},'store')" /></td>
+          <td><input type="text" id="sr-${i}-item" value="${esc(r.itemName)}"  placeholder="宿泊費" oninput="settleRows[${i}].itemName=this.value" onkeydown="rowFieldEnter(event,'sr',${i},'item')" /></td>
+          <td><button id="sr-${i}-acct" class="acct-row-btn" onclick="showAcctRowPicker('settle',${i},'${esc(advId)}',${advAmt},this)">${r.account?`<span class="badge-acct" style="pointer-events:none;">${esc(r.account)}</span>`:'<span style="color:var(--gray-400);font-size:11px;">— 未分類 —</span>'} <span style="font-size:10px;color:var(--gray-400);">▼</span></button></td>
+          <td><input type="text" id="sr-${i}-amt" inputmode="numeric" value="${fmtAmt}" placeholder="0" oninput="fmtAmtInput(this);settleRows[${i}].amount=this.value.replace(/,/g,'');updateSettleSummary(${advAmt})" onkeydown="rowFieldEnter(event,'sr',${i},'amt')" /></td>
           <td style="text-align:center;">${settleRows.length>1?`<button class="btn btn-secondary btn-xs" onclick="removeSettleRow(${i},'${esc(advId)}',${advAmt})">✕</button>`:''}</td>
         </tr>`;}).join('')}
       </tbody>
@@ -2878,6 +2921,33 @@ function updateSettleSummary(advAmt) {
     const methodEl = document.getElementById('st-method');
     const isCash = methodEl ? methodEl.value === 'cash' : true;
     wrap.style.display = (diff < 0 && isCash) ? 'block' : 'none';
+    if (diff < 0 && isCash) {
+      const dispEl = document.getElementById('return-expected-display');
+      if (dispEl) dispEl.textContent = '¥'+Math.abs(diff).toLocaleString('ja-JP');
+    }
+  }
+}
+
+function setActualReturnMode(differs) {
+  var inputWrap = document.getElementById('actual-input-wrap');
+  var okWrap = document.getElementById('actual-ok-wrap');
+  var yesBtn = document.getElementById('return-yes-btn');
+  var noBtn = document.getElementById('return-no-btn');
+  if (inputWrap) inputWrap.style.display = differs ? 'block' : 'none';
+  if (okWrap) okWrap.style.display = differs ? 'none' : 'block';
+  if (yesBtn) {
+    yesBtn.style.background = differs ? 'white' : '#16a34a';
+    yesBtn.style.color = differs ? '#374151' : 'white';
+    yesBtn.style.border = differs ? '2px solid #d1d5db' : '2px solid #16a34a';
+  }
+  if (noBtn) {
+    noBtn.style.background = differs ? '#fef3c7' : 'white';
+    noBtn.style.color = differs ? '#92400e' : '#374151';
+    noBtn.style.border = differs ? '2px solid #fcd34d' : '2px solid #d1d5db';
+  }
+  if (!differs) {
+    var actEl = document.getElementById('st-actual');
+    if (actEl) actEl.value = '';
   }
 }
 
