@@ -637,8 +637,8 @@ function taxLabel(rate) {
 function entryTypeLabel(e) {
   if (e.entryKind==='bank_withdraw') return '通帳引出 ';
   if (e.entryKind==='bank_deposit')  return '通帳預入 ';
-  if (e.type==='advance')      return '仮払 ';
-  if (e.type==='settlement')   return '精算 ';
+  if (e.type==='advance')      return '仮払支払 ';
+  if (e.type==='settlement')   return '仮払精算 ';
   if (e.type==='reimbursement') return '立替返金 ';
   return '';
 }
@@ -1227,7 +1227,7 @@ function pageLedger() {
   const storePlaceholder = isBank ? '〇〇銀行〇〇支店' : '〇〇スーパー';
   const storeLabel = isBank ? '銀行名' : '店名・支払先';
   const itemLabel  = isBank ? '内容'   : '購入品・内容';
-  const itemFixed = currentEntryKind==='bank_withdraw' ? '通帳より引出し（現金補充）' : currentEntryKind==='bank_deposit' ? '現金へ預入' : '';
+  const itemFixed = currentEntryKind==='bank_withdraw' ? '〇〇銀行より引出し（現金補充）※店名から自動入力' : currentEntryKind==='bank_deposit' ? '〇〇銀行へ預入 ※店名から自動入力' : '';
   const recLabel = currentEntryKind==='bank_withdraw' ? '入金額（引出し金額）' : '入金額（円）';
   const payLabel = currentEntryKind==='bank_deposit'  ? '出金額（預入金額）'   : '出金額（円）';
   const recentStores = getRecentStores();
@@ -2598,10 +2598,12 @@ function submitEntry() {
 
   if (currentEntryKind==='bank_withdraw') {
     if (rec<=0){ alert('通帳から引き出した金額（入金額）を入力してください。'); return; }
-    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:rec, paymentAmount:0, taxRate:null, account:'', memo, type:'normal', entryKind:'bank_withdraw' });
+    const bwItem = `${store}より引出し（現金補充）`;
+    addEntry({ date, storeName:store, itemName:bwItem, description:`${store} ${bwItem}`, receiptAmount:rec, paymentAmount:0, taxRate:null, account:'', memo, type:'normal', entryKind:'bank_withdraw' });
   } else if (currentEntryKind==='bank_deposit') {
     if (pay<=0){ alert('通帳へ預け入れた金額（出金額）を入力してください。'); return; }
-    addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:0, paymentAmount:pay, taxRate:null, account:'', memo, type:'normal', entryKind:'bank_deposit' });
+    const bdItem = `${store}へ預入`;
+    addEntry({ date, storeName:store, itemName:bdItem, description:`${store} ${bdItem}`, receiptAmount:0, paymentAmount:pay, taxRate:null, account:'', memo, type:'normal', entryKind:'bank_deposit' });
   } else {
     if (rec===0&&pay===0){ alert('入金か出金のいずれかを入力してください。'); return; }
     if (rec>0&&pay>0){ alert('入金と出金を同時に入力することはできません。'); return; }
@@ -2945,7 +2947,7 @@ function exportTaxAccountantBundle() {
       e.account||'',
       e.storeName||'', e.itemName||e.description||'',
       e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
-      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':e.type==='reimbursement'?'立替返金':'一般',
+      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払支払':e.type==='settlement'?'仮払精算':e.type==='reimbursement'?'立替返金':'一般',
       e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
     ];})
   ];
@@ -3043,7 +3045,7 @@ function exportLedgerCSVReport() {
     ...filtered.map(function(e){return [
       e.date, e.account||'', e.storeName||'', e.itemName||e.description||'',
       e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
-      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':e.type==='reimbursement'?'立替返金':'一般',
+      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払支払':e.type==='settlement'?'仮払精算':e.type==='reimbursement'?'立替返金':'一般',
       e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
     ];})
   ];
@@ -3060,7 +3062,7 @@ function exportLedgerCSV() {
       e.account||'',
       e.storeName||'', e.itemName||e.description||'',
       e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
-      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払':e.type==='settlement'?'精算':e.type==='reimbursement'?'立替返金':'一般',
+      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払支払':e.type==='settlement'?'仮払精算':e.type==='reimbursement'?'立替返金':'一般',
       e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
     ])
   ];
