@@ -468,6 +468,7 @@
     <h1>現金出納帳・仮払管理システム</h1>
     <div id="header-save" style="font-size:11px;opacity:0.7;margin-top:2px;"></div>
   </div>
+  <div id="header-loc-bar" class="no-print" style="display:none;align-items:center;gap:5px;flex-wrap:wrap;justify-content:center;"></div>
   <div style="display:flex;align-items:center;gap:12px;">
     <div id="header-balance" style="font-size:18px;font-weight:700;"></div>
     <button class="btn no-print" style="background:rgba(255,255,255,0.18);color:white;border:1px solid rgba(255,255,255,0.6);font-size:13px;font-weight:700;padding:7px 14px;" onclick="showSettings()">⚙ 設定</button>
@@ -1368,10 +1369,7 @@ function pageLedger() {
   const recLabel = currentEntryKind==='bank_withdraw' ? '入金額（引出し金額）' : '入金額（円）';
   const payLabel = currentEntryKind==='bank_deposit'  ? '出金額（預入金額）'   : '出金額（円）';
   const recentStores = getRecentStores();
-  const locSelectHtml = (locs.length>=1) ? `<div class="form-group"><label>拠点</label>
-    <select id="ae-loc">
-      ${locs.map(function(l){ return '<option value="'+l.replace(/"/g,'&quot;')+'" '+((currentLocation===l||(currentLocation===''&&l===locs[0]))?'selected':'')+'>'+l+'</option>'; }).join('')}
-    </select></div>` : '';
+  const needsLocPick = locs.length>=1 && !currentLocation;
 
   return `
   ${isClosed ? `<div class="alert" style="background:#fff7ed;border:2px solid #fb923c;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
@@ -1392,9 +1390,9 @@ function pageLedger() {
       <button class="bank-type-btn ${kindDeposit}"  onclick="setEntryKind('bank_deposit')">🏦 通帳へ預入（現金を銀行へ）</button>
     </div>
     ${hintHtml}
+    ${needsLocPick?`<div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#92400e;font-weight:700;">⚠️ 「全拠点」表示中は取引登録できません。ヘッダーの拠点ボタンから処理する拠点を選択してください。</div>`:''}
     <div class="form-grid" style="margin-bottom:10px;">
       <div class="form-group req"><label>日付</label>${dateInputsMD('ae-date', today(), 'ae-store')}</div>
-      ${locSelectHtml}
       <div class="form-group req"><label>${storeLabel}</label>
         <input type="text" id="ae-store" placeholder="${storePlaceholder}" ${currentEntryKind==='normal'?'list="ae-store-list" autocomplete="off"':''} lang="ja" style="ime-mode:active;" onkeydown="formEnterNext(event,this)" data-next="ae-item" onblur="if(currentEntryKind==='normal')applyStoreMemory()" />
         ${currentEntryKind==='normal'&&recentStores.length>0?`<datalist id="ae-store-list">${recentStores.map(function(n){return '<option value="'+esc(n)+'">';}).join('')}</datalist>`:''}
@@ -1441,7 +1439,6 @@ function pageLedger() {
         <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ 印刷/PDF</button>
       </div>
     </div>
-    ${buildLocationBar()}
     ${buildMonthBar('ledger', fm)}
     <div class="print-only" style="text-align:center;margin-bottom:14px;">
       <div style="font-size:18px;font-weight:700;">現 金 出 納 帳</div>
@@ -1515,10 +1512,7 @@ function pageAdvances() {
   const s=getSettings();
   const empNames=[...new Set(all.map(a=>a.employeeName))];
   const locs=s.locations||[];
-  const advLocHtml = (locs.length>=1) ? `<div class="form-group"><label>拠点</label>
-    <select id="af-loc">
-      ${locs.map(function(l){ return '<option value="'+l.replace(/"/g,'&quot;')+'" '+((currentLocation===l||(currentLocation===''&&l===locs[0]))?'selected':'')+'>'+l+'</option>'; }).join('')}
-    </select></div>` : '';
+  const advNeedsLocPick = locs.length>=1 && !currentLocation;
 
   return `
   <div class="card no-print">
@@ -1526,9 +1520,9 @@ function pageAdvances() {
       <div class="card-title" style="margin-bottom:0;border:none;padding:0;">＋ 仮払い登録</div>
       <button class="btn btn-outline btn-sm" onclick="showHowTo('advances')" style="font-size:12px;">📖 操作方法</button>
     </div>
+    ${advNeedsLocPick?`<div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#92400e;font-weight:700;">⚠️ 「全拠点」表示中は仮払い登録できません。ヘッダーの拠点ボタンから処理する拠点を選択してください。</div>`:''}
     <div class="form-grid">
       <div class="form-group req"><label>仮払日</label>${dateInputsMD('af-date', today(), 'af-name')}</div>
-      ${advLocHtml}
       <div class="form-group req">
         <label>氏名</label>
         <input type="text" id="af-name" placeholder="山田 太郎" list="emp-list" autocomplete="off" onkeydown="formEnterNext(event,this)" data-next="af-purpose" />
@@ -1608,10 +1602,7 @@ function pageReimbursements() {
   const empNames=[...new Set(all.map(function(r){return r.employeeName;}))];
   const pendingTotal=all.filter(function(r){return r.status==='pending';}).reduce(function(s,r){return s+(r.totalAmount||0);},0);
   const locs = s.locations||[];
-  const reimLocHtml = (locs.length>=1) ? `<div class="form-group"><label>拠点</label>
-    <select id="rf-loc">
-      ${locs.map(function(l){ return '<option value="'+l.replace(/"/g,'&quot;')+'" '+(currentLocation===l?'selected':'')+'>'+l+'</option>'; }).join('')}
-    </select></div>` : '';
+  const reimNeedsLocPick = locs.length>=1 && !currentLocation;
 
   return `
   <div class="card no-print">
@@ -1630,8 +1621,8 @@ function pageReimbursements() {
         <datalist id="rf-emp-list">${empNames.map(function(n){return '<option value="'+esc(n)+'">';}).join('')}</datalist>
       </div>
       <div class="form-group"><label>目的・備考</label><input type="text" id="rf-purpose" placeholder="〇月分立替経費" onkeydown="if(event.key==='Enter'){event.preventDefault();submitReimbursement();}" /></div>
-      ${reimLocHtml}
     </div>
+    ${reimNeedsLocPick?`<div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#92400e;font-weight:700;">⚠️ 「全拠点」表示中は立替登録できません。ヘッダーの拠点ボタンから処理する拠点を選択してください。</div>`:''}
     <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">立替明細（レシートごとに1行）</div>
     <div id="reim-rows-wrap"></div>
     <button class="btn btn-secondary btn-sm" style="margin-bottom:12px;" onclick="addReimRow()">＋ 明細を追加</button>
@@ -1760,8 +1751,13 @@ function submitReimbursement() {
   }
   const cleanItems=items.map(function(r){return {...r, amount:Number((r.amount||'').toString().replace(/,/g,'')||0)};});
   cleanItems.forEach(function(it){ if(it.storeName) learnStore(it.storeName, it.account, null, it.itemName); });
-  const reimLocEl = document.getElementById('rf-loc');
-  const reimLocation = reimLocEl ? reimLocEl.value : '';
+  const _reimS = getSettings();
+  const _reimLocs = (_reimS && _reimS.locations) ? _reimS.locations : [];
+  if (_reimLocs.length>=1 && !currentLocation) {
+    alert('「全拠点」表示中は立替登録できません。\n\nヘッダーの拠点ボタンから処理する拠点を選択してください。');
+    return;
+  }
+  const reimLocation = currentLocation || '';
   const rei=registerReimbursement({registeredDate:date, employeeName:name, purpose:purpose, items:cleanItems, location:reimLocation});
   reimburseRows=[];
   document.getElementById('rf-name').value='';
@@ -2823,8 +2819,13 @@ function submitEntry() {
   const memo  = document.getElementById('ae-memo').value.trim();
   const acctEl = document.getElementById('ae-account');
   const account = acctEl ? acctEl.value : '';
-  const locEl = document.getElementById('ae-loc');
-  const location = locEl ? locEl.value : '';
+  const _s = getSettings();
+  const _locs = (_s && _s.locations) ? _s.locations : [];
+  if (_locs.length>=1 && !currentLocation) {
+    alert('「全拠点」表示中は取引登録できません。\n\nヘッダーの拠点ボタンから処理する拠点を選択してください。');
+    return;
+  }
+  const location = currentLocation || '';
 
   if (!date||!store||!item){ alert('日付・店名・購入品は必須です。'); return; }
 
@@ -2933,8 +2934,13 @@ function submitAdvance() {
   const amount =document.getElementById('af-amount').value.replace(/,/g,'');
   if (!date||!name||!purpose||!amount){ alert('全ての必須項目を入力してください。'); return; }
   if (Number(amount)<=0){ alert('仮払金額は1円以上を入力してください。'); return; }
-  const advLocEl = document.getElementById('af-loc');
-  const advLocation = advLocEl ? advLocEl.value : '';
+  const _advS = getSettings();
+  const _advLocs = (_advS && _advS.locations) ? _advS.locations : [];
+  if (_advLocs.length>=1 && !currentLocation) {
+    alert('「全拠点」表示中は仮払い登録できません。\n\nヘッダーの拠点ボタンから処理する拠点を選択してください。');
+    return;
+  }
+  const advLocation = currentLocation || '';
   const adv=registerAdvance({date,employeeName:name,purpose,advanceAmount:amount,location:advLocation});
   document.getElementById('af-name').value='';
   document.getElementById('af-purpose').value='';
@@ -3685,10 +3691,46 @@ function showModal(html, wide=false) {
 function closeModal() { document.getElementById('modal-mount').innerHTML=''; }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
 
+function getLocationColor(loc) {
+  if (!loc) return '#1e40af';
+  const colors=['#166534','#c2410c','#6d28d9','#0f766e','#9d174d','#7c2d12','#1e3a8a','#0c4a6e'];
+  let h=0;
+  for (let i=0;i<loc.length;i++) h=(h*31+loc.charCodeAt(i))>>>0;
+  return colors[h%colors.length];
+}
+function setLocation(loc) {
+  currentLocation=loc;
+  updateHeader();
+  renderPage();
+}
+function locBtnStyle(active) {
+  if (active) return 'background:white;color:#1f2937;border:none;font-size:12px;font-weight:700;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit;box-shadow:0 1px 3px rgba(0,0,0,0.2);';
+  return 'background:rgba(255,255,255,0.18);color:white;border:1px solid rgba(255,255,255,0.5);font-size:12px;font-weight:700;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit;';
+}
 function updateHeader() {
   const s=getSettings(); if (!s) return;
   document.getElementById('header-company').textContent=s.companyName;
   document.getElementById('header-balance').textContent=`現金残高: ${fc(getCurrentBalance())}`;
+
+  const headerEl=document.getElementById('app-header');
+  if (headerEl) headerEl.style.background=getLocationColor(currentLocation);
+
+  const locBar=document.getElementById('header-loc-bar');
+  if (locBar) {
+    const locs=s.locations||[];
+    if (locs.length===0) {
+      locBar.style.display='none';
+    } else {
+      locBar.style.display='flex';
+      let html='<span style="font-size:11px;font-weight:700;opacity:0.9;margin-right:2px;white-space:nowrap;">🏢 処理中:</span>';
+      html+='<button onclick="setLocation(\'\')" style="'+locBtnStyle(currentLocation==='')+'">全拠点</button>';
+      locs.forEach(function(loc){
+        const act=currentLocation===loc;
+        html+='<button onclick="setLocation(this.dataset.loc)" data-loc="'+loc.replace(/"/g,'&quot;')+'" style="'+locBtnStyle(act)+'">'+loc+'</button>';
+      });
+      locBar.innerHTML=html;
+    }
+  }
 }
 
 function checkAndRestoreAutoBackup() {
