@@ -394,6 +394,23 @@
       .stats-grid { grid-template-columns: 1fr 1fr; }
       .form-grid { grid-template-columns: 1fr; }
     }
+    .bank-drop-zone {
+      border: 3px dashed var(--gray-300); border-radius: 12px;
+      padding: 48px 24px; text-align: center; cursor: pointer;
+      transition: all 0.15s; background: var(--gray-50);
+    }
+    .bank-drop-zone:hover, .bank-drop-zone.drag-over {
+      border-color: var(--primary); background: var(--primary-light);
+    }
+    .bank-session-card {
+      border: 1px solid var(--gray-200); border-radius: 10px;
+      padding: 16px; background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      transition: box-shadow 0.15s;
+    }
+    .bank-session-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .bank-row-empty td { background: #fff7ed !important; }
+    .bank-row-empty:hover td { background: #fef3c7 !important; }
   </style>
 </head>
 <body>
@@ -481,6 +498,7 @@
   <button class="nav-btn" id="nav-advances" onclick="showPage('advances')">💼 仮払管理</button>
   <button class="nav-btn" id="nav-reimbursements" onclick="showPage('reimbursements')">🧾 立替経費</button>
   <button class="nav-btn" id="nav-reports"  onclick="showPage('reports')">📄 帳票出力</button>
+  <button class="nav-btn" id="nav-bank-csv" onclick="showPage('bank-csv')">🏦 銀行CSV</button>
   <div id="nav-fiscal-bar" style="margin-left:auto;align-items:center;gap:4px;padding:0 8px;display:none;"></div>
 </div>
 
@@ -974,6 +992,9 @@ function showSettings() {
       <input type="file" id="imp-f" accept=".json" style="display:none;" onchange="importBackup(event)">
     </div>
     <div style="font-size:11px;color:var(--gray-500);margin-top:4px;">※定期的なバックアップを推奨します（ブラウザキャッシュ削除でデータが消えます）</div>
+    <div class="divider"></div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🏦 銀行CSV設定</div>
+    <button class="btn btn-secondary btn-sm" onclick="closeModal();showBankCsvSettings()">🏦 銀行CSV テンプレート・学習履歴の管理</button>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveSettings()">保存</button>
@@ -1025,6 +1046,13 @@ function saveSettings() {
 let currentPage='dashboard';
 let currentLocation='';
 let _monthFirstClick={ledger:0, pl:0};
+let bankCsvPage='list';
+let bankCurrentSession=null;
+let bankImportedData=null;
+let bankColumnRoles={};
+let bankSessionCache=null;
+let bankEditAutoSaveTimer=null;
+let _bankIDB=null;
 let searchMode=false;
 let searchFilters={account:'',store:'',item:'',amtMin:'',amtMax:''};
 let ledgerYear=new Date().getFullYear();
@@ -1258,6 +1286,7 @@ function renderPage() {
   else if (currentPage==='reports')           el.innerHTML=pageReports();
   else if (currentPage==='settlement-detail') el.innerHTML=pageSettlementDetail();
   else if (currentPage==='pl-report')         el.innerHTML=pagePLReport();
+  else if (currentPage==='bank-csv')          el.innerHTML=pageBankCSV();
   renderAccountSidebar();
   renderNavFiscalBar();
   if (currentPage==='reimbursements' && typeof renderReimRows==='function') renderReimRows();
@@ -1266,7 +1295,7 @@ function renderPage() {
 function renderAccountSidebar() {
   var sb = document.getElementById('acct-sidebar');
   if (!sb) return;
-  if (currentPage !== 'ledger') {
+  if (currentPage !== 'ledger' || currentPage === 'bank-csv') {
     sb.classList.remove('visible');
     document.body.classList.remove('sidebar-open');
     return;
@@ -3834,6 +3863,640 @@ function checkAndRestoreAutoBackup() {
     }
   } catch (e) { }
 }
+
+// ─── 銀行CSV修正ツール ─────────────────────────────────────────────────────────
+
+// IndexedDB
+function bankOpenDB() {
+  if (_bankIDB) return Promise.resolve(_bankIDB);
+  return new Promise(function(resolve, reject) {
+    var req = indexedDB.open('CashLedgerBankDB', 1);
+    req.onupgradeneeded = function(e) {
+      var db = e.target.result;
+      if (!db.objectStoreNames.contains('sessions'))
+        db.createObjectStore('sessions', { keyPath: 'id' });
+    };
+    req.onsuccess = function(e) { _bankIDB = e.target.result; resolve(_bankIDB); };
+    req.onerror = function(e) { reject(e); };
+  });
+}
+function bankSaveSession(sess) {
+  return bankOpenDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('sessions','readwrite');
+      tx.objectStore('sessions').put(sess);
+      tx.oncomplete = resolve; tx.onerror = reject;
+    });
+  });
+}
+function bankLoadAllSessions() {
+  return bankOpenDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('sessions','readonly');
+      var req = tx.objectStore('sessions').getAll();
+      req.onsuccess = function() { resolve(req.result || []); };
+      req.onerror = reject;
+    });
+  });
+}
+function bankDeleteSession(id) {
+  return bankOpenDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('sessions','readwrite');
+      tx.objectStore('sessions').delete(id);
+      tx.oncomplete = resolve; tx.onerror = reject;
+    });
+  });
+}
+
+// 文字コード自動検出
+function bankDetectEncoding(buf) {
+  var b = new Uint8Array(buf);
+  if (b[0]===0xEF && b[1]===0xBB && b[2]===0xBF) return 'utf-8';
+  if (b[0]===0xFF && b[1]===0xFE) return 'utf-16le';
+  for (var i=0; i<Math.min(b.length-1,2000); i++) {
+    if (b[i]===0x1B && (b[i+1]===0x24 || b[i+1]===0x28)) return 'iso-2022-jp';
+  }
+  var sjis=0, euc=0;
+  for (var j=0; j<Math.min(b.length-1,3000); j++) {
+    var c=b[j];
+    if ((c>=0x81&&c<=0x9F)||(c>=0xE0&&c<=0xFC)) { sjis++; j++; }
+    else if (c>=0xA1&&c<=0xFE) { if (b[j+1]>=0xA1&&b[j+1]<=0xFE) { euc++; j++; } }
+  }
+  if (sjis===0&&euc===0) return 'utf-8';
+  return sjis>=euc ? 'shift_jis' : 'euc-jp';
+}
+
+// CSV解析
+function bankParseCSV(text) {
+  text = text.normalize('NFC').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  var rows = [];
+  var lines = text.split('\n');
+  for (var li=0; li<lines.length; li++) {
+    var line = lines[li];
+    if (line.trim()==='') continue;
+    var cells=[], i=0;
+    while (i<line.length) {
+      if (line[i]==='"') {
+        var cell=''; i++;
+        while (i<line.length) {
+          if (line[i]==='"'&&line[i+1]==='"') { cell+='"'; i+=2; }
+          else if (line[i]==='"') { i++; break; }
+          else { cell+=line[i++]; }
+        }
+        cells.push(cell);
+        if (line[i]===',') i++;
+      } else {
+        var end=line.indexOf(',',i);
+        if (end===-1) { cells.push(line.slice(i)); i=line.length; }
+        else { cells.push(line.slice(i,end)); i=end+1; }
+      }
+    }
+    rows.push(cells);
+  }
+  return rows;
+}
+
+// 金額解析（括弧表記対応）
+function bankParseAmount(str) {
+  if (str==null||str==='') return 0;
+  var s = String(str).replace(/,/g,'').replace(/¥/g,'').trim();
+  var neg=false;
+  if (s.startsWith('(')&&s.endsWith(')')) { neg=true; s=s.slice(1,-1); }
+  var n = parseFloat(s);
+  if (isNaN(n)) return 0;
+  return neg ? -n : n;
+}
+
+// 日付正規化
+function bankNormalizeDate(str) {
+  if (!str||!str.trim()) return '';
+  var s = str.trim().replace(/[年月・]/g,'/').replace(/[日]/g,'');
+  var parts = s.split(/[\/\-]/);
+  if (parts.length===3) {
+    var y = parts[0].length===2 ? '20'+parts[0] : parts[0];
+    return y+'-'+parts[1].padStart(2,'0')+'-'+parts[2].padStart(2,'0');
+  }
+  if (parts.length===2) {
+    var now=new Date();
+    return now.getFullYear()+'-'+parts[0].padStart(2,'0')+'-'+parts[1].padStart(2,'0');
+  }
+  return str;
+}
+
+// 摘要学習・オートコンプリート
+function bankGetHistory() { return DB.get('bank_history')||{}; }
+function bankLearnHistory(description, amount, dayOfMonth) {
+  if (!description||!description.trim()) return;
+  var h=bankGetHistory();
+  var key=String(amount)+'_'+String(dayOfMonth);
+  if (!h[key]) h[key]=[];
+  h[key]=h[key].filter(function(x){return x!==description;});
+  h[key].unshift(description);
+  if (h[key].length>8) h[key]=h[key].slice(0,8);
+  DB.set('bank_history',h);
+}
+function bankAutoComplete(amount, dayOfMonth) {
+  var h=bankGetHistory();
+  return h[String(amount)+'_'+String(dayOfMonth)]||[];
+}
+
+// テンプレート管理
+function bankGetTemplates() { return DB.get('bank_templates')||[]; }
+function bankSaveTemplates(t) { DB.set('bank_templates',t); }
+
+// 列ロール定義
+var BANK_COL_ROLES = {
+  date:        { label:'日付', color:'#1e40af', bg:'#dbeafe' },
+  description: { label:'摘要', color:'#166534', bg:'#dcfce7' },
+  receipt:     { label:'入金', color:'#15803d', bg:'#dcfce7' },
+  payment:     { label:'出金', color:'#b91c1c', bg:'#fee2e2' },
+  balance:     { label:'残高', color:'#6d28d9', bg:'#ede9fe' },
+};
+var _bankRoleCycle = ['date','description','receipt','payment','balance',null];
+
+// 自動保存
+function bankScheduleAutoSave() {
+  if (bankEditAutoSaveTimer) clearTimeout(bankEditAutoSaveTimer);
+  bankEditAutoSaveTimer = setTimeout(function() {
+    if (!bankCurrentSession) return;
+    bankCurrentSession.updatedAt = new Date().toISOString();
+    bankSaveSession(bankCurrentSession).then(function() {
+      if (bankSessionCache) {
+        var idx=bankSessionCache.findIndex(function(s){return s.id===bankCurrentSession.id;});
+        if (idx>=0) bankSessionCache[idx]=bankCurrentSession;
+        else bankSessionCache.push(bankCurrentSession);
+      }
+      var el=document.getElementById('bank-save-ind');
+      if (el) {
+        var t=new Date();
+        el.textContent='自動保存済 '+String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+        el.style.opacity='1';
+        setTimeout(function(){if(el)el.style.opacity='0.5';},3000);
+      }
+    });
+  }, 800);
+}
+
+// セッションマージ（同銀行・同口座の重複排除）
+function bankMergeSessions(base, other) {
+  var seen=new Set(base.rows.map(function(r){
+    return r.date+'_'+r.receipt+'_'+r.payment+'_'+r.balance;
+  }));
+  var added=0;
+  other.rows.forEach(function(r) {
+    var k=r.date+'_'+r.receipt+'_'+r.payment+'_'+r.balance;
+    if (!seen.has(k)) { base.rows.push(r); seen.add(k); added++; }
+  });
+  base.rows.sort(function(a,b){return a.date.localeCompare(b.date);});
+  return added;
+}
+
+// ── ページ関数 ──────────────────────────────────────────────────────────────
+
+function pageBankCSV() {
+  if (bankCsvPage==='list') {
+    if (bankSessionCache===null) {
+      bankLoadAllSessions().then(function(sessions) {
+        bankSessionCache=sessions.sort(function(a,b){return b.updatedAt.localeCompare(a.updatedAt);});
+        renderPage();
+      }).catch(function(){ bankSessionCache=[]; renderPage(); });
+      return '<div class="card"><div class="empty-state"><div class="icon">🏦</div><p>読み込み中...</p></div></div>';
+    }
+    return bankPageList();
+  }
+  if (bankCsvPage==='importing') return bankPageImport();
+  if (bankCsvPage==='mapping')   return bankPageMapping();
+  if (bankCsvPage==='editing')   return bankPageEdit();
+  return '';
+}
+
+function bankPageList() {
+  var sessions=bankSessionCache||[];
+  var listHtml;
+  if (sessions.length===0) {
+    listHtml='<div class="empty-state"><div class="icon">📂</div><p>保存されたセッションはありません</p>'
+      +'<p style="font-size:12px;margin-top:6px;">「新規CSVインポート」から銀行CSVを取り込んでください</p></div>';
+  } else {
+    listHtml='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">';
+    sessions.forEach(function(sess) {
+      var dt=sess.updatedAt?new Date(sess.updatedAt).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+      var emptyCount=sess.rows.filter(function(r){return !r.description||!r.description.trim();}).length;
+      listHtml+='<div class="bank-session-card">'
+        +'<div style="font-size:13px;font-weight:700;color:var(--gray-900);margin-bottom:4px;">🏦 '+esc(sess.bankName||'（銀行名未設定）')+'</div>'
+        +(sess.accountNo?'<div style="font-size:11px;color:var(--gray-500);margin-bottom:4px;">口座番号: '+esc(sess.accountNo)+'</div>':'')
+        +'<div style="font-size:11px;color:var(--gray-500);margin-bottom:4px;">📄 '+esc(sess.fileName||'')+'　'+sess.rows.length+'行</div>'
+        +(emptyCount>0
+          ?'<div style="font-size:11px;color:#d97706;font-weight:600;margin-bottom:6px;">⚠ 空欄の摘要: '+emptyCount+'行</div>'
+          :'<div style="font-size:11px;color:var(--success);margin-bottom:6px;">✅ 摘要入力完了</div>')
+        +'<div style="font-size:10px;color:var(--gray-400);margin-bottom:10px;">最終更新: '+dt+'</div>'
+        +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+        +'<button class="btn btn-primary btn-sm" onclick="bankResumeSession(\''+esc(sess.id)+'\')">▶ 再開</button>'
+        +'<button class="btn btn-secondary btn-sm" onclick="bankDownloadCSV(\''+esc(sess.id)+'\')">📥 CSV出力</button>'
+        +'<button class="btn btn-secondary btn-sm" onclick="bankConfirmDelete(\''+esc(sess.id)+'\')">🗑 削除</button>'
+        +'</div></div>';
+    });
+    listHtml+='</div>';
+    // 同銀行・同口座のマージ提案
+    var groups={};
+    sessions.forEach(function(s){
+      var k=(s.bankName||'')+'|'+(s.accountNo||'');
+      if (!groups[k]) groups[k]=[];
+      groups[k].push(s);
+    });
+    Object.keys(groups).forEach(function(k){
+      if (groups[k].length>=2) {
+        listHtml+='<div class="alert alert-warning" style="margin-top:12px;font-size:13px;">'
+          +'💡 同じ銀行・口座のセッションが '+groups[k].length+' 件あります。'
+          +'<button class="btn btn-sm btn-outline" style="margin-left:10px;" onclick="bankShowMergeModal(\''+esc(k)+'\')">'
+          +'マージして重複除去</button></div>';
+      }
+    });
+  }
+  return '<div class="card">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+    +'<div class="card-title" style="margin:0;border:none;padding:0;">🏦 銀行CSVセッション一覧</div>'
+    +'<button class="btn btn-primary" onclick="bankCsvPage=\'importing\';renderPage()">＋ 新規CSVインポート</button>'
+    +'</div>'
+    +listHtml
+    +'</div>';
+}
+
+function bankPageImport() {
+  return '<div class="card">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">'
+    +'<button class="btn btn-secondary btn-sm" onclick="bankCsvPage=\'list\';renderPage()">← 一覧に戻る</button>'
+    +'<div class="card-title" style="margin:0;border:none;padding:0;">📂 CSVインポート</div>'
+    +'</div>'
+    +'<div id="bank-drop-zone" class="bank-drop-zone" ondragover="event.preventDefault();this.classList.add(\'drag-over\')" ondragleave="this.classList.remove(\'drag-over\')" ondrop="bankOnDrop(event)">'
+    +'<div style="font-size:48px;margin-bottom:12px;">📂</div>'
+    +'<div style="font-size:15px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">CSVファイルをドラッグ&amp;ドロップ</div>'
+    +'<div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">または下のボタンからファイルを選択</div>'
+    +'<button class="btn btn-primary" onclick="document.getElementById(\'bank-file-input\').click()">📄 ファイルを選択</button>'
+    +'<input type="file" id="bank-file-input" accept=".csv,.txt" style="display:none;" onchange="bankOnFileSelect(event)">'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--gray-500);margin-top:10px;">対応文字コード: UTF-8 / BOM付きUTF-8 / Shift_JIS / EUC-JP / JIS</div>'
+    +'</div>';
+}
+
+function bankOnDrop(event) {
+  event.preventDefault();
+  var dz=document.getElementById('bank-drop-zone');
+  if (dz) dz.classList.remove('drag-over');
+  var file=event.dataTransfer.files[0];
+  if (file) bankReadFile(file);
+}
+function bankOnFileSelect(event) {
+  var file=event.target.files[0];
+  if (file) bankReadFile(file);
+  event.target.value='';
+}
+function bankReadFile(file) {
+  var reader=new FileReader();
+  reader.onload=function(e) {
+    var buf=e.target.result;
+    var enc=bankDetectEncoding(buf);
+    var text;
+    try { text=new TextDecoder(enc,{fatal:false}).decode(buf); }
+    catch(ex) { text=new TextDecoder('utf-8',{fatal:false}).decode(buf); }
+    if (text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+    var parsed=bankParseCSV(text);
+    if (parsed.length<2) { alert('CSVの解析に失敗しました。ファイルを確認してください。'); return; }
+    bankImportedData={
+      fileName:file.name, encoding:enc,
+      headers:parsed[0],
+      rows:parsed.slice(1).filter(function(r){return r.some(function(c){return c.trim()!=='';});})
+    };
+    bankColumnRoles={};
+    bankAutoDetectColumns(bankImportedData.headers);
+    bankCsvPage='mapping';
+    renderPage();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function bankAutoDetectColumns(headers) {
+  var dateKw  =['日付','DATE','取引日','年月日','Value Date'];
+  var descKw  =['摘要','内容','取引内容','取引摘要','説明','Description'];
+  var recKw   =['入金','入金額','入金金額','お預かり','Deposit'];
+  var payKw   =['出金','出金額','出金金額','お引き出し','引出','Withdrawal'];
+  var balKw   =['残高','差引残高','帳尻','Balance'];
+  function match(h,kws) {
+    var hu=h.trim().toUpperCase();
+    return kws.some(function(k){return hu.indexOf(k.toUpperCase())!==-1;});
+  }
+  headers.forEach(function(h,i) {
+    if (!bankColumnRoles.date        && match(h,dateKw))  bankColumnRoles.date=i;
+    else if (!bankColumnRoles.description && match(h,descKw))  bankColumnRoles.description=i;
+    else if (!bankColumnRoles.receipt     && match(h,recKw))   bankColumnRoles.receipt=i;
+    else if (!bankColumnRoles.payment     && match(h,payKw))   bankColumnRoles.payment=i;
+    else if (!bankColumnRoles.balance     && match(h,balKw))   bankColumnRoles.balance=i;
+  });
+}
+
+function bankPageMapping() {
+  if (!bankImportedData) { bankCsvPage='list'; return pageBankCSV(); }
+  var headers=bankImportedData.headers;
+  var previewRows=bankImportedData.rows.slice(0,5);
+  var tpls=bankGetTemplates();
+  var tplHtml='';
+  if (tpls.length>0) {
+    tplHtml='<div style="margin-bottom:14px;"><span style="font-size:12px;font-weight:700;color:var(--gray-700);">テンプレート読込: </span>'
+      +tpls.map(function(t,i){
+        return '<button class="btn btn-xs btn-secondary" style="margin-right:4px;" onclick="bankLoadTemplate('+i+')">'+esc(t.name)+'</button>';
+      }).join('')
+      +'</div>';
+  }
+  var headerCols=headers.map(function(h,i) {
+    var assigned=Object.keys(bankColumnRoles).find(function(r){return bankColumnRoles[r]===i;});
+    var style=assigned
+      ?'background:'+BANK_COL_ROLES[assigned].bg+';color:'+BANK_COL_ROLES[assigned].color+';border:2px solid '+BANK_COL_ROLES[assigned].color+';'
+      :'background:var(--gray-100);';
+    return '<th style="cursor:pointer;padding:8px 10px;border:1px solid var(--gray-200);'+style+'white-space:nowrap;" onclick="bankCycleRole('+i+')" title="クリックで役割を割当">'
+      +esc(h)
+      +(assigned?'<br><span style="font-size:10px;font-weight:700;">['+BANK_COL_ROLES[assigned].label+']</span>':'<br><span style="font-size:9px;color:var(--gray-400);">クリックで割当</span>')
+      +'</th>';
+  }).join('');
+  var previewHtml=previewRows.map(function(row) {
+    return '<tr>'+headers.map(function(_,i) {
+      var assigned=Object.keys(bankColumnRoles).find(function(r){return bankColumnRoles[r]===i;});
+      var style=assigned?'background:'+BANK_COL_ROLES[assigned].bg+';':'';
+      return '<td style="padding:5px 8px;border:1px solid var(--gray-200);font-size:12px;'+style+'">'+esc(row[i]||'')+'</td>';
+    }).join('')+'</tr>';
+  }).join('');
+  var allMapped=bankColumnRoles.date!=null&&bankColumnRoles.description!=null
+    &&(bankColumnRoles.receipt!=null||bankColumnRoles.payment!=null);
+  var statusBadges=['date','description','receipt','payment','balance'].map(function(r){
+    var idx=bankColumnRoles[r];
+    var info=BANK_COL_ROLES[r];
+    return '<span style="background:'+(idx!=null?info.bg:'var(--gray-100)')+';color:'+(idx!=null?info.color:'var(--gray-500)')+';border:1px solid '+(idx!=null?info.color:'var(--gray-300)')+';padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;">'
+      +info.label+': '+(idx!=null?esc(headers[idx]):'未設定')+'</span>';
+  }).join('');
+
+  return '<div class="card">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">'
+    +'<button class="btn btn-secondary btn-sm" onclick="bankCsvPage=\'importing\';bankImportedData=null;renderPage()">← 戻る</button>'
+    +'<div class="card-title" style="margin:0;border:none;padding:0;">📋 列マッピング設定</div>'
+    +'</div>'
+    +tplHtml
+    +'<div class="alert alert-info" style="margin-bottom:12px;font-size:12px;">列ヘッダーをクリックして役割を割り当ててください。クリックのたびに 日付→摘要→入金→出金→残高→解除 の順で切り替わります。</div>'
+    +'<div style="overflow-x:auto;margin-bottom:16px;"><table style="border-collapse:collapse;width:100%;">'
+    +'<thead><tr>'+headerCols+'</tr></thead>'
+    +'<tbody>'+previewHtml+'</tbody>'
+    +'</table></div>'
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">'+statusBadges+'</div>'
+    +'<div class="form-grid" style="margin-bottom:14px;">'
+    +'<div class="form-group"><label>銀行名</label><input type="text" id="bank-name-input" placeholder="〇〇銀行〇〇支店" /></div>'
+    +'<div class="form-group"><label>口座番号（任意）</label><input type="text" id="bank-acct-input" placeholder="1234567" /></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+    +'<button class="btn btn-primary" onclick="bankStartEditing()" '+(allMapped?'':'disabled style="opacity:0.5;"')+'>'
+    +'✅ この設定で編集を開始</button>'
+    +(allMapped?'<button class="btn btn-secondary btn-sm" onclick="bankSaveTemplateDialog()">テンプレートとして保存</button>':'')
+    +'</div>'
+    +(!allMapped?'<div style="font-size:12px;color:var(--danger);margin-top:8px;">※ 少なくとも 日付・摘要・入金または出金 の列を割り当ててください</div>':'')
+    +'</div>';
+}
+
+function bankCycleRole(colIdx) {
+  var current=Object.keys(bankColumnRoles).find(function(r){return bankColumnRoles[r]===colIdx;});
+  Object.keys(bankColumnRoles).forEach(function(r){if(bankColumnRoles[r]===colIdx)delete bankColumnRoles[r];});
+  var cycleIdx=current?_bankRoleCycle.indexOf(current):-1;
+  var nextRole=_bankRoleCycle[(cycleIdx+1)%_bankRoleCycle.length];
+  if (nextRole) { delete bankColumnRoles[nextRole]; bankColumnRoles[nextRole]=colIdx; }
+  renderPage();
+}
+function bankLoadTemplate(idx) {
+  var tpls=bankGetTemplates();
+  if (!tpls[idx]) return;
+  bankColumnRoles=Object.assign({},tpls[idx].roles);
+  renderPage();
+}
+function bankSaveTemplateDialog() {
+  var name=prompt('テンプレート名を入力してください:');
+  if (!name||!name.trim()) return;
+  var tpls=bankGetTemplates();
+  tpls.push({name:name.trim(), roles:Object.assign({},bankColumnRoles)});
+  bankSaveTemplates(tpls);
+  alert('テンプレートを保存しました。');
+}
+
+function bankStartEditing() {
+  if (!bankImportedData) return;
+  var bankName=(document.getElementById('bank-name-input')||{value:''}).value.trim();
+  var accountNo=(document.getElementById('bank-acct-input')||{value:''}).value.trim();
+  var rows=bankImportedData.rows.map(function(row) {
+    var dateStr=bankColumnRoles.date!=null?bankNormalizeDate(row[bankColumnRoles.date]||''):'';
+    var descOrig=bankColumnRoles.description!=null?(row[bankColumnRoles.description]||'').trim():'';
+    var rec=bankColumnRoles.receipt!=null?bankParseAmount(row[bankColumnRoles.receipt]):0;
+    var pay=bankColumnRoles.payment!=null?bankParseAmount(row[bankColumnRoles.payment]):0;
+    var bal=bankColumnRoles.balance!=null?bankParseAmount(row[bankColumnRoles.balance]):0;
+    return {date:dateStr, descriptionOriginal:descOrig, description:descOrig, receipt:rec, payment:pay, balance:bal};
+  }).filter(function(r){return r.date||r.receipt||r.payment||r.balance;});
+  rows.sort(function(a,b){return a.date.localeCompare(b.date);});
+
+  // 既存セッションとのマージ確認
+  var existing=null;
+  if (bankSessionCache&&bankName) {
+    existing=bankSessionCache.find(function(s){return s.bankName===bankName&&s.accountNo===accountNo;});
+  }
+  if (existing) {
+    var added=bankMergeSessions(existing,{rows:rows.map(function(r){return Object.assign({},r);})});
+    if (confirm('同じ銀行・口座のセッションが存在します。\n重複を除いて '+added+' 行をマージしますか？\n（キャンセルすると新規セッションとして保存します）')) {
+      existing.updatedAt=new Date().toISOString();
+      bankCurrentSession=existing;
+      bankCsvPage='editing';
+      bankSaveSession(existing).then(function(){renderPage();});
+      return;
+    }
+  }
+
+  var sess={
+    id:'bank_'+Date.now(),
+    bankName:bankName, accountNo:accountNo,
+    fileName:bankImportedData.fileName,
+    originalHeaders:bankImportedData.headers,
+    columnMapping:Object.assign({},bankColumnRoles),
+    rows:rows,
+    createdAt:new Date().toISOString(),
+    updatedAt:new Date().toISOString()
+  };
+  bankCurrentSession=sess;
+  if (!bankSessionCache) bankSessionCache=[];
+  bankSessionCache.unshift(sess);
+  bankSaveSession(sess);
+  bankCsvPage='editing';
+  renderPage();
+}
+
+function bankResumeSession(id) {
+  var sess=(bankSessionCache||[]).find(function(s){return s.id===id;});
+  if (sess) { bankCurrentSession=sess; bankCsvPage='editing'; renderPage(); return; }
+  bankOpenDB().then(function(db){
+    var tx=db.transaction('sessions','readonly');
+    var req=tx.objectStore('sessions').get(id);
+    req.onsuccess=function(){
+      if (req.result){bankCurrentSession=req.result;bankCsvPage='editing';renderPage();}
+    };
+  });
+}
+function bankConfirmDelete(id) {
+  if (!confirm('このセッションを削除しますか？')) return;
+  bankDeleteSession(id).then(function(){
+    if (bankSessionCache) bankSessionCache=bankSessionCache.filter(function(s){return s.id!==id;});
+    if (bankCurrentSession&&bankCurrentSession.id===id) bankCurrentSession=null;
+    renderPage();
+  });
+}
+
+function bankPageEdit() {
+  if (!bankCurrentSession) { bankCsvPage='list'; bankSessionCache=null; return pageBankCSV(); }
+  var sess=bankCurrentSession;
+  var rows=sess.rows;
+  var emptyCount=rows.filter(function(r){return !r.description||!r.description.trim();}).length;
+
+  var tableRows=rows.map(function(r,i) {
+    var isEmpty=!r.description||!r.description.trim();
+    var amount=Math.max(Math.abs(r.receipt||0),Math.abs(r.payment||0));
+    var dayOfMonth=r.date?parseInt(r.date.split('-')[2])||0:0;
+    var suggestions=bankAutoComplete(amount,dayOfMonth);
+    var dlId='bank-ac-'+i;
+    var dlHtml=suggestions.length>0
+      ?'<datalist id="'+dlId+'">'+suggestions.map(function(s){return '<option value="'+esc(s)+'">';}).join('')+'</datalist>'
+      :'';
+    return '<tr class="'+(isEmpty?'bank-row-empty':'')+'">'
+      +'<td style="white-space:nowrap;font-size:12px;">'+esc(r.date||'')+'</td>'
+      +'<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(r.descriptionOriginal||'')+'</td>'
+      +'<td>'+dlHtml
+      +'<input type="text" class="bank-desc-input" value="'+esc(r.description||'')+'" placeholder="摘要を入力" '
+      +(suggestions.length>0?'list="'+dlId+'" ':'')
+      +'style="width:100%;padding:5px 7px;border:1px solid '+(isEmpty?'#f97316':'var(--gray-300)')+';border-radius:5px;font-size:12px;font-family:inherit;background:'+(isEmpty?'#fff7ed':'white')+';" '
+      +'oninput="bankUpdateDesc('+i+',this.value)" '
+      +'onblur="bankDescBlur('+i+',this.value)" />'
+      +'</td>'
+      +'<td class="r mono" style="font-size:12px;white-space:nowrap;">'+(r.receipt>0?fc(r.receipt):'')+'</td>'
+      +'<td class="r mono" style="font-size:12px;white-space:nowrap;">'+(r.payment>0?fc(r.payment):'')+'</td>'
+      +'<td class="r mono" style="font-size:12px;white-space:nowrap;">'+(r.balance!==0?fc(r.balance):'')+'</td>'
+      +'</tr>';
+  }).join('');
+
+  return '<div class="card">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">'
+    +'<button class="btn btn-secondary btn-sm" onclick="bankCsvPage=\'list\';bankCurrentSession=null;renderPage()">← 一覧に戻る</button>'
+    +'<div style="font-size:15px;font-weight:700;">🏦 '+esc(sess.bankName||'（銀行名未設定）')+'</div>'
+    +(sess.accountNo?'<div style="font-size:12px;color:var(--gray-500);">口座: '+esc(sess.accountNo)+'</div>':'')
+    +'<div style="margin-left:auto;display:flex;gap:8px;align-items:center;">'
+    +'<span id="bank-save-ind" style="font-size:11px;color:var(--gray-400);opacity:0.5;"></span>'
+    +'<button class="btn btn-primary btn-sm" onclick="bankDownloadCSV(\''+esc(sess.id)+'\')">📥 CSV出力</button>'
+    +'</div>'
+    +'</div>'
+    +(emptyCount>0
+      ?'<div class="alert alert-warning" style="margin-bottom:10px;">⚠ 摘要が空の行が '+emptyCount+' 行あります（オレンジ色で強調表示）</div>'
+      :'<div class="alert alert-success" style="margin-bottom:10px;">✅ 全行の摘要が入力されています</div>')
+    +'<div style="overflow-x:auto;"><table class="table-grid" style="font-size:13px;">'
+    +'<thead><tr>'
+    +'<th style="min-width:90px;">日付</th>'
+    +'<th style="min-width:160px;">元の摘要</th>'
+    +'<th style="min-width:220px;">修正後の摘要 <span style="font-weight:400;color:var(--gray-500);font-size:11px;">（直接編集可能）</span></th>'
+    +'<th class="r" style="min-width:90px;">入金（円）</th>'
+    +'<th class="r" style="min-width:90px;">出金（円）</th>'
+    +'<th class="r" style="min-width:90px;">残高（円）</th>'
+    +'</tr></thead>'
+    +'<tbody>'+tableRows+'</tbody>'
+    +'</table></div>'
+    +'</div>';
+}
+
+function bankUpdateDesc(rowIdx, value) {
+  if (!bankCurrentSession) return;
+  bankCurrentSession.rows[rowIdx].description=value;
+  var inputs=document.querySelectorAll('.bank-desc-input');
+  var inp=inputs[rowIdx];
+  if (inp) {
+    var isEmpty=!value||!value.trim();
+    inp.style.borderColor=isEmpty?'#f97316':'var(--gray-300)';
+    inp.style.background=isEmpty?'#fff7ed':'white';
+    var tr=inp.closest('tr');
+    if (tr) tr.className=isEmpty?'bank-row-empty':'';
+  }
+  bankScheduleAutoSave();
+}
+function bankDescBlur(rowIdx, value) {
+  if (!bankCurrentSession) return;
+  bankCurrentSession.rows[rowIdx].description=value;
+  if (value&&value.trim()) {
+    var r=bankCurrentSession.rows[rowIdx];
+    var amount=Math.max(Math.abs(r.receipt||0),Math.abs(r.payment||0));
+    var day=r.date?parseInt(r.date.split('-')[2])||0:0;
+    bankLearnHistory(value.trim(),amount,day);
+  }
+  bankScheduleAutoSave();
+}
+
+function bankDownloadCSV(sessionId) {
+  var sess=bankCurrentSession&&bankCurrentSession.id===sessionId
+    ?bankCurrentSession
+    :(bankSessionCache||[]).find(function(s){return s.id===sessionId;});
+  if (!sess) { alert('セッションが見つかりません。'); return; }
+  var rows=[['日付','摘要','入金','出金','残高']];
+  sess.rows.forEach(function(r){
+    rows.push([r.date||'',r.description||'',r.receipt>0?r.receipt:'',r.payment>0?r.payment:'',r.balance!==0?r.balance:'']);
+  });
+  var name=(sess.bankName||'銀行CSV').replace(/[\\/:*?"<>|]/g,'_');
+  dlCSV(rows, name+'_修正済_'+today()+'.csv');
+}
+
+function bankShowMergeModal(groupKey) {
+  var sessions=(bankSessionCache||[]).filter(function(s){
+    return ((s.bankName||'')+'|'+(s.accountNo||''))===groupKey;
+  });
+  if (sessions.length<2) return;
+  if (!confirm('以下のセッションをマージします（重複行は除去されます）:\n'+sessions.map(function(s){return (s.fileName||s.id)+' ('+s.rows.length+'行)';}).join('\n'))) return;
+  var base=sessions[0];
+  for (var i=1;i<sessions.length;i++) bankMergeSessions(base,sessions[i]);
+  base.updatedAt=new Date().toISOString();
+  bankSaveSession(base).then(function(){
+    var deletePromises=sessions.slice(1).map(function(s){return bankDeleteSession(s.id);});
+    return Promise.all(deletePromises);
+  }).then(function(){
+    bankSessionCache=null;
+    renderPage();
+  });
+}
+
+// ── 設定: 銀行CSVテンプレート・学習履歴 ──
+function showBankCsvSettings() {
+  var tpls=bankGetTemplates();
+  var h=bankGetHistory();
+  var histCount=Object.keys(h).reduce(function(s,k){return s+h[k].length;},0);
+  var tplHtml=tpls.length===0
+    ?'<div style="font-size:12px;color:var(--gray-500);">テンプレートはありません</div>'
+    :tpls.map(function(t,i){
+      return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">'
+        +'<span style="flex:1;font-size:13px;">'+esc(t.name)+'</span>'
+        +'<button class="btn btn-danger btn-xs" onclick="bankDeleteTemplate('+i+')">削除</button>'
+        +'</div>';
+    }).join('');
+  showModal('<div class="modal-title">🏦 銀行CSV設定</div>'
+    +'<div class="divider"></div>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">📋 列マッピングテンプレート</div>'
+    +'<div id="bank-tpl-list">'+tplHtml+'</div>'
+    +'<div class="divider"></div>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">📚 摘要学習履歴</div>'
+    +'<div style="font-size:12px;color:var(--gray-500);margin-bottom:10px;">登録件数: '+histCount+' 件</div>'
+    +'<button class="btn btn-danger btn-sm" onclick="if(confirm(\'摘要の学習データを全て削除しますか？\')){DB.set(\'bank_history\',{});closeModal();alert(\'削除しました。\');}">🗑 学習履歴を全削除</button>'
+    +'<div class="modal-actions">'
+    +'<button class="btn btn-primary" onclick="closeModal()">閉じる</button>'
+    +'</div>');
+}
+function bankDeleteTemplate(idx) {
+  var tpls=bankGetTemplates();
+  tpls.splice(idx,1);
+  bankSaveTemplates(tpls);
+  showBankCsvSettings();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function initApp() {
   try {
