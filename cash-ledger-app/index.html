@@ -68,7 +68,19 @@
     .acct-row-btn { padding:4px 8px; border:1px solid var(--gray-300); background:white; cursor:pointer; font-size:12px; font-family:inherit; border-radius:5px; color:var(--gray-700); transition:all 0.1s; white-space:nowrap; min-width:80px; text-align:left; display:flex; align-items:center; gap:4px; }
     .acct-row-btn:hover { border-color:var(--primary); background:var(--primary-light); }
     #acct-row-popup { font-family:'Hiragino Kaku Gothic ProN','Meiryo','Yu Gothic',sans-serif; }
-    #app-main { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+    #app-main { max-width: 1400px; margin: 0 auto; padding: 20px 24px; }
+    .ledger-table th.action-col, .ledger-table td.action-col {
+      position: sticky; right: 0; background: white; z-index: 2;
+      box-shadow: -4px 0 6px -2px rgba(0,0,0,0.08);
+    }
+    .ledger-table tr.row-advance td.action-col { background: #fffbeb; }
+    .ledger-table tr.row-settle td.action-col { background: #f0fdf4; }
+    .ledger-table tr.row-reim td.action-col { background: #fff7ed; }
+    .ledger-table tr.row-bank-w td.action-col { background: #fefce8; }
+    .ledger-table tr.row-bank-d td.action-col { background: #f0fdf4; }
+    .ledger-table tr:hover td.action-col { background: var(--gray-50); }
+    .ledger-table thead th.action-col { background: var(--gray-100); }
+    .ledger-table tfoot td.action-col { background: var(--gray-100); }
     .card {
       background: white; border-radius: 8px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.08);
@@ -1320,17 +1332,17 @@ function pageLedger() {
     </div>
     ${filtered.length===0
       ?'<div class="empty-state"><div class="icon">📒</div><p>この期間の取引はありません</p></div>'
-      :`<div class="table-wrap"><table class="table-grid">
+      :`<div class="table-wrap"><table class="table-grid ledger-table">
         <thead><tr>
           <th>日付</th><th>店名・支払先</th><th>購入品・内容</th><th>税区分</th>
           <th class="r">入金（円）</th><th class="r">出金（円）</th><th class="r">残高（円）</th>
-          <th>メモ</th><th class="no-print">操作</th>
+          <th>メモ</th><th class="no-print action-col">操作</th>
         </tr></thead>
         <tbody>
           <tr style="background:#eff6ff;">
             <td colspan="6" style="color:var(--primary);font-weight:700;">▶ 前期繰越 / 期首残高</td>
             <td class="r mono num-bold">${fc(openBal)}</td>
-            <td></td><td class="no-print"></td>
+            <td></td><td class="no-print action-col"></td>
           </tr>
           ${filtered.map(function(e){
             var rowCls=e.entryKind==='bank_withdraw'?'row-bank-w':e.entryKind==='bank_deposit'?'row-bank-d':e.type==='advance'?'row-advance':e.type==='settlement'?'row-settle':e.type==='reimbursement'?'row-reim':'';
@@ -1361,7 +1373,7 @@ function pageLedger() {
             <td class="r mono ${e.paymentAmount>0?'num-neg':''}" style="white-space:nowrap;">${e.paymentAmount>0?fc(e.paymentAmount):''}</td>
             <td class="r mono num-bold" style="white-space:nowrap;">${fc(e.balance)}</td>
             <td style="white-space:nowrap;position:relative;">${e.memo?`<button class="btn btn-xs btn-secondary" onclick="toggleMemo('${e.id}')" title="${esc(e.memo)}">📝</button><div id="memo-${e.id}" style="display:none;position:absolute;right:0;top:100%;z-index:5;font-size:12px;color:var(--gray-700);margin-top:4px;width:300px;white-space:normal;line-height:1.6;background:#fefce8;border:1px solid #fde047;border-radius:6px;padding:8px 10px;box-shadow:0 4px 12px rgba(0,0,0,0.1);text-align:left;">${esc(e.memo)}</div>`:''}</td>
-            <td class="no-print" style="white-space:nowrap;">
+            <td class="no-print action-col" style="white-space:nowrap;">
               ${e.type==='normal'||e.entryKind?`<button class="btn btn-secondary btn-sm" onclick="showEditEntryModal('${e.id}')">修正</button> `:''}
               ${e.type==='normal'||e.entryKind?`<button class="btn btn-secondary btn-sm" onclick="confirmDeleteEntry('${e.id}')">削除</button>`:''}
             </td>
@@ -1372,7 +1384,7 @@ function pageLedger() {
           <td class="r mono num-pos">${fc(totalRec)}</td>
           <td class="r mono num-neg">${fc(totalPay)}</td>
           <td class="r mono num-bold">${fc(closeBal)}</td>
-          <td></td><td class="no-print"></td>
+          <td></td><td class="no-print action-col"></td>
         </tr></tfoot>
       </table></div>`}
   </div>`;
