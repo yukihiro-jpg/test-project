@@ -784,9 +784,9 @@ function processClientEmailAttachments() {
     return;
   }
 
-  const parentFolder = findFolderByName_(EMAIL_INTAKE_CONFIG.PARENT_FOLDER_NAME);
+  const parentFolder = getParentFolder_();
   if (!parentFolder) {
-    throw new Error(`親フォルダが見つかりません: ${EMAIL_INTAKE_CONFIG.PARENT_FOLDER_NAME}`);
+    throw new Error(`親フォルダが取得できません（CONFIG.ROOT_FOLDER_ID を確認してください）`);
   }
 
   const processedLabel = getOrCreateLabel_(EMAIL_INTAKE_CONFIG.PROCESSED_LABEL);
@@ -897,6 +897,21 @@ function findFolderByName_(name) {
   return null;
 }
 
+// CONFIG.ROOT_FOLDER_ID から親フォルダを取得
+// （共有ドライブ内のフォルダを名前検索する代わりに ID で直接取得）
+function getParentFolder_() {
+  if (!CONFIG.ROOT_FOLDER_ID || CONFIG.ROOT_FOLDER_ID === 'YOUR_FOLDER_ID_HERE') {
+    console.error('CONFIG.ROOT_FOLDER_ID が設定されていません');
+    return null;
+  }
+  try {
+    return DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
+  } catch (e) {
+    console.error('CONFIG.ROOT_FOLDER_ID のフォルダにアクセスできません: ' + e.message);
+    return null;
+  }
+}
+
 function getTargetFolder_(parentFolder, clientName, kbn) {
   const displayName = clientName.replace(/^\d+_/, '');
   const subfolders = parentFolder.getFolders();
@@ -961,9 +976,9 @@ const SYNC_NOTIFY_CONFIG = {
 };
 
 function notifyClientSyncUploads() {
-  const parentFolder = findFolderByName_(SYNC_NOTIFY_CONFIG.PARENT_FOLDER_NAME);
+  const parentFolder = getParentFolder_();
   if (!parentFolder) {
-    console.warn(`親フォルダが見つかりません: ${SYNC_NOTIFY_CONFIG.PARENT_FOLDER_NAME}`);
+    console.warn('親フォルダが取得できません（CONFIG.ROOT_FOLDER_ID を確認してください）');
     return;
   }
 
