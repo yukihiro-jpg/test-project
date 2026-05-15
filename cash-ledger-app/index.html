@@ -2154,14 +2154,13 @@ function pageReports() {
       </div>
       <div style="border:2px solid #d97706;border-radius:8px;padding:18px;background:#fffbeb;">
         <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:#92400e;">📁 税理士提出用</div>
-        <div style="font-size:12px;color:#78350f;margin-bottom:6px;">下記ファイルをまとめて一括ダウンロードします</div>
+        <div style="font-size:12px;color:#78350f;margin-bottom:6px;">該当データがあるファイルだけ一括ダウンロードします</div>
         <ul style="font-size:12px;color:#92400e;margin:0 0 14px 16px;padding:0;line-height:1.8;">
-          <li>現金出納帳（期首〜最新）</li>
-          <li>仮払金台帳</li>
-          <li>仮払精算明細表</li>
-          <li>未精算一覧</li>
-          <li>立替経費台帳</li>
-          <li>銀行出納帳（取込済みCSVセッションごと）</li>
+          <li>現金出納帳（期首〜最新）— 常時</li>
+          <li>仮払金台帳 / 仮払精算明細表 / 未精算一覧 — <strong>仮払が1件以上ある場合のみ</strong></li>
+          <li>立替経費台帳 — <strong>立替が1件以上ある場合のみ</strong></li>
+          <li>銀行出納帳 — <strong>「登録完了」済の銀行CSVセッションのみ</strong></li>
+          <li>PDF提出必要資料リスト — <strong>振込明細／借入／自動車関連の対象がある場合のみ</strong></li>
         </ul>
         <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="exportTaxAccountantBundle()">📦 一括ダウンロード</button>
       </div>
@@ -3390,8 +3389,10 @@ function todayJP() {
 function exportTaxAccountantBundle() {
   var s=getSettings();
   var jp=todayJP();
+  var advancesAll=getAdvances();
+  var reimsAll=getReimbursements();
 
-  // 1. 現金出納帳（全件 — 期首から最新まで）
+  // 1. 現金出納帳（全件 — 期首から最新まで）— 常に出力
   var ledgerRows=[
     [`現金出納帳`,s.companyName,`出力日:${today()}`],
     ['日付','勘定科目','店名・支払先','購入品・内容','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
@@ -3406,74 +3407,82 @@ function exportTaxAccountantBundle() {
   ];
   dlCSV(ledgerRows, '現金出納帳_'+jp+'.csv');
 
-  // 2. 仮払金台帳
-  var advRows=[
-    [`仮払金台帳`,s.companyName,`出力日:${today()}`],
-    ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用金額','返金額','不足額','状態','精算明細'],
-    ...getAdvances().map(function(a){return [
-      a.id,a.date,a.employeeName,a.purpose,a.advanceAmount,
-      a.settlementDate||'',
-      a.settlementMethod==='transfer'?'振込':a.settlementMethod==='cash'?'現金':'',
-      a.usedAmount==null?'':a.usedAmount, a.returnAmount==null?'':a.returnAmount, a.shortageAmount==null?'':a.shortageAmount,
-      a.status==='pending'?'未精算':'精算済',
-      (a.settlementItems||[]).map(function(it){return (it.date?it.date+' ':'')+( it.storeName||'')+' '+(it.itemName||'')+' '+(it.amount||0)+'円';}).join(' / ')
-    ];})
-  ];
-  dlCSV(advRows, '仮払金台帳_'+jp+'.csv');
+  // 2-4. 仮払関連 — 仮払が1件以上ある場合のみ出力
+  if (advancesAll.length>0) {
+    var advRows=[
+      [`仮払金台帳`,s.companyName,`出力日:${today()}`],
+      ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用金額','返金額','不足額','状態','精算明細'],
+      ...advancesAll.map(function(a){return [
+        a.id,a.date,a.employeeName,a.purpose,a.advanceAmount,
+        a.settlementDate||'',
+        a.settlementMethod==='transfer'?'振込':a.settlementMethod==='cash'?'現金':'',
+        a.usedAmount==null?'':a.usedAmount, a.returnAmount==null?'':a.returnAmount, a.shortageAmount==null?'':a.shortageAmount,
+        a.status==='pending'?'未精算':'精算済',
+        (a.settlementItems||[]).map(function(it){return (it.date?it.date+' ':'')+( it.storeName||'')+' '+(it.itemName||'')+' '+(it.amount||0)+'円';}).join(' / ')
+      ];})
+    ];
+    dlCSV(advRows, '仮払金台帳_'+jp+'.csv');
 
-  // 3. 仮払精算明細表
-  var detRows=[
-    [`仮払精算明細表`,s.companyName,`出力日:${today()}`],
-    ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用日','相手先名称','内容','金額','状態']
-  ];
-  buildSettlementDetailRows().forEach(function(r){
-    detRows.push([
-      r.id, r.advDate, r.employeeName, r.purpose, r.advanceAmount,
-      r.settlementDate||'',
-      r.settlementMethod==='transfer'?'振込':r.settlementMethod==='cash'?'現金':'',
-      r.usageDate||'', r.storeName||'', r.itemName||'',
-      r.amount!=null?r.amount:'',
-      r.status==='pending'?'未精算':'精算済'
-    ]);
-  });
-  dlCSV(detRows, '仮払精算明細表_'+jp+'.csv');
+    var detRows=[
+      [`仮払精算明細表`,s.companyName,`出力日:${today()}`],
+      ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用日','相手先名称','内容','金額','状態']
+    ];
+    buildSettlementDetailRows().forEach(function(r){
+      detRows.push([
+        r.id, r.advDate, r.employeeName, r.purpose, r.advanceAmount,
+        r.settlementDate||'',
+        r.settlementMethod==='transfer'?'振込':r.settlementMethod==='cash'?'現金':'',
+        r.usageDate||'', r.storeName||'', r.itemName||'',
+        r.amount!=null?r.amount:'',
+        r.status==='pending'?'未精算':'精算済'
+      ]);
+    });
+    dlCSV(detRows, '仮払精算明細表_'+jp+'.csv');
 
-  // 4. 未精算一覧
-  var pendRows=[
-    [`未精算一覧`,s.companyName,`出力日:${today()}`],
-    ['番号','仮払日','氏名','目的','仮払金額'],
-    ...getAdvances().filter(function(a){return a.status==='pending';}).map(function(a){
-      return [a.id,a.date,a.employeeName,a.purpose,a.advanceAmount];
-    })
-  ];
-  dlCSV(pendRows, '未精算一覧_'+jp+'.csv');
+    var pendRows=[
+      [`未精算一覧`,s.companyName,`出力日:${today()}`],
+      ['番号','仮払日','氏名','目的','仮払金額'],
+      ...advancesAll.filter(function(a){return a.status==='pending';}).map(function(a){
+        return [a.id,a.date,a.employeeName,a.purpose,a.advanceAmount];
+      })
+    ];
+    dlCSV(pendRows, '未精算一覧_'+jp+'.csv');
+  }
 
-  // 5. 立替経費台帳
-  var reimRows=[
-    [`立替経費台帳`,s.companyName,`出力日:${today()}`],
-    ['番号','登録日','氏名','目的','使用日','店名・支払先','内容','勘定科目','金額（円）','合計','返金日','返金方法','状態']
-  ];
-  getReimbursements().forEach(function(r){
-    if (!r.items||r.items.length===0) {
-      reimRows.push([r.id,r.registeredDate,r.employeeName,r.purpose||'','','','','','',r.totalAmount,r.reimbursementDate||'',r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':'',r.status==='pending'?'未返金':'返金済']);
-    } else {
-      r.items.forEach(function(it,idx){
-        reimRows.push([
-          r.id, idx===0?r.registeredDate:'', idx===0?r.employeeName:'', idx===0?(r.purpose||''):'',
-          it.date||'', it.storeName||'', it.itemName||'', it.account||'', it.amount||0,
-          idx===0?r.totalAmount:'',
-          idx===0?(r.reimbursementDate||''):'', idx===0?(r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':''):'',
-          idx===0?(r.status==='pending'?'未返金':'返金済'):''
-        ]);
-      });
-    }
-  });
-  dlCSV(reimRows, '立替経費台帳_'+jp+'.csv');
+  // 5. 立替経費台帳 — 立替が1件以上ある場合のみ出力
+  if (reimsAll.length>0) {
+    var reimRows=[
+      [`立替経費台帳`,s.companyName,`出力日:${today()}`],
+      ['番号','登録日','氏名','目的','使用日','店名・支払先','内容','勘定科目','金額（円）','合計','返金日','返金方法','状態']
+    ];
+    reimsAll.forEach(function(r){
+      if (!r.items||r.items.length===0) {
+        reimRows.push([r.id,r.registeredDate,r.employeeName,r.purpose||'','','','','','',r.totalAmount,r.reimbursementDate||'',r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':'',r.status==='pending'?'未返金':'返金済']);
+      } else {
+        r.items.forEach(function(it,idx){
+          reimRows.push([
+            r.id, idx===0?r.registeredDate:'', idx===0?r.employeeName:'', idx===0?(r.purpose||''):'',
+            it.date||'', it.storeName||'', it.itemName||'', it.account||'', it.amount||0,
+            idx===0?r.totalAmount:'',
+            idx===0?(r.reimbursementDate||''):'', idx===0?(r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':''):'',
+            idx===0?(r.status==='pending'?'未返金':'返金済'):''
+          ]);
+        });
+      }
+    });
+    dlCSV(reimRows, '立替経費台帳_'+jp+'.csv');
+  }
 
-  // 6. 銀行出納帳（IndexedDBから全セッション）
+  // 6. 銀行出納帳（IndexedDBから「登録完了」セッションのみ）+ PDF提出資料リスト
   bankLoadAllSessions().then(function(sessions) {
     if (!sessions||sessions.length===0) return;
-    sessions.forEach(function(sess) {
+    var completed=sessions.filter(function(s){return s.completed;});
+    var pending=sessions.filter(function(s){return !s.completed;});
+    if (completed.length===0 && pending.length>0) {
+      alert('銀行CSVは「登録完了」になったセッションだけが税理士提出用バンドルに含まれます。\n現在 '+pending.length+' 件のセッションが未完了です。\n編集画面で「✅ 登録完了」ボタンを押してから再度実行してください。');
+      return;
+    }
+    completed.forEach(function(sess) {
       var rows=[
         ['銀行出納帳', sess.bankName||'', (sess.accountNo?'口座番号:'+sess.accountNo:''), '出力日:'+today()],
         ['日付','摘要','入金','出金','残高']
@@ -3491,7 +3500,43 @@ function exportTaxAccountantBundle() {
       var fname='銀行出納帳_'+safe(sess.bankName||'銀行CSV')+(sess.accountNo?'_'+safe(sess.accountNo):'')+'_'+jp+'.csv';
       dlCSV(rows, fname);
     });
+
+    // 7. PDF提出必要資料リスト（needsPDF 行を集約）
+    var pdfList=buildPdfSubmissionList(completed, s.companyName);
+    if (pdfList.length>2) dlCSV(pdfList, 'PDF提出必要資料リスト_'+jp+'.csv');
+
+    if (pending.length>0) {
+      alert('完了済の銀行セッション '+completed.length+' 件を出力しました。\n未完了の '+pending.length+' 件は含まれていません（編集画面の「✅ 登録完了」で確定後に再実行してください）。');
+    }
   }).catch(function(e){ console.error('銀行CSV出力に失敗:', e); });
+}
+
+function buildPdfSubmissionList(sessions, companyName) {
+  var rows=[
+    ['PDF提出必要資料リスト', companyName||'', '出力日:'+today()],
+    ['銀行名','口座番号','日付','元の摘要','入金（円）','出金（円）','提出書類区分','PDF送付状況','補完後摘要']
+  ];
+  (sessions||[]).forEach(function(sess) {
+    (sess.rows||[]).forEach(function(r) {
+      if (bankClassifyRow(r)!=='needsPDF') return;
+      var reason=bankRowReason(r);
+      var category=reason==='loan'?'借入関連書類PDF'
+                 :reason==='auto'?'自動車関連書類PDF'
+                 :'振込明細PDF';
+      rows.push([
+        sess.bankName||'',
+        sess.accountNo||'',
+        r.date||'',
+        r.descriptionOriginal||'',
+        r.receipt>0?r.receipt:'',
+        r.payment>0?r.payment:'',
+        category,
+        r.pdfSent?'送付済':'未送付',
+        r.description||''
+      ]);
+    });
+  });
+  return rows;
 }
 
 function exportLedgerReportPrint() {
@@ -4753,9 +4798,14 @@ function bankParseCSV(text) {
 // 金額解析（括弧表記対応）
 function bankParseAmount(str) {
   if (str==null||str==='') return 0;
-  var s = String(str).replace(/,/g,'').replace(/¥/g,'').trim();
+  var s = String(str).replace(/[,，、]/g,'').replace(/¥/g,'').replace(/円/g,'').trim();
+  if (!s) return 0;
   var neg=false;
   if (s.startsWith('(')&&s.endsWith(')')) { neg=true; s=s.slice(1,-1); }
+  // 日本の銀行CSVで使われるマイナス記号: ▲ △ －(全角) －(MINUS SIGN)
+  if (/^[▲△－−ー\-]/.test(s)) { neg=!neg; s=s.replace(/^[▲△－−ー\-]+/,''); }
+  // 全角数字を半角に
+  s = s.replace(/[０-９]/g, function(c){return String.fromCharCode(c.charCodeAt(0)-0xFEE0);});
   var n = parseFloat(s);
   if (isNaN(n)) return 0;
   return neg ? -n : n;
@@ -4847,6 +4897,7 @@ var BANK_COL_ROLES = {
   description: { label:'摘要', color:'#166534', bg:'#dcfce7' },
   receipt:     { label:'入金', color:'#15803d', bg:'#dcfce7' },
   payment:     { label:'出金', color:'#b91c1c', bg:'#fee2e2' },
+  amount:      { label:'入出金(±)', color:'#0c4a6e', bg:'#cffafe' },
   balance:     { label:'残高', color:'#6d28d9', bg:'#ede9fe' },
 };
 
@@ -4916,18 +4967,26 @@ function bankPageList() {
     listHtml='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">';
     sessions.forEach(function(sess) {
       var dt=sess.updatedAt?new Date(sess.updatedAt).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
-      var emptyCount=sess.rows.filter(function(r){return !r.description||!r.description.trim();}).length;
+      var attentionCount=sess.rows.filter(function(r){
+        var st=bankRowState(r);
+        return st==='needsInfo'||st==='needsPDF';
+      }).length;
+      var statusHtml;
+      if (sess.completed) {
+        statusHtml='<div style="font-size:11px;color:#166534;background:#dcfce7;padding:3px 8px;border-radius:4px;font-weight:700;margin-bottom:6px;display:inline-block;">✅ 登録完了</div>';
+      } else if (attentionCount>0) {
+        statusHtml='<div style="font-size:11px;color:#d97706;font-weight:600;margin-bottom:6px;">⚠ 要対応: '+attentionCount+'行</div>';
+      } else {
+        statusHtml='<div style="font-size:11px;color:var(--success);margin-bottom:6px;">✅ 全行対応済（登録完了押下で確定）</div>';
+      }
       listHtml+='<div class="bank-session-card">'
         +'<div style="font-size:13px;font-weight:700;color:var(--gray-900);margin-bottom:4px;">🏦 '+esc(sess.bankName||'（銀行名未設定）')+'</div>'
         +(sess.accountNo?'<div style="font-size:11px;color:var(--gray-500);margin-bottom:4px;">口座番号: '+esc(sess.accountNo)+'</div>':'')
         +'<div style="font-size:11px;color:var(--gray-500);margin-bottom:4px;">📄 '+esc(sess.fileName||'')+'　'+sess.rows.length+'行</div>'
-        +(emptyCount>0
-          ?'<div style="font-size:11px;color:#d97706;font-weight:600;margin-bottom:6px;">⚠ 空欄の摘要: '+emptyCount+'行</div>'
-          :'<div style="font-size:11px;color:var(--success);margin-bottom:6px;">✅ 摘要入力完了</div>')
+        +statusHtml
         +'<div style="font-size:10px;color:var(--gray-400);margin-bottom:10px;">最終更新: '+dt+'</div>'
         +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
-        +'<button class="btn btn-primary btn-sm" onclick="bankResumeSession(\''+esc(sess.id)+'\')">▶ 再開</button>'
-        +'<button class="btn btn-secondary btn-sm" onclick="bankDownloadCSV(\''+esc(sess.id)+'\')">📥 CSV出力</button>'
+        +'<button class="btn btn-primary btn-sm" onclick="bankResumeSession(\''+esc(sess.id)+'\')">▶ 編集</button>'
         +'<button class="btn btn-secondary btn-sm" onclick="bankConfirmDelete(\''+esc(sess.id)+'\')">🗑 削除</button>'
         +'</div></div>';
     });
@@ -5028,6 +5087,7 @@ function bankAutoDetectColumns(headers) {
   var descKw  =['摘要','内容','取引内容','取引摘要','説明','Description'];
   var recKw   =['入金','入金額','入金金額','受入','受入金額','預入','預入金額','お預かり','預金','Deposit','Credit'];
   var payKw   =['出金','出金額','出金金額','支払','支払金額','お引き出し','引出','引落','引落額','Withdrawal','Debit'];
+  var amtKw   =['金額','取引金額','収支','差引','差額','入出金','取引額','Amount'];
   var balKw   =['残高','差引残高','帳尻','Balance'];
   function match(h,kws) {
     var hu=h.trim().toUpperCase();
@@ -5037,9 +5097,12 @@ function bankAutoDetectColumns(headers) {
   headers.forEach(function(h,i) {
     if (bankColumnRoles.date==null && match(h,dateKw))         bankColumnRoles.date=i;
     else if (bankColumnRoles.description.length===0 && match(h,descKw)) bankColumnRoles.description=[i];
+    else if (bankColumnRoles.balance==null && match(h,balKw))  bankColumnRoles.balance=i;
     else if (bankColumnRoles.receipt==null && match(h,recKw))  bankColumnRoles.receipt=i;
     else if (bankColumnRoles.payment==null && match(h,payKw))  bankColumnRoles.payment=i;
-    else if (bankColumnRoles.balance==null && match(h,balKw))  bankColumnRoles.balance=i;
+    else if (bankColumnRoles.amount==null
+             && bankColumnRoles.receipt==null && bankColumnRoles.payment==null
+             && match(h,amtKw))  bankColumnRoles.amount=i;
   });
 }
 
@@ -5072,6 +5135,7 @@ function bankGetRoleForCol(colIdx) {
   if (bankColumnRoles.date===colIdx) return 'date';
   if (bankColumnRoles.receipt===colIdx) return 'receipt';
   if (bankColumnRoles.payment===colIdx) return 'payment';
+  if (bankColumnRoles.amount===colIdx) return 'amount';
   if (bankColumnRoles.balance===colIdx) return 'balance';
   if ((bankColumnRoles.description||[]).indexOf(colIdx)>=0) return 'description';
   return null;
@@ -5091,35 +5155,36 @@ function bankAssignRole(colIdx) {
   bankCacheMappingInputs();
   bankNormalizeColumnRoles();
   if (!bankActiveRole) {
-    alert('まず上の役割ボタン（日付/摘要/入金/出金/残高/解除）を選んでから、CSVの列ヘッダーをクリックしてください。');
+    alert('まず上の役割ボタン（日付/摘要/入金/出金/入出金(±)/残高/解除）を選んでから、CSVの列ヘッダーをクリックしてください。');
     return;
   }
+  var SINGLE_ROLES=['date','receipt','payment','amount','balance'];
+  function clearFromAllRoles(idx) {
+    SINGLE_ROLES.forEach(function(r){ if (bankColumnRoles[r]===idx) delete bankColumnRoles[r]; });
+    bankColumnRoles.description=bankColumnRoles.description.filter(function(i){return i!==idx;});
+  }
   if (bankActiveRole==='clear') {
-    if (bankColumnRoles.date===colIdx) delete bankColumnRoles.date;
-    if (bankColumnRoles.receipt===colIdx) delete bankColumnRoles.receipt;
-    if (bankColumnRoles.payment===colIdx) delete bankColumnRoles.payment;
-    if (bankColumnRoles.balance===colIdx) delete bankColumnRoles.balance;
-    bankColumnRoles.description=bankColumnRoles.description.filter(function(i){return i!==colIdx;});
+    clearFromAllRoles(colIdx);
   } else if (bankActiveRole==='description') {
     var arr=bankColumnRoles.description.slice();
     var pos=arr.indexOf(colIdx);
     if (pos>=0) {
       arr.splice(pos,1);
     } else {
-      if (bankColumnRoles.date===colIdx) delete bankColumnRoles.date;
-      if (bankColumnRoles.receipt===colIdx) delete bankColumnRoles.receipt;
-      if (bankColumnRoles.payment===colIdx) delete bankColumnRoles.payment;
-      if (bankColumnRoles.balance===colIdx) delete bankColumnRoles.balance;
+      SINGLE_ROLES.forEach(function(r){ if (bankColumnRoles[r]===colIdx) delete bankColumnRoles[r]; });
       arr.push(colIdx);
       arr.sort(function(a,b){return a-b;});
     }
     bankColumnRoles.description=arr;
   } else {
-    bankColumnRoles.description=bankColumnRoles.description.filter(function(i){return i!==colIdx;});
-    if (bankColumnRoles.date===colIdx) delete bankColumnRoles.date;
-    if (bankColumnRoles.receipt===colIdx) delete bankColumnRoles.receipt;
-    if (bankColumnRoles.payment===colIdx) delete bankColumnRoles.payment;
-    if (bankColumnRoles.balance===colIdx) delete bankColumnRoles.balance;
+    clearFromAllRoles(colIdx);
+    // 入出金(±)を選ぶときは入金/出金を解除、逆も
+    if (bankActiveRole==='amount') {
+      delete bankColumnRoles.receipt;
+      delete bankColumnRoles.payment;
+    } else if (bankActiveRole==='receipt' || bankActiveRole==='payment') {
+      delete bankColumnRoles.amount;
+    }
     bankColumnRoles[bankActiveRole]=colIdx;
   }
   renderPage();
@@ -5146,7 +5211,7 @@ function bankPageMapping() {
       +'</div></div>';
   }
 
-  var roleOrder=['date','description','receipt','payment','balance'];
+  var roleOrder=['date','description','receipt','payment','amount','balance'];
   var roleBtnsHtml=roleOrder.map(function(r){
     var info=BANK_COL_ROLES[r];
     var isActive=(bankActiveRole===r);
@@ -5206,7 +5271,7 @@ function bankPageMapping() {
 
   var allMapped=bankColumnRoles.date!=null
     &&bankColumnRoles.description.length>0
-    &&(bankColumnRoles.receipt!=null||bankColumnRoles.payment!=null);
+    &&(bankColumnRoles.receipt!=null||bankColumnRoles.payment!=null||bankColumnRoles.amount!=null);
 
   var hintHtml;
   if (bankActiveRole==='clear') {
@@ -5251,7 +5316,7 @@ function bankPageMapping() {
     +'✅ この設定で編集を開始</button>'
     +'<span style="font-size:11px;color:var(--gray-500);">※ 銀行名を入れて開始すると、次回以降この設定を自動で復元できます</span>'
     +'</div>'
-    +(!allMapped?'<div style="font-size:12px;color:var(--danger);margin-top:8px;">※ 少なくとも 日付・摘要・入金または出金 の列を割り当ててください</div>':'')
+    +(!allMapped?'<div style="font-size:12px;color:var(--danger);margin-top:8px;">※ 少なくとも 日付・摘要・(入金または出金または入出金±) の列を割り当ててください</div>':'')
     +'</div>';
 }
 
@@ -5267,11 +5332,17 @@ function bankStartEditing() {
     var descOrig=descCols.map(function(c){return (row[c]||'').trim();}).filter(function(s){return s;}).join(' ');
     var rec=bankColumnRoles.receipt!=null?bankParseAmount(row[bankColumnRoles.receipt]):0;
     var pay=bankColumnRoles.payment!=null?bankParseAmount(row[bankColumnRoles.payment]):0;
+    // 入出金が1列(プラスマイナス)で表現されている場合、正→入金、負→出金として分割
+    if (bankColumnRoles.amount!=null) {
+      var amt=bankParseAmount(row[bankColumnRoles.amount]);
+      if (amt>0) rec=amt;
+      else if (amt<0) pay=-amt;
+    }
     var bal=bankColumnRoles.balance!=null?bankParseAmount(row[bankColumnRoles.balance]):0;
     var probe={descriptionOriginal:descOrig, receipt:rec, payment:pay};
     var initDesc=(bankClassifyRow(probe)==='needsInfo')?'':descOrig;
     return {date:dateStr, descriptionOriginal:descOrig, description:initDesc, receipt:rec, payment:pay, balance:bal};
-  }).filter(function(r){return r.date||r.receipt||r.payment||r.balance;});
+  }).filter(function(r){return r.date||r.receipt||r.payment||r.balance!==0;});
   rows.sort(function(a,b){return a.date.localeCompare(b.date);});
 
   // 既存セッションとのマージ確認
@@ -5536,7 +5607,10 @@ function bankPageEdit() {
     +(sess.accountNo?'<div style="font-size:12px;color:var(--gray-500);">口座: '+esc(sess.accountNo)+'</div>':'')
     +'<div style="margin-left:auto;display:flex;gap:8px;align-items:center;">'
     +'<span id="bank-save-ind" style="font-size:11px;color:var(--gray-400);opacity:0.5;"></span>'
-    +'<button class="btn btn-primary btn-sm" onclick="bankDownloadCSV(\''+esc(sess.id)+'\')">📥 CSV出力</button>'
+    +(sess.completed
+       ?'<span style="background:#dcfce7;color:#166534;padding:5px 10px;border-radius:6px;font-size:12px;font-weight:700;">✅ 登録完了済</span>'
+        +'<button class="btn btn-secondary btn-sm" onclick="bankToggleCompleted(false)">↩ 完了を取消</button>'
+       :'<button class="btn btn-primary btn-sm" onclick="bankToggleCompleted(true)">✅ 登録完了</button>')
     +'</div>'
     +'</div>'
     +alertHtml
@@ -5586,6 +5660,27 @@ function bankTogglePdfSent(rowIdx, checked) {
   r.pdfSent=!!checked;
   bankScheduleAutoSave();
   renderPage();
+}
+function bankToggleCompleted(completed) {
+  if (!bankCurrentSession) return;
+  if (completed) {
+    var attn=bankCurrentSession.rows.filter(function(r){
+      var s=bankRowState(r);
+      return s==='needsInfo'||s==='needsPDF';
+    }).length;
+    if (attn>0) {
+      if (!confirm('まだ未対応の行が '+attn+' 行あります。\n本当に登録完了にしますか？\n（登録完了にすると、帳票出力の「税理士提出用一括ダウンロード」に含まれます）')) return;
+    }
+  }
+  bankCurrentSession.completed=!!completed;
+  bankCurrentSession.completedAt=completed?new Date().toISOString():null;
+  bankSaveSession(bankCurrentSession).then(function(){
+    if (bankSessionCache) {
+      var idx=bankSessionCache.findIndex(function(s){return s.id===bankCurrentSession.id;});
+      if (idx>=0) bankSessionCache[idx]=bankCurrentSession;
+    }
+    renderPage();
+  });
 }
 function bankDescBlur(rowIdx, value) {
   if (!bankCurrentSession) return;
