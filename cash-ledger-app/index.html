@@ -708,6 +708,7 @@ function entryTypeLabel(e) {
 }
 
 function addEntry(entry) {
+  if (typeof checkNotClosedForDate==='function' && !checkNotClosedForDate(entry.date, '取引の登録')) return null;
   const entries = getEntries();
   const e = { ...entry, id: entry.id||genEntryId(), createdAt: new Date().toISOString() };
   entries.push(e);
@@ -716,12 +717,22 @@ function addEntry(entry) {
   return e;
 }
 
-function removeEntry(id) { saveEntries(getEntries().filter(e=>e.id!==id)); }
+function removeEntry(id) {
+  const all = getEntries();
+  const e = all.find(x=>x.id===id);
+  if (e && typeof checkNotClosedForDate==='function' && !checkNotClosedForDate(e.date, '取引の削除')) return false;
+  saveEntries(all.filter(x=>x.id!==id));
+  return true;
+}
 
 function updateEntry(id, data) {
   const entries = getEntries();
   const idx = entries.findIndex(e=>e.id===id);
   if (idx<0) return false;
+  if (typeof checkNotClosedForDate==='function') {
+    if (!checkNotClosedForDate(entries[idx].date, '取引の修正')) return false;
+    if (data.date && data.date!==entries[idx].date && !checkNotClosedForDate(data.date, '取引の修正')) return false;
+  }
   entries[idx] = { ...entries[idx], ...data, updatedAt: new Date().toISOString() };
   entries.sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
   saveEntries(entries);
@@ -729,6 +740,7 @@ function updateEntry(id, data) {
 }
 
 function registerAdvance(d) {
+  if (!checkNotClosedForDate(d.date, '仮払いの登録')) return null;
   const adv = {
     id: genAdvanceId(d.employeeName),
     date: d.date,
@@ -764,6 +776,8 @@ function settleAdvance(id, d) {
   const idx = advances.findIndex(a=>a.id===id);
   if (idx<0) return;
   const adv = advances[idx];
+  if (!checkNotClosedForDate(adv.date, '仮払いの精算')) return;
+  if (!checkNotClosedForDate(d.settlementDate, '仮払いの精算')) return;
 
   if (adv.settlementEntryId)  { removeEntry(adv.settlementEntryId);  adv.settlementEntryId=null; }
   if (adv.discrepancyEntryId) { removeEntry(adv.discrepancyEntryId); adv.discrepancyEntryId=null; }
@@ -827,6 +841,8 @@ function removeAdvance(id) {
   const advances=getAdvances();
   const adv=advances.find(a=>a.id===id);
   if (!adv) return false;
+  if (!checkNotClosedForDate(adv.date, '仮払いの削除')) return false;
+  if (adv.settlementDate && !checkNotClosedForDate(adv.settlementDate, '仮払いの削除')) return false;
   if (adv.cashEntryId)         removeEntry(adv.cashEntryId);
   if (adv.settlementEntryId)   removeEntry(adv.settlementEntryId);
   if (adv.discrepancyEntryId)  removeEntry(adv.discrepancyEntryId);
@@ -847,6 +863,7 @@ function genReimbursementId(name) {
 }
 
 function registerReimbursement(d) {
+  if (!checkNotClosedForDate(d.registeredDate, '立替経費の登録')) return null;
   const items = (d.items||[]).map(function(it){return {
     date: it.date||'',
     storeName: it.storeName||'',
@@ -911,6 +928,7 @@ function reimburseExpense(id, d) {
   const list = getReimbursements();
   const idx = list.findIndex(function(r){return r.id===id;});
   if (idx<0) return null;
+  if (!checkNotClosedForDate(d.reimbursementDate, '立替の返金確定')) return null;
   const rei = list[idx];
   if (rei.reimbursementEntryId) { removeEntry(rei.reimbursementEntryId); rei.reimbursementEntryId=null; }
   const method = d.reimbursementMethod==='transfer' ? '振込' : '現金';
@@ -1008,6 +1026,9 @@ function showSettings() {
       <input type="file" id="imp-f" accept=".json" style="display:none;" onchange="importBackup(event)">
     </div>
     <div style="font-size:11px;color:var(--gray-500);margin-top:4px;">※定期的なバックアップを推奨します（ブラウザキャッシュ削除でデータが消えます）</div>
+    <div class="divider"></div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🔒 決算管理</div>
+    ${renderFiscalCloseSection()}
     <div class="divider"></div>
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🏦 銀行口座マスタ</div>
     <button class="btn btn-secondary btn-sm" onclick="closeModal();showBankAccountsManager()">🏦 解析対象の銀行・口座リストを管理</button>
@@ -1285,21 +1306,46 @@ function showPage(p) {
 function renderNavFiscalBar() {
   var bar = document.getElementById('nav-fiscal-bar');
   if (!bar) return;
-  if (currentPage !== 'ledger') { bar.style.display='none'; return; }
-  bar.style.display='flex';
-  var s=getSettings();
-  var closedYears=s.closedYears||{};
-  var isClosed=!!closedYears[ledgerYear];
-  var closeBtn = isClosed
-    ? '<button class="nav-fiscal-close" onclick="performYearUnlock()" style="background:#d1fae5;border-color:#6ee7b7;color:#065f46;">🔓 決算解除</button>'
-    : '<button class="nav-fiscal-close" onclick="performYearClose()">🔒 決算・繰越</button>';
-  bar.innerHTML = closeBtn;
+  bar.style.display='none';
+  bar.innerHTML='';
 }
 function changeFiscalYear(delta) {
-  ledgerYear += delta;
+  var s = getSettings();
+  var fm = (s && s.fiscalMonth) || 1;
+  var newYear = ledgerYear + delta;
+  var label = fyRangeLabel(newYear, fm);
+  var direction = delta < 0 ? '前期' : '翌期';
+  if (!confirm(direction + '（' + label + '）に移動しますか？')) return;
+  ledgerYear = newYear;
   ledgerMonthFrom = 0;
   ledgerMonthTo = 0;
   renderPage();
+}
+// ── 決算ロック ヘルパ ──
+function getFiscalYearForDate(dateStr) {
+  if (!dateStr) return null;
+  var m = String(dateStr).match(/^(\d{4})-(\d{2})/);
+  if (!m) return null;
+  var y = parseInt(m[1],10), mo = parseInt(m[2],10);
+  var s = getSettings();
+  var fm = (s && s.fiscalMonth) || 1;
+  return (fm===1 || mo>=fm) ? y : y-1;
+}
+function isFiscalYearClosed(fy) {
+  if (fy==null) return false;
+  var s = getSettings();
+  return !!((s && s.closedYears) || {})[fy];
+}
+function checkNotClosedForDate(dateStr, action) {
+  var fy = getFiscalYearForDate(dateStr);
+  if (fy==null) return true;
+  if (isFiscalYearClosed(fy)) {
+    var s = getSettings();
+    var fm = (s && s.fiscalMonth) || 1;
+    alert(fyRangeLabel(fy, fm) + ' は決算確定済みのため、'+(action||'操作')+'できません。\n設定 → 🔒 決算管理 から決算を解除してください。');
+    return false;
+  }
+  return true;
 }
 
 function renderPage() {
@@ -2800,6 +2846,49 @@ function fyRangeLabel(year, fm) {
   const endY=year+1, endM=fm-1;
   const endD=new Date(endY,endM,0).getDate();
   return year+'年'+fm+'月1日〜'+endY+'年'+endM+'月'+endD+'日';
+}
+
+function renderFiscalCloseSection() {
+  const s = getSettings()||{};
+  const fm = s.fiscalMonth || 1;
+  const closedYears = s.closedYears || {};
+  const fyLabel = fyRangeLabel(ledgerYear, fm);
+  const isClosed = !!closedYears[ledgerYear];
+
+  let html = '';
+  if (isClosed) {
+    const cy = closedYears[ledgerYear];
+    html += '<div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:12px 14px;margin-bottom:8px;">';
+    html += '<div style="font-size:13px;font-weight:700;color:#166534;">🔒 ' + esc(fyLabel) + ' は決算確定済み</div>';
+    html += '<div style="font-size:11px;color:#15803d;margin-top:4px;line-height:1.6;">期末残高: <strong>' + fc(cy.closingBalance||0) + '</strong> ／ 確定日: ' + (cy.closedAt?fd(cy.closedAt):'不明') + '<br>この年度の取引データ（追加・修正・削除）はロックされています。</div>';
+    html += '<button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="performYearUnlockFromSettings()">🔓 ' + esc(fyLabel) + ' の決算を解除</button>';
+    html += '</div>';
+  } else {
+    html += '<div style="background:#fef3c7;border:1px solid #fde047;border-radius:8px;padding:12px 14px;margin-bottom:8px;">';
+    html += '<div style="font-size:13px;font-weight:700;color:#854d0e;">📅 現在表示中の年度: ' + esc(fyLabel) + '</div>';
+    html += '<div style="font-size:11px;color:#78350f;margin-top:4px;line-height:1.6;">この年度の取引が確定したら「決算確定」を実行してください。<br>確定するとこの年度の<strong>すべてのデータ（取引・仮払・立替）の追加・修正・削除がロック</strong>されます（解除可能）。</div>';
+    html += '<button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="performYearCloseFromSettings()">🔒 ' + esc(fyLabel) + ' を決算確定する</button>';
+    html += '</div>';
+  }
+
+  const otherClosed = Object.keys(closedYears).filter(function(y){return parseInt(y)!==ledgerYear;}).map(function(y){return parseInt(y);}).sort(function(a,b){return b-a;});
+  if (otherClosed.length>0) {
+    html += '<div style="font-size:11px;color:var(--gray-600);margin-top:8px;">他の確定済み年度:</div>';
+    otherClosed.forEach(function(y){
+      const lbl = fyRangeLabel(y, fm);
+      html += '<div style="font-size:11px;color:var(--gray-600);padding:2px 0;">🔒 ' + esc(lbl) + '</div>';
+    });
+  }
+  return html;
+}
+
+function performYearCloseFromSettings() {
+  closeModal();
+  setTimeout(function(){ performYearClose(); }, 80);
+}
+function performYearUnlockFromSettings() {
+  closeModal();
+  setTimeout(function(){ performYearUnlock(); showSettings(); }, 80);
 }
 
 function performYearUnlock() {
@@ -5063,6 +5152,20 @@ function bankRemoveAccount(idx) {
   arr.splice(idx,1);
   bankSaveAccounts(arr);
 }
+function bankEnsureProcessedMonths(sess) {
+  if (!sess) return sess;
+  if (sess.processedMonths && sess.processedMonths.length>0) return sess;
+  var monthsSet={};
+  (sess.rows||[]).forEach(function(r){
+    if (r.date && /^\d{4}-\d{2}/.test(r.date)) monthsSet[r.date.substring(0,7)]=true;
+  });
+  var months=Object.keys(monthsSet).sort();
+  sess.processedMonths=months;
+  sess.firstProcessedMonth=months[0]||null;
+  sess.lastProcessedMonth=months[months.length-1]||null;
+  return sess;
+}
+
 function bankGetAccountProgress(bankName, accountNo) {
   var key=bankAccountKey(bankName, accountNo);
   var sessions=(bankSessionCache||[]).filter(function(s){
@@ -5072,6 +5175,7 @@ function bankGetAccountProgress(bankName, accountNo) {
   var ongoing=sessions.filter(function(s){return !s.completed;});
   var lastMonth=null;
   completed.forEach(function(s){
+    bankEnsureProcessedMonths(s);
     if (s.lastProcessedMonth && (lastMonth===null||s.lastProcessedMonth>lastMonth)) {
       lastMonth=s.lastProcessedMonth;
     }
@@ -5105,6 +5209,7 @@ function bankGetProcessedMonthsSet(bankName, accountNo) {
   });
   var set={};
   sessions.forEach(function(s){
+    bankEnsureProcessedMonths(s);
     (s.processedMonths||[]).forEach(function(m){ set[m]=true; });
   });
   return set;
@@ -5300,29 +5405,39 @@ function bankPageList() {
   if (accounts.length>0) {
     var settingsForBar=getSettings();
     var fmForBar=(settingsForBar&&settingsForBar.fiscalMonth)||1;
-    accountsHtml='<div style="margin-bottom:16px;">'
-      +'<div style="font-size:14px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">🏦 解析対象の銀行口座（登録済み '+accounts.length+'件）— クリックで新規CSVを取り込み</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;">';
+    var fyLabelForBar=fyRangeLabel(ledgerYear, fmForBar);
+    accountsHtml='<div style="margin-bottom:18px;">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;">'
+        +'<div style="font-size:14px;font-weight:700;color:var(--gray-700);">🏦 解析対象の銀行口座（'+accounts.length+'件）— 行をクリックで新規CSVを取り込み</div>'
+        +'<div style="font-size:11px;color:var(--gray-500);">会計年度: '+esc(fyLabelForBar)+'</div>'
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;gap:6px;">';
     accounts.forEach(function(a,i){
       var prog=bankGetAccountProgress(a.bankName, a.accountNo);
-      var statusLine;
-      if (prog.lastProcessedMonth) {
-        statusLine='<span style="color:#059669;font-weight:700;">✅ '+esc(bankFormatMonth(prog.lastProcessedMonth))+'分まで完了</span>';
-      } else {
-        statusLine='<span style="color:var(--gray-500);">未処理</span>';
-      }
-      if (prog.ongoingCount>0) statusLine+='<span style="color:#d97706;font-size:12px;font-weight:600;"> / 編集中 '+prog.ongoingCount+'件</span>';
       var subtitle=[a.branchName||'', a.accountType||''].filter(function(x){return x;}).join(' ');
       var progressBar=bankRenderProgressBar(a.bankName, a.accountNo, fmForBar, ledgerYear);
-      accountsHtml+='<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px 16px;cursor:pointer;transition:box-shadow 0.15s, transform 0.1s;" '
-        +'onmouseover="this.style.boxShadow=\'0 3px 10px rgba(30,64,175,0.25)\';this.style.transform=\'translateY(-1px)\'" onmouseout="this.style.boxShadow=\'\';this.style.transform=\'\'" '
+      var statusBadge='';
+      if (prog.lastProcessedMonth) {
+        statusBadge='<span style="background:#dcfce7;color:#166534;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;">✅ '+esc(bankFormatMonth(prog.lastProcessedMonth))+'まで</span>';
+      } else {
+        statusBadge='<span style="background:#f3f4f6;color:#6b7280;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">未処理</span>';
+      }
+      if (prog.ongoingCount>0) statusBadge+=' <span style="background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;">編集中 '+prog.ongoingCount+'</span>';
+      accountsHtml+='<div style="display:flex;align-items:center;gap:14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;cursor:pointer;transition:box-shadow 0.15s, transform 0.1s;flex-wrap:wrap;" '
+        +'onmouseover="this.style.boxShadow=\'0 2px 8px rgba(30,64,175,0.2)\';this.style.transform=\'translateY(-1px)\'" onmouseout="this.style.boxShadow=\'\';this.style.transform=\'\'" '
         +'onclick="bankStartImportForAccount('+i+')">'
-        +'<div style="font-size:17px;font-weight:700;color:var(--gray-900);margin-bottom:4px;">🏦 '+esc(a.bankName||'')+'</div>'
-        +(subtitle?'<div style="font-size:13px;color:var(--gray-700);margin-bottom:4px;font-weight:500;">'+esc(subtitle)+'</div>':'')
-        +'<div style="font-size:14px;color:var(--gray-800);margin-bottom:8px;font-family:monospace;font-weight:600;">口座番号: '+esc(a.accountNo||'')+'</div>'
-        +'<div style="font-size:13px;margin-bottom:8px;">'+statusLine+'</div>'
-        +progressBar
-        +'<div style="display:flex;justify-content:flex-end;margin-top:10px;"><span class="btn btn-primary btn-sm" style="font-size:12px;">＋ 新規CSV取込</span></div>'
+        +'<div style="flex:0 0 auto;min-width:220px;">'
+          +'<div style="font-size:16px;font-weight:700;color:#111827;line-height:1.2;">🏦 '+esc(a.bankName||'')+'</div>'
+          +'<div style="font-size:12px;color:var(--gray-600);margin-top:3px;">'
+            +(subtitle?esc(subtitle)+' ／ ':'')
+            +'<span style="font-family:monospace;font-weight:600;color:var(--gray-800);">'+esc(a.accountNo||'')+'</span>'
+          +'</div>'
+        +'</div>'
+        +'<div style="flex:1;min-width:280px;">'+progressBar+'</div>'
+        +'<div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">'
+          +'<div>'+statusBadge+'</div>'
+          +'<span class="btn btn-primary btn-sm" style="font-size:11px;padding:5px 11px;">＋ 新規CSV取込</span>'
+        +'</div>'
         +'</div>';
     });
     accountsHtml+='</div></div>';
@@ -5333,6 +5448,7 @@ function bankPageList() {
       +'</div>';
   }
 
+  var sessionCount=sessions.length;
   return '<div class="card">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
     +'<div class="card-title" style="margin:0;border:none;padding:0;">🏦 銀行CSVセッション一覧</div>'
@@ -5343,10 +5459,12 @@ function bankPageList() {
     +'<button class="btn btn-primary" onclick="bankNameCache=\'\';bankAcctCache=\'\';bankCsvPage=\'importing\';renderPage()">＋ 新規CSVインポート</button>'
     +'</div>'
     +'</div>'
-    +accountsHtml
-    +(accounts.length>0?'<div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">📂 取込履歴</div>':'')
-    +listHtml
     +bankRenderWorkflowGuide()
+    +accountsHtml
+    +(sessionCount>0
+       ?'<div style="font-size:13px;font-weight:700;color:var(--gray-700);margin:18px 0 8px;">📂 取込履歴（'+sessionCount+'件） — クリックで編集の続きから再開できます</div>'
+       :'<div style="font-size:12px;color:var(--gray-500);margin:18px 0 8px;padding:10px 14px;background:#f9fafb;border-radius:8px;">📂 まだ取込履歴はありません。上の口座行をクリックするか、右上の「＋ 新規CSVインポート」から開始してください。</div>')
+    +listHtml
     +'</div>';
 }
 
@@ -6068,6 +6186,7 @@ function bankToggleCompleted(completed) {
   }
   bankCurrentSession.completed=!!completed;
   bankCurrentSession.completedAt=completed?new Date().toISOString():null;
+  bankEnsureProcessedMonths(bankCurrentSession);
   bankSaveSession(bankCurrentSession).then(function(){
     if (bankSessionCache) {
       var idx=bankSessionCache.findIndex(function(s){return s.id===bankCurrentSession.id;});
