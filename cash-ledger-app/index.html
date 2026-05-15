@@ -831,8 +831,9 @@ function removeAdvance(id) {
   const advances=getAdvances();
   const adv=advances.find(a=>a.id===id);
   if (!adv) return false;
-  if (adv.status==='settled'){ alert('精算済みの記録は削除できません。'); return false; }
-  if (adv.cashEntryId) removeEntry(adv.cashEntryId);
+  if (adv.cashEntryId)         removeEntry(adv.cashEntryId);
+  if (adv.settlementEntryId)   removeEntry(adv.settlementEntryId);
+  if (adv.discrepancyEntryId)  removeEntry(adv.discrepancyEntryId);
   saveAdvances(advances.filter(a=>a.id!==id));
   return true;
 }
@@ -1666,6 +1667,9 @@ function pageAdvances() {
       <button class="btn btn-outline btn-sm" onclick="showHowTo('advances')" style="font-size:12px;">📖 操作方法</button>
     </div>
     ${advNeedsLocPick?`<div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#92400e;font-weight:700;">⚠️ 「全拠点」表示中は仮払い登録できません。ヘッダーの拠点ボタンから処理する拠点を選択してください。</div>`:''}
+    <div class="alert alert-info" style="margin-bottom:14px;font-size:12px;">
+      💡 出張・接待・備品購入などで従業員に事前に現金を渡す場合に使います。仮払日・氏名・目的・金額を入力すると、現金出納帳に出金として自動記録されます。使用後はレシートを集めて「精算」ボタンから使用額・返金額を確定してください。
+    </div>
     <div class="form-grid">
       <div class="form-group req"><label>仮払日</label>${dateInputsMD('af-date', today(), 'af-name')}</div>
       <div class="form-group req">
@@ -1728,9 +1732,14 @@ function pageAdvances() {
               ${a.status==='pending'?`
                 <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;">
                   <button class="btn btn-success btn-sm" onclick="showSettleModal('${esc(a.id)}')">精算</button>
-                  <button class="btn btn-secondary btn-sm" onclick="confirmDeleteAdv('${esc(a.id)}')">削除</button>
+                  <button class="btn btn-danger btn-sm" onclick="confirmDeleteAdv('${esc(a.id)}')">削除</button>
                 </div>
-              `:`<button class="btn btn-outline btn-sm" onclick="showSettleModal('${esc(a.id)}')">✏️ 修正</button>`}
+              `:`
+                <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;">
+                  <button class="btn btn-outline btn-sm" onclick="showSettleModal('${esc(a.id)}')">✏️ 修正</button>
+                  <button class="btn btn-danger btn-sm" onclick="confirmDeleteAdv('${esc(a.id)}')">削除</button>
+                </div>
+              `}
             </td>
           </tr>`).join('')}
         </tbody>
@@ -3352,8 +3361,19 @@ function confirmDeleteEntry(id) {
 }
 
 function confirmDeleteAdv(id) {
-  if (confirm('この仮払い記録を削除しますか？\n関連する出納帳の記録も削除されます。')){
-    if (removeAdvance(id)){ updateHeader(); renderPage(); }
+  const adv=getAdvances().find(a=>a.id===id);
+  if (!adv) return;
+  var msg;
+  if (adv.status==='settled') {
+    var parts=['・仮払い時の出金記録'];
+    if (adv.settlementEntryId)  parts.push('・精算時の入金/出金記録');
+    if (adv.discrepancyEntryId) parts.push('・現金過不足の記録');
+    msg='この精算済の仮払い記録（'+adv.id+'）を削除しますか？\n\n以下の出納帳記録もまとめて削除されます：\n'+parts.join('\n')+'\n\n※ この操作は取り消せません。';
+  } else {
+    msg='この仮払い記録（'+adv.id+'）を削除しますか？\n関連する出納帳の出金記録も削除されます。';
+  }
+  if (confirm(msg)) {
+    if (removeAdvance(id)) { updateHeader(); renderPage(); }
   }
 }
 
@@ -4916,9 +4936,9 @@ function bankConfirmDelete(id) {
 
 var BANK_TRANSFER_DOC_KEYWORDS = ['振込資金','フリコミカワリキン','フリコミシキン','フリカエシキン','カワリキン','振替金','送金資金','フリコミシ'];
 var BANK_GENERIC_DESC_PATTERNS = ['AD','D','CD','ATM','預金機','カード','カードAD','カードD','機械','現金'];
-var BANK_LOAN_KEYWORDS = ['借入','借り入れ','借入金','ローン','融資','金消','金銭消費貸借','ｶﾘｲﾚ','ｶﾘｲﾚｷﾝ','ｶﾘｲﾚｷﾝｺｳﾆｭｳ','カリイレ','カリイレキン','LOAN'];
+var BANK_LOAN_KEYWORDS = ['借入','借り入れ','借入金','ローン','融資','金消','金銭消費貸借','手形貸付','手形借入','手貸','ﾃｶﾞﾀｶｼﾂｹ','ﾃｶﾞﾀｶﾘｲﾚ','当座貸越','当貸','証書貸付','ｶﾘｲﾚ','ｶﾘｲﾚｷﾝ','ｶﾘｲﾚｷﾝｺｳﾆｭｳ','カリイレ','カリイレキン','LOAN'];
 var BANK_AUTO_KEYWORDS = ['トヨタ','ﾄﾖﾀ','ホンダ','ﾎﾝﾀﾞ','日産','ﾆｯｻﾝ','ニッサン','マツダ','ﾏﾂﾀﾞ','スバル','ｽﾊﾞﾙ','スズキ','ｽｽﾞｷ','ダイハツ','ﾀﾞｲﾊﾂ','レクサス','ﾚｸｻｽ','三菱自動車','ｶｰﾃﾞｨｰﾗｰ','カーディーラー','自動車','ｼﾞﾄﾞｳｼﾔ','ｼﾞﾄﾞｳｼｬ','モータース','ﾓｰﾀｰｽ','ネッツ','ﾈｯﾂ','カローラ','ｶﾛｰﾗ','ＶＷ','VW','フォルクスワーゲン','BMW','ベンツ','ﾍﾞﾝﾂ','アウディ','ｱｳﾃﾞｨ','ポルシェ','ﾎﾟﾙｼｪ','カーリース','ｶｰﾘｰｽ','オートリース','ｵｰﾄﾘｰｽ','整備工場','板金','ｾｲﾋﾞ','ｶｰｼｮｯﾌﾟ','カーショップ','車検','ｼｬｹﾝ'];
-var BANK_LOAN_RECEIPT_THRESHOLD = 100000;
+var BANK_LOAN_RECEIPT_THRESHOLD = 1000000;
 
 function bankClassifyByOrig(orig) {
   var s=(orig||'').trim();
