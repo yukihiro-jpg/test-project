@@ -1015,8 +1015,11 @@ function showSettings() {
     </div>
     <div style="font-size:11px;color:var(--gray-500);margin-top:4px;">※定期的なバックアップを推奨します（ブラウザキャッシュ削除でデータが消えます）</div>
     <div class="divider"></div>
-    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🏦 銀行CSV設定</div>
-    <button class="btn btn-secondary btn-sm" onclick="closeModal();showBankCsvSettings()">🏦 銀行CSV テンプレート・学習履歴の管理</button>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🏦 銀行口座マスタ</div>
+    <button class="btn btn-secondary btn-sm" onclick="closeModal();showBankAccountsManager()">🏦 解析対象の銀行・口座リストを管理</button>
+    <div class="divider"></div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🏦 銀行CSV学習履歴</div>
+    <button class="btn btn-secondary btn-sm" onclick="closeModal();showBankCsvSettings()">🏦 銀行CSV 学習履歴の管理</button>
     <div class="divider"></div>
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">📌 デスクトップアイコン</div>
     <button class="btn btn-secondary btn-sm" onclick="closeModal();showDesktopIconHelp()">📌 デスクトップにアプリ風アイコンで配置する方法</button>
@@ -4847,6 +4850,65 @@ function bankAutoComplete(amount, dayOfMonth) {
 // テンプレート管理
 function bankGetProfiles() { return DB.get('bank_profiles')||[]; }
 function bankSaveProfiles(p) { DB.set('bank_profiles',p); }
+
+// ── 銀行口座マスタ（解析対象の銀行・口座リスト） ──
+function bankGetAccounts() { return DB.get('bank_accounts')||[]; }
+function bankSaveAccounts(arr) { DB.set('bank_accounts', arr); }
+function bankAccountKey(bankName, accountNo) {
+  return (bankName||'').trim()+'|'+(accountNo||'').trim();
+}
+function bankUpsertAccount(account) {
+  if (!account||!account.bankName||!account.bankName.trim()) return;
+  var arr=bankGetAccounts();
+  var key=bankAccountKey(account.bankName, account.accountNo);
+  var idx=arr.findIndex(function(a){return bankAccountKey(a.bankName, a.accountNo)===key;});
+  if (idx>=0) {
+    // 既存：空でない値だけ上書き（個別登録時に他フィールドを消さないため）
+    var cur=arr[idx];
+    ['branchName','accountType','holderName'].forEach(function(f){
+      var v=(account[f]||'').trim();
+      if (v) cur[f]=v;
+    });
+    cur.bankName=(account.bankName||'').trim();
+    cur.accountNo=(account.accountNo||'').trim();
+  } else {
+    arr.push({
+      bankName:(account.bankName||'').trim(),
+      branchName:(account.branchName||'').trim(),
+      accountType:(account.accountType||'').trim(),
+      accountNo:(account.accountNo||'').trim(),
+      holderName:(account.holderName||'').trim(),
+      createdAt:new Date().toISOString()
+    });
+  }
+  bankSaveAccounts(arr);
+}
+function bankRemoveAccount(idx) {
+  var arr=bankGetAccounts();
+  if (idx<0||idx>=arr.length) return;
+  arr.splice(idx,1);
+  bankSaveAccounts(arr);
+}
+function bankGetAccountProgress(bankName, accountNo) {
+  var key=bankAccountKey(bankName, accountNo);
+  var sessions=(bankSessionCache||[]).filter(function(s){
+    return bankAccountKey(s.bankName, s.accountNo)===key;
+  });
+  var completed=sessions.filter(function(s){return s.completed;});
+  var ongoing=sessions.filter(function(s){return !s.completed;});
+  var lastMonth=null;
+  completed.forEach(function(s){
+    if (s.lastProcessedMonth && (lastMonth===null||s.lastProcessedMonth>lastMonth)) {
+      lastMonth=s.lastProcessedMonth;
+    }
+  });
+  return { lastProcessedMonth:lastMonth, ongoingCount:ongoing.length, completedCount:completed.length };
+}
+function bankFormatMonth(yyyymm) {
+  if (!yyyymm) return '';
+  var m=String(yyyymm).match(/^(\d{4})-(\d{2})$/);
+  return m ? m[1]+'年'+parseInt(m[2],10)+'月' : yyyymm;
+}
 function bankProfileKey(bankName, accountNo) {
   return (bankName||'').trim()+'|'+(accountNo||'').trim();
 }
@@ -4935,6 +4997,15 @@ function bankMergeSessions(base, other) {
     if (!seen.has(k)) { base.rows.push(r); seen.add(k); added++; }
   });
   base.rows.sort(function(a,b){return a.date.localeCompare(b.date);});
+  // 処理対象月を再計算
+  var monthsSet={};
+  base.rows.forEach(function(r){
+    if (r.date && /^\d{4}-\d{2}/.test(r.date)) monthsSet[r.date.substring(0,7)]=true;
+  });
+  var months=Object.keys(monthsSet).sort();
+  base.processedMonths=months;
+  base.firstProcessedMonth=months[0]||null;
+  base.lastProcessedMonth=months[months.length-1]||null;
   return added;
 }
 
@@ -5007,16 +5078,64 @@ function bankPageList() {
       }
     });
   }
+  // 解析対象の銀行口座マスタを上部に表示
+  var accounts=bankGetAccounts();
+  var accountsHtml='';
+  if (accounts.length>0) {
+    accountsHtml='<div style="margin-bottom:16px;">'
+      +'<div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">🏦 解析対象の銀行口座（登録済み '+accounts.length+'件）— クリックで新規CSVを取り込み</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">';
+    accounts.forEach(function(a,i){
+      var prog=bankGetAccountProgress(a.bankName, a.accountNo);
+      var statusLine;
+      if (prog.lastProcessedMonth) {
+        statusLine='<span style="color:#059669;font-weight:600;">✅ '+esc(bankFormatMonth(prog.lastProcessedMonth))+'分まで完了</span>';
+      } else {
+        statusLine='<span style="color:var(--gray-400);">未処理</span>';
+      }
+      if (prog.ongoingCount>0) statusLine+='<span style="color:#d97706;font-size:11px;"> / 編集中 '+prog.ongoingCount+'件</span>';
+      var subtitle=[a.branchName||'', a.accountType||''].filter(function(x){return x;}).join(' ');
+      accountsHtml+='<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px;cursor:pointer;transition:box-shadow 0.15s;" '
+        +'onmouseover="this.style.boxShadow=\'0 2px 8px rgba(30,64,175,0.2)\'" onmouseout="this.style.boxShadow=\'\'" '
+        +'onclick="bankStartImportForAccount('+i+')">'
+        +'<div style="font-size:13px;font-weight:700;color:var(--gray-900);margin-bottom:2px;">🏦 '+esc(a.bankName||'')+'</div>'
+        +(subtitle?'<div style="font-size:11px;color:var(--gray-600);margin-bottom:4px;">'+esc(subtitle)+'</div>':'')
+        +'<div style="font-size:11px;color:var(--gray-600);margin-bottom:6px;font-family:monospace;">口座番号: '+esc(a.accountNo||'')+'</div>'
+        +'<div style="font-size:11px;margin-bottom:8px;">'+statusLine+'</div>'
+        +'<div style="display:flex;justify-content:flex-end;"><span class="btn btn-primary btn-xs" style="font-size:11px;">＋ 新規CSV取込</span></div>'
+        +'</div>';
+    });
+    accountsHtml+='</div></div>';
+  } else {
+    accountsHtml='<div style="background:#f9fafb;border:1px dashed var(--gray-300);border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--gray-600);">'
+      +'💡 <strong>解析対象の銀行口座を事前に登録できます。</strong>登録すると、ここにカードが並び、クリックするだけで銀行名・口座番号入力なしにCSV取込を開始できます。<br>'
+      +'<button class="btn btn-secondary btn-xs" style="margin-top:6px;" onclick="closeModal();showBankAccountsManager()">⚙ 銀行口座マスタを開く</button>'
+      +'</div>';
+  }
+
   return '<div class="card">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
     +'<div class="card-title" style="margin:0;border:none;padding:0;">🏦 銀行CSVセッション一覧</div>'
     +'<div style="display:flex;gap:8px;align-items:center;">'
     +'<button class="btn btn-outline btn-sm" onclick="showHowTo(\'bank-csv\')" style="font-size:12px;">📖 操作方法</button>'
-    +'<button class="btn btn-primary" onclick="bankCsvPage=\'importing\';renderPage()">＋ 新規CSVインポート</button>'
+    +'<button class="btn btn-outline btn-sm" onclick="showBankAccountsManager()" style="font-size:12px;">⚙ 銀行口座マスタ</button>'
+    +'<button class="btn btn-primary" onclick="bankNameCache=\'\';bankAcctCache=\'\';bankCsvPage=\'importing\';renderPage()">＋ 新規CSVインポート</button>'
     +'</div>'
     +'</div>'
+    +accountsHtml
+    +(accounts.length>0?'<div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">📂 取込履歴</div>':'')
     +listHtml
     +'</div>';
+}
+
+function bankStartImportForAccount(idx) {
+  var accounts=bankGetAccounts();
+  var a=accounts[idx];
+  if (!a) return;
+  bankNameCache=a.bankName||'';
+  bankAcctCache=a.accountNo||'';
+  bankCsvPage='importing';
+  renderPage();
 }
 
 function bankPageImport() {
@@ -5073,9 +5192,28 @@ function bankReadFile(file) {
     };
     bankColumnRoles={description:[]};
     bankActiveRole=null;
-    bankNameCache='';
-    bankAcctCache='';
+    // bankNameCache / bankAcctCache は意図的に保持
+    // （口座マスタカードクリックや銀行プロファイル選択で事前入力された値を維持する）
     bankAutoDetectColumns(bankImportedData.headers);
+    // 既存プロファイルがあれば列マッピングを自動復元
+    if (bankNameCache && bankAcctCache!=null) {
+      var profiles=bankGetProfiles();
+      var key=bankProfileKey(bankNameCache, bankAcctCache);
+      var p=profiles.find(function(pp){return bankProfileKey(pp.bankName, pp.accountNo)===key;});
+      if (p) {
+        var roles=Object.assign({}, p.roles||{});
+        if (typeof roles.description==='number') roles.description=[roles.description];
+        if (!Array.isArray(roles.description)) roles.description=[];
+        // 新CSVの列数の範囲内かを検証
+        var maxIdx=bankImportedData.headers.length-1;
+        var allValid=true;
+        ['date','receipt','payment','amount','balance'].forEach(function(r){
+          if (roles[r]!=null && (roles[r]<0||roles[r]>maxIdx)) allValid=false;
+        });
+        (roles.description||[]).forEach(function(i){ if (i<0||i>maxIdx) allValid=false; });
+        if (allValid) bankColumnRoles=roles;
+      }
+    }
     bankCsvPage='mapping';
     renderPage();
   };
@@ -5325,7 +5463,10 @@ function bankStartEditing() {
   bankNormalizeColumnRoles();
   var bankName=(document.getElementById('bank-name-input')||{value:bankNameCache}).value.trim();
   var accountNo=(document.getElementById('bank-acct-input')||{value:bankAcctCache}).value.trim();
-  if (bankName) bankUpsertProfile(bankName, accountNo, bankColumnRoles);
+  if (bankName) {
+    bankUpsertProfile(bankName, accountNo, bankColumnRoles);
+    bankUpsertAccount({bankName:bankName, accountNo:accountNo});
+  }
   var descCols=bankColumnRoles.description||[];
   var rows=bankImportedData.rows.map(function(row) {
     var dateStr=bankColumnRoles.date!=null?bankNormalizeDate(row[bankColumnRoles.date]||''):'';
@@ -5361,6 +5502,11 @@ function bankStartEditing() {
     }
   }
 
+  var monthsSet={};
+  rows.forEach(function(r){
+    if (r.date && /^\d{4}-\d{2}/.test(r.date)) monthsSet[r.date.substring(0,7)]=true;
+  });
+  var months=Object.keys(monthsSet).sort();
   var sess={
     id:'bank_'+Date.now(),
     bankName:bankName, accountNo:accountNo,
@@ -5368,6 +5514,9 @@ function bankStartEditing() {
     originalHeaders:bankImportedData.headers,
     columnMapping:Object.assign({},bankColumnRoles),
     rows:rows,
+    processedMonths:months,
+    firstProcessedMonth:months[0]||null,
+    lastProcessedMonth:months[months.length-1]||null,
     createdAt:new Date().toISOString(),
     updatedAt:new Date().toISOString()
   };
@@ -5851,6 +6000,240 @@ function showDesktopIconHelp() {
       +'<button class="btn btn-primary" onclick="closeModal()">閉じる</button>'
     +'</div>'
   , true);
+}
+
+let _pendingBankAccountsImport=null;
+
+function showBankAccountsManager() {
+  var accounts=bankGetAccounts();
+  var rowsHtml;
+  if (accounts.length===0) {
+    rowsHtml='<div style="font-size:12px;color:var(--gray-500);padding:12px;text-align:center;">登録された銀行口座はありません。下のフォーム、またはExcel(CSV)インポートから登録してください。</div>';
+  } else {
+    rowsHtml='<div style="overflow-x:auto;border:1px solid var(--gray-200);border-radius:8px;">'
+      +'<table style="width:100%;font-size:12px;border-collapse:collapse;">'
+      +'<thead style="background:var(--gray-100);"><tr>'
+      +'<th style="padding:6px 8px;text-align:left;">銀行名</th>'
+      +'<th style="padding:6px 8px;text-align:left;">支店</th>'
+      +'<th style="padding:6px 8px;text-align:left;">種別</th>'
+      +'<th style="padding:6px 8px;text-align:left;">口座番号</th>'
+      +'<th style="padding:6px 8px;text-align:left;">名義</th>'
+      +'<th style="padding:6px 8px;text-align:left;">処理状況</th>'
+      +'<th style="padding:6px 8px;"></th>'
+      +'</tr></thead><tbody>';
+    accounts.forEach(function(a,i){
+      var prog=bankGetAccountProgress(a.bankName, a.accountNo);
+      var progText=prog.lastProcessedMonth
+        ?'<span style="color:#059669;">'+bankFormatMonth(prog.lastProcessedMonth)+'分まで完了</span>'
+        :'<span style="color:var(--gray-400);">未処理</span>';
+      if (prog.ongoingCount>0) progText+='<span style="color:#d97706;font-size:11px;"> / 進行中 '+prog.ongoingCount+'件</span>';
+      rowsHtml+='<tr style="border-top:1px solid var(--gray-200);">'
+        +'<td style="padding:6px 8px;font-weight:600;">'+esc(a.bankName||'')+'</td>'
+        +'<td style="padding:6px 8px;">'+esc(a.branchName||'')+'</td>'
+        +'<td style="padding:6px 8px;">'+esc(a.accountType||'')+'</td>'
+        +'<td style="padding:6px 8px;font-family:monospace;">'+esc(a.accountNo||'')+'</td>'
+        +'<td style="padding:6px 8px;">'+esc(a.holderName||'')+'</td>'
+        +'<td style="padding:6px 8px;font-size:11px;">'+progText+'</td>'
+        +'<td style="padding:6px 8px;"><button class="btn btn-danger btn-xs" onclick="bankRemoveAccountConfirm('+i+')">削除</button></td>'
+        +'</tr>';
+    });
+    rowsHtml+='</tbody></table></div>';
+  }
+
+  showModal(
+    '<div class="modal-title">🏦 解析対象の銀行・口座リスト</div>'
+    +'<div style="font-size:12px;color:var(--gray-600);margin-bottom:12px;">ここに登録した銀行口座は<strong>銀行CSVセッション一覧</strong>に常に表示され、クリックするだけで銀行名・口座番号の再入力なしにCSV取込を開始できます。各口座の処理状況（最終処理月）も一覧で確認できます。</div>'
+    +rowsHtml
+    +'<div class="divider"></div>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">📥 Excel(CSV)で一括インポート／エクスポート</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
+      +'<button class="btn btn-secondary btn-sm" onclick="bankExportAccountsTemplate()">📥 テンプレートをダウンロード</button>'
+      +'<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'bank-accounts-imp\').click()">📤 Excel(CSV)からインポート</button>'
+      +'<input type="file" id="bank-accounts-imp" accept=".csv" style="display:none;" onchange="bankImportAccountsFile(event)">'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--gray-500);margin-bottom:14px;">'
+      +'1. テンプレートをダウンロード（既存データがあれば編集用として出力）<br>'
+      +'2. Excelで開き、銀行口座を追記して保存（CSV形式のまま）<br>'
+      +'3. 「Excel(CSV)からインポート」で取込 → 内容確認 → 確定<br>'
+      +'<strong>※ インポートしたCSVファイル自体はアプリ内に保存されません</strong>（容量を取らないため、データのみ取り込みます）'
+    +'</div>'
+    +'<div class="divider"></div>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">＋ 個別に1件追加</div>'
+    +'<div style="display:grid;grid-template-columns:1.2fr 1fr 0.8fr 1fr 1fr;gap:6px;margin-bottom:8px;">'
+      +'<input type="text" id="ba-bankName" placeholder="銀行名（必須）" style="padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;font-family:inherit;" />'
+      +'<input type="text" id="ba-branchName" placeholder="支店名" style="padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;font-family:inherit;" />'
+      +'<input type="text" id="ba-accountType" placeholder="種別 例:普通" style="padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;font-family:inherit;" />'
+      +'<input type="text" id="ba-accountNo" placeholder="口座番号（必須）" style="padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;font-family:inherit;" />'
+      +'<input type="text" id="ba-holderName" placeholder="名義" style="padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;font-family:inherit;" />'
+    +'</div>'
+    +'<button class="btn btn-primary btn-sm" onclick="bankAddAccountFromForm()">＋ この内容で登録</button>'
+    +'<div class="modal-actions">'
+      +'<button class="btn btn-secondary" onclick="closeModal()">閉じる</button>'
+    +'</div>'
+  , true);
+}
+
+function bankAddAccountFromForm() {
+  var b=(document.getElementById('ba-bankName')||{value:''}).value.trim();
+  var n=(document.getElementById('ba-accountNo')||{value:''}).value.trim();
+  if (!b || !n) { alert('銀行名と口座番号は必須です。'); return; }
+  bankUpsertAccount({
+    bankName:b,
+    branchName:(document.getElementById('ba-branchName')||{value:''}).value,
+    accountType:(document.getElementById('ba-accountType')||{value:''}).value,
+    accountNo:n,
+    holderName:(document.getElementById('ba-holderName')||{value:''}).value
+  });
+  showBankAccountsManager();
+}
+
+function bankRemoveAccountConfirm(idx) {
+  var arr=bankGetAccounts();
+  var a=arr[idx];
+  if (!a) return;
+  if (!confirm('「'+(a.bankName||'')+(a.accountNo?' / '+a.accountNo:'')+'」をマスタから削除しますか？\n（取込済みのセッションには影響しません）')) return;
+  bankRemoveAccount(idx);
+  showBankAccountsManager();
+}
+
+function bankExportAccountsTemplate() {
+  var headers=['銀行名(必須)','支店名','口座種別','口座番号(必須)','名義'];
+  var rows=[headers];
+  var existing=bankGetAccounts();
+  if (existing.length>0) {
+    existing.forEach(function(a){
+      rows.push([a.bankName||'', a.branchName||'', a.accountType||'', a.accountNo||'', a.holderName||'']);
+    });
+  } else {
+    rows.push(['〇〇銀行','△△支店','普通','1234567','株式会社サンプル']);
+    rows.push(['','','','','']);
+  }
+  dlCSV(rows, '銀行口座マスタ_'+today()+'.csv');
+}
+
+function bankImportAccountsFile(event) {
+  var file=event.target.files[0];
+  if (!file) return;
+  var reader=new FileReader();
+  reader.onload=function(e) {
+    var buf=e.target.result;
+    var enc=bankDetectEncoding(buf);
+    var text;
+    try { text=new TextDecoder(enc,{fatal:false}).decode(buf); }
+    catch (ex) { text=new TextDecoder('utf-8',{fatal:false}).decode(buf); }
+    if (text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+
+    var parsed=bankParseCSV(text);
+    if (parsed.length<2) {
+      alert('CSVが空、もしくは形式が違います。テンプレートをご利用ください。');
+      return;
+    }
+    var headers=parsed[0]||[];
+    var bankIdx=headers.findIndex(function(h){return String(h||'').indexOf('銀行名')!==-1;});
+    var acctIdx=headers.findIndex(function(h){return String(h||'').indexOf('口座番号')!==-1;});
+    if (bankIdx===-1||acctIdx===-1) {
+      alert('ヘッダ行に「銀行名」「口座番号」が見つかりません。\nテンプレートをご利用ください。');
+      return;
+    }
+    var branchIdx=headers.findIndex(function(h){return String(h||'').indexOf('支店')!==-1;});
+    var typeIdx=headers.findIndex(function(h){return String(h||'').indexOf('口座種別')!==-1||String(h||'').indexOf('種別')!==-1;});
+    var holderIdx=headers.findIndex(function(h){return String(h||'').indexOf('名義')!==-1;});
+
+    var accounts=[];
+    for (var i=1;i<parsed.length;i++) {
+      var row=parsed[i];
+      if (!row||row.length===0) continue;
+      if (row.every(function(c){return !(String(c||'').trim());})) continue;
+      var bn=String(row[bankIdx]||'').trim();
+      var an=String(row[acctIdx]||'').trim();
+      if (!bn||!an) continue;
+      accounts.push({
+        bankName:bn,
+        branchName:branchIdx>=0?String(row[branchIdx]||'').trim():'',
+        accountType:typeIdx>=0?String(row[typeIdx]||'').trim():'',
+        accountNo:an,
+        holderName:holderIdx>=0?String(row[holderIdx]||'').trim():''
+      });
+    }
+    if (accounts.length===0) {
+      alert('有効なデータ行（銀行名と口座番号が両方入った行）が見つかりません。'); return;
+    }
+    showBankAccountsImportPreview(accounts);
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value='';
+}
+
+function showBankAccountsImportPreview(accounts) {
+  _pendingBankAccountsImport=accounts;
+  var existing=bankGetAccounts();
+  var existingKeys={};
+  existing.forEach(function(a){ existingKeys[bankAccountKey(a.bankName, a.accountNo)]=true; });
+
+  var newCount=0, updCount=0;
+  accounts.forEach(function(a){
+    if (existingKeys[bankAccountKey(a.bankName, a.accountNo)]) updCount++;
+    else newCount++;
+  });
+
+  var html='<div class="modal-title">📤 銀行口座マスタの取り込み確認</div>'
+    +'<div style="font-size:12px;color:var(--gray-600);margin-bottom:10px;">取り込み件数: <strong>'+accounts.length+'</strong> 件（新規 <span style="color:#059669;">'+newCount+'</span> 件 / 上書き <span style="color:#d97706;">'+updCount+'</span> 件）</div>'
+    +'<div style="max-height:300px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:8px;">'
+    +'<table style="width:100%;font-size:12px;border-collapse:collapse;">'
+    +'<thead style="background:var(--gray-100);position:sticky;top:0;"><tr>'
+    +'<th style="padding:6px 8px;text-align:left;">区分</th>'
+    +'<th style="padding:6px 8px;text-align:left;">銀行名</th>'
+    +'<th style="padding:6px 8px;text-align:left;">支店</th>'
+    +'<th style="padding:6px 8px;text-align:left;">種別</th>'
+    +'<th style="padding:6px 8px;text-align:left;">口座番号</th>'
+    +'<th style="padding:6px 8px;text-align:left;">名義</th>'
+    +'</tr></thead><tbody>';
+  accounts.forEach(function(a){
+    var isUpd=existingKeys[bankAccountKey(a.bankName, a.accountNo)];
+    html+='<tr style="border-top:1px solid var(--gray-200);">'
+      +'<td style="padding:5px 8px;">'+(isUpd?'<span style="color:#d97706;font-weight:600;">上書</span>':'<span style="color:#059669;font-weight:600;">新規</span>')+'</td>'
+      +'<td style="padding:5px 8px;">'+esc(a.bankName)+'</td>'
+      +'<td style="padding:5px 8px;">'+esc(a.branchName||'')+'</td>'
+      +'<td style="padding:5px 8px;">'+esc(a.accountType||'')+'</td>'
+      +'<td style="padding:5px 8px;font-family:monospace;">'+esc(a.accountNo)+'</td>'
+      +'<td style="padding:5px 8px;">'+esc(a.holderName||'')+'</td>'
+      +'</tr>';
+  });
+  html+='</tbody></table></div>';
+  html+='<div style="font-size:11px;color:var(--gray-500);margin-top:8px;">※ 確定後、取り込んだCSVファイル自体はアプリ内に保存されません（容量を取らないため、データのみ登録します）。</div>';
+  html+='<div class="modal-actions">'
+    +'<button class="btn btn-secondary" onclick="_pendingBankAccountsImport=null;closeModal();showBankAccountsManager();">キャンセル</button>'
+    +'<button class="btn btn-primary" onclick="bankConfirmImportAccounts()">'+accounts.length+'件を登録する</button>'
+    +'</div>';
+  showModal(html, true);
+}
+
+function bankConfirmImportAccounts() {
+  if (!_pendingBankAccountsImport) return;
+  var arr=bankGetAccounts();
+  var keyToIdx={};
+  arr.forEach(function(a,i){ keyToIdx[bankAccountKey(a.bankName, a.accountNo)]=i; });
+  var added=0, updated=0;
+  _pendingBankAccountsImport.forEach(function(a) {
+    var key=bankAccountKey(a.bankName, a.accountNo);
+    var rec={
+      bankName:a.bankName, branchName:a.branchName, accountType:a.accountType,
+      accountNo:a.accountNo, holderName:a.holderName
+    };
+    if (keyToIdx[key]!=null) {
+      arr[keyToIdx[key]]=Object.assign({}, arr[keyToIdx[key]], rec);
+      updated++;
+    } else {
+      rec.createdAt=new Date().toISOString();
+      arr.push(rec);
+      added++;
+    }
+  });
+  bankSaveAccounts(arr);
+  _pendingBankAccountsImport=null;
+  closeModal();
+  alert('銀行口座マスタを更新しました。\n新規追加: '+added+'件\n上書き: '+updated+'件\n\n取込元のCSVファイルはアプリ内に保存されていません。');
+  showBankAccountsManager();
 }
 
 function showBankCsvSettings() {
