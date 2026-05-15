@@ -3790,6 +3790,7 @@ function showHowTo(context) {
   const isLedger=context==='ledger';
   const isAdv=context==='advances';
   const isReim=context==='reimbursements';
+  const isBankCsv=context==='bank-csv';
   const isReports=context==='reports';
   showModal(`
     <div class="modal-title">📖 操作方法ガイド</div>
@@ -3798,6 +3799,7 @@ function showHowTo(context) {
       <button class="btn btn-xs ${isLedger?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('ledger')">📒 現金出納帳</button>
       <button class="btn btn-xs ${isAdv?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('advances')">💼 仮払管理</button>
       <button class="btn btn-xs ${isReim?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('reimbursements')">🧾 立替経費</button>
+      <button class="btn btn-xs ${isBankCsv?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('bank-csv')">🏦 銀行CSV</button>
       <button class="btn btn-xs ${isReports?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('reports')">📄 帳票出力</button>
     </div>
 
@@ -4063,8 +4065,9 @@ function showHowTo(context) {
 
       <div class="howto-step">
         <strong>④ 修正・削除</strong><br>
-        精算済みの仮払いも「修正」ボタンで内容を変更できます（出納帳の関連記録も自動更新）。<br>
-        「削除」ボタンで仮払い記録と関連出納帳行をまとめて削除します。
+        ・<strong>「✏️ 修正」</strong>：精算済みの仮払いも修正できます（出納帳の関連記録も自動更新）<br>
+        ・<strong>「削除」</strong>：未精算／精算済どちらでも削除でき、関連する出納帳記録（仮払時の出金・精算時の入金/出金・現金過不足）が<strong>まとめて自動削除</strong>されます<br>
+        ※ 精算済の削除時は確認ダイアログに削除される出納帳記録の内訳が表示されます
       </div>
     </div>
     `:''}
@@ -4197,9 +4200,167 @@ function showHowTo(context) {
     </div>
     `:''}
 
+    ${isBankCsv?`
+    <div class="howto-section">
+      <h3>🏦 銀行CSVの使い方</h3>
+
+      <div class="howto-step">
+        <strong>このタブは何をするもの？</strong><br>
+        銀行からダウンロードした口座取引CSVを取り込み、空欄や略号だけの摘要を補完して、税理士提出用のクリーンな出納帳CSVに整える機能です。一度設定した銀行は自動で記憶され、次回以降は列の割当を自動復元します。
+      </div>
+
+      <!-- VISUAL: セッション一覧 -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 銀行CSVセッション一覧</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px;">
+          <div style="background:white;border:1px solid var(--gray-200);border-radius:8px;padding:10px;position:relative;">
+            <div style="font-size:12px;font-weight:700;">🏦 〇〇銀行〇〇支店</div>
+            <div style="font-size:10px;color:var(--gray-500);">口座番号: 1234567</div>
+            <div style="font-size:10px;color:var(--gray-500);">📄 202604.csv　44行</div>
+            <div style="font-size:10px;color:#d97706;font-weight:600;margin-top:4px;">⚠ 要対応: 5行</div>
+            <div style="margin-top:6px;display:flex;gap:4px;">
+              <span class="howto-mock-btn primary" style="font-size:9px;padding:2px 6px;">▶ 再開</span>
+              <span class="howto-mock-btn secondary" style="font-size:9px;padding:2px 6px;">📥 CSV出力</span>
+              <span class="howto-mock-btn secondary" style="font-size:9px;padding:2px 6px;">🗑</span>
+            </div>
+            <span class="howto-tag" style="top:-8px;right:-8px;">①</span>
+          </div>
+          <div style="border:2px dashed #93c5fd;background:#eff6ff;border-radius:8px;padding:18px;text-align:center;position:relative;">
+            <div style="font-size:24px;">＋</div>
+            <div style="font-size:11px;color:var(--primary);font-weight:700;">新規CSVインポート</div>
+            <span class="howto-tag" style="top:-8px;right:-8px;background:#059669;">②</span>
+          </div>
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge">①</span>
+          <strong>セッションカード</strong>：取込済みの銀行CSVが1枚＝1セッションとして保存されます。「▶ 再開」で編集続行、「📥 CSV出力」で修正後CSVを保存、「🗑」で削除。
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">②</span>
+          <strong>新規CSVインポート</strong>：未取込のCSVを取り込むときはここから。
+        </div>
+      </div>
+
+      <!-- VISUAL: インポート画面 -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ CSVインポート画面</div>
+        <div style="border:3px dashed #93c5fd;background:#eff6ff;border-radius:10px;padding:30px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:6px;">📁</div>
+          <div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:4px;">CSVファイルをドラッグ＆ドロップ</div>
+          <div style="font-size:11px;color:var(--gray-500);">または ファイルを選択</div>
+        </div>
+        <div class="howto-callout-ok">
+          ✅ <strong>文字コード自動判定</strong>：Shift_JIS / UTF-8 / EUC-JP / JIS を自動検出して読み込みます。<br>
+          ✅ <strong>プリアンブル対応</strong>：CSVの上部に口座番号・期間などの説明行があっても、実際の取引列ヘッダー行を自動で見つけて使います（複数銀行のフォーマット差を吸収）。
+        </div>
+      </div>
+
+      <!-- VISUAL: 列マッピング設定 -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 列マッピング設定</div>
+        <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px;margin-bottom:8px;position:relative;">
+          <div style="font-size:11px;font-weight:700;margin-bottom:4px;">🔖 過去の銀行・口座（クリックで前回の設定を復元）</div>
+          <span style="background:white;border:1px solid #93c5fd;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;color:var(--primary);">〇〇銀行〇〇支店 / 1234567 ×</span>
+          <span class="howto-tag" style="top:-8px;right:-8px;background:#059669;">③</span>
+        </div>
+        <div style="background:#f9fafb;border:1px solid var(--gray-200);border-radius:8px;padding:8px;margin-bottom:8px;">
+          <div style="font-size:11px;font-weight:700;margin-bottom:4px;">銀行名・口座番号</div>
+          <div style="display:flex;gap:6px;">
+            <div class="howto-mock-input" style="flex:1;font-size:11px;">〇〇銀行〇〇支店</div>
+            <div class="howto-mock-input" style="flex:1;font-size:11px;">1234567</div>
+          </div>
+        </div>
+        <div style="background:#f9fafb;border:1px solid var(--gray-200);border-radius:8px;padding:8px;margin-bottom:8px;position:relative;">
+          <div style="font-size:11px;font-weight:700;margin-bottom:6px;">① 役割を選択（クリックでON/OFF）</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            <span style="background:#1e40af;color:white;border:2px solid #1e40af;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;box-shadow:0 0 0 3px #dbeafe;">日付: 年月日</span>
+            <span style="background:#dcfce7;color:#166534;border:2px solid #166534;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;">摘要（複数可）: 摘要</span>
+            <span style="background:#dcfce7;color:#15803d;border:2px solid #15803d;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;">入金: 受入金額</span>
+            <span style="background:#fee2e2;color:#b91c1c;border:2px solid #b91c1c;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;">出金: 支払金額</span>
+            <span style="background:#ede9fe;color:#6d28d9;border:2px solid #6d28d9;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;">残高: 残高</span>
+          </div>
+          <span class="howto-tag" style="top:-8px;left:-4px;background:#d97706;">④</span>
+        </div>
+        <div style="font-size:10px;font-weight:700;color:var(--gray-700);margin-bottom:4px;">② CSVプレビュー（列ヘッダーをクリックして割当）</div>
+        <table class="howto-mock-table" style="font-size:10px;">
+          <thead><tr>
+            <th style="background:#dbeafe;color:#1e40af;border:2px solid #1e40af;">年月日<br>[日付]</th>
+            <th style="background:#dcfce7;color:#166534;border:2px solid #166534;">摘要<br>[摘要]</th>
+            <th style="background:#fee2e2;color:#b91c1c;border:2px solid #b91c1c;">支払金額<br>[出金]</th>
+            <th style="background:#dcfce7;color:#15803d;border:2px solid #15803d;">受入金額<br>[入金]</th>
+            <th style="background:#ede9fe;color:#6d28d9;border:2px solid #6d28d9;">残高<br>[残高]</th>
+          </tr></thead>
+          <tbody>
+            <tr><td>4/1</td><td>振込 〇〇商事</td><td></td><td>185,900</td><td>2,507,299</td></tr>
+          </tbody>
+        </table>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">③</span>
+          <strong>銀行プロファイル</strong>：同じ銀行・口座のCSVを2回目以降取り込むと、ここに過去の銀行が並びます。クリックすると<strong>銀行名／口座番号／列マッピングを一括復元</strong>できます（テンプレート保存は不要）。
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge" style="background:#d97706;">④</span>
+          <strong>役割ボタン→列ヘッダーの順にクリック</strong>して割り当てます。割当の流れ：<br>
+          1️⃣ 例えば「日付」ボタンを押す → 該当する列ヘッダーをクリック<br>
+          2️⃣ 「摘要」ボタンを押す → 摘要を構成する列を1つ以上クリック（複数可、再クリックで解除）<br>
+          3️⃣ 「入金」「出金」「残高」も同様に割当<br>
+          ※ よくある列名（年月日／支払金額／受入金額など）は<strong>自動で割り当てられます</strong>。
+        </div>
+      </div>
+
+      <!-- VISUAL: 編集画面（要対応行分類） -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 編集画面：要対応行の分類表示</div>
+        <div style="background:#fffbeb;border:1px solid #fde047;padding:8px 10px;border-radius:6px;margin-bottom:8px;font-size:11px;color:#713f12;">
+          <div><span class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</span> 未対応 <strong>3</strong>行 / 入力済 1行</div>
+          <div style="margin-top:4px;"><span class="bank-status-badge bank-status-needpdf">📎 関連書類PDFを税理士へ送付</span> 未対応 <strong>2</strong>行 / 送付済 0行<br><span style="font-size:10px;">（内訳: 振込明細PDF 1行 / 借入関連書類PDF 1行）</span></div>
+        </div>
+        <div style="display:flex;gap:4px;margin-bottom:6px;">
+          <span class="howto-mock-btn primary" style="font-size:10px;padding:2px 8px;position:relative;">⚠ 要対応行のみ（6行）<span class="howto-tag" style="top:-8px;right:-8px;">⑤</span></span>
+          <span class="howto-mock-btn secondary" style="font-size:10px;padding:2px 8px;">📋 全明細を表示（44行）</span>
+        </div>
+        <table class="howto-mock-table" style="font-size:10px;">
+          <thead><tr><th>日付</th><th>元の摘要 / 状態</th><th>修正後の摘要</th><th>入金</th><th>出金</th></tr></thead>
+          <tbody>
+            <tr style="background:#fee2e2;"><td>4/2</td><td>AD<br><span class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</span></td><td style="background:#fef2f2;border:1px solid #dc2626;">（入力欄）</td><td></td><td>5,000</td></tr>
+            <tr style="background:#ede9fe;"><td>4/3</td><td>振込資金<br><span class="bank-status-badge bank-status-needpdf">📎 振込明細PDFを税理士へ送付</span></td><td>振込資金</td><td></td><td>500,000</td></tr>
+            <tr style="background:#ede9fe;"><td>4/4</td><td>手形貸付<br><span class="bank-status-badge bank-status-needpdf">📎 借入関連書類PDFを税理士へ送付</span></td><td>手形貸付</td><td>5,000,000</td><td></td></tr>
+            <tr style="background:#ede9fe;"><td>4/5</td><td>トヨタ自販東京<br><span class="bank-status-badge bank-status-needpdf">📎 自動車関連書類PDFを税理士へ送付</span></td><td>トヨタ自販東京</td><td></td><td>250,000</td></tr>
+          </tbody>
+        </table>
+        <div class="howto-callout">
+          <strong>4種類の要対応自動分類：</strong>
+          <ul style="margin:4px 0 0 18px;padding:0;font-size:11px;line-height:1.6;">
+            <li><span class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</span> 元摘要が空欄／「AD」「D」「預金機」など相手先名称が無い行 → <strong>摘要欄に入力で解決</strong></li>
+            <li><span class="bank-status-badge bank-status-needpdf">📎 振込明細PDF</span> 元摘要に「振込資金」「フリコミカワリキン」等 → <strong>別の振込明細PDFを税理士へ送付し「PDF送付済」にチェック</strong></li>
+            <li><span class="bank-status-badge bank-status-needpdf">📎 借入関連書類PDF</span> 入金100万円以上＋「借入」「手形貸付」「ローン」「融資」「金消」等 → 借入契約書PDFを送付</li>
+            <li><span class="bank-status-badge bank-status-needpdf">📎 自動車関連書類PDF</span> 出金＋「トヨタ」「ホンダ」「日産」「カーディーラー」等 → 整備明細・契約書PDFを送付</li>
+          </ul>
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">⑤</span>
+          <strong>要対応行のみ／全明細を表示</strong>のトグルで切替。要対応のみモードでは通常の取引行は非表示になり、対応必要な行だけに集中できます。
+        </div>
+      </div>
+
+      <div class="howto-step">
+        <strong>📥 CSV出力</strong><br>
+        編集画面の右上「CSV出力」または一覧画面のセッションカードから個別にダウンロードできます。<br>
+        ✅ 形式：日付 / 摘要（修正後） / 入金 / 出金 / 残高 の5列、BOM付きUTF-8（Excel直接対応）<br>
+        ✅ <strong>「📄 帳票出力」タブの税理士提出用一括ダウンロード</strong>を実行すると、取込済みの全銀行セッションも自動的に含めて出力されます。
+      </div>
+
+      <div class="howto-step">
+        <strong>💾 自動保存</strong><br>
+        編集中の変更は800msのデバウンスで自動的にIndexedDBに保存されます（画面右上に「自動保存済」表示）。ブラウザを閉じてもデータは残り、「▶ 再開」でいつでも続きから編集できます。
+      </div>
+    </div>
+    `:''}
+
     ${isReports?`
     <div class="howto-section">
       <h3>📄 帳票出力の使い方</h3>
+
       <div class="howto-step">
         <strong>📒 現金出納帳</strong><br>
         月範囲ボタンで出力する期間を選択します。「全月」で通期全件、月ボタンで特定月のみ。<br>
@@ -4216,15 +4377,44 @@ function showHowTo(context) {
         ・<strong>CF（キャッシュフロー）</strong>：現金の増減をすべての取引を含めて集計<br>
         月範囲での絞り込みが可能です。
       </div>
-      <div class="howto-step">
-        <strong>📁 税理士提出用（一括ダウンロード）</strong><br>
-        現金出納帳（期首〜最新・全件固定）・仮払金台帳・仮払精算明細表・未精算一覧・立替経費台帳の<br>
-        5ファイルをまとめてZIPではなく個別にダウンロードします。ファイル名に日付が入ります。
+
+      <!-- VISUAL: 税理士提出用バンドル -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 📁 税理士提出用（一括ダウンロード）</div>
+        <div style="border:2px solid #d97706;border-radius:8px;padding:12px;background:#fffbeb;">
+          <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:6px;">📁 税理士提出用</div>
+          <ul style="font-size:11px;color:#92400e;margin:0 0 8px 16px;padding:0;line-height:1.7;">
+            <li>現金出納帳（期首〜最新）</li>
+            <li>仮払金台帳</li>
+            <li>仮払精算明細表</li>
+            <li>未精算一覧</li>
+            <li>立替経費台帳</li>
+            <li><strong>銀行出納帳</strong>（取込済みCSVセッションごと） <span style="font-size:10px;color:#059669;">★追加</span></li>
+          </ul>
+          <span class="howto-mock-btn" style="background:#d97706;color:white;font-weight:700;font-size:11px;">📦 一括ダウンロード</span>
+        </div>
+        <div class="howto-callout-ok">
+          ✅ 上記の各種ファイルが個別にダウンロードされます。ファイル名に「YYYY年MM月DD日」形式で日付が入ります。<br>
+          ✅ <strong>銀行出納帳</strong>は取込済みの全銀行セッションが <code>銀行出納帳_銀行名_口座番号_日付.csv</code> として出力されます。
+        </div>
       </div>
-      <div class="howto-step">
-        <strong>💾 バックアップ・復元</strong><br>
-        「バックアップ保存」で全データをJSONファイルに保存します。月1回の定期保存を推奨します。<br>
-        「復元」で保存したJSONを読み込んでデータを復元できます（現在のデータは上書きされます）。
+
+      <!-- VISUAL: バックアップと拠点指定マージ -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 💾 バックアップ・復元</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <span class="howto-mock-btn secondary" style="font-size:11px;">📥 バックアップ保存</span>
+          <span class="howto-mock-btn secondary" style="font-size:11px;">📤 バックアップから復元</span>
+        </div>
+        <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px;font-size:11px;margin-bottom:6px;">
+          <strong>復元時の選択肢：</strong><br>
+          🔀 <strong>拠点指定マージ復元（推奨）</strong>：取り込む拠点を選んで部分復元。他拠点のデータはそのまま残る<br>
+          ⚠️ <strong>完全上書き</strong>：全データを置き換え（他拠点も含めて消去）
+        </div>
+        <div class="howto-callout-ok">
+          ✅ <strong>定期的にバックアップ（月1回推奨）</strong>。ブラウザのキャッシュ削除でデータが消えるリスクを回避できます。<br>
+          ✅ <strong>多拠点運用</strong>では、支社が月末にバックアップを取得→本社が「拠点指定マージ復元」で支社拠点だけを取り込む運用ができます。本社拠点のデータは無傷で支社分だけ最新化されます。
+        </div>
       </div>
     </div>
     `:''}
@@ -4361,11 +4551,30 @@ function showHowTo(context) {
     </div>
 
     <div class="howto-section">
-      <h3>💾 データの保存について</h3>
+      <h3>💾 データの保存と移行</h3>
       <div class="howto-step">
-        データはこのブラウザ（localStorage）に<strong>自動保存</strong>されます。<br>
-        ブラウザのキャッシュ削除でデータが失われる場合があります。<br>
-        <strong>定期的に「帳票出力」→「バックアップ保存」でJSONファイルを保存してください。</strong>
+        <strong>保存の仕組み</strong><br>
+        ・通常データ（設定・取引・仮払・立替）：このブラウザの <code>localStorage</code><br>
+        ・銀行CSVセッション：このブラウザの <code>IndexedDB</code><br>
+        編集すると <strong>800ms 後に自動保存</strong>されます（画面右上に「自動保存済 HH:MM」表示）。
+      </div>
+      <div class="howto-step">
+        <strong>⚠️ データはPC・ブラウザに紐づきます</strong><br>
+        ・HTMLファイルをUSB等で他のPCにコピーしても、<strong>取引データは付いてきません</strong>（PCのブラウザ内に保存されるため）<br>
+        ・別のブラウザ（Chrome → Edge 等）でも別のデータになります<br>
+        ・ブラウザのキャッシュ削除でデータが失われるリスクあり<br>
+        <strong>→ 定期的に「📄 帳票出力」→「💾 バックアップ保存」でJSONファイルを保存してください（月1回推奨）。</strong>
+      </div>
+      <div class="howto-step">
+        <strong>📦 他のPCへデータを持ち込む手順</strong><br>
+        ① 元PCで「📄 帳票出力」→「💾 バックアップ保存」でJSONをダウンロード<br>
+        ② USB等で先のPCへJSONをコピー<br>
+        ③ 先のPCで現金出納帳.htmlを開き「📤 バックアップから復元」を選択<br>
+        ④ <strong>「🔀 拠点指定マージ復元」</strong>または「⚠️ 完全上書き」を選択して取り込み
+      </div>
+      <div class="howto-step">
+        <strong>📌 デスクトップにアプリ風アイコンで配置</strong><br>
+        ⚙ 設定 → 📌 デスクトップにアプリ風アイコンで配置する方法 から、アプリ専用の .ico をダウンロードしてWindowsショートカットのアイコンに設定できます。
       </div>
     </div>
     `:''}
@@ -4742,7 +4951,10 @@ function bankPageList() {
   return '<div class="card">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
     +'<div class="card-title" style="margin:0;border:none;padding:0;">🏦 銀行CSVセッション一覧</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;">'
+    +'<button class="btn btn-outline btn-sm" onclick="showHowTo(\'bank-csv\')" style="font-size:12px;">📖 操作方法</button>'
     +'<button class="btn btn-primary" onclick="bankCsvPage=\'importing\';renderPage()">＋ 新規CSVインポート</button>'
+    +'</div>'
     +'</div>'
     +listHtml
     +'</div>';
