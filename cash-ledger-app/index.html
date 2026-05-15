@@ -411,18 +411,12 @@
       transition: box-shadow 0.15s;
     }
     .bank-session-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .bank-row-empty td { background: #fff7ed !important; }
-    .bank-row-empty:hover td { background: #fef3c7 !important; }
-    .bank-row-needinfo td { background: #fee2e2 !important; }
-    .bank-row-needinfo:hover td { background: #fecaca !important; }
-    .bank-row-needpdf td { background: #ede9fe !important; }
-    .bank-row-needpdf:hover td { background: #ddd6fe !important; }
-    .bank-row-resolved td { background: #ecfdf5 !important; }
-    .bank-row-resolved:hover td { background: #d1fae5 !important; }
     .bank-status-badge { display:inline-block;font-size:12px;font-weight:700;padding:4px 9px;border-radius:5px;margin-top:4px;white-space:nowrap;line-height:1.4; }
-    .bank-status-needinfo { background:#dc2626;color:white; }
-    .bank-status-needpdf  { background:#7c3aed;color:white; }
-    .bank-status-resolved { background:#059669;color:white; }
+    .bank-status-needinfo         { background:#dc2626;color:white; }
+    .bank-status-needinfo-payment { background:#dc2626;color:white; }
+    .bank-status-needinfo-receipt { background:#059669;color:white; }
+    .bank-status-needpdf          { background:#7c3aed;color:white; }
+    .bank-status-resolved         { background:#059669;color:white; }
   </style>
 </head>
 <body>
@@ -3514,6 +3508,13 @@ function exportTaxAccountantBundle() {
   }).catch(function(e){ console.error('銀行CSV出力に失敗:', e); });
 }
 
+function bankCategoryLabel(reason) {
+  if (reason==='loan') return '借入関連書類PDF';
+  if (reason==='loan_repayment') return '借入返済関連書類PDF（返済予定表＋利息計算書）';
+  if (reason==='auto') return '自動車関連書類PDF';
+  return '振込明細PDF';
+}
+
 function buildPdfSubmissionList(sessions, companyName) {
   var rows=[
     ['PDF提出必要資料リスト', companyName||'', '出力日:'+today()],
@@ -3523,9 +3524,6 @@ function buildPdfSubmissionList(sessions, companyName) {
     (sess.rows||[]).forEach(function(r) {
       if (bankClassifyRow(r)!=='needsPDF') return;
       var reason=bankRowReason(r);
-      var category=reason==='loan'?'借入関連書類PDF'
-                 :reason==='auto'?'自動車関連書類PDF'
-                 :'振込明細PDF';
       rows.push([
         sess.bankName||'',
         sess.accountNo||'',
@@ -3533,7 +3531,7 @@ function buildPdfSubmissionList(sessions, companyName) {
         r.descriptionOriginal||'',
         r.receipt>0?r.receipt:'',
         r.payment>0?r.payment:'',
-        category,
+        bankCategoryLabel(reason),
         r.description||''
       ]);
     });
@@ -3548,6 +3546,10 @@ function bankCollectPdfSubmissionEntries(sessions) {
       if (bankClassifyRow(r)!=='needsPDF') return;
       var reason=bankRowReason(r);
       var amt=r.receipt>0?r.receipt:r.payment;
+      var category=reason==='loan'?'loan'
+                  :reason==='loan_repayment'?'loan_repayment'
+                  :reason==='auto'?'auto'
+                  :'transfer';
       entries.push({
         bank:sess.bankName||'(銀行名未設定)',
         acct:sess.accountNo||'',
@@ -3555,7 +3557,7 @@ function bankCollectPdfSubmissionEntries(sessions) {
         orig:r.descriptionOriginal||'',
         amount:amt||0,
         isReceipt:r.receipt>0,
-        category:reason==='loan'?'loan':reason==='auto'?'auto':'transfer',
+        category:category,
         desc:r.description||''
       });
     });
@@ -3570,14 +3572,14 @@ function bankBuildPdfListHtml(entries, companyName, dateStr) {
   entries.forEach(function(e){
     var bk=e.bank+'|'+e.acct;
     if (!byBank[bk]) {
-      byBank[bk]={bankName:e.bank, accountNo:e.acct, byCategory:{transfer:[], loan:[], auto:[]}};
+      byBank[bk]={bankName:e.bank, accountNo:e.acct, byCategory:{transfer:[], loan:[], loan_repayment:[], auto:[]}};
       bankOrder.push(bk);
     }
     byBank[bk].byCategory[e.category].push(e);
   });
 
   var totalCount=entries.length;
-  var totalByCategory={transfer:0, loan:0, auto:0};
+  var totalByCategory={transfer:0, loan:0, loan_repayment:0, auto:0};
   entries.forEach(function(e){ totalByCategory[e.category]++; });
 
   function escHtml(s) {
@@ -3586,13 +3588,28 @@ function bankBuildPdfListHtml(entries, companyName, dateStr) {
   function fmtAmt(n) {
     return n ? Number(n).toLocaleString('ja-JP') : '';
   }
-  function catLabel(c){return c==='loan'?'借入関連書類PDF':c==='auto'?'自動車関連書類PDF':'振込明細PDF';}
-  function catColor(c){return c==='loan'?'#b91c1c':c==='auto'?'#0c4a6e':'#6d28d9';}
-  function catBg(c){return c==='loan'?'#fee2e2':c==='auto'?'#cffafe':'#ede9fe';}
+  function catLabel(c){
+    if (c==='loan') return '借入関連書類PDF (契約書・金消契約書等)';
+    if (c==='loan_repayment') return '借入返済関連書類PDF (返済予定表・利息計算書)';
+    if (c==='auto') return '自動車関連書類PDF';
+    return '振込明細PDF';
+  }
+  function catColor(c){
+    if (c==='loan') return '#b91c1c';
+    if (c==='loan_repayment') return '#9a3412';
+    if (c==='auto') return '#0c4a6e';
+    return '#6d28d9';
+  }
+  function catBg(c){
+    if (c==='loan') return '#fee2e2';
+    if (c==='loan_repayment') return '#fed7aa';
+    if (c==='auto') return '#cffafe';
+    return '#ede9fe';
+  }
 
   var sections=bankOrder.map(function(bk){
     var b=byBank[bk];
-    var subs=['transfer','loan','auto'].map(function(cat){
+    var subs=['transfer','loan','loan_repayment','auto'].map(function(cat){
       var items=b.byCategory[cat];
       if (items.length===0) return '';
       var rowsHtml=items.map(function(r){
@@ -3625,9 +3642,10 @@ function bankBuildPdfListHtml(entries, companyName, dateStr) {
   }).join('');
 
   var summaryRow='';
-  if (totalByCategory.transfer>0) summaryRow+='<span style="background:#ede9fe;color:#6d28d9;padding:5px 12px;border-radius:6px;margin-right:8px;font-weight:700;">振込明細PDF '+totalByCategory.transfer+'件</span>';
-  if (totalByCategory.loan>0)     summaryRow+='<span style="background:#fee2e2;color:#b91c1c;padding:5px 12px;border-radius:6px;margin-right:8px;font-weight:700;">借入関連書類PDF '+totalByCategory.loan+'件</span>';
-  if (totalByCategory.auto>0)     summaryRow+='<span style="background:#cffafe;color:#0c4a6e;padding:5px 12px;border-radius:6px;margin-right:8px;font-weight:700;">自動車関連書類PDF '+totalByCategory.auto+'件</span>';
+  if (totalByCategory.transfer>0)        summaryRow+='<span style="background:#ede9fe;color:#6d28d9;padding:5px 12px;border-radius:6px;margin-right:8px;font-weight:700;">振込明細PDF '+totalByCategory.transfer+'件</span>';
+  if (totalByCategory.loan>0)            summaryRow+='<span style="background:#fee2e2;color:#b91c1c;padding:5px 12px;border-radius:6px;margin-right:8px;font-weight:700;">借入関連書類PDF '+totalByCategory.loan+'件</span>';
+  if (totalByCategory.loan_repayment>0)  summaryRow+='<span style="background:#fed7aa;color:#9a3412;padding:5px 12px;border-radius:6px;margin-right:8px;font-weight:700;">借入返済関連書類PDF '+totalByCategory.loan_repayment+'件</span>';
+  if (totalByCategory.auto>0)            summaryRow+='<span style="background:#cffafe;color:#0c4a6e;padding:5px 12px;border-radius:6px;margin-right:8px;font-weight:700;">自動車関連書類PDF '+totalByCategory.auto+'件</span>';
 
   return '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">'
     +'<title>税理士提出必要資料リスト</title>'
@@ -3662,6 +3680,7 @@ function bankBuildPdfListHtml(entries, companyName, dateStr) {
     +'<div class="intro">下記取引について、対応する書類のPDFを税理士にご送付ください。<br>'
     +'<strong>振込明細PDF</strong>: 振込資金・カワリキン等、振込明細資料が別途必要な取引<br>'
     +'<strong>借入関連書類PDF</strong>: 高額入金で借入・手形貸付・ローン等のキーワードがある取引（金消契約書、借用書等）<br>'
+    +'<strong>借入返済関連書類PDF</strong>: 支払で借入・手形貸付・証書貸付・ローン等のキーワードがある取引（借入金返済予定表、借入時の利息計算書）<br>'
     +'<strong>自動車関連書類PDF</strong>: 自動車関連会社への支払（整備明細書、購入契約書、車検証コピー等）</div>'
     +sections
     +'</body></html>';
@@ -4534,7 +4553,8 @@ function showHowTo(context) {
           <ul style="margin:4px 0 0 18px;padding:0;font-size:11px;line-height:1.6;">
             <li><span class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</span> 元摘要が空欄／「AD」「D」「預金機」など相手先名称が無い行 → <strong>摘要欄に入力で解決</strong></li>
             <li><span class="bank-status-badge bank-status-needpdf">📎 振込明細PDF</span> 元摘要に「振込資金」「フリコミカワリキン」等 → 振込明細PDFを税理士へ送付</li>
-            <li><span class="bank-status-badge bank-status-needpdf">📎 借入関連書類PDF</span> 入金100万円以上＋「借入」「手形貸付」「ローン」「融資」「金消」等 → 借入契約書PDFを送付</li>
+            <li><span class="bank-status-badge bank-status-needpdf">📎 借入関連書類PDF</span> <strong>入金</strong>100万円以上＋「借入」「手形貸付」「ローン」「融資」「金消」等 → 借入契約書・金消契約書PDFを送付</li>
+            <li><span class="bank-status-badge bank-status-needpdf">📎 借入返済関連書類PDF</span> <strong>支払</strong>＋「借入」「手形貸付」「証書貸付」「ローン」等 → <strong>借入金返済予定表＋利息計算書</strong>を送付</li>
             <li><span class="bank-status-badge bank-status-needpdf">📎 自動車関連書類PDF</span> 出金＋「トヨタ」「ホンダ」「日産」「カーディーラー」等 → 整備明細・契約書PDFを送付</li>
             <li>💡 提出が必要な行の一覧は <strong>「📄 提出資料リスト(PDF)」</strong>ボタンから印刷・PDF保存できます</li>
           </ul>
@@ -5326,6 +5346,39 @@ function bankPageList() {
     +accountsHtml
     +(accounts.length>0?'<div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">📂 取込履歴</div>':'')
     +listHtml
+    +bankRenderWorkflowGuide()
+    +'</div>';
+}
+
+function bankRenderWorkflowGuide() {
+  var step=function(num, icon, title, desc, highlight) {
+    var bg=highlight?'#fef3c7':'#f0f9ff';
+    var bd=highlight?'2px solid #f59e0b':'1px solid #bae6fd';
+    var numColor=highlight?'#b45309':'#1e40af';
+    var descColor=highlight?'#78350f':'#374151';
+    return '<div style="flex:1;min-width:170px;max-width:250px;background:'+bg+';border:'+bd+';border-radius:8px;padding:11px 14px;">'
+      +'<div style="font-size:11px;color:'+numColor+';font-weight:700;letter-spacing:0.5px;">STEP '+num+(highlight?' ★重要':'')+'</div>'
+      +'<div style="font-size:14px;font-weight:700;margin:3px 0 5px;color:#111827;">'+icon+' '+title+'</div>'
+      +'<div style="font-size:12px;color:'+descColor+';line-height:1.55;">'+desc+'</div>'
+      +'</div>';
+  };
+  var arrow='<div style="align-self:center;font-size:22px;color:#93c5fd;padding:0 2px;font-weight:700;">→</div>';
+  return '<div style="margin-top:24px;background:#ffffff;border:2px solid #dbeafe;border-radius:12px;padding:18px 20px;">'
+    +'<div style="font-size:16px;font-weight:700;color:var(--primary);margin-bottom:14px;">🔄 銀行CSV解析の流れ</div>'
+    +'<div style="display:flex;gap:6px;align-items:stretch;flex-wrap:wrap;">'
+      +step('1','📂','CSV取込', '銀行口座マスタの<strong>口座カードをクリック</strong>、または「＋ 新規CSVインポート」からCSVファイルをドラッグ＆ドロップ。')
+      +arrow
+      +step('2','📋','列マッピング', '日付/摘要/入金/出金/残高 の列を自動検出。同じ銀行の2回目以降は前回設定を自動復元します。')
+      +arrow
+      +step('3','✏️','要対応行を編集', '<span class="bank-status-badge bank-status-needinfo-payment" style="font-size:10px;">❗</span>と<span class="bank-status-badge bank-status-needpdf" style="font-size:10px;">📎</span>のバッジが付いた行を確認・摘要入力。')
+      +arrow
+      +step('4','✅','登録完了で確定', '編集画面右上の<strong>「✅ 登録完了」</strong>ボタンを押すと、<strong>月別進捗バーに色がつきます</strong>。これを押さないと進捗反映されません。', true)
+      +arrow
+      +step('5','📄','PDF印刷', '上の<strong>「📄 提出資料リスト(PDF)」</strong>ボタンで税理士提出用の必要書類リストをPDFとして印刷／保存。')
+    +'</div>'
+    +'<div style="margin-top:12px;font-size:11px;color:var(--gray-600);background:#f9fafb;border-left:3px solid #93c5fd;padding:8px 12px;border-radius:4px;">'
+      +'💡 月別進捗バー（各口座カード内）は「<strong>登録完了</strong>」を押したセッションの処理対象月が緑色になります。タイトルバーの「← 前期 / 翌期 →」ボタンで会計年度を切り替えると、その年度の進捗が表示されます。'
+    +'</div>'
     +'</div>';
 }
 
@@ -5780,9 +5833,16 @@ function bankClassifyRow(r) {
   var base=bankClassifyByOrig(orig);
   if (base==='needsPDF') return 'needsPDF';
   if (base==='needsInfo') return 'needsInfo';
+  // 高額入金＋借入関連 → 借入金書類(契約書等)
   if (receipt>=BANK_LOAN_RECEIPT_THRESHOLD) {
     for (var j=0;j<BANK_LOAN_KEYWORDS.length;j++) {
       if (orig.indexOf(BANK_LOAN_KEYWORDS[j])!==-1) return 'needsPDF';
+    }
+  }
+  // 支払＋借入関連（手形貸付/証書貸付/ローン返済等）→ 返済予定表・利息計算書
+  if (payment>0) {
+    for (var lj=0;lj<BANK_LOAN_KEYWORDS.length;lj++) {
+      if (orig.indexOf(BANK_LOAN_KEYWORDS[lj])!==-1) return 'needsPDF';
     }
   }
   if (payment>0) {
@@ -5805,6 +5865,9 @@ function bankRowReason(r) {
     }
   }
   if (Number(r.payment||0)>0) {
+    for (var lj=0;lj<BANK_LOAN_KEYWORDS.length;lj++) {
+      if (orig.indexOf(BANK_LOAN_KEYWORDS[lj])!==-1) return 'loan_repayment';
+    }
     for (var k=0;k<BANK_AUTO_KEYWORDS.length;k++) {
       if (orig.indexOf(BANK_AUTO_KEYWORDS[k])!==-1) return 'auto';
     }
@@ -5830,13 +5893,18 @@ function bankRowClassName(state) {
   return '';
 }
 
-function bankReasonBadge(state, reason) {
-  if (state==='needsInfo') return '<div class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</div>';
+function bankReasonBadge(state, reason, row) {
+  if (state==='needsInfo') {
+    var isReceipt=!!(row && Number(row.receipt||0)>0);
+    var cls=isReceipt?'bank-status-needinfo-receipt':'bank-status-needinfo-payment';
+    return '<div class="bank-status-badge '+cls+'">❗ 相手先情報を入力</div>';
+  }
   if (state==='resolvedInfo') return '<div class="bank-status-badge bank-status-resolved">✓ 入力済</div>';
   if (state==='resolvedPDF') return '<div class="bank-status-badge bank-status-resolved">✓ PDF送付済</div>';
   if (state==='needsPDF') {
-    if (reason==='loan') return '<div class="bank-status-badge bank-status-needpdf">📎 借入関連書類PDFを税理士へ送付</div>';
-    if (reason==='auto') return '<div class="bank-status-badge bank-status-needpdf">📎 自動車関連書類PDFを税理士へ送付</div>';
+    if (reason==='loan')           return '<div class="bank-status-badge bank-status-needpdf">📎 借入関連書類PDFを税理士へ送付</div>';
+    if (reason==='loan_repayment') return '<div class="bank-status-badge bank-status-needpdf">📎 借入金返済予定表＋利息計算書を税理士へ送付</div>';
+    if (reason==='auto')           return '<div class="bank-status-badge bank-status-needpdf">📎 自動車関連書類PDFを税理士へ送付</div>';
     return '<div class="bank-status-badge bank-status-needpdf">📎 振込明細PDFを税理士へ送付</div>';
   }
   return '';
@@ -5871,7 +5939,6 @@ function bankPageEdit() {
   var tableRows=visibleRows.map(function(x) {
     var r=x.r, i=x.i, state=x.state;
     var reason=bankRowReason(r);
-    var rowCls=bankRowClassName(state);
     var amount=Math.max(Math.abs(r.receipt||0),Math.abs(r.payment||0));
     var dayOfMonth=r.date?parseInt(r.date.split('-')[2])||0:0;
     var suggestions=bankAutoComplete(amount,dayOfMonth);
@@ -5879,12 +5946,8 @@ function bankPageEdit() {
     var dlHtml=suggestions.length>0
       ?'<datalist id="'+dlId+'">'+suggestions.map(function(s){return '<option value="'+esc(s)+'">';}).join('')+'</datalist>'
       :'';
-    var badge=bankReasonBadge(state, reason);
-    var inputBorder='var(--gray-300)';
-    var inputBg='white';
-    if (state==='needsInfo') { inputBorder='#dc2626'; inputBg='#fef2f2'; }
-    else if (state==='needsPDF') { inputBorder='#7c3aed'; inputBg='#faf5ff'; }
-    return '<tr class="'+rowCls+'">'
+    var badge=bankReasonBadge(state, reason, r);
+    return '<tr>'
       +'<td style="white-space:nowrap;font-size:13px;vertical-align:top;">'+esc(r.date||'')+'</td>'
       +'<td style="font-size:13px;max-width:220px;overflow:hidden;vertical-align:top;">'
         +'<div style="font-weight:600;">'+esc(r.descriptionOriginal||'(空欄)')+'</div>'
@@ -5893,7 +5956,7 @@ function bankPageEdit() {
       +'<td style="vertical-align:top;">'+dlHtml
       +'<input type="text" class="bank-desc-input" value="'+esc(r.description||'')+'" placeholder="摘要を入力" '
       +(suggestions.length>0?'list="'+dlId+'" ':'')
-      +'style="width:100%;padding:6px 9px;border:1px solid '+inputBorder+';border-radius:5px;font-size:13px;font-family:inherit;background:'+inputBg+';" '
+      +'style="width:100%;padding:6px 9px;border:1px solid var(--gray-300);border-radius:5px;font-size:13px;font-family:inherit;background:white;" '
       +'oninput="bankUpdateDesc('+i+',this.value)" '
       +'onblur="bankDescBlur('+i+',this.value)" />'
       +'</td>'
@@ -5982,18 +6045,6 @@ function bankUpdateDesc(rowIdx, value) {
   var r=bankCurrentSession.rows[rowIdx];
   if (!r) return;
   r.description=value;
-  var inputs=document.querySelectorAll('.bank-desc-input');
-  var inp=inputs[rowIdx];
-  if (inp) {
-    var state=bankRowState(r);
-    var border='var(--gray-300)', bg='white';
-    if (state==='needsInfo') { border='#dc2626'; bg='#fef2f2'; }
-    else if (state==='needsPDF') { border='#7c3aed'; bg='#faf5ff'; }
-    inp.style.borderColor=border;
-    inp.style.background=bg;
-    var tr=inp.closest('tr');
-    if (tr) tr.className=bankRowClassName(state);
-  }
   bankScheduleAutoSave();
 }
 function bankTogglePdfSent(rowIdx, checked) {
