@@ -497,8 +497,8 @@
   <button class="nav-btn" id="nav-ledger"   onclick="showPage('ledger')">📒 現金出納帳</button>
   <button class="nav-btn" id="nav-advances" onclick="showPage('advances')">💼 仮払管理</button>
   <button class="nav-btn" id="nav-reimbursements" onclick="showPage('reimbursements')">🧾 立替経費</button>
-  <button class="nav-btn" id="nav-reports"  onclick="showPage('reports')">📄 帳票出力</button>
   <button class="nav-btn" id="nav-bank-csv" onclick="showPage('bank-csv')">🏦 銀行CSV</button>
+  <button class="nav-btn" id="nav-reports"  onclick="showPage('reports')">📄 帳票出力</button>
   <div id="nav-fiscal-bar" style="margin-left:auto;align-items:center;gap:4px;padding:0 8px;display:none;"></div>
 </div>
 
@@ -1050,6 +1050,9 @@ let bankCsvPage='list';
 let bankCurrentSession=null;
 let bankImportedData=null;
 let bankColumnRoles={};
+let bankActiveRole=null;
+let bankNameCache='';
+let bankAcctCache='';
 let bankSessionCache=null;
 let bankEditAutoSaveTimer=null;
 let _bankIDB=null;
@@ -4013,7 +4016,6 @@ var BANK_COL_ROLES = {
   payment:     { label:'出金', color:'#b91c1c', bg:'#fee2e2' },
   balance:     { label:'残高', color:'#6d28d9', bg:'#ede9fe' },
 };
-var _bankRoleCycle = ['date','description','receipt','payment','balance',null];
 
 // 自動保存
 function bankScheduleAutoSave() {
@@ -4167,7 +4169,10 @@ function bankReadFile(file) {
       headers:parsed[0],
       rows:parsed.slice(1).filter(function(r){return r.some(function(c){return c.trim()!=='';});})
     };
-    bankColumnRoles={};
+    bankColumnRoles={description:[]};
+    bankActiveRole=null;
+    bankNameCache='';
+    bankAcctCache='';
     bankAutoDetectColumns(bankImportedData.headers);
     bankCsvPage='mapping';
     renderPage();
@@ -4185,17 +4190,81 @@ function bankAutoDetectColumns(headers) {
     var hu=h.trim().toUpperCase();
     return kws.some(function(k){return hu.indexOf(k.toUpperCase())!==-1;});
   }
+  if (!Array.isArray(bankColumnRoles.description)) bankColumnRoles.description=[];
   headers.forEach(function(h,i) {
-    if (!bankColumnRoles.date        && match(h,dateKw))  bankColumnRoles.date=i;
-    else if (!bankColumnRoles.description && match(h,descKw))  bankColumnRoles.description=i;
-    else if (!bankColumnRoles.receipt     && match(h,recKw))   bankColumnRoles.receipt=i;
-    else if (!bankColumnRoles.payment     && match(h,payKw))   bankColumnRoles.payment=i;
-    else if (!bankColumnRoles.balance     && match(h,balKw))   bankColumnRoles.balance=i;
+    if (bankColumnRoles.date==null && match(h,dateKw))         bankColumnRoles.date=i;
+    else if (bankColumnRoles.description.length===0 && match(h,descKw)) bankColumnRoles.description=[i];
+    else if (bankColumnRoles.receipt==null && match(h,recKw))  bankColumnRoles.receipt=i;
+    else if (bankColumnRoles.payment==null && match(h,payKw))  bankColumnRoles.payment=i;
+    else if (bankColumnRoles.balance==null && match(h,balKw))  bankColumnRoles.balance=i;
   });
+}
+
+function bankNormalizeColumnRoles() {
+  if (!bankColumnRoles || typeof bankColumnRoles!=='object') bankColumnRoles={};
+  if (typeof bankColumnRoles.description==='number') bankColumnRoles.description=[bankColumnRoles.description];
+  if (!Array.isArray(bankColumnRoles.description)) bankColumnRoles.description=[];
+}
+function bankGetRoleForCol(colIdx) {
+  if (bankColumnRoles.date===colIdx) return 'date';
+  if (bankColumnRoles.receipt===colIdx) return 'receipt';
+  if (bankColumnRoles.payment===colIdx) return 'payment';
+  if (bankColumnRoles.balance===colIdx) return 'balance';
+  if ((bankColumnRoles.description||[]).indexOf(colIdx)>=0) return 'description';
+  return null;
+}
+function bankCacheMappingInputs() {
+  var n=document.getElementById('bank-name-input');
+  var a=document.getElementById('bank-acct-input');
+  if (n) bankNameCache=n.value;
+  if (a) bankAcctCache=a.value;
+}
+function bankSetActiveRole(role) {
+  bankCacheMappingInputs();
+  bankActiveRole=(bankActiveRole===role)?null:role;
+  renderPage();
+}
+function bankAssignRole(colIdx) {
+  bankCacheMappingInputs();
+  bankNormalizeColumnRoles();
+  if (!bankActiveRole) {
+    alert('まず上の役割ボタン（日付/摘要/入金/出金/残高/解除）を選んでから、CSVの列ヘッダーをクリックしてください。');
+    return;
+  }
+  if (bankActiveRole==='clear') {
+    if (bankColumnRoles.date===colIdx) delete bankColumnRoles.date;
+    if (bankColumnRoles.receipt===colIdx) delete bankColumnRoles.receipt;
+    if (bankColumnRoles.payment===colIdx) delete bankColumnRoles.payment;
+    if (bankColumnRoles.balance===colIdx) delete bankColumnRoles.balance;
+    bankColumnRoles.description=bankColumnRoles.description.filter(function(i){return i!==colIdx;});
+  } else if (bankActiveRole==='description') {
+    var arr=bankColumnRoles.description.slice();
+    var pos=arr.indexOf(colIdx);
+    if (pos>=0) {
+      arr.splice(pos,1);
+    } else {
+      if (bankColumnRoles.date===colIdx) delete bankColumnRoles.date;
+      if (bankColumnRoles.receipt===colIdx) delete bankColumnRoles.receipt;
+      if (bankColumnRoles.payment===colIdx) delete bankColumnRoles.payment;
+      if (bankColumnRoles.balance===colIdx) delete bankColumnRoles.balance;
+      arr.push(colIdx);
+      arr.sort(function(a,b){return a-b;});
+    }
+    bankColumnRoles.description=arr;
+  } else {
+    bankColumnRoles.description=bankColumnRoles.description.filter(function(i){return i!==colIdx;});
+    if (bankColumnRoles.date===colIdx) delete bankColumnRoles.date;
+    if (bankColumnRoles.receipt===colIdx) delete bankColumnRoles.receipt;
+    if (bankColumnRoles.payment===colIdx) delete bankColumnRoles.payment;
+    if (bankColumnRoles.balance===colIdx) delete bankColumnRoles.balance;
+    bankColumnRoles[bankActiveRole]=colIdx;
+  }
+  renderPage();
 }
 
 function bankPageMapping() {
   if (!bankImportedData) { bankCsvPage='list'; return pageBankCSV(); }
+  bankNormalizeColumnRoles();
   var headers=bankImportedData.headers;
   var previewRows=bankImportedData.rows.slice(0,5);
   var tpls=bankGetTemplates();
@@ -4207,31 +4276,83 @@ function bankPageMapping() {
       }).join('')
       +'</div>';
   }
+
+  var roleOrder=['date','description','receipt','payment','balance'];
+  var roleBtnsHtml=roleOrder.map(function(r){
+    var info=BANK_COL_ROLES[r];
+    var isActive=(bankActiveRole===r);
+    var assignedText;
+    if (r==='description') {
+      var dArr=bankColumnRoles.description;
+      assignedText=dArr.length>0
+        ?dArr.map(function(i){return esc(headers[i]||'');}).join(' + ')
+        :'未設定';
+    } else {
+      assignedText=(bankColumnRoles[r]!=null)?esc(headers[bankColumnRoles[r]]||''):'未設定';
+    }
+    var labelText=info.label+(r==='description'?'（複数可）':'');
+    var style=isActive
+      ?'background:'+info.color+';color:#fff;border:2px solid '+info.color+';box-shadow:0 0 0 3px '+info.bg+';'
+      :'background:'+info.bg+';color:'+info.color+';border:2px solid '+info.color+';';
+    return '<button type="button" onclick="bankSetActiveRole(\''+r+'\')" '
+      +'style="padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:13px;font-family:inherit;'+style+'">'
+      +labelText+': <span style="font-weight:500;">'+assignedText+'</span>'
+      +'</button>';
+  }).join('');
+  var clearActive=(bankActiveRole==='clear');
+  roleBtnsHtml+='<button type="button" onclick="bankSetActiveRole(\'clear\')" '
+    +'style="padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:13px;font-family:inherit;'
+    +(clearActive?'background:#374151;color:#fff;border:2px solid #374151;box-shadow:0 0 0 3px #d1d5db;'
+                 :'background:#fff;color:#374151;border:2px solid #d1d5db;')
+    +'">解除</button>';
+
   var headerCols=headers.map(function(h,i) {
-    var assigned=Object.keys(bankColumnRoles).find(function(r){return bankColumnRoles[r]===i;});
-    var style=assigned
-      ?'background:'+BANK_COL_ROLES[assigned].bg+';color:'+BANK_COL_ROLES[assigned].color+';border:2px solid '+BANK_COL_ROLES[assigned].color+';'
-      :'background:var(--gray-100);';
-    return '<th style="cursor:pointer;padding:8px 10px;border:1px solid var(--gray-200);'+style+'white-space:nowrap;" onclick="bankCycleRole('+i+')" title="クリックで役割を割当">'
+    var role=bankGetRoleForCol(i);
+    var info=role?BANK_COL_ROLES[role]:null;
+    var isClickable=!!bankActiveRole;
+    var hoverHint='';
+    if (bankActiveRole==='clear') hoverHint='クリックで割当を解除';
+    else if (bankActiveRole==='description') hoverHint='クリックで「摘要」に追加/解除';
+    else if (bankActiveRole) hoverHint='クリックで「'+BANK_COL_ROLES[bankActiveRole].label+'」を割当';
+    else hoverHint='上の役割ボタンを先に選択してください';
+    var style=role
+      ?'background:'+info.bg+';color:'+info.color+';border:2px solid '+info.color+';'
+      :'background:var(--gray-100);border:1px solid var(--gray-200);';
+    if (isClickable) style+='outline:2px dashed '+(bankActiveRole==='clear'?'#9ca3af':BANK_COL_ROLES[bankActiveRole].color)+';outline-offset:-4px;';
+    return '<th style="cursor:'+(isClickable?'pointer':'not-allowed')+';padding:8px 10px;white-space:nowrap;'+style+'" onclick="bankAssignRole('+i+')" title="'+hoverHint+'">'
       +esc(h)
-      +(assigned?'<br><span style="font-size:10px;font-weight:700;">['+BANK_COL_ROLES[assigned].label+']</span>':'<br><span style="font-size:9px;color:var(--gray-400);">クリックで割当</span>')
+      +(role?'<br><span style="font-size:10px;font-weight:700;">['+info.label+']</span>'
+            :'<br><span style="font-size:9px;color:var(--gray-400);">未割当</span>')
       +'</th>';
   }).join('');
+
   var previewHtml=previewRows.map(function(row) {
     return '<tr>'+headers.map(function(_,i) {
-      var assigned=Object.keys(bankColumnRoles).find(function(r){return bankColumnRoles[r]===i;});
-      var style=assigned?'background:'+BANK_COL_ROLES[assigned].bg+';':'';
+      var role=bankGetRoleForCol(i);
+      var info=role?BANK_COL_ROLES[role]:null;
+      var style=role?'background:'+info.bg+';':'';
       return '<td style="padding:5px 8px;border:1px solid var(--gray-200);font-size:12px;'+style+'">'+esc(row[i]||'')+'</td>';
     }).join('')+'</tr>';
   }).join('');
-  var allMapped=bankColumnRoles.date!=null&&bankColumnRoles.description!=null
+
+  var allMapped=bankColumnRoles.date!=null
+    &&bankColumnRoles.description.length>0
     &&(bankColumnRoles.receipt!=null||bankColumnRoles.payment!=null);
-  var statusBadges=['date','description','receipt','payment','balance'].map(function(r){
-    var idx=bankColumnRoles[r];
-    var info=BANK_COL_ROLES[r];
-    return '<span style="background:'+(idx!=null?info.bg:'var(--gray-100)')+';color:'+(idx!=null?info.color:'var(--gray-500)')+';border:1px solid '+(idx!=null?info.color:'var(--gray-300)')+';padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;">'
-      +info.label+': '+(idx!=null?esc(headers[idx]):'未設定')+'</span>';
-  }).join('');
+
+  var hintHtml;
+  if (bankActiveRole==='clear') {
+    hintHtml='<div class="alert alert-info" style="margin:0 0 12px 0;font-size:13px;background:#fef9c3;border-color:#fde047;color:#854d0e;">'
+      +'<strong>「解除」モード:</strong> 下のCSV列ヘッダーをクリックすると、その列の割当が解除されます。</div>';
+  } else if (bankActiveRole==='description') {
+    hintHtml='<div class="alert alert-info" style="margin:0 0 12px 0;font-size:13px;background:#fef9c3;border-color:#fde047;color:#854d0e;">'
+      +'<strong>「摘要」モード:</strong> 下のCSV列ヘッダーをクリックして摘要列を選択してください。<u>複数選択可</u>（再クリックで解除）。</div>';
+  } else if (bankActiveRole) {
+    hintHtml='<div class="alert alert-info" style="margin:0 0 12px 0;font-size:13px;background:#fef9c3;border-color:#fde047;color:#854d0e;">'
+      +'<strong>「'+BANK_COL_ROLES[bankActiveRole].label+'」モード:</strong> 下のCSV列ヘッダーをクリックして割り当てる列を選んでください。</div>';
+  } else {
+    hintHtml='<div class="alert alert-info" style="margin:0 0 12px 0;font-size:13px;">'
+      +'① 下の<strong>役割ボタン</strong>（日付／摘要／入金／出金／残高）を選択 → ② <strong>CSV列ヘッダー</strong>をクリックして割当てます。摘要は複数列選択できます。</div>';
+  }
 
   return '<div class="card">'
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">'
@@ -4239,16 +4360,23 @@ function bankPageMapping() {
     +'<div class="card-title" style="margin:0;border:none;padding:0;">📋 列マッピング設定</div>'
     +'</div>'
     +tplHtml
-    +'<div class="alert alert-info" style="margin-bottom:12px;font-size:12px;">列ヘッダーをクリックして役割を割り当ててください。クリックのたびに 日付→摘要→入金→出金→残高→解除 の順で切り替わります。</div>'
+    +'<div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px;border:1px solid var(--gray-200);">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">銀行名・口座番号</div>'
+    +'<div class="form-grid" style="margin:0;">'
+    +'<div class="form-group" style="margin:0;"><label>銀行名</label><input type="text" id="bank-name-input" value="'+esc(bankNameCache||'')+'" placeholder="〇〇銀行〇〇支店" oninput="bankNameCache=this.value" /></div>'
+    +'<div class="form-group" style="margin:0;"><label>口座番号（任意）</label><input type="text" id="bank-acct-input" value="'+esc(bankAcctCache||'')+'" placeholder="1234567" oninput="bankAcctCache=this.value" /></div>'
+    +'</div>'
+    +'</div>'
+    +'<div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px;border:1px solid var(--gray-200);">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">① 役割を選択（クリックでON/OFF）</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'+roleBtnsHtml+'</div>'
+    +'</div>'
+    +hintHtml
+    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">② CSVプレビュー（列ヘッダーをクリックして割当）</div>'
     +'<div style="overflow-x:auto;margin-bottom:16px;"><table style="border-collapse:collapse;width:100%;">'
     +'<thead><tr>'+headerCols+'</tr></thead>'
     +'<tbody>'+previewHtml+'</tbody>'
     +'</table></div>'
-    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">'+statusBadges+'</div>'
-    +'<div class="form-grid" style="margin-bottom:14px;">'
-    +'<div class="form-group"><label>銀行名</label><input type="text" id="bank-name-input" placeholder="〇〇銀行〇〇支店" /></div>'
-    +'<div class="form-group"><label>口座番号（任意）</label><input type="text" id="bank-acct-input" placeholder="1234567" /></div>'
-    +'</div>'
     +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
     +'<button class="btn btn-primary" onclick="bankStartEditing()" '+(allMapped?'':'disabled style="opacity:0.5;"')+'>'
     +'✅ この設定で編集を開始</button>'
@@ -4258,18 +4386,11 @@ function bankPageMapping() {
     +'</div>';
 }
 
-function bankCycleRole(colIdx) {
-  var current=Object.keys(bankColumnRoles).find(function(r){return bankColumnRoles[r]===colIdx;});
-  Object.keys(bankColumnRoles).forEach(function(r){if(bankColumnRoles[r]===colIdx)delete bankColumnRoles[r];});
-  var cycleIdx=current?_bankRoleCycle.indexOf(current):-1;
-  var nextRole=_bankRoleCycle[(cycleIdx+1)%_bankRoleCycle.length];
-  if (nextRole) { delete bankColumnRoles[nextRole]; bankColumnRoles[nextRole]=colIdx; }
-  renderPage();
-}
 function bankLoadTemplate(idx) {
   var tpls=bankGetTemplates();
   if (!tpls[idx]) return;
   bankColumnRoles=Object.assign({},tpls[idx].roles);
+  bankNormalizeColumnRoles();
   renderPage();
 }
 function bankSaveTemplateDialog() {
@@ -4283,11 +4404,13 @@ function bankSaveTemplateDialog() {
 
 function bankStartEditing() {
   if (!bankImportedData) return;
-  var bankName=(document.getElementById('bank-name-input')||{value:''}).value.trim();
-  var accountNo=(document.getElementById('bank-acct-input')||{value:''}).value.trim();
+  bankNormalizeColumnRoles();
+  var bankName=(document.getElementById('bank-name-input')||{value:bankNameCache}).value.trim();
+  var accountNo=(document.getElementById('bank-acct-input')||{value:bankAcctCache}).value.trim();
+  var descCols=bankColumnRoles.description||[];
   var rows=bankImportedData.rows.map(function(row) {
     var dateStr=bankColumnRoles.date!=null?bankNormalizeDate(row[bankColumnRoles.date]||''):'';
-    var descOrig=bankColumnRoles.description!=null?(row[bankColumnRoles.description]||'').trim():'';
+    var descOrig=descCols.map(function(c){return (row[c]||'').trim();}).filter(function(s){return s;}).join(' ');
     var rec=bankColumnRoles.receipt!=null?bankParseAmount(row[bankColumnRoles.receipt]):0;
     var pay=bankColumnRoles.payment!=null?bankParseAmount(row[bankColumnRoles.payment]):0;
     var bal=bankColumnRoles.balance!=null?bankParseAmount(row[bankColumnRoles.balance]):0;
