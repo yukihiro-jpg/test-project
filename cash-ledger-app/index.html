@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>現金出納帳・仮払管理</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%231e40af'/><stop offset='1' stop-color='%23172554'/></linearGradient></defs><rect width='100' height='100' rx='22' fill='url(%23g)'/><rect x='20' y='22' width='60' height='56' rx='5' fill='white'/><rect x='20' y='22' width='8' height='56' fill='%23d97706'/><line x1='34' y1='35' x2='74' y2='35' stroke='%23bfdbfe' stroke-width='2'/><line x1='34' y1='45' x2='74' y2='45' stroke='%23bfdbfe' stroke-width='2'/><line x1='34' y1='55' x2='74' y2='55' stroke='%23bfdbfe' stroke-width='2'/><text x='54' y='75' font-size='22' font-family='Arial Black, sans-serif' font-weight='900' text-anchor='middle' fill='%231e40af'>¥</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231e40af'/><text x='50' y='72' font-size='68' font-family='sans-serif' font-weight='900' text-anchor='middle' fill='white'>¥</text></svg>">
   <style>
     :root {
       --primary: #1e40af;
@@ -1015,6 +1017,9 @@ function showSettings() {
     <div class="divider"></div>
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🏦 銀行CSV設定</div>
     <button class="btn btn-secondary btn-sm" onclick="closeModal();showBankCsvSettings()">🏦 銀行CSV テンプレート・学習履歴の管理</button>
+    <div class="divider"></div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">📌 デスクトップアイコン</div>
+    <button class="btn btn-secondary btn-sm" onclick="closeModal();showDesktopIconHelp()">📌 デスクトップにアプリ風アイコンで配置する方法</button>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveSettings()">保存</button>
@@ -5414,6 +5419,50 @@ function bankShowMergeModal(groupKey) {
 }
 
 // ── 設定: 銀行CSVテンプレート・学習履歴 ──
+function showDesktopIconHelp() {
+  var iconSvg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="64" height="64"><defs><linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e40af"/><stop offset="1" stop-color="#172554"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(#hg)"/><rect x="20" y="22" width="60" height="56" rx="5" fill="white"/><rect x="20" y="22" width="8" height="56" fill="#d97706"/><line x1="34" y1="35" x2="74" y2="35" stroke="#bfdbfe" stroke-width="2"/><line x1="34" y1="45" x2="74" y2="45" stroke="#bfdbfe" stroke-width="2"/><line x1="34" y1="55" x2="74" y2="55" stroke="#bfdbfe" stroke-width="2"/><text x="54" y="75" font-size="22" font-family="Arial Black,sans-serif" font-weight="900" text-anchor="middle" fill="#1e40af">¥</text></svg>';
+  showModal(
+    '<div class="modal-title">📌 デスクトップアイコンの作り方</div>'
+    +'<div style="display:flex;gap:14px;align-items:center;margin-bottom:14px;">'
+      +'<div style="flex-shrink:0;">'+iconSvg+'</div>'
+      +'<div style="font-size:13px;color:var(--gray-700);">'
+        +'<strong>HTMLファイルのアイコン自体は OS の仕様で変更できません。</strong><br>'
+        +'代わりに Chrome / Edge の「ショートカットを作成」機能を使うと、デスクトップにこのアプリのアイコン（左の¥マーク）でアプリ風のショートカットを作れます。<br>'
+        +'ショートカットから起動するとアドレスバーの無い独立ウィンドウで開きます。'
+      +'</div>'
+    +'</div>'
+    +'<div class="divider"></div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:8px;">🪟 Windows（Chrome）の手順</div>'
+    +'<ol style="font-size:13px;line-height:1.8;margin:0 0 14px 20px;padding:0;">'
+      +'<li>このアプリ（<code>現金出納帳.html</code>）を Chrome で開いた状態にする</li>'
+      +'<li>右上の <strong>⋮</strong>（三点メニュー）→ <strong>その他のツール</strong> → <strong>ショートカットを作成…</strong></li>'
+      +'<li>表示されるダイアログで <strong>「ウィンドウとして開く」</strong>に✓ を入れる</li>'
+      +'<li><strong>「作成」</strong>をクリック → デスクトップに ¥マークのショートカットが作成されます</li>'
+      +'<li>ショートカット名は右クリック→「名前の変更」で「現金出納帳」等にできます</li>'
+    +'</ol>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:8px;">🪟 Windows（Microsoft Edge）の手順</div>'
+    +'<ol style="font-size:13px;line-height:1.8;margin:0 0 14px 20px;padding:0;">'
+      +'<li>このアプリを Edge で開いた状態にする</li>'
+      +'<li>右上の <strong>…</strong> → <strong>アプリ</strong> → <strong>このサイトをアプリとしてインストール</strong></li>'
+      +'<li>名前を「現金出納帳」等に設定して <strong>インストール</strong></li>'
+      +'<li>インストール後ダイアログで「デスクトップへピン留め」「スタートメニューにピン留め」「タスクバーにピン留め」を選択</li>'
+    +'</ol>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:8px;">🍎 macOS（Chrome）の手順</div>'
+    +'<ol style="font-size:13px;line-height:1.8;margin:0 0 14px 20px;padding:0;">'
+      +'<li>このアプリを Chrome で開いた状態にする</li>'
+      +'<li>メニューバー → <strong>ファイル</strong> → <strong>ショートカットを作成…</strong>（または <strong>名前を付けてインストール…</strong>）</li>'
+      +'<li>「ウィンドウとして開く」にチェックして作成</li>'
+      +'<li>アプリは <code>~/Applications/Chrome Apps</code> に配置され、Launchpad / Dock からも起動できます</li>'
+    +'</ol>'
+    +'<div class="alert alert-info" style="font-size:12px;margin-top:8px;">'
+      +'💡 ショートカットは <code>現金出納帳.html</code> ファイル本体への参照です。元のHTMLファイルを削除・移動するとショートカットが動かなくなります。HTMLファイルは固定のフォルダ（例: <code>ドキュメント\\現金出納帳\\</code>）に置いて、デスクトップにはショートカットだけ置く運用がおすすめです。'
+    +'</div>'
+    +'<div class="modal-actions">'
+      +'<button class="btn btn-primary" onclick="closeModal()">閉じる</button>'
+    +'</div>'
+  , true);
+}
+
 function showBankCsvSettings() {
   var profiles=bankGetProfiles();
   var h=bankGetHistory();
