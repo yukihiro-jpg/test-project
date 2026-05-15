@@ -486,9 +486,13 @@
     <div id="header-save" style="font-size:11px;opacity:0.7;margin-top:2px;"></div>
   </div>
   <div id="header-loc-bar" class="no-print" style="display:none;align-items:center;gap:5px;flex-wrap:wrap;justify-content:center;"></div>
-  <div style="display:flex;align-items:center;gap:12px;">
+  <div style="display:flex;align-items:center;gap:8px;">
     <div id="header-balance" style="font-size:18px;font-weight:700;"></div>
-    <div id="header-fiscal-year" class="no-print" style="font-size:12px;font-weight:600;padding:5px 10px;border:1px solid rgba(255,255,255,0.5);border-radius:6px;background:rgba(255,255,255,0.12);white-space:nowrap;"></div>
+    <div class="no-print" style="display:flex;align-items:stretch;gap:0;border:1px solid rgba(255,255,255,0.5);border-radius:6px;overflow:hidden;background:rgba(255,255,255,0.12);">
+      <button onclick="changeFiscalYear(-1)" style="background:transparent;color:white;border:none;border-right:1px solid rgba(255,255,255,0.5);padding:5px 8px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;" title="前期へ">← 前期</button>
+      <div id="header-fiscal-year" style="font-size:12px;font-weight:600;padding:5px 10px;white-space:nowrap;align-self:center;"></div>
+      <button onclick="changeFiscalYear(1)" style="background:transparent;color:white;border:none;border-left:1px solid rgba(255,255,255,0.5);padding:5px 8px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;" title="翌期へ">翌期 →</button>
+    </div>
     <button class="btn no-print" style="background:rgba(255,255,255,0.18);color:white;border:1px solid rgba(255,255,255,0.6);font-size:13px;font-weight:700;padding:7px 14px;" onclick="showSettings()">⚙ 設定</button>
   </div>
 </div>
@@ -1270,19 +1274,18 @@ function renderNavFiscalBar() {
   if (currentPage !== 'ledger') { bar.style.display='none'; return; }
   bar.style.display='flex';
   var s=getSettings();
-  var fm=s.fiscalMonth||1;
   var closedYears=s.closedYears||{};
   var isClosed=!!closedYears[ledgerYear];
-  var fyLabel=fyRangeLabel(ledgerYear,fm);
   var closeBtn = isClosed
     ? '<button class="nav-fiscal-close" onclick="performYearUnlock()" style="background:#d1fae5;border-color:#6ee7b7;color:#065f46;">🔓 決算解除</button>'
     : '<button class="nav-fiscal-close" onclick="performYearClose()">🔒 決算・繰越</button>';
-  bar.innerHTML =
-    '<button class="nav-fiscal-btn" onclick="ledgerYear--;ledgerMonthFrom=0;ledgerMonthTo=0;renderPage()">← 前期</button>'
-    + '<span class="nav-fiscal-label">'+fyLabel+'</span>'
-    + '<button class="nav-fiscal-btn" onclick="ledgerYear++;ledgerMonthFrom=0;ledgerMonthTo=0;renderPage()">翌期 →</button>'
-    + '<span style="width:1px;background:var(--gray-200);height:22px;margin:0 4px;"></span>'
-    + closeBtn;
+  bar.innerHTML = closeBtn;
+}
+function changeFiscalYear(delta) {
+  ledgerYear += delta;
+  ledgerMonthFrom = 0;
+  ledgerMonthTo = 0;
+  renderPage();
 }
 
 function renderPage() {
@@ -2126,13 +2129,14 @@ function pageReports() {
       </div>
       <div style="border:2px solid #d97706;border-radius:8px;padding:18px;background:#fffbeb;">
         <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:#92400e;">📁 税理士提出用</div>
-        <div style="font-size:12px;color:#78350f;margin-bottom:6px;">下記4ファイルをまとめて一括ダウンロードします</div>
+        <div style="font-size:12px;color:#78350f;margin-bottom:6px;">下記ファイルをまとめて一括ダウンロードします</div>
         <ul style="font-size:12px;color:#92400e;margin:0 0 14px 16px;padding:0;line-height:1.8;">
           <li>現金出納帳（期首〜最新）</li>
           <li>仮払金台帳</li>
           <li>仮払精算明細表</li>
           <li>未精算一覧</li>
           <li>立替経費台帳</li>
+          <li>銀行出納帳（取込済みCSVセッションごと）</li>
         </ul>
         <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="exportTaxAccountantBundle()">📦 一括ダウンロード</button>
       </div>
@@ -3429,6 +3433,29 @@ function exportTaxAccountantBundle() {
     }
   });
   dlCSV(reimRows, '立替経費台帳_'+jp+'.csv');
+
+  // 6. 銀行出納帳（IndexedDBから全セッション）
+  bankLoadAllSessions().then(function(sessions) {
+    if (!sessions||sessions.length===0) return;
+    sessions.forEach(function(sess) {
+      var rows=[
+        ['銀行出納帳', sess.bankName||'', (sess.accountNo?'口座番号:'+sess.accountNo:''), '出力日:'+today()],
+        ['日付','摘要','入金','出金','残高']
+      ];
+      (sess.rows||[]).forEach(function(r){
+        rows.push([
+          r.date||'',
+          r.description||'',
+          r.receipt>0?r.receipt:'',
+          r.payment>0?r.payment:'',
+          r.balance!==0?r.balance:''
+        ]);
+      });
+      var safe=function(s){return (s||'').replace(/[\\/:*?"<>|]/g,'_');};
+      var fname='銀行出納帳_'+safe(sess.bankName||'銀行CSV')+(sess.accountNo?'_'+safe(sess.accountNo):'')+'_'+jp+'.csv';
+      dlCSV(rows, fname);
+    });
+  }).catch(function(e){ console.error('銀行CSV出力に失敗:', e); });
 }
 
 function exportLedgerReportPrint() {
@@ -4346,8 +4373,51 @@ function bankAutoComplete(amount, dayOfMonth) {
 }
 
 // テンプレート管理
-function bankGetTemplates() { return DB.get('bank_templates')||[]; }
-function bankSaveTemplates(t) { DB.set('bank_templates',t); }
+function bankGetProfiles() { return DB.get('bank_profiles')||[]; }
+function bankSaveProfiles(p) { DB.set('bank_profiles',p); }
+function bankProfileKey(bankName, accountNo) {
+  return (bankName||'').trim()+'|'+(accountNo||'').trim();
+}
+function bankUpsertProfile(bankName, accountNo, roles) {
+  if (!bankName||!bankName.trim()) return;
+  var profiles=bankGetProfiles();
+  var key=bankProfileKey(bankName, accountNo);
+  var idx=profiles.findIndex(function(p){return bankProfileKey(p.bankName, p.accountNo)===key;});
+  var profile={
+    bankName:bankName.trim(),
+    accountNo:(accountNo||'').trim(),
+    roles:JSON.parse(JSON.stringify(roles||{})),
+    lastUsed:new Date().toISOString()
+  };
+  if (idx>=0) profiles[idx]=profile;
+  else profiles.push(profile);
+  profiles.sort(function(a,b){return (b.lastUsed||'').localeCompare(a.lastUsed||'');});
+  bankSaveProfiles(profiles);
+}
+function bankDeleteProfile(idx) {
+  var profiles=bankGetProfiles();
+  if (!profiles[idx]) return;
+  if (!confirm('「'+(profiles[idx].bankName||'')+(profiles[idx].accountNo?' ('+profiles[idx].accountNo+')':'')+'」の保存設定を削除しますか？')) return;
+  profiles.splice(idx,1);
+  bankSaveProfiles(profiles);
+  renderPage();
+}
+function bankApplyProfile(idx) {
+  var profiles=bankGetProfiles();
+  var p=profiles[idx];
+  if (!p) return;
+  bankCacheMappingInputs();
+  bankNameCache=p.bankName||'';
+  bankAcctCache=p.accountNo||'';
+  var roles=Object.assign({}, p.roles||{});
+  if (typeof roles.description==='number') roles.description=[roles.description];
+  if (!Array.isArray(roles.description)) roles.description=[];
+  bankColumnRoles=roles;
+  renderPage();
+}
+// 互換性のため既存テンプレート関数を空にしておく（将来削除）
+function bankGetTemplates() { return []; }
+function bankSaveTemplates(t) {}
 
 // 列ロール定義
 var BANK_COL_ROLES = {
@@ -4608,14 +4678,20 @@ function bankPageMapping() {
   bankNormalizeColumnRoles();
   var headers=bankImportedData.headers;
   var previewRows=bankImportedData.rows.slice(0,5);
-  var tpls=bankGetTemplates();
-  var tplHtml='';
-  if (tpls.length>0) {
-    tplHtml='<div style="margin-bottom:14px;"><span style="font-size:12px;font-weight:700;color:var(--gray-700);">テンプレート読込: </span>'
-      +tpls.map(function(t,i){
-        return '<button class="btn btn-xs btn-secondary" style="margin-right:4px;" onclick="bankLoadTemplate('+i+')">'+esc(t.name)+'</button>';
+  var profiles=bankGetProfiles();
+  var profileHtml='';
+  if (profiles.length>0) {
+    profileHtml='<div style="margin-bottom:14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 12px;">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">🔖 過去の銀行・口座（クリックで前回の設定を復元）</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
+      +profiles.map(function(p,i){
+        var label=esc(p.bankName||'(銀行名なし)')+(p.accountNo?' / '+esc(p.accountNo):'');
+        return '<span style="display:inline-flex;align-items:center;gap:4px;background:white;border:1px solid #93c5fd;border-radius:6px;padding:2px 4px 2px 8px;">'
+          +'<button style="background:none;border:none;font-size:12px;font-weight:600;color:var(--primary);cursor:pointer;font-family:inherit;padding:2px 4px;" onclick="bankApplyProfile('+i+')" title="クリックで設定を復元">'+label+'</button>'
+          +'<button style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;" onclick="bankDeleteProfile('+i+')" title="この保存設定を削除">×</button>'
+          +'</span>';
       }).join('')
-      +'</div>';
+      +'</div></div>';
   }
 
   var roleOrder=['date','description','receipt','payment','balance'];
@@ -4700,7 +4776,7 @@ function bankPageMapping() {
     +'<button class="btn btn-secondary btn-sm" onclick="bankCsvPage=\'importing\';bankImportedData=null;renderPage()">← 戻る</button>'
     +'<div class="card-title" style="margin:0;border:none;padding:0;">📋 列マッピング設定</div>'
     +'</div>'
-    +tplHtml
+    +profileHtml
     +'<div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px;border:1px solid var(--gray-200);">'
     +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">銀行名・口座番号</div>'
     +'<div class="form-grid" style="margin:0;">'
@@ -4721,26 +4797,10 @@ function bankPageMapping() {
     +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
     +'<button class="btn btn-primary" onclick="bankStartEditing()" '+(allMapped?'':'disabled style="opacity:0.5;"')+'>'
     +'✅ この設定で編集を開始</button>'
-    +(allMapped?'<button class="btn btn-secondary btn-sm" onclick="bankSaveTemplateDialog()">テンプレートとして保存</button>':'')
+    +'<span style="font-size:11px;color:var(--gray-500);">※ 銀行名を入れて開始すると、次回以降この設定を自動で復元できます</span>'
     +'</div>'
     +(!allMapped?'<div style="font-size:12px;color:var(--danger);margin-top:8px;">※ 少なくとも 日付・摘要・入金または出金 の列を割り当ててください</div>':'')
     +'</div>';
-}
-
-function bankLoadTemplate(idx) {
-  var tpls=bankGetTemplates();
-  if (!tpls[idx]) return;
-  bankColumnRoles=Object.assign({},tpls[idx].roles);
-  bankNormalizeColumnRoles();
-  renderPage();
-}
-function bankSaveTemplateDialog() {
-  var name=prompt('テンプレート名を入力してください:');
-  if (!name||!name.trim()) return;
-  var tpls=bankGetTemplates();
-  tpls.push({name:name.trim(), roles:Object.assign({},bankColumnRoles)});
-  bankSaveTemplates(tpls);
-  alert('テンプレートを保存しました。');
 }
 
 function bankStartEditing() {
@@ -4748,6 +4808,7 @@ function bankStartEditing() {
   bankNormalizeColumnRoles();
   var bankName=(document.getElementById('bank-name-input')||{value:bankNameCache}).value.trim();
   var accountNo=(document.getElementById('bank-acct-input')||{value:bankAcctCache}).value.trim();
+  if (bankName) bankUpsertProfile(bankName, accountNo, bankColumnRoles);
   var descCols=bankColumnRoles.description||[];
   var rows=bankImportedData.rows.map(function(row) {
     var dateStr=bankColumnRoles.date!=null?bankNormalizeDate(row[bankColumnRoles.date]||''):'';
@@ -4930,21 +4991,22 @@ function bankShowMergeModal(groupKey) {
 
 // ── 設定: 銀行CSVテンプレート・学習履歴 ──
 function showBankCsvSettings() {
-  var tpls=bankGetTemplates();
+  var profiles=bankGetProfiles();
   var h=bankGetHistory();
   var histCount=Object.keys(h).reduce(function(s,k){return s+h[k].length;},0);
-  var tplHtml=tpls.length===0
-    ?'<div style="font-size:12px;color:var(--gray-500);">テンプレートはありません</div>'
-    :tpls.map(function(t,i){
+  var profileHtml=profiles.length===0
+    ?'<div style="font-size:12px;color:var(--gray-500);">保存された銀行・口座はありません</div>'
+    :profiles.map(function(p,i){
+      var label=esc(p.bankName||'(銀行名なし)')+(p.accountNo?' / '+esc(p.accountNo):'');
       return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">'
-        +'<span style="flex:1;font-size:13px;">'+esc(t.name)+'</span>'
-        +'<button class="btn btn-danger btn-xs" onclick="bankDeleteTemplate('+i+')">削除</button>'
+        +'<span style="flex:1;font-size:13px;">'+label+'</span>'
+        +'<button class="btn btn-danger btn-xs" onclick="bankDeleteProfile('+i+');showBankCsvSettings();">削除</button>'
         +'</div>';
     }).join('');
   showModal('<div class="modal-title">🏦 銀行CSV設定</div>'
     +'<div class="divider"></div>'
-    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">📋 列マッピングテンプレート</div>'
-    +'<div id="bank-tpl-list">'+tplHtml+'</div>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">🔖 保存された銀行・口座（列マッピング設定）</div>'
+    +'<div id="bank-profile-list">'+profileHtml+'</div>'
     +'<div class="divider"></div>'
     +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">📚 摘要学習履歴</div>'
     +'<div style="font-size:12px;color:var(--gray-500);margin-bottom:10px;">登録件数: '+histCount+' 件</div>'
@@ -4952,12 +5014,6 @@ function showBankCsvSettings() {
     +'<div class="modal-actions">'
     +'<button class="btn btn-primary" onclick="closeModal()">閉じる</button>'
     +'</div>');
-}
-function bankDeleteTemplate(idx) {
-  var tpls=bankGetTemplates();
-  tpls.splice(idx,1);
-  bankSaveTemplates(tpls);
-  showBankCsvSettings();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
