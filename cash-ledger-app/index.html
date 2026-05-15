@@ -188,6 +188,7 @@
     }
     .badge-pending   { background: var(--danger-light);   color: var(--danger); }
     .badge-settled   { background: var(--success-light);  color: var(--success); }
+    .badge-partial   { background: #fef3c7; color: #d97706; }
     .badge-advance   { background: var(--warning-light);  color: var(--warning); }
     .badge-normal    { background: var(--gray-100);       color: var(--gray-700); }
     .badge-tax10     { background: #e0f2fe; color: #0369a1; font-size: 10px; }
@@ -795,6 +796,9 @@ function removeAdvance(id) {
   const adv=advances.find(a=>a.id===id);
   if (!adv) return false;
   if (adv.status==='settled'){ alert('精算済みの記録は削除できません。'); return false; }
+  if (adv.status==='partial') {
+    if (!confirm('一時保存中の精算データも含めて削除します。よろしいですか？')) return false;
+  }
   if (adv.cashEntryId) removeEntry(adv.cashEntryId);
   saveAdvances(advances.filter(a=>a.id!==id));
   return true;
@@ -1288,7 +1292,7 @@ function renderAccountSidebar() {
 function pageDashboard() {
   const bal=getCurrentBalance();
   const advances=getAdvances();
-  const pending=advances.filter(a=>a.status==='pending');
+  const pending=advances.filter(a=>a.status==='pending'||a.status==='partial');
   const pendTot=pending.reduce((s,a)=>s+a.advanceAmount,0);
   const s=getSettings();
   const allWithBal=calcBalances(getEntries());
@@ -1327,11 +1331,11 @@ function pageDashboard() {
       <thead><tr><th>番号</th><th>仮払日</th><th>氏名</th><th>目的</th><th class="r">仮払金額</th><th class="no-print">操作</th></tr></thead>
       <tbody>
         ${pending.map(a=>`<tr>
-          <td><span class="badge badge-pending">${esc(a.id)}</span></td>
+          <td><span class="badge badge-${a.status==='partial'?'partial':'pending'}">${esc(a.id)}</span></td>
           <td>${fd(a.date)}</td><td><strong>${esc(a.employeeName)}</strong></td>
-          <td>${esc(a.purpose)}</td>
+          <td>${esc(a.purpose)}${a.status==='partial'?'<span class="badge badge-partial" style="margin-left:6px;">一時保存</span>':''}</td>
           <td class="r mono num-neg">${fc(a.advanceAmount)}</td>
-          <td class="no-print"><button class="btn btn-success btn-sm" onclick="showSettleModal('${esc(a.id)}')">精算する</button></td>
+          <td class="no-print"><button class="btn ${a.status==='partial'?'btn-primary':'btn-success'} btn-sm" onclick="showSettleModal('${esc(a.id)}')">${a.status==='partial'?'🔄 精算を続ける':'精算する'}</button></td>
         </tr>`).join('')}
       </tbody>
     </table></div>
@@ -1662,11 +1666,16 @@ function pageAdvances() {
             <td style="font-size:11px;max-width:200px;">
               ${(a.settlementItems||[]).map(it=>`<div>${it.date?`<span style="color:var(--gray-500);">${fd(it.date)}</span> `:''}${esc(it.storeName||'')}${it.storeName&&it.itemName?' / ':''}${esc(it.itemName||'')} <span class="mono">${fc(it.amount)}</span></div>`).join('')}
             </td>
-            <td><span class="badge badge-${a.status==='pending'?'pending':'settled'}">${a.status==='pending'?'未精算':'精算済'}</span></td>
+            <td><span class="badge badge-${a.status==='pending'?'pending':a.status==='partial'?'partial':'settled'}">${a.status==='pending'?'未精算':a.status==='partial'?'一時保存':'精算済'}</span></td>
             <td class="no-print">
               ${a.status==='pending'?`
                 <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;">
                   <button class="btn btn-success btn-sm" onclick="showSettleModal('${esc(a.id)}')">精算</button>
+                  <button class="btn btn-secondary btn-sm" onclick="confirmDeleteAdv('${esc(a.id)}')">削除</button>
+                </div>
+              `:a.status==='partial'?`
+                <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;">
+                  <button class="btn btn-primary btn-sm" onclick="showSettleModal('${esc(a.id)}')">🔄 精算を続ける</button>
                   <button class="btn btn-secondary btn-sm" onclick="confirmDeleteAdv('${esc(a.id)}')">削除</button>
                 </div>
               `:`<button class="btn btn-outline btn-sm" onclick="showSettleModal('${esc(a.id)}')">✏️ 修正</button>`}
@@ -3038,8 +3047,9 @@ let settleRows=[];
 function showSettleModal(id) {
   const adv=getAdvances().find(a=>a.id===id);
   if (!adv) return;
-  const isReedit = adv.status === 'settled';
-  if (isReedit && adv.settlementItems && adv.settlementItems.length>0) {
+  const isReedit  = adv.status === 'settled';
+  const isPartial = adv.status === 'partial';
+  if ((isReedit || isPartial) && adv.settlementItems && adv.settlementItems.length>0) {
     settleRows = adv.settlementItems.map(it=>({
       date: it.date||'', storeName: it.storeName||'',
       itemName: it.itemName||'', amount: String(it.amount||''),
@@ -3048,17 +3058,19 @@ function showSettleModal(id) {
   } else {
     settleRows=[{date:'',storeName:'',itemName:'',amount:'',account:''}];
   }
-  const initDate   = isReedit && adv.settlementDate ? adv.settlementDate : today();
-  const initMethod = isReedit ? (adv.settlementMethod||'cash') : 'cash';
+  const initDate   = (isReedit && adv.settlementDate) ? adv.settlementDate
+                   : (isPartial && adv.partialDate) ? adv.partialDate : today();
+  const initMethod = (isReedit||isPartial) ? (adv.settlementMethod||'cash') : 'cash';
   const initActual = (isReedit && adv.actualReturn!=null && adv.actualReturn!==adv.expectedReturn)
     ? Number(adv.actualReturn).toLocaleString('ja-JP') : '';
 
   showModal(`
-    <div class="modal-title">${isReedit?'✏️ 精算内容の修正':'✅ 精算入力'} — ${esc(adv.id)}</div>
+    <div class="modal-title">${isReedit?'✏️ 精算内容の修正':isPartial?'🔄 精算の続き（一時保存から再開）':'✅ 精算入力'} — ${esc(adv.id)}</div>
     <div class="alert alert-info">
       <strong>${esc(adv.employeeName)}</strong> さん ／ ${esc(adv.purpose)}<br>
       仮払金額: <strong class="mono">${fc(adv.advanceAmount)}</strong>　仮払日: ${fd(adv.date)}
       ${isReedit?'<br><span style="font-size:12px;">※ 既存の精算記録（出納帳含む）は上書きされます。</span>':''}
+      ${isPartial?'<br><span style="font-size:12px;color:#d97706;font-weight:700;">⚠ 一時保存済みの明細を引き継いでいます。残りのレシートを追加して精算を確定してください。</span>':''}
     </div>
     <div class="form-grid" style="margin-bottom:14px;">
       <div class="form-group req">
@@ -3099,6 +3111,7 @@ function showSettleModal(id) {
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      ${!isReedit?`<button class="btn btn-outline" onclick="submitPartialSave('${esc(adv.id)}',${adv.advanceAmount})" title="レシートが揃っていなくても途中で保存できます">📋 一時保存</button>`:''}
       <button class="btn btn-success" onclick="submitSettle('${esc(adv.id)}',${adv.advanceAmount})">${isReedit?'修正を保存する':'精算を確定する'}</button>
     </div>
   `, true);
@@ -3283,6 +3296,38 @@ function submitSettle(id, advAmt) {
     }
     alert(msg);
   }
+}
+
+function partialSaveAdvance(id, d) {
+  const advances=getAdvances();
+  const idx=advances.findIndex(a=>a.id===id);
+  if (idx<0) return null;
+  const adv=advances[idx];
+  const used=d.items.reduce((s,it)=>s+Number(it.amount||0),0);
+  const diff=used-adv.advanceAmount;
+  adv.status='partial';
+  adv.partialDate=d.settlementDate;
+  adv.usedAmount=used;
+  adv.expectedReturn=diff<0?Math.abs(diff):0;
+  adv.returnAmount=adv.expectedReturn;
+  adv.shortageAmount=diff>0?diff:0;
+  adv.settlementItems=d.items;
+  adv.settlementMethod=d.settlementMethod||'cash';
+  saveAdvances(advances);
+  return adv;
+}
+
+function submitPartialSave(id, advAmt) {
+  const settlementDate=readDateGroupMD('st-date')||today();
+  const settlementMethod=document.getElementById('st-method').value;
+  const validItems=settleRows.filter(r=>r.amount||r.storeName||r.itemName);
+  if (validItems.length===0){ alert('明細を1件以上入力してから一時保存してください。'); return; }
+  const items=validItems.map(r=>({...r,amount:Number((r.amount||'').toString().replace(/,/g,'')||0)}));
+  items.forEach(function(it){ if(it.storeName) learnStore(it.storeName,it.account,null,it.itemName); });
+  partialSaveAdvance(id,{settlementDate,settlementMethod,items});
+  settleRows=[];
+  closeModal(); updateHeader(); renderPage();
+  alert('一時保存しました。\n\n後で「精算を続ける」から残りのレシートを追加して精算を確定できます。\n仮払金台帳には現時点の使用額・返金額・明細が表示されます。');
 }
 
 function confirmDeleteEntry(id) {
@@ -3481,21 +3526,122 @@ function exportBackup() {
   a.click(); URL.revokeObjectURL(a.href);
 }
 
+let _pendingRestoreData=null;
+
 function importBackup(ev) {
   const file=ev.target.files[0]; if (!file) return;
   const reader=new FileReader();
-  reader.onload=e=>{
+  reader.onload=function(e) {
     try {
       const d=JSON.parse(e.target.result);
       if (!d.settings||!d.entries||!d.advances){ alert('無効なバックアップファイルです。'); return; }
-      if (confirm('現在のデータをバックアップデータで上書きします。\nこの操作は元に戻せません。よろしいですか？')){
-        DB.set('settings',d.settings); DB.set('entries',d.entries); DB.set('advances',d.advances);
-        DB.set('reimbursements', d.reimbursements||[]);
-        alert('データを復元しました。'); initApp();
-      }
-    } catch (e) { alert('ファイルの読み込みに失敗しました。'); }
+      _pendingRestoreData=d;
+      showRestoreModal(d);
+    } catch(ex) { alert('ファイルの読み込みに失敗しました。'); }
   };
   reader.readAsText(file); ev.target.value='';
+}
+
+function showRestoreModal(d) {
+  const backupLocs=d.settings.locations||[];
+  const savedAt=d.exportedAt?new Date(d.exportedAt).toLocaleString('ja-JP'):'不明';
+  const entryCount=(d.entries||[]).length;
+  const locOptions=backupLocs.map(function(loc){
+    return '<option value="'+esc(loc)+'">'+esc(loc)+'</option>';
+  }).join('');
+  const hasBackupLocs=backupLocs.length>0;
+
+  showModal(`
+    <div class="modal-title">📤 バックアップから復元</div>
+    <div class="alert alert-info" style="margin-bottom:14px;">
+      <strong>バックアップ情報</strong><br>
+      会社名: ${esc(d.settings.companyName||'—')}　保存日時: ${savedAt}<br>
+      取引件数: ${entryCount}件${hasBackupLocs?'　拠点: '+backupLocs.map(function(l){return esc(l);}).join('・'):''}
+    </div>
+    <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:10px;">復元方法を選択してください：</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:2px solid var(--danger);border-radius:8px;cursor:pointer;background:#fef2f2;">
+        <input type="radio" name="restore-type" value="all" id="rt-all" checked style="margin-top:2px;" onchange="document.getElementById('rt-loc-wrap').style.display='none'" />
+        <div>
+          <div style="font-weight:700;color:var(--danger);">全データを上書き復元</div>
+          <div style="font-size:12px;color:#b91c1c;margin-top:2px;">⚠ 現在の全データが削除され、バックアップで完全に上書きされます</div>
+        </div>
+      </label>
+      ${hasBackupLocs?`
+      <label id="rt-loc-label" style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:2px solid var(--gray-200);border-radius:8px;cursor:pointer;">
+        <input type="radio" name="restore-type" value="location" id="rt-loc" style="margin-top:2px;"
+          onchange="document.getElementById('rt-loc-wrap').style.display='block';document.getElementById('rt-loc-label').style.borderColor='var(--primary)';document.getElementById('rt-all').closest('label').style.background='';document.getElementById('rt-all').closest('label').style.borderColor='var(--gray-200)';" />
+        <div style="flex:1;">
+          <div style="font-weight:700;color:var(--gray-900);">✅ 特定の拠点のみ復元（推奨）</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">選択した拠点のデータのみ上書きし、他拠点のデータは現在のまま維持します</div>
+          <div id="rt-loc-wrap" style="display:none;margin-top:10px;">
+            <label style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:4px;display:block;">復元する拠点を選択：</label>
+            <select id="rt-loc-select" style="width:100%;padding:8px;border:1px solid var(--gray-300);border-radius:6px;font-family:inherit;">${locOptions}</select>
+          </div>
+        </div>
+      </label>`:''}
+    </div>
+    <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:10px;font-size:12px;margin-bottom:14px;">
+      ⚠ この操作は元に戻せません。実行前に現在のデータのバックアップを取ることをお勧めします。
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal();_pendingRestoreData=null;">キャンセル</button>
+      <button class="btn btn-danger" onclick="executeRestore()">復元を実行する</button>
+    </div>
+  `);
+}
+
+function executeRestore() {
+  const d=_pendingRestoreData;
+  if (!d) return;
+  const selected=document.querySelector('input[name="restore-type"]:checked');
+  if (!selected) return;
+
+  if (selected.value==='all') {
+    if (!confirm('全データをバックアップで上書きします。\n現在のデータは全て削除されます。\n\n本当によろしいですか？')) return;
+    DB.set('settings',d.settings);
+    DB.set('entries',d.entries);
+    DB.set('advances',d.advances);
+    DB.set('reimbursements',d.reimbursements||[]);
+    _pendingRestoreData=null;
+    closeModal();
+    alert('全データを復元しました。');
+    initApp();
+  } else {
+    const locEl=document.getElementById('rt-loc-select');
+    const loc=locEl?locEl.value:'';
+    if (!loc){ alert('復元する拠点を選択してください。'); return; }
+    if (!confirm('「'+loc+'」の拠点データをバックアップから復元します。\n他の拠点のデータは変更されません。\n\n本当によろしいですか？')) return;
+
+    // 設定: 現在の設定に拠点を追加・期首残高をマージ
+    const s=getSettings()||{};
+    const currentLocBals=Object.assign({},s.locationOpeningBalances||{});
+    const backupLocBals=d.settings.locationOpeningBalances||{};
+    if (backupLocBals[loc]!=null) currentLocBals[loc]=backupLocBals[loc];
+    const currentLocs=(s.locations||[]).slice();
+    if (!currentLocs.includes(loc)) currentLocs.push(loc);
+    DB.set('settings',Object.assign({},s,{locations:currentLocs,locationOpeningBalances:currentLocBals}));
+
+    // 取引: 対象拠点以外を保持 + バックアップの対象拠点を追加
+    const keptEntries=getEntries().filter(function(e){return (e.location||'')!==loc;});
+    const newEntries=(d.entries||[]).filter(function(e){return (e.location||'')===loc;});
+    DB.set('entries',[...keptEntries,...newEntries]);
+
+    // 仮払: 同様
+    const keptAdv=getAdvances().filter(function(a){return (a.location||'')!==loc;});
+    const newAdv=(d.advances||[]).filter(function(a){return (a.location||'')===loc;});
+    DB.set('advances',[...keptAdv,...newAdv]);
+
+    // 立替: 同様
+    const keptReim=getReimbursements().filter(function(r){return (r.location||'')!==loc;});
+    const newReim=(d.reimbursements||[]).filter(function(r){return (r.location||'')===loc;});
+    DB.set('reimbursements',[...keptReim,...newReim]);
+
+    _pendingRestoreData=null;
+    closeModal();
+    alert('「'+loc+'」の拠点データを復元しました。\n他の拠点のデータはそのまま維持されています。');
+    initApp();
+  }
 }
 
 function showHowTo(context) {
