@@ -411,6 +411,16 @@
     .bank-session-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     .bank-row-empty td { background: #fff7ed !important; }
     .bank-row-empty:hover td { background: #fef3c7 !important; }
+    .bank-row-needinfo td { background: #fee2e2 !important; }
+    .bank-row-needinfo:hover td { background: #fecaca !important; }
+    .bank-row-needpdf td { background: #ede9fe !important; }
+    .bank-row-needpdf:hover td { background: #ddd6fe !important; }
+    .bank-row-resolved td { background: #ecfdf5 !important; }
+    .bank-row-resolved:hover td { background: #d1fae5 !important; }
+    .bank-status-badge { display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-top:3px;white-space:nowrap; }
+    .bank-status-needinfo { background:#dc2626;color:white; }
+    .bank-status-needpdf  { background:#7c3aed;color:white; }
+    .bank-status-resolved { background:#059669;color:white; }
   </style>
 </head>
 <body>
@@ -4874,14 +4884,46 @@ function bankConfirmDelete(id) {
   });
 }
 
+var BANK_TRANSFER_DOC_KEYWORDS = ['振込資金','フリコミカワリキン','フリコミシキン','フリカエシキン','カワリキン','振替金','送金資金','フリコミシ'];
+var BANK_GENERIC_DESC_PATTERNS = ['AD','D','CD','ATM','預金機','カード','カードAD','カードD','機械','現金'];
+
+function bankClassifyOrig(orig) {
+  var s=(orig||'').trim();
+  for (var i=0;i<BANK_TRANSFER_DOC_KEYWORDS.length;i++) {
+    if (s.indexOf(BANK_TRANSFER_DOC_KEYWORDS[i])!==-1) return 'needsPDF';
+  }
+  if (!s) return 'needsInfo';
+  var stripped=s.replace(/[\d\s\.\-\/:時分日年月()（）　,，。、]/g,'').trim();
+  if (!stripped) return 'needsInfo';
+  if (stripped.length<=2) return 'needsInfo';
+  if (BANK_GENERIC_DESC_PATTERNS.indexOf(stripped)!==-1) return 'needsInfo';
+  if (BANK_GENERIC_DESC_PATTERNS.indexOf(stripped.toUpperCase())!==-1) return 'needsInfo';
+  return 'ok';
+}
+function bankRowState(r) {
+  var cls=bankClassifyOrig(r.descriptionOriginal||'');
+  var hasDesc=!!(r.description&&r.description.trim());
+  if (cls==='needsInfo')   return hasDesc ? 'resolvedInfo' : 'needsInfo';
+  if (cls==='needsPDF')    return r.pdfSent ? 'resolvedPDF' : 'needsPDF';
+  return 'ok';
+}
+function bankRowClassName(state) {
+  if (state==='needsInfo')    return 'bank-row-needinfo';
+  if (state==='needsPDF')     return 'bank-row-needpdf';
+  if (state==='resolvedInfo'||state==='resolvedPDF') return 'bank-row-resolved';
+  return '';
+}
+
 function bankPageEdit() {
   if (!bankCurrentSession) { bankCsvPage='list'; bankSessionCache=null; return pageBankCSV(); }
   var sess=bankCurrentSession;
   var rows=sess.rows;
-  var emptyCount=rows.filter(function(r){return !r.description||!r.description.trim();}).length;
+  var stateCounts={needsInfo:0, resolvedInfo:0, needsPDF:0, resolvedPDF:0, ok:0};
+  rows.forEach(function(r){ stateCounts[bankRowState(r)]++; });
 
   var tableRows=rows.map(function(r,i) {
-    var isEmpty=!r.description||!r.description.trim();
+    var state=bankRowState(r);
+    var rowCls=bankRowClassName(state);
     var amount=Math.max(Math.abs(r.receipt||0),Math.abs(r.payment||0));
     var dayOfMonth=r.date?parseInt(r.date.split('-')[2])||0:0;
     var suggestions=bankAutoComplete(amount,dayOfMonth);
@@ -4889,21 +4931,60 @@ function bankPageEdit() {
     var dlHtml=suggestions.length>0
       ?'<datalist id="'+dlId+'">'+suggestions.map(function(s){return '<option value="'+esc(s)+'">';}).join('')+'</datalist>'
       :'';
-    return '<tr class="'+(isEmpty?'bank-row-empty':'')+'">'
-      +'<td style="white-space:nowrap;font-size:12px;">'+esc(r.date||'')+'</td>'
-      +'<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(r.descriptionOriginal||'')+'</td>'
-      +'<td>'+dlHtml
+    var badge='';
+    if (state==='needsInfo')        badge='<div class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</div>';
+    else if (state==='resolvedInfo') badge='<div class="bank-status-badge bank-status-resolved">✓ 入力済</div>';
+    else if (state==='needsPDF')    badge='<div class="bank-status-badge bank-status-needpdf">📎 振込明細PDFを税理士へ送付</div>';
+    else if (state==='resolvedPDF') badge='<div class="bank-status-badge bank-status-resolved">✓ PDF送付済</div>';
+    var inputBorder='var(--gray-300)';
+    var inputBg='white';
+    if (state==='needsInfo') { inputBorder='#dc2626'; inputBg='#fef2f2'; }
+    else if (state==='needsPDF') { inputBorder='#7c3aed'; inputBg='#faf5ff'; }
+    var pdfChk='';
+    if (bankClassifyOrig(r.descriptionOriginal||'')==='needsPDF') {
+      pdfChk='<label style="display:flex;align-items:center;gap:4px;font-size:11px;margin-top:4px;cursor:pointer;white-space:nowrap;">'
+        +'<input type="checkbox" '+(r.pdfSent?'checked':'')+' onchange="bankTogglePdfSent('+i+',this.checked)" style="margin:0;" />'
+        +'<span>PDF送付済</span></label>';
+    }
+    return '<tr class="'+rowCls+'">'
+      +'<td style="white-space:nowrap;font-size:12px;vertical-align:top;">'+esc(r.date||'')+'</td>'
+      +'<td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;vertical-align:top;">'
+        +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(r.descriptionOriginal||'(空欄)')+'</div>'
+        +badge
+      +'</td>'
+      +'<td style="vertical-align:top;">'+dlHtml
       +'<input type="text" class="bank-desc-input" value="'+esc(r.description||'')+'" placeholder="摘要を入力" '
       +(suggestions.length>0?'list="'+dlId+'" ':'')
-      +'style="width:100%;padding:5px 7px;border:1px solid '+(isEmpty?'#f97316':'var(--gray-300)')+';border-radius:5px;font-size:12px;font-family:inherit;background:'+(isEmpty?'#fff7ed':'white')+';" '
+      +'style="width:100%;padding:5px 7px;border:1px solid '+inputBorder+';border-radius:5px;font-size:12px;font-family:inherit;background:'+inputBg+';" '
       +'oninput="bankUpdateDesc('+i+',this.value)" '
       +'onblur="bankDescBlur('+i+',this.value)" />'
+      +pdfChk
       +'</td>'
-      +'<td class="r mono" style="font-size:12px;white-space:nowrap;">'+(r.receipt>0?fc(r.receipt):'')+'</td>'
-      +'<td class="r mono" style="font-size:12px;white-space:nowrap;">'+(r.payment>0?fc(r.payment):'')+'</td>'
-      +'<td class="r mono" style="font-size:12px;white-space:nowrap;">'+(r.balance!==0?fc(r.balance):'')+'</td>'
+      +'<td class="r mono" style="font-size:12px;white-space:nowrap;vertical-align:top;">'+(r.receipt>0?fc(r.receipt):'')+'</td>'
+      +'<td class="r mono" style="font-size:12px;white-space:nowrap;vertical-align:top;">'+(r.payment>0?fc(r.payment):'')+'</td>'
+      +'<td class="r mono" style="font-size:12px;white-space:nowrap;vertical-align:top;">'+(r.balance!==0?fc(r.balance):'')+'</td>'
       +'</tr>';
   }).join('');
+
+  var alertHtml='';
+  if (stateCounts.needsInfo===0 && stateCounts.needsPDF===0) {
+    alertHtml='<div class="alert alert-success" style="margin-bottom:10px;">✅ 全ての要対応行が処理されています</div>';
+  } else {
+    var bits=[];
+    if (stateCounts.needsInfo>0||stateCounts.resolvedInfo>0) {
+      bits.push('<div style="margin-bottom:6px;color:#991b1b;"><span class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</span> '
+        +'未対応 <strong>'+stateCounts.needsInfo+'</strong> 行 / 入力済 '+stateCounts.resolvedInfo+' 行<br>'
+        +'<span style="font-size:11px;color:#7f1d1d;">→ 元摘要が空欄や「AD」「D」「預金機」など相手先名称が無い行です。記帳代行のため摘要欄に相手先と内容を入力してください。</span></div>');
+    }
+    if (stateCounts.needsPDF>0||stateCounts.resolvedPDF>0) {
+      bits.push('<div style="color:#5b21b6;"><span class="bank-status-badge bank-status-needpdf">📎 振込明細PDFを税理士へ送付</span> '
+        +'未対応 <strong>'+stateCounts.needsPDF+'</strong> 行 / 送付済 '+stateCounts.resolvedPDF+' 行<br>'
+        +'<span style="font-size:11px;color:#4c1d95;">→ 元摘要に「振込資金」「フリコミカワリキン」など、別途振込明細資料があることを示す行です。経理担当者は対応する明細PDFを税理士へ送付し、対応後にチェックを入れてください。</span></div>');
+    }
+    alertHtml='<div class="alert" style="margin-bottom:10px;background:#fffbeb;border:1px solid #fde047;color:#713f12;padding:10px 14px;">'
+      +bits.join('<div style="height:8px;"></div>')
+      +'</div>';
+  }
 
   return '<div class="card">'
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">'
@@ -4915,14 +4996,12 @@ function bankPageEdit() {
     +'<button class="btn btn-primary btn-sm" onclick="bankDownloadCSV(\''+esc(sess.id)+'\')">📥 CSV出力</button>'
     +'</div>'
     +'</div>'
-    +(emptyCount>0
-      ?'<div class="alert alert-warning" style="margin-bottom:10px;">⚠ 摘要が空の行が '+emptyCount+' 行あります（オレンジ色で強調表示）</div>'
-      :'<div class="alert alert-success" style="margin-bottom:10px;">✅ 全行の摘要が入力されています</div>')
+    +alertHtml
     +'<div style="overflow-x:auto;"><table class="table-grid" style="font-size:13px;">'
     +'<thead><tr>'
     +'<th style="min-width:90px;">日付</th>'
-    +'<th style="min-width:160px;">元の摘要</th>'
-    +'<th style="min-width:220px;">修正後の摘要 <span style="font-weight:400;color:var(--gray-500);font-size:11px;">（直接編集可能）</span></th>'
+    +'<th style="min-width:200px;">元の摘要 / 状態</th>'
+    +'<th style="min-width:240px;">修正後の摘要 <span style="font-weight:400;color:var(--gray-500);font-size:11px;">（直接編集可能）</span></th>'
     +'<th class="r" style="min-width:90px;">入金（円）</th>'
     +'<th class="r" style="min-width:90px;">出金（円）</th>'
     +'<th class="r" style="min-width:90px;">残高（円）</th>'
@@ -4934,17 +5013,30 @@ function bankPageEdit() {
 
 function bankUpdateDesc(rowIdx, value) {
   if (!bankCurrentSession) return;
-  bankCurrentSession.rows[rowIdx].description=value;
+  var r=bankCurrentSession.rows[rowIdx];
+  if (!r) return;
+  r.description=value;
   var inputs=document.querySelectorAll('.bank-desc-input');
   var inp=inputs[rowIdx];
   if (inp) {
-    var isEmpty=!value||!value.trim();
-    inp.style.borderColor=isEmpty?'#f97316':'var(--gray-300)';
-    inp.style.background=isEmpty?'#fff7ed':'white';
+    var state=bankRowState(r);
+    var border='var(--gray-300)', bg='white';
+    if (state==='needsInfo') { border='#dc2626'; bg='#fef2f2'; }
+    else if (state==='needsPDF') { border='#7c3aed'; bg='#faf5ff'; }
+    inp.style.borderColor=border;
+    inp.style.background=bg;
     var tr=inp.closest('tr');
-    if (tr) tr.className=isEmpty?'bank-row-empty':'';
+    if (tr) tr.className=bankRowClassName(state);
   }
   bankScheduleAutoSave();
+}
+function bankTogglePdfSent(rowIdx, checked) {
+  if (!bankCurrentSession) return;
+  var r=bankCurrentSession.rows[rowIdx];
+  if (!r) return;
+  r.pdfSent=!!checked;
+  bankScheduleAutoSave();
+  renderPage();
 }
 function bankDescBlur(rowIdx, value) {
   if (!bankCurrentSession) return;
