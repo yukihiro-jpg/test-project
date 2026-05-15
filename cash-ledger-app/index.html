@@ -3593,14 +3593,191 @@ function importBackup(ev) {
     try {
       const d=JSON.parse(e.target.result);
       if (!d.settings||!d.entries||!d.advances){ alert('無効なバックアップファイルです。'); return; }
-      if (confirm('現在のデータをバックアップデータで上書きします。\nこの操作は元に戻せません。よろしいですか？')){
-        DB.set('settings',d.settings); DB.set('entries',d.entries); DB.set('advances',d.advances);
-        DB.set('reimbursements', d.reimbursements||[]);
-        alert('データを復元しました。'); initApp();
-      }
+      _pendingBackupData=d;
+      showRestoreModeModal(d);
     } catch (e) { alert('ファイルの読み込みに失敗しました。'); }
   };
   reader.readAsText(file); ev.target.value='';
+}
+
+let _pendingBackupData=null;
+
+function showRestoreModeModal(d) {
+  const backupSettingsLocs=(d.settings&&d.settings.locations)||[];
+  const entryLocSet=new Set((d.entries||[]).map(function(e){return e.location||'';}).filter(function(l){return l;}));
+  const allLocs=Array.from(new Set(backupSettingsLocs.concat(Array.from(entryLocSet)))).filter(function(l){return l;});
+  const exportedAt=d.exportedAt?new Date(d.exportedAt).toLocaleString('ja-JP'):'(不明)';
+  const counts={};
+  allLocs.forEach(function(loc){
+    counts[loc]={
+      entries:(d.entries||[]).filter(function(e){return (e.location||'')===loc;}).length,
+      advances:(d.advances||[]).filter(function(a){return (a.location||'')===loc;}).length,
+      reims:(d.reimbursements||[]).filter(function(r){return (r.location||'')===loc;}).length
+    };
+  });
+  const noLocCount={
+    entries:(d.entries||[]).filter(function(e){return !e.location;}).length,
+    advances:(d.advances||[]).filter(function(a){return !a.location;}).length,
+    reims:(d.reimbursements||[]).filter(function(r){return !r.location;}).length
+  };
+  const hasNoLoc=noLocCount.entries+noLocCount.advances+noLocCount.reims>0;
+
+  const mergeBlock=allLocs.length===0
+    ? '<div style="font-size:12px;color:var(--danger);">⚠ このバックアップには拠点情報がありません。拠点指定マージは利用できないため、必要なら「完全上書き」をご利用ください。</div>'
+    : '<div style="margin-bottom:8px;font-size:12px;color:var(--gray-700);">取り込む拠点を選択してください（複数選択可）:</div>'
+      +'<div id="restore-loc-checks" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">'
+      +allLocs.map(function(loc,i){
+        var c=counts[loc];
+        return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:4px 6px;border:1px solid var(--gray-200);border-radius:6px;">'
+          +'<input type="checkbox" data-loc="'+esc(loc)+'" '+(allLocs.length===1?'checked':'')+' />'
+          +'<strong>'+esc(loc)+'</strong>'
+          +'<span style="font-size:11px;color:var(--gray-500);margin-left:auto;">'
+          +'取引 '+c.entries+'件 / 仮払 '+c.advances+'件 / 立替 '+c.reims+'件</span>'
+          +'</label>';
+      }).join('')
+      +'</div>'
+      +(hasNoLoc?'<div style="font-size:11px;color:var(--warning);margin-bottom:8px;">※ 拠点未設定のデータ（取引 '+noLocCount.entries+'件 / 仮払 '+noLocCount.advances+'件 / 立替 '+noLocCount.reims+'件）はマージ復元では取り込まれません。</div>':'')
+      +'<button class="btn btn-primary btn-sm" onclick="executeLocationMerge()">🔀 選択した拠点をマージ復元</button>';
+
+  showModal(
+    '<div class="modal-title">📤 バックアップの復元</div>'
+    +'<div style="font-size:12px;color:var(--gray-600);margin-bottom:14px;">'
+      +'保存日時: <strong>'+esc(exportedAt)+'</strong><br>'
+      +'バージョン: '+esc(d.version||'(未指定)')+' / '
+      +'取引 '+((d.entries||[]).length)+'件 / '
+      +'仮払 '+((d.advances||[]).length)+'件 / '
+      +'立替 '+((d.reimbursements||[]).length)+'件<br>'
+      +'含まれる拠点: '+(allLocs.length?allLocs.map(esc).join('、'):'(なし)')
+    +'</div>'
+    +'<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:14px;margin-bottom:12px;">'
+      +'<div style="font-weight:700;margin-bottom:6px;color:#0c4a6e;">🔀 拠点を指定してマージ復元（推奨）</div>'
+      +'<div style="font-size:12px;color:var(--gray-700);margin-bottom:10px;">'
+        +'選択した拠点のデータのみ取り込みます。<br>'
+        +'現在のデータの<strong>他拠点分はそのまま残ります</strong>。<br>'
+        +'本社で支社のバックアップを取り込む等の運用に推奨です。'
+      +'</div>'
+      +mergeBlock
+    +'</div>'
+    +'<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:14px;">'
+      +'<div style="font-weight:700;color:#991b1b;margin-bottom:6px;">⚠️ 完全上書き</div>'
+      +'<div style="font-size:12px;color:#7f1d1d;margin-bottom:10px;">'
+        +'現在の<strong>すべてのデータ</strong>（拠点設定・取引・仮払・立替）がバックアップで置き換わります。<br>'
+        +'現在登録している他拠点のデータは失われます。'
+      +'</div>'
+      +'<button class="btn btn-danger btn-sm" onclick="executeFullOverwrite()">🗑 すべて上書きする</button>'
+    +'</div>'
+    +'<div class="modal-actions">'
+      +'<button class="btn btn-secondary" onclick="_pendingBackupData=null;closeModal()">キャンセル</button>'
+    +'</div>'
+  , true);
+}
+
+function executeFullOverwrite() {
+  if (!_pendingBackupData) return;
+  if (!confirm('現在のすべてのデータをバックアップで上書きします。\n他拠点のデータも消去されます。本当によろしいですか？')) return;
+  const d=_pendingBackupData;
+  DB.set('settings', d.settings);
+  DB.set('entries', d.entries);
+  DB.set('advances', d.advances);
+  DB.set('reimbursements', d.reimbursements||[]);
+  _pendingBackupData=null;
+  closeModal();
+  alert('データを復元しました。');
+  initApp();
+}
+
+function executeLocationMerge() {
+  if (!_pendingBackupData) return;
+  const checks=document.querySelectorAll('#restore-loc-checks input[type=checkbox]:checked');
+  const selectedLocs=Array.prototype.map.call(checks, function(c){return c.dataset.loc;});
+  if (selectedLocs.length===0) { alert('取り込む拠点を1つ以上選択してください。'); return; }
+  if (!confirm('選択した拠点（'+selectedLocs.join('、')+'）の現在データを、バックアップ内容で置き換えます。\nその他の拠点のデータはそのまま残ります。よろしいですか？')) return;
+  mergeLocationBackup(_pendingBackupData, selectedLocs);
+  _pendingBackupData=null;
+  closeModal();
+  alert('選択した拠点のデータをマージ復元しました：'+selectedLocs.join('、'));
+  initApp();
+}
+
+function mergeLocationBackup(d, selectedLocs) {
+  const locSet={};
+  selectedLocs.forEach(function(l){ locSet[l]=true; });
+
+  // 1) バックアップから選択拠点分を抽出
+  const bEntries=(d.entries||[]).filter(function(e){return locSet[e.location||''];}).map(function(e){return Object.assign({},e);});
+  const bAdvances=(d.advances||[]).filter(function(a){return locSet[a.location||''];}).map(function(a){return Object.assign({},a);});
+  const bReims=(d.reimbursements||[]).filter(function(r){return locSet[r.location||''];}).map(function(r){return Object.assign({},r);});
+
+  // 2) 現在データから選択拠点分を除外
+  const curEntries=getEntries().filter(function(e){return !locSet[e.location||''];});
+  const curAdvances=getAdvances().filter(function(a){return !locSet[a.location||''];});
+  const curReims=getReimbursements().filter(function(r){return !locSet[r.location||''];});
+
+  // 3) entry ID を採番し直し（衝突回避）
+  var nextEntryNum=curEntries.reduce(function(m,e){return Math.max(m,parseInt(String(e.id||'').replace(/^E/,''))||0);},0)+1;
+  const entryIdMap={};
+  bEntries.forEach(function(e){
+    const newId='E'+String(nextEntryNum++).padStart(4,'0');
+    entryIdMap[e.id]=newId;
+    e.id=newId;
+  });
+
+  // 4) advance ID を採番し直し（氏名スコープで連番）
+  const advCounters={};
+  curAdvances.forEach(function(a){
+    const m=String(a.id||'').match(/^(.+)-(\d+)$/);
+    if (m) advCounters[m[1]]=Math.max(advCounters[m[1]]||0, parseInt(m[2])||0);
+  });
+  const advIdMap={};
+  bAdvances.forEach(function(a){
+    const clean=(a.employeeName||'').replace(/\s+/g,'');
+    advCounters[clean]=(advCounters[clean]||0)+1;
+    const newId=clean+'-'+String(advCounters[clean]).padStart(3,'0');
+    advIdMap[a.id]=newId;
+    a.id=newId;
+    if (a.cashEntryId)        a.cashEntryId=entryIdMap[a.cashEntryId]||null;
+    if (a.settlementEntryId)  a.settlementEntryId=entryIdMap[a.settlementEntryId]||null;
+    if (a.discrepancyEntryId) a.discrepancyEntryId=entryIdMap[a.discrepancyEntryId]||null;
+  });
+
+  // 5) reimbursement ID を採番し直し
+  const reimCounters={};
+  curReims.forEach(function(r){
+    const m=String(r.id||'').match(/^R-(.+)-(\d+)$/);
+    if (m) reimCounters[m[1]]=Math.max(reimCounters[m[1]]||0, parseInt(m[2])||0);
+  });
+  const reimIdMap={};
+  bReims.forEach(function(r){
+    const clean=(r.employeeName||'').replace(/\s+/g,'');
+    reimCounters[clean]=(reimCounters[clean]||0)+1;
+    const newId='R-'+clean+'-'+String(reimCounters[clean]).padStart(3,'0');
+    reimIdMap[r.id]=newId;
+    r.id=newId;
+    if (r.reimbursementEntryId) r.reimbursementEntryId=entryIdMap[r.reimbursementEntryId]||null;
+  });
+
+  // 6) entry の advanceId / reimbursementId 参照を更新
+  bEntries.forEach(function(e){
+    if (e.advanceId && advIdMap[e.advanceId])           e.advanceId=advIdMap[e.advanceId];
+    if (e.reimbursementId && reimIdMap[e.reimbursementId]) e.reimbursementId=reimIdMap[e.reimbursementId];
+  });
+
+  // 7) settings の locations と locationOpeningBalances をマージ
+  const curSettings=getSettings()||{};
+  const newSettings=Object.assign({}, curSettings);
+  const curLocs=curSettings.locations||[];
+  newSettings.locations=Array.from(new Set(curLocs.concat(selectedLocs)));
+  newSettings.locationOpeningBalances=Object.assign({}, curSettings.locationOpeningBalances||{});
+  const bLOB=(d.settings&&d.settings.locationOpeningBalances)||{};
+  selectedLocs.forEach(function(loc){
+    if (bLOB[loc]!=null) newSettings.locationOpeningBalances[loc]=bLOB[loc];
+  });
+  DB.set('settings', newSettings);
+
+  // 8) 保存
+  DB.set('entries', curEntries.concat(bEntries));
+  DB.set('advances', curAdvances.concat(bAdvances));
+  DB.set('reimbursements', curReims.concat(bReims));
 }
 
 function showHowTo(context) {
