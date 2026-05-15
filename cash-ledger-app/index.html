@@ -1070,6 +1070,7 @@ let bankCurrentSession=null;
 let bankImportedData=null;
 let bankColumnRoles={};
 let bankActiveRole=null;
+let bankEditFilter='attention';
 let bankNameCache='';
 let bankAcctCache='';
 let bankSessionCache=null;
@@ -4585,10 +4586,17 @@ function bankReadFile(file) {
     if (text.charCodeAt(0)===0xFEFF) text=text.slice(1);
     var parsed=bankParseCSV(text);
     if (parsed.length<2) { alert('CSVの解析に失敗しました。ファイルを確認してください。'); return; }
+    var hdrIdx=bankFindBestHeaderRow(parsed);
+    var headerRow=parsed[hdrIdx]||parsed[0];
+    var hdrLen=headerRow.length;
     bankImportedData={
       fileName:file.name, encoding:enc,
-      headers:parsed[0],
-      rows:parsed.slice(1).filter(function(r){return r.some(function(c){return c.trim()!=='';});})
+      headers:headerRow,
+      preambleRowCount:hdrIdx,
+      rows:parsed.slice(hdrIdx+1).filter(function(r){
+        if (!r.some(function(c){return (c||'').trim()!=='';})) return false;
+        return r.length>=Math.max(3, Math.floor(hdrLen/2));
+      })
     };
     bankColumnRoles={description:[]};
     bankActiveRole=null;
@@ -4602,10 +4610,10 @@ function bankReadFile(file) {
 }
 
 function bankAutoDetectColumns(headers) {
-  var dateKw  =['日付','DATE','取引日','年月日','Value Date'];
+  var dateKw  =['日付','DATE','取引日','年月日','取引年月日','Value Date'];
   var descKw  =['摘要','内容','取引内容','取引摘要','説明','Description'];
-  var recKw   =['入金','入金額','入金金額','お預かり','Deposit'];
-  var payKw   =['出金','出金額','出金金額','お引き出し','引出','Withdrawal'];
+  var recKw   =['入金','入金額','入金金額','受入','受入金額','預入','預入金額','お預かり','預金','Deposit','Credit'];
+  var payKw   =['出金','出金額','出金金額','支払','支払金額','お引き出し','引出','引落','引落額','Withdrawal','Debit'];
   var balKw   =['残高','差引残高','帳尻','Balance'];
   function match(h,kws) {
     var hu=h.trim().toUpperCase();
@@ -4619,6 +4627,26 @@ function bankAutoDetectColumns(headers) {
     else if (bankColumnRoles.payment==null && match(h,payKw))  bankColumnRoles.payment=i;
     else if (bankColumnRoles.balance==null && match(h,balKw))  bankColumnRoles.balance=i;
   });
+}
+
+// CSVの上部に口座番号・期間などのプリアンブル行がある場合に
+// 実際の取引列ヘッダー行を見つけて、その行をヘッダーとして扱う。
+function bankFindBestHeaderRow(parsed) {
+  var keywords=['日付','年月日','取引日','摘要','内容','取引内容','入金','受入','預入','預金','出金','支払','引出','引落','残高','差引'];
+  var best={idx:0, score:0, len:0};
+  var limit=Math.min(parsed.length, 12);
+  for (var i=0;i<limit;i++) {
+    var row=parsed[i];
+    if (!row||row.length<3) continue;
+    var rowText=row.map(function(c){return (c||'').trim();}).filter(function(c){return c;}).join('|');
+    if (!rowText) continue;
+    var score=0;
+    keywords.forEach(function(k){ if (rowText.indexOf(k)!==-1) score++; });
+    if (score>best.score || (score===best.score && row.length>best.len)) {
+      best={idx:i, score:score, len:row.length};
+    }
+  }
+  return best.score>=2 ? best.idx : 0;
 }
 
 function bankNormalizeColumnRoles() {
@@ -4826,7 +4854,9 @@ function bankStartEditing() {
     var rec=bankColumnRoles.receipt!=null?bankParseAmount(row[bankColumnRoles.receipt]):0;
     var pay=bankColumnRoles.payment!=null?bankParseAmount(row[bankColumnRoles.payment]):0;
     var bal=bankColumnRoles.balance!=null?bankParseAmount(row[bankColumnRoles.balance]):0;
-    return {date:dateStr, descriptionOriginal:descOrig, description:descOrig, receipt:rec, payment:pay, balance:bal};
+    var probe={descriptionOriginal:descOrig, receipt:rec, payment:pay};
+    var initDesc=(bankClassifyRow(probe)==='needsInfo')?'':descOrig;
+    return {date:dateStr, descriptionOriginal:descOrig, description:initDesc, receipt:rec, payment:pay, balance:bal};
   }).filter(function(r){return r.date||r.receipt||r.payment||r.balance;});
   rows.sort(function(a,b){return a.date.localeCompare(b.date);});
 
@@ -4840,7 +4870,7 @@ function bankStartEditing() {
     if (confirm('同じ銀行・口座のセッションが存在します。\n重複を除いて '+added+' 行をマージしますか？\n（キャンセルすると新規セッションとして保存します）')) {
       existing.updatedAt=new Date().toISOString();
       bankCurrentSession=existing;
-      bankCsvPage='editing';
+      bankEditFilter='attention';bankCsvPage='editing';
       bankSaveSession(existing).then(function(){renderPage();});
       return;
     }
@@ -4860,18 +4890,18 @@ function bankStartEditing() {
   if (!bankSessionCache) bankSessionCache=[];
   bankSessionCache.unshift(sess);
   bankSaveSession(sess);
-  bankCsvPage='editing';
+  bankEditFilter='attention';bankCsvPage='editing';
   renderPage();
 }
 
 function bankResumeSession(id) {
   var sess=(bankSessionCache||[]).find(function(s){return s.id===id;});
-  if (sess) { bankCurrentSession=sess; bankCsvPage='editing'; renderPage(); return; }
+  if (sess) { bankCurrentSession=sess; bankEditFilter='attention';bankCsvPage='editing'; renderPage(); return; }
   bankOpenDB().then(function(db){
     var tx=db.transaction('sessions','readonly');
     var req=tx.objectStore('sessions').get(id);
     req.onsuccess=function(){
-      if (req.result){bankCurrentSession=req.result;bankCsvPage='editing';renderPage();}
+      if (req.result){bankCurrentSession=req.result;bankEditFilter='attention';bankCsvPage='editing';renderPage();}
     };
   });
 }
@@ -4886,8 +4916,11 @@ function bankConfirmDelete(id) {
 
 var BANK_TRANSFER_DOC_KEYWORDS = ['振込資金','フリコミカワリキン','フリコミシキン','フリカエシキン','カワリキン','振替金','送金資金','フリコミシ'];
 var BANK_GENERIC_DESC_PATTERNS = ['AD','D','CD','ATM','預金機','カード','カードAD','カードD','機械','現金'];
+var BANK_LOAN_KEYWORDS = ['借入','借り入れ','借入金','ローン','融資','金消','金銭消費貸借','ｶﾘｲﾚ','ｶﾘｲﾚｷﾝ','ｶﾘｲﾚｷﾝｺｳﾆｭｳ','カリイレ','カリイレキン','LOAN'];
+var BANK_AUTO_KEYWORDS = ['トヨタ','ﾄﾖﾀ','ホンダ','ﾎﾝﾀﾞ','日産','ﾆｯｻﾝ','ニッサン','マツダ','ﾏﾂﾀﾞ','スバル','ｽﾊﾞﾙ','スズキ','ｽｽﾞｷ','ダイハツ','ﾀﾞｲﾊﾂ','レクサス','ﾚｸｻｽ','三菱自動車','ｶｰﾃﾞｨｰﾗｰ','カーディーラー','自動車','ｼﾞﾄﾞｳｼﾔ','ｼﾞﾄﾞｳｼｬ','モータース','ﾓｰﾀｰｽ','ネッツ','ﾈｯﾂ','カローラ','ｶﾛｰﾗ','ＶＷ','VW','フォルクスワーゲン','BMW','ベンツ','ﾍﾞﾝﾂ','アウディ','ｱｳﾃﾞｨ','ポルシェ','ﾎﾟﾙｼｪ','カーリース','ｶｰﾘｰｽ','オートリース','ｵｰﾄﾘｰｽ','整備工場','板金','ｾｲﾋﾞ','ｶｰｼｮｯﾌﾟ','カーショップ','車検','ｼｬｹﾝ'];
+var BANK_LOAN_RECEIPT_THRESHOLD = 100000;
 
-function bankClassifyOrig(orig) {
+function bankClassifyByOrig(orig) {
   var s=(orig||'').trim();
   for (var i=0;i<BANK_TRANSFER_DOC_KEYWORDS.length;i++) {
     if (s.indexOf(BANK_TRANSFER_DOC_KEYWORDS[i])!==-1) return 'needsPDF';
@@ -4900,11 +4933,59 @@ function bankClassifyOrig(orig) {
   if (BANK_GENERIC_DESC_PATTERNS.indexOf(stripped.toUpperCase())!==-1) return 'needsInfo';
   return 'ok';
 }
+function bankClassifyOrig(orig) { return bankClassifyByOrig(orig); }
+
+function bankClassifyRow(r) {
+  if (!r) return 'ok';
+  var receipt=Number(r.receipt||0);
+  var payment=Number(r.payment||0);
+  // 入出金が無い行（繰越・残高調整など）は対応不要
+  if (receipt===0 && payment===0) return 'ok';
+  var orig=(r.descriptionOriginal||'').trim();
+  var base=bankClassifyByOrig(orig);
+  if (base==='needsPDF') return 'needsPDF';
+  if (base==='needsInfo') return 'needsInfo';
+  if (receipt>=BANK_LOAN_RECEIPT_THRESHOLD) {
+    for (var j=0;j<BANK_LOAN_KEYWORDS.length;j++) {
+      if (orig.indexOf(BANK_LOAN_KEYWORDS[j])!==-1) return 'needsPDF';
+    }
+  }
+  if (payment>0) {
+    for (var k=0;k<BANK_AUTO_KEYWORDS.length;k++) {
+      if (orig.indexOf(BANK_AUTO_KEYWORDS[k])!==-1) return 'needsPDF';
+    }
+  }
+  return 'ok';
+}
+
+function bankRowReason(r) {
+  if (!r) return '';
+  var orig=(r.descriptionOriginal||'').trim();
+  for (var i=0;i<BANK_TRANSFER_DOC_KEYWORDS.length;i++) {
+    if (orig.indexOf(BANK_TRANSFER_DOC_KEYWORDS[i])!==-1) return 'transfer';
+  }
+  if (Number(r.receipt||0)>=BANK_LOAN_RECEIPT_THRESHOLD) {
+    for (var j=0;j<BANK_LOAN_KEYWORDS.length;j++) {
+      if (orig.indexOf(BANK_LOAN_KEYWORDS[j])!==-1) return 'loan';
+    }
+  }
+  if (Number(r.payment||0)>0) {
+    for (var k=0;k<BANK_AUTO_KEYWORDS.length;k++) {
+      if (orig.indexOf(BANK_AUTO_KEYWORDS[k])!==-1) return 'auto';
+    }
+  }
+  return orig?'generic':'empty';
+}
+
 function bankRowState(r) {
-  var cls=bankClassifyOrig(r.descriptionOriginal||'');
-  var hasDesc=!!(r.description&&r.description.trim());
-  if (cls==='needsInfo')   return hasDesc ? 'resolvedInfo' : 'needsInfo';
-  if (cls==='needsPDF')    return r.pdfSent ? 'resolvedPDF' : 'needsPDF';
+  var cls=bankClassifyRow(r);
+  var desc=((r&&r.description)||'').trim();
+  var orig=((r&&r.descriptionOriginal)||'').trim();
+  if (cls==='needsInfo') {
+    var hasNewDesc=desc.length>0 && desc!==orig;
+    return hasNewDesc?'resolvedInfo':'needsInfo';
+  }
+  if (cls==='needsPDF') return r.pdfSent?'resolvedPDF':'needsPDF';
   return 'ok';
 }
 function bankRowClassName(state) {
@@ -4914,15 +4995,47 @@ function bankRowClassName(state) {
   return '';
 }
 
+function bankReasonBadge(state, reason) {
+  if (state==='needsInfo') return '<div class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</div>';
+  if (state==='resolvedInfo') return '<div class="bank-status-badge bank-status-resolved">✓ 入力済</div>';
+  if (state==='resolvedPDF') return '<div class="bank-status-badge bank-status-resolved">✓ PDF送付済</div>';
+  if (state==='needsPDF') {
+    if (reason==='loan') return '<div class="bank-status-badge bank-status-needpdf">📎 借入関連書類PDFを税理士へ送付</div>';
+    if (reason==='auto') return '<div class="bank-status-badge bank-status-needpdf">📎 自動車関連書類PDFを税理士へ送付</div>';
+    return '<div class="bank-status-badge bank-status-needpdf">📎 振込明細PDFを税理士へ送付</div>';
+  }
+  return '';
+}
+
 function bankPageEdit() {
   if (!bankCurrentSession) { bankCsvPage='list'; bankSessionCache=null; return pageBankCSV(); }
   var sess=bankCurrentSession;
   var rows=sess.rows;
   var stateCounts={needsInfo:0, resolvedInfo:0, needsPDF:0, resolvedPDF:0, ok:0};
-  rows.forEach(function(r){ stateCounts[bankRowState(r)]++; });
+  var pdfReasonCounts={transfer:0, loan:0, auto:0};
+  rows.forEach(function(r){
+    var st=bankRowState(r);
+    stateCounts[st]++;
+    if (st==='needsPDF') {
+      var rsn=bankRowReason(r);
+      if (pdfReasonCounts[rsn]!=null) pdfReasonCounts[rsn]++;
+    }
+  });
 
-  var tableRows=rows.map(function(r,i) {
-    var state=bankRowState(r);
+  var attentionCount=stateCounts.needsInfo+stateCounts.needsPDF;
+  var resolvedCount=stateCounts.resolvedInfo+stateCounts.resolvedPDF;
+  var showAttentionOnly=(bankEditFilter==='attention');
+
+  var visibleRows=rows.map(function(r,i){return {r:r,i:i,state:bankRowState(r)};});
+  if (showAttentionOnly) {
+    visibleRows=visibleRows.filter(function(x){
+      return x.state==='needsInfo'||x.state==='needsPDF'||x.state==='resolvedInfo'||x.state==='resolvedPDF';
+    });
+  }
+
+  var tableRows=visibleRows.map(function(x) {
+    var r=x.r, i=x.i, state=x.state;
+    var reason=bankRowReason(r);
     var rowCls=bankRowClassName(state);
     var amount=Math.max(Math.abs(r.receipt||0),Math.abs(r.payment||0));
     var dayOfMonth=r.date?parseInt(r.date.split('-')[2])||0:0;
@@ -4931,17 +5044,13 @@ function bankPageEdit() {
     var dlHtml=suggestions.length>0
       ?'<datalist id="'+dlId+'">'+suggestions.map(function(s){return '<option value="'+esc(s)+'">';}).join('')+'</datalist>'
       :'';
-    var badge='';
-    if (state==='needsInfo')        badge='<div class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</div>';
-    else if (state==='resolvedInfo') badge='<div class="bank-status-badge bank-status-resolved">✓ 入力済</div>';
-    else if (state==='needsPDF')    badge='<div class="bank-status-badge bank-status-needpdf">📎 振込明細PDFを税理士へ送付</div>';
-    else if (state==='resolvedPDF') badge='<div class="bank-status-badge bank-status-resolved">✓ PDF送付済</div>';
+    var badge=bankReasonBadge(state, reason);
     var inputBorder='var(--gray-300)';
     var inputBg='white';
     if (state==='needsInfo') { inputBorder='#dc2626'; inputBg='#fef2f2'; }
     else if (state==='needsPDF') { inputBorder='#7c3aed'; inputBg='#faf5ff'; }
     var pdfChk='';
-    if (bankClassifyOrig(r.descriptionOriginal||'')==='needsPDF') {
+    if (bankClassifyRow(r)==='needsPDF') {
       pdfChk='<label style="display:flex;align-items:center;gap:4px;font-size:11px;margin-top:4px;cursor:pointer;white-space:nowrap;">'
         +'<input type="checkbox" '+(r.pdfSent?'checked':'')+' onchange="bankTogglePdfSent('+i+',this.checked)" style="margin:0;" />'
         +'<span>PDF送付済</span></label>';
@@ -4966,6 +5075,12 @@ function bankPageEdit() {
       +'</tr>';
   }).join('');
 
+  if (tableRows==='') {
+    tableRows='<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:20px;font-size:13px;">'
+      +(showAttentionOnly?'要対応行はありません。「全明細を表示」で全行を確認できます。':'表示できる明細がありません。')
+      +'</td></tr>';
+  }
+
   var alertHtml='';
   if (stateCounts.needsInfo===0 && stateCounts.needsPDF===0) {
     alertHtml='<div class="alert alert-success" style="margin-bottom:10px;">✅ 全ての要対応行が処理されています</div>';
@@ -4977,14 +5092,28 @@ function bankPageEdit() {
         +'<span style="font-size:11px;color:#7f1d1d;">→ 元摘要が空欄や「AD」「D」「預金機」など相手先名称が無い行です。記帳代行のため摘要欄に相手先と内容を入力してください。</span></div>');
     }
     if (stateCounts.needsPDF>0||stateCounts.resolvedPDF>0) {
-      bits.push('<div style="color:#5b21b6;"><span class="bank-status-badge bank-status-needpdf">📎 振込明細PDFを税理士へ送付</span> '
-        +'未対応 <strong>'+stateCounts.needsPDF+'</strong> 行 / 送付済 '+stateCounts.resolvedPDF+' 行<br>'
-        +'<span style="font-size:11px;color:#4c1d95;">→ 元摘要に「振込資金」「フリコミカワリキン」など、別途振込明細資料があることを示す行です。経理担当者は対応する明細PDFを税理士へ送付し、対応後にチェックを入れてください。</span></div>');
+      var pdfDetail=[];
+      if (pdfReasonCounts.transfer>0) pdfDetail.push('振込明細PDF '+pdfReasonCounts.transfer+'行');
+      if (pdfReasonCounts.loan>0)     pdfDetail.push('借入関連書類PDF '+pdfReasonCounts.loan+'行');
+      if (pdfReasonCounts.auto>0)     pdfDetail.push('自動車関連書類PDF '+pdfReasonCounts.auto+'行');
+      var detailLine=pdfDetail.length>0?'（内訳: '+pdfDetail.join(' / ')+'）':'';
+      bits.push('<div style="color:#5b21b6;"><span class="bank-status-badge bank-status-needpdf">📎 関連書類PDFを税理士へ送付</span> '
+        +'未対応 <strong>'+stateCounts.needsPDF+'</strong> 行 / 送付済 '+stateCounts.resolvedPDF+' 行 '+detailLine+'<br>'
+        +'<span style="font-size:11px;color:#4c1d95;">→ ①振込明細資料が別途必要な行、②高額入金で借入関連の摘要がある行、③自動車関連会社への支払行。経理担当者は対応する書類のPDFを税理士へ送付し、送付後にチェックを入れてください。</span></div>');
     }
     alertHtml='<div class="alert" style="margin-bottom:10px;background:#fffbeb;border:1px solid #fde047;color:#713f12;padding:10px 14px;">'
       +bits.join('<div style="height:8px;"></div>')
       +'</div>';
   }
+
+  var filterBar='<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">'
+    +'<span style="font-size:12px;color:var(--gray-600);font-weight:700;">表示:</span>'
+    +'<button class="btn btn-xs '+(showAttentionOnly?'btn-primary':'btn-secondary')+'" onclick="bankSetEditFilter(\'attention\')">'
+    +'⚠ 要対応行のみ（'+(attentionCount+resolvedCount)+'行）</button>'
+    +'<button class="btn btn-xs '+(!showAttentionOnly?'btn-primary':'btn-secondary')+'" onclick="bankSetEditFilter(\'all\')">'
+    +'📋 全明細を表示（'+rows.length+'行）</button>'
+    +(showAttentionOnly?'<span style="font-size:11px;color:var(--gray-500);">※ 通常の取引行（'+stateCounts.ok+'行）は非表示</span>':'')
+    +'</div>';
 
   return '<div class="card">'
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">'
@@ -4997,6 +5126,7 @@ function bankPageEdit() {
     +'</div>'
     +'</div>'
     +alertHtml
+    +filterBar
     +'<div style="overflow-x:auto;"><table class="table-grid" style="font-size:13px;">'
     +'<thead><tr>'
     +'<th style="min-width:90px;">日付</th>'
@@ -5009,6 +5139,11 @@ function bankPageEdit() {
     +'<tbody>'+tableRows+'</tbody>'
     +'</table></div>'
     +'</div>';
+}
+
+function bankSetEditFilter(mode) {
+  bankEditFilter=(mode==='all'?'all':'attention');
+  renderPage();
 }
 
 function bankUpdateDesc(rowIdx, value) {
