@@ -488,6 +488,7 @@
   <div id="header-loc-bar" class="no-print" style="display:none;align-items:center;gap:5px;flex-wrap:wrap;justify-content:center;"></div>
   <div style="display:flex;align-items:center;gap:12px;">
     <div id="header-balance" style="font-size:18px;font-weight:700;"></div>
+    <div id="header-fiscal-year" class="no-print" style="font-size:12px;font-weight:600;padding:5px 10px;border:1px solid rgba(255,255,255,0.5);border-radius:6px;background:rgba(255,255,255,0.12);white-space:nowrap;"></div>
     <button class="btn no-print" style="background:rgba(255,255,255,0.18);color:white;border:1px solid rgba(255,255,255,0.6);font-size:13px;font-weight:700;padding:7px 14px;" onclick="showSettings()">⚙ 設定</button>
   </div>
 </div>
@@ -668,11 +669,15 @@ function getCurrentBalance() {
   return bal;
 }
 
-function monthlyTotal(type) {
+function monthlyTotal(type, loc) {
   const d=new Date();
   const pfx=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  const s=getSettings();
+  const locs=s?(s.locations||[]):[];
+  const useFilter=locs.length>0 && loc && locs.indexOf(loc)!==-1;
   return getEntries()
     .filter(e=>e.date.startsWith(pfx))
+    .filter(e=>!useFilter || (e.location||'')===loc)
     .reduce((s,e)=>s+(type==='pay'?(e.paymentAmount||0):(e.receiptAmount||0)),0);
 }
 
@@ -1292,6 +1297,7 @@ function renderPage() {
   else if (currentPage==='bank-csv')          el.innerHTML=pageBankCSV();
   renderAccountSidebar();
   renderNavFiscalBar();
+  updateHeader();
   if (currentPage==='reimbursements' && typeof renderReimRows==='function') renderReimRows();
 }
 
@@ -1318,12 +1324,21 @@ function renderAccountSidebar() {
 }
 
 function pageDashboard() {
+  const s=getSettings();
+  const locs=s?(s.locations||[]):[];
+  const useLocFilter=locs.length>0 && currentLocation && locs.indexOf(currentLocation)!==-1;
+  const locLabel=useLocFilter ? currentLocation : (locs.length>0 ? '全拠点合計' : '');
+  const locTag=locLabel?`<span style="font-size:10px;font-weight:700;color:var(--gray-500);margin-left:6px;">[${esc(locLabel)}]</span>`:'';
+
   const bal=getCurrentBalance();
-  const advances=getAdvances();
+  const allAdvances=getAdvances();
+  const advances=useLocFilter ? allAdvances.filter(a=>(a.location||'')===currentLocation) : allAdvances;
   const pending=advances.filter(a=>a.status==='pending');
   const pendTot=pending.reduce((s,a)=>s+a.advanceAmount,0);
-  const s=getSettings();
-  const allWithBal=calcBalances(getEntries());
+  const allEntries=getEntries();
+  const filteredEntries=useLocFilter ? allEntries.filter(e=>(e.location||'')===currentLocation) : allEntries;
+  const openBalForDash=locs.length>0 ? getLocationOpenBalance(currentLocation) : (s.openingBalance||0);
+  const allWithBal=calcBalancesFrom(filteredEntries, openBalForDash);
   const recent=allWithBal.slice(-6);
 
   return `
@@ -1333,28 +1348,28 @@ function pageDashboard() {
   </div>
   <div class="stats-grid">
     <div class="stat-card">
-      <div class="stat-label">現在の現金残高</div>
+      <div class="stat-label">現在の現金残高${locTag}</div>
       <div class="stat-value mono ${bal<0?'danger':''}">${fc(bal)}</div>
-      <div class="stat-sub">期首残高: ${fc(s.openingBalance)}</div>
+      <div class="stat-sub">期首残高: ${fc(openBalForDash)}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">未精算件数</div>
+      <div class="stat-label">未精算件数${locTag}</div>
       <div class="stat-value ${pending.length>0?'danger':'success'}">${pending.length}<span style="font-size:15px;">件</span></div>
       <div class="stat-sub">未精算合計: ${fc(pendTot)}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">今月の出金</div>
-      <div class="stat-value mono">${fc(monthlyTotal('pay'))}</div>
+      <div class="stat-label">今月の出金${locTag}</div>
+      <div class="stat-value mono">${fc(monthlyTotal('pay', currentLocation))}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">今月の入金</div>
-      <div class="stat-value mono success">${fc(monthlyTotal('rec'))}</div>
+      <div class="stat-label">今月の入金${locTag}</div>
+      <div class="stat-value mono success">${fc(monthlyTotal('rec', currentLocation))}</div>
     </div>
   </div>
 
   ${pending.length>0?`
   <div class="card">
-    <div class="card-title">⚠️ 未精算の仮払い（${pending.length}件）</div>
+    <div class="card-title">⚠️ 未精算の仮払い（${pending.length}件）${locTag}</div>
     <div class="table-wrap"><table>
       <thead><tr><th>番号</th><th>仮払日</th><th>氏名</th><th>目的</th><th class="r">仮払金額</th><th class="no-print">操作</th></tr></thead>
       <tbody>
@@ -1370,7 +1385,7 @@ function pageDashboard() {
   </div>`:`<div class="alert alert-success">✅ 未精算の仮払いはありません</div>`}
 
   <div class="card">
-    <div class="card-title">📒 直近の取引（最新6件・古い順）</div>
+    <div class="card-title">📒 直近の取引（最新6件・古い順）${locTag}</div>
     ${recent.length===0
       ?'<div class="empty-state"><div class="icon">📒</div><p>まだ取引がありません</p></div>'
       :`<div class="table-wrap"><table>
@@ -3531,6 +3546,7 @@ function importBackup(ev) {
 }
 
 function showHowTo(context) {
+  const isDash=context==='dashboard';
   const isLedger=context==='ledger';
   const isAdv=context==='advances';
   const isReim=context==='reimbursements';
@@ -3538,6 +3554,7 @@ function showHowTo(context) {
   showModal(`
     <div class="modal-title">📖 操作方法ガイド</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+      <button class="btn btn-xs ${isDash?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('dashboard')">📊 ダッシュボード</button>
       <button class="btn btn-xs ${isLedger?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('ledger')">📒 現金出納帳</button>
       <button class="btn btn-xs ${isAdv?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('advances')">💼 仮払管理</button>
       <button class="btn btn-xs ${isReim?'btn-primary':'btn-secondary'}" onclick="closeModal();showHowTo('reimbursements')">🧾 立替経費</button>
@@ -3681,26 +3698,129 @@ function showHowTo(context) {
     ${isAdv?`
     <div class="howto-section">
       <h3>💼 仮払管理の使い方</h3>
-      <div class="howto-step">
-        <strong>① 仮払い登録</strong><br>
-        「仮払管理」タブ上部の登録フォームに、仮払日・氏名・目的・金額を入力して「仮払いを登録する」ボタンを押します。<br>
-        ✅ 登録すると、現金出納帳に<strong>出金として自動記録</strong>されます。<br>
-        ✅ 番号は「氏名-連番」形式（例: 山田太郎-001）で自動付番されます。
+
+      <!-- VISUAL: 仮払い登録フォーム -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 画面上部：仮払い登録フォーム</div>
+        <div class="howto-mock-form">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">仮払日 <span style="color:var(--danger);">*必須</span> <span class="howto-badge" style="background:#d97706;">①</span></div>
+              <div class="howto-mock-input highlight">2026-05-15</div>
+            </div>
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">氏名 <span style="color:var(--danger);">*必須</span> <span class="howto-badge" style="background:#d97706;">②</span></div>
+              <div class="howto-mock-input">石塚隼人</div>
+            </div>
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">金額（円） <span style="color:var(--danger);">*必須</span> <span class="howto-badge" style="background:#d97706;">④</span></div>
+              <div class="howto-mock-input">100,000</div>
+            </div>
+          </div>
+          <div class="howto-mock-field" style="margin-bottom:8px;">
+            <div class="howto-mock-label">目的 <span style="color:var(--danger);">*必須</span> <span class="howto-badge" style="background:#d97706;">③</span></div>
+            <div class="howto-mock-input">東京出張</div>
+          </div>
+          <div style="margin-top:10px;"><span class="howto-mock-btn primary">💼 仮払いを登録する</span></div>
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge" style="background:#d97706;">①〜④</span>
+          仮払日・氏名・目的・金額の4項目を入力します。氏名は過去に登録された人が候補として表示されます。
+        </div>
+        <div class="howto-callout-ok">
+          ✅ 登録すると現金出納帳に<strong>出金として自動記録</strong>されます。<br>
+          ✅ 番号は「氏名-連番」形式（例: 石塚隼人-003）で自動付番されます。
+        </div>
       </div>
-      <div class="howto-step">
-        <strong>② 精算入力</strong><br>
-        仮払金台帳の「精算」ボタンを押すと精算入力モーダルが開きます。<br>
-        ・<strong>精算日</strong>と<strong>精算方法</strong>（現金 or 振込）を選択<br>
-        ・<strong>使用明細</strong>を1行ずつ入力（使用日・店名・内容・勘定科目・金額）<br>
-        ・「＋ 明細を追加」で複数行入力できます<br>
-        ・使用合計が自動計算され、返金額または不足額が表示されます
+
+      <!-- VISUAL: 仮払金台帳 -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 仮払金台帳テーブル</div>
+        <div style="overflow-x:auto;">
+          <table class="howto-mock-table">
+            <thead><tr>
+              <th>番号</th><th>仮払日</th><th>氏名</th><th>目的</th><th>仮払額</th><th>状態</th><th>操作</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td><span style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">石塚隼人-003</span></td>
+                <td>2026/06/01</td><td>石塚隼人</td><td>東京出張</td>
+                <td class="r" style="color:var(--danger);">100,000</td>
+                <td><span style="background:#fecaca;color:#991b1b;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">未精算</span></td>
+                <td>
+                  <span class="howto-mock-btn primary" style="padding:2px 8px;font-size:10px;position:relative;">精算する
+                    <span class="howto-tag" style="top:-8px;right:-8px;background:#059669;">⑤</span>
+                  </span>
+                </td>
+              </tr>
+              <tr style="background:#f0fdf4;">
+                <td><span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">山田太郎-001</span></td>
+                <td>2026/05/01</td><td>山田太郎</td><td>名古屋出張</td>
+                <td class="r" style="color:var(--gray-500);">50,000</td>
+                <td><span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">精算済</span></td>
+                <td>
+                  <span class="howto-mock-btn secondary" style="padding:2px 6px;font-size:10px;">詳細</span>
+                  <span class="howto-mock-btn secondary" style="padding:2px 6px;font-size:10px;">修正</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge" style="background:#059669;">⑤</span>
+          「精算する」ボタンを押すと精算入力モーダルが開きます（次の図）。
+        </div>
       </div>
-      <div class="howto-step">
-        <strong>③ 精算結果と出納帳への反映</strong><br>
-        ・使用額 ＜ 仮払額 → <span style="color:var(--success);">返金</span>として現金出納帳に入金記録<br>
-        ・使用額 ＞ 仮払額 → <span style="color:var(--danger);">追加払い</span>として出金記録<br>
-        ・現金精算で返金額がある場合、実際の受取額が違う場合は「実際の受取額」欄に入力してください
+
+      <!-- VISUAL: 精算入力モーダル -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 精算入力モーダル</div>
+        <div style="background:white;border:2px solid var(--primary-light);border-radius:10px;padding:14px;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--primary);">📋 仮払い精算 — 石塚隼人-003（仮払額 ¥100,000）</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">精算日 <span class="howto-badge" style="background:#d97706;">⑥</span></div>
+              <div class="howto-mock-input">2026-06-05</div>
+            </div>
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">精算方法 <span class="howto-badge" style="background:#d97706;">⑦</span></div>
+              <div style="display:flex;gap:4px;">
+                <span class="howto-mock-btn active-normal" style="font-size:10px;padding:3px 8px;">現金</span>
+                <span class="howto-mock-btn secondary" style="font-size:10px;padding:3px 8px;">振込</span>
+              </div>
+            </div>
+          </div>
+          <div style="font-size:11px;font-weight:700;color:var(--gray-700);margin:8px 0 4px;">使用明細 <span class="howto-badge" style="background:#059669;">⑧</span></div>
+          <table class="howto-mock-table">
+            <thead><tr><th>使用日</th><th>店名</th><th>内容</th><th>科目</th><th>金額</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>6/2</td><td>JR東日本</td><td>新幹線往復</td><td><span style="background:#dbeafe;color:var(--primary);padding:1px 5px;border-radius:4px;font-size:9px;">旅費交通費</span></td><td class="r">28,000</td><td>×</td></tr>
+              <tr><td>6/3</td><td>ホテル○○</td><td>宿泊</td><td><span style="background:#dbeafe;color:var(--primary);padding:1px 5px;border-radius:4px;font-size:9px;">旅費交通費</span></td><td class="r">12,000</td><td>×</td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top:6px;"><span class="howto-mock-btn secondary" style="font-size:11px;padding:3px 10px;">＋ 明細を追加</span></div>
+          <div style="background:#fef3c7;padding:8px;border-radius:6px;margin-top:10px;font-size:11px;display:flex;justify-content:space-between;">
+            <span>使用合計: <strong>¥40,000</strong></span>
+            <span style="color:var(--success);">返金額: <strong>¥60,000</strong> <span class="howto-badge" style="background:#059669;">⑨</span></span>
+          </div>
+          <div style="margin-top:10px;"><span class="howto-mock-btn primary" style="font-size:11px;padding:5px 14px;">精算を確定する</span></div>
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge" style="background:#d97706;">⑥⑦</span>
+          精算日と精算方法（現金／振込）を選びます。
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">⑧</span>
+          使用明細はレシート1件につき1行。「＋ 明細を追加」で複数行入力でき、科目はチップから選択します。
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">⑨</span>
+          <strong>使用額 ＜ 仮払額</strong> → <span style="color:var(--success);">返金</span>として出納帳に入金記録。<br>
+          <strong>使用額 ＞ 仮払額</strong> → <span style="color:var(--danger);">追加払い</span>として出金記録。<br>
+          現金精算で実際の受取額が違う場合は「実際の受取額」欄を上書き入力できます。
+        </div>
       </div>
+
       <div class="howto-step">
         <strong>④ 修正・削除</strong><br>
         精算済みの仮払いも「修正」ボタンで内容を変更できます（出納帳の関連記録も自動更新）。<br>
@@ -3712,32 +3832,127 @@ function showHowTo(context) {
     ${isReim?`
     <div class="howto-section">
       <h3>🧾 立替経費の使い方</h3>
+
       <div class="howto-step">
         <strong>立替経費とは</strong><br>
         従業員が個人のクレジットカードや現金で立替払いした経費を管理します。<br>
-        後日、会社から従業員に現金や振込で返金します。
+        後日、会社から従業員にまとめて現金や振込で返金します。
       </div>
-      <div class="howto-step">
-        <strong>① 立替経費の登録</strong><br>
-        「立替経費」タブ上部の登録フォームに入力します。<br>
-        ・<strong>登録日</strong>：経費を登録する日（今日など）<br>
-        ・<strong>氏名</strong>：立替した従業員名<br>
-        ・<strong>目的・備考</strong>：「5月分立替」など<br>
-        ・<strong>立替明細</strong>：レシートごとに1行。使用日・店名・内容・勘定科目・金額を入力<br>
-        ✅ この時点では現金出納帳には記録されません。
+
+      <!-- VISUAL: 立替経費登録フォーム -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 画面上部：立替経費の登録フォーム</div>
+        <div class="howto-mock-form">
+          <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;margin-bottom:8px;">
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">登録日 <span class="howto-badge" style="background:#d97706;">①</span></div>
+              <div class="howto-mock-input highlight">2026-05-15</div>
+            </div>
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">氏名 <span style="color:var(--danger);">*必須</span> <span class="howto-badge" style="background:#d97706;">②</span></div>
+              <div class="howto-mock-input">石塚隼人</div>
+            </div>
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">目的・備考 <span class="howto-badge" style="background:#d97706;">③</span></div>
+              <div class="howto-mock-input">5月分立替</div>
+            </div>
+          </div>
+          <div style="font-size:11px;font-weight:700;color:var(--gray-700);margin:6px 0 4px;">立替明細 <span class="howto-badge" style="background:#059669;">④</span></div>
+          <table class="howto-mock-table">
+            <thead><tr><th>使用日</th><th>店名</th><th>内容</th><th>科目</th><th>金額</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>5/2</td><td>○○書店</td><td>業務書籍</td><td><span style="background:#dbeafe;color:var(--primary);padding:1px 5px;border-radius:4px;font-size:9px;">図書研修費</span></td><td class="r">3,200</td><td>×</td></tr>
+              <tr><td>5/8</td><td>△△カフェ</td><td>来客接待</td><td><span style="background:#dbeafe;color:var(--primary);padding:1px 5px;border-radius:4px;font-size:9px;">交際費</span></td><td class="r">4,800</td><td>×</td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top:6px;"><span class="howto-mock-btn secondary" style="font-size:11px;padding:3px 10px;">＋ 明細を追加</span></div>
+          <div style="background:#eff6ff;padding:6px 10px;border-radius:6px;margin-top:8px;font-size:11px;display:flex;justify-content:space-between;">
+            <span>立替合計</span><strong>¥8,000</strong>
+          </div>
+          <div style="margin-top:10px;"><span class="howto-mock-btn primary">🧾 立替経費を登録する</span></div>
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge" style="background:#d97706;">①②③</span>
+          登録日（通常は今日）、立替した従業員名、まとめる単位の備考（例「5月分立替」）を入力します。
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">④</span>
+          レシート1枚＝1行で明細を入力します。科目はチップから選択。「＋ 明細を追加」で行を増やせます。
+        </div>
+        <div class="howto-callout">
+          ⚠️ <strong>この時点では現金出納帳には記録されません。</strong> 返金確定時にまとめて出金記録されます。
+        </div>
       </div>
-      <div class="howto-step">
-        <strong>② 返金確定</strong><br>
-        立替経費台帳の「返金確定」ボタンを押すと、返金確定モーダルが開きます。<br>
-        ・<strong>返金日</strong>と<strong>返金方法</strong>（現金 or 振込）を選択<br>
-        ✅ 確定すると、現金出納帳に<strong>出金として自動記録</strong>されます。<br>
-        ✅ PL集計では各レシートの<strong>使用日</strong>ベースで経費計上されます（発生主義）。
+
+      <!-- VISUAL: 立替経費台帳 -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 立替経費台帳テーブル</div>
+        <div style="overflow-x:auto;">
+          <table class="howto-mock-table">
+            <thead><tr>
+              <th>登録日</th><th>氏名</th><th>目的・備考</th><th>立替額</th><th>状態</th><th>操作</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td>2026/05/15</td><td>石塚隼人</td><td>5月分立替</td>
+                <td class="r">8,000</td>
+                <td><span style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">未返金</span></td>
+                <td>
+                  <span class="howto-mock-btn primary" style="padding:2px 8px;font-size:10px;position:relative;">返金確定
+                    <span class="howto-tag" style="top:-8px;right:-8px;background:#059669;">⑤</span>
+                  </span>
+                  <span class="howto-mock-btn secondary" style="padding:2px 6px;font-size:10px;">✏️ 修正</span>
+                </td>
+              </tr>
+              <tr style="background:#f0fdf4;">
+                <td>2026/04/30</td><td>山田太郎</td><td>4月分立替</td>
+                <td class="r" style="color:var(--gray-500);">12,500</td>
+                <td><span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">返金済</span></td>
+                <td><span class="howto-mock-btn secondary" style="padding:2px 6px;font-size:10px;">↩ 返金取消</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge" style="background:#059669;">⑤</span>
+          「返金確定」ボタンで返金モーダル（次の図）が開きます。
+        </div>
       </div>
+
+      <!-- VISUAL: 返金確定モーダル -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 返金確定モーダル</div>
+        <div style="background:white;border:2px solid var(--primary-light);border-radius:10px;padding:14px;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--primary);">↩ 立替返金 — 石塚隼人（立替額 ¥8,000）</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">返金日 <span class="howto-badge" style="background:#d97706;">⑥</span></div>
+              <div class="howto-mock-input">2026-05-25</div>
+            </div>
+            <div class="howto-mock-field">
+              <div class="howto-mock-label">返金方法 <span class="howto-badge" style="background:#d97706;">⑦</span></div>
+              <div style="display:flex;gap:4px;">
+                <span class="howto-mock-btn active-normal" style="font-size:10px;padding:3px 8px;">現金</span>
+                <span class="howto-mock-btn secondary" style="font-size:10px;padding:3px 8px;">振込</span>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:12px;"><span class="howto-mock-btn primary" style="font-size:11px;padding:5px 14px;">返金を確定する</span></div>
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#d97706;">⑥⑦</span>
+          返金日と返金方法を選択して確定します。
+        </div>
+        <div class="howto-callout-ok">
+          ✅ 確定すると、現金出納帳に<strong>立替合計額が出金として自動記録</strong>されます。<br>
+          ✅ PL集計では明細1行ずつの<strong>使用日</strong>で経費計上されます（発生主義）。
+        </div>
+      </div>
+
       <div class="howto-step">
         <strong>③ 修正・返金取消</strong><br>
-        ・「✏️ 修正」：登録内容（明細・氏名等）を変更します<br>
-        ・「↩ 返金取消」：返金確定を取り消し、未返金状態に戻します（出納帳の関連行も削除）<br>
-        ・返金済みの場合も修正可能です（出納帳行が自動更新されます）
+        ・<strong>「✏️ 修正」</strong>：登録内容（明細・氏名等）を変更します。返金済みの場合も修正でき、出納帳行が自動更新されます。<br>
+        ・<strong>「↩ 返金取消」</strong>：返金確定を取り消し、未返金状態に戻します（出納帳の関連行も削除）。
       </div>
     </div>
     `:''}
@@ -3774,13 +3989,134 @@ function showHowTo(context) {
     </div>
     `:''}
 
-    ${!isLedger&&!isAdv&&!isReim&&!isReports?`
+    ${isDash||(!isLedger&&!isAdv&&!isReim&&!isReports)?`
     <div class="howto-section">
       <h3>📊 ダッシュボードの見方</h3>
+
+      <!-- VISUAL: タイトルバー -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:6px;">▼ 画面上部：タイトルバー</div>
+        <div style="background:#1e40af;color:white;padding:8px 12px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="font-size:11px;">
+            <div style="opacity:0.8;">あなたの会社名</div>
+            <div style="font-weight:700;">現金出納帳・仮払管理システム</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+            <span style="font-size:10px;font-weight:700;opacity:0.9;">🏢 処理中:</span>
+            <span style="background:white;color:#1f2937;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;position:relative;">全拠点
+              <span class="howto-tag" style="top:-8px;right:-8px;">①</span>
+            </span>
+            <span style="background:rgba(255,255,255,0.18);padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;border:1px solid rgba(255,255,255,0.5);">本店</span>
+            <span style="background:rgba(255,255,255,0.18);padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;border:1px solid rgba(255,255,255,0.5);">支店</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:13px;font-weight:700;position:relative;">現金残高: ¥200,000
+              <span class="howto-tag" style="top:-10px;left:-4px;">②</span>
+            </span>
+            <span style="font-size:10px;font-weight:600;padding:3px 6px;border:1px solid rgba(255,255,255,0.5);border-radius:4px;background:rgba(255,255,255,0.12);position:relative;">2026年4月1日〜2027年3月31日
+              <span class="howto-tag" style="top:-10px;left:-4px;background:#059669;">③</span>
+            </span>
+            <span style="background:rgba(255,255,255,0.18);padding:3px 8px;border-radius:4px;font-size:10px;border:1px solid rgba(255,255,255,0.5);position:relative;">⚙ 設定
+              <span class="howto-tag" style="top:-10px;right:-4px;background:#059669;">④</span>
+            </span>
+          </div>
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge">①</span>
+          <strong>拠点切替バー</strong>：拠点管理で拠点を追加すると表示されます。クリックでその拠点のデータだけに絞り込みます。<strong>「全拠点」</strong>を選ぶと全拠点を合算表示します。
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge">②</span>
+          <strong>現金残高</strong>：選択中の拠点（または全拠点合算）の現金残高をリアルタイム表示します。
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">③</span>
+          <strong>会計年度の表示</strong>：現在表示している会計年度の期間を表示します（決算月の設定で4月始まりなどに変更可）。
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">④</span>
+          <strong>⚙ 設定</strong>：会社名・期首残高・決算月・拠点管理・バックアップ等の設定画面を開きます。
+        </div>
+      </div>
+
+      <!-- VISUAL: ダッシュボードの4つのカード -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ ダッシュボードの4つのカード</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
+          <div style="background:white;border:1px solid var(--gray-200);border-radius:8px;padding:8px;text-align:center;position:relative;">
+            <div style="font-size:10px;color:var(--gray-600);">現在の現金残高 <span style="font-size:9px;color:var(--gray-500);">[本店]</span></div>
+            <div style="font-size:16px;font-weight:700;color:var(--primary);">¥200,000</div>
+            <div style="font-size:9px;color:var(--gray-500);">期首残高: ¥500,000</div>
+            <span class="howto-tag" style="top:-8px;right:-4px;">⑤</span>
+          </div>
+          <div style="background:white;border:1px solid var(--gray-200);border-radius:8px;padding:8px;text-align:center;position:relative;">
+            <div style="font-size:10px;color:var(--gray-600);">未精算件数 <span style="font-size:9px;color:var(--gray-500);">[本店]</span></div>
+            <div style="font-size:16px;font-weight:700;color:var(--success);">0<span style="font-size:11px;">件</span></div>
+            <div style="font-size:9px;color:var(--gray-500);">未精算合計: ¥0</div>
+            <span class="howto-tag" style="top:-8px;right:-4px;background:#d97706;">⑥</span>
+          </div>
+          <div style="background:white;border:1px solid var(--gray-200);border-radius:8px;padding:8px;text-align:center;position:relative;">
+            <div style="font-size:10px;color:var(--gray-600);">今月の出金 <span style="font-size:9px;color:var(--gray-500);">[本店]</span></div>
+            <div style="font-size:16px;font-weight:700;color:var(--danger);">¥312,220</div>
+            <span class="howto-tag" style="top:-8px;right:-4px;background:#059669;">⑦</span>
+          </div>
+          <div style="background:white;border:1px solid var(--gray-200);border-radius:8px;padding:8px;text-align:center;position:relative;">
+            <div style="font-size:10px;color:var(--gray-600);">今月の入金 <span style="font-size:9px;color:var(--gray-500);">[本店]</span></div>
+            <div style="font-size:16px;font-weight:700;color:var(--success);">¥75,000</div>
+            <span class="howto-tag" style="top:-8px;right:-4px;background:#059669;">⑦</span>
+          </div>
+        </div>
+        <div class="howto-callout-ok" style="margin-top:8px;">
+          <span class="howto-badge">⑤</span>
+          <strong>現在の現金残高</strong>：手元の現金残高です。期首残高＋入金合計－出金合計で自動計算されます。
+        </div>
+        <div class="howto-callout">
+          <span class="howto-badge" style="background:#d97706;">⑥</span>
+          <strong>未精算件数</strong>：精算が完了していない仮払いの件数です。<strong>0件になるよう管理</strong>します。1件以上あると赤く強調表示されます。
+        </div>
+        <div class="howto-callout-ok">
+          <span class="howto-badge" style="background:#059669;">⑦</span>
+          <strong>今月の出金/入金</strong>：当月（システム日付の月）の合計金額です。
+        </div>
+        <div class="howto-callout">
+          💡 すべてのカードには右上に <strong>[本店]</strong> のように<strong>現在選択中の拠点ラベル</strong>が表示されます。「全拠点」を選択中は <strong>[全拠点合計]</strong> と表示されます。
+        </div>
+      </div>
+
+      <!-- VISUAL: 直近の取引 -->
+      <div class="howto-visual">
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 直近の取引（最新6件・古い順）</div>
+        <div style="overflow-x:auto;">
+          <table class="howto-mock-table">
+            <thead><tr><th>日付</th><th>店名・品目／摘要</th><th>入金</th><th>出金</th><th>残高</th></tr></thead>
+            <tbody>
+              <tr><td>05/22</td><td>仮払精算（現金）山田太郎-001</td><td class="r" style="color:var(--success);">3,000</td><td></td><td class="r" style="font-weight:700;">210,780</td></tr>
+              <tr style="background:#fef9c3;"><td>05/31</td><td>通帳引出 筑波銀行 通帳より引出し</td><td class="r" style="color:var(--success);">50,000</td><td></td><td class="r" style="font-weight:700;">262,780</td></tr>
+              <tr style="background:#fef9c3;"><td>06/01</td><td>仮払支払 仮払 石塚隼人-003</td><td></td><td class="r" style="color:var(--danger);">100,000</td><td class="r" style="font-weight:700;">162,780</td></tr>
+              <tr><td>06/05</td><td>仮払精算（現金）石塚隼人-003</td><td class="r" style="color:var(--success);">1,000</td><td></td><td class="r" style="font-weight:700;">163,780</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="howto-callout-ok" style="margin-top:8px;">
+          <strong>背景色の意味：</strong>
+          <span style="background:#fef9c3;padding:1px 6px;border-radius:4px;font-size:11px;">黄色</span> = 通帳出入金、
+          薄い色 = 仮払支払・精算・立替返金など特殊取引。<br>
+          選択中の拠点に応じて表示が絞り込まれます（「全拠点」選択時は合算表示）。
+        </div>
+      </div>
+    </div>
+
+    <div class="howto-section">
+      <h3>🏢 拠点を活用する</h3>
       <div class="howto-step">
-        <strong>現在の現金残高</strong>：手元の現金残高です。期首残高＋入金合計－出金合計で自動計算されます。<br>
-        <strong>未精算件数</strong>：まだ精算されていない仮払いの件数です。0件になるよう管理します。<br>
-        <strong>直近の取引</strong>：最新6件の取引が表示されます。
+        <strong>拠点を追加する方法</strong><br>
+        ⚙ 設定 → <strong>拠点管理</strong> から拠点を追加します（例: 本店／支店）。<br>
+        拠点を追加するとタイトルバーに拠点切替ボタンが現れ、データ入力時にも拠点を選択できるようになります。
+      </div>
+      <div class="howto-step">
+        <strong>拠点別表示と全拠点合算</strong><br>
+        ・特定拠点を選択 → その拠点の<strong>現金残高・未精算・入出金・直近取引</strong>のみが表示されます<br>
+        ・「全拠点」を選択 → 全拠点を<strong>合算</strong>した値が表示されます
       </div>
     </div>
 
@@ -3827,6 +4163,11 @@ function updateHeader() {
   const s=getSettings(); if (!s) return;
   document.getElementById('header-company').textContent=s.companyName;
   document.getElementById('header-balance').textContent=`現金残高: ${fc(getCurrentBalance())}`;
+  const fyEl=document.getElementById('header-fiscal-year');
+  if (fyEl) {
+    const fm=s.fiscalMonth||1;
+    fyEl.textContent=fyRangeLabel(ledgerYear, fm);
+  }
 
   const headerEl=document.getElementById('app-header');
   if (headerEl) headerEl.style.background=getLocationColor(currentLocation);
