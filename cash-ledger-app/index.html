@@ -6421,15 +6421,13 @@ function bankPageMapping() {
     +'</div>';
 }
 
+let _bankPendingImport=null;
+
 function bankStartEditing() {
   if (!bankImportedData) return;
   bankNormalizeColumnRoles();
   var bankName=(document.getElementById('bank-name-input')||{value:bankNameCache}).value.trim();
   var accountNo=(document.getElementById('bank-acct-input')||{value:bankAcctCache}).value.trim();
-  if (bankName) {
-    bankUpsertProfile(bankName, accountNo, bankColumnRoles);
-    bankUpsertAccount({bankName:bankName, accountNo:accountNo});
-  }
   var descCols=bankColumnRoles.description||[];
   var batchId='batch_'+Date.now();
   var rows=bankImportedData.rows.map(function(row) {
@@ -6449,14 +6447,40 @@ function bankStartEditing() {
   }).filter(function(r){return r.date||r.receipt||r.payment||r.balance!==0;});
   rows.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
 
+  // === 年度ミスマッチ検出 ===
+  var rowFys={};
+  rows.forEach(function(r){
+    var fy=getFiscalYearForDate(r.date);
+    if (fy!=null) rowFys[fy]=(rowFys[fy]||0)+1;
+  });
+  var rowFyList=Object.keys(rowFys).map(Number).sort(function(a,b){return a-b;});
+  if (rowFyList.length>0 && rowFyList.indexOf(ledgerYear)===-1) {
+    _bankPendingImport={
+      bankName:bankName, accountNo:accountNo,
+      batchId:batchId, rows:rows,
+      fileName:bankImportedData.fileName||'',
+      columnMapping:Object.assign({},bankColumnRoles),
+      headers:bankImportedData.headers
+    };
+    bankShowYearMismatchDialog(rowFyList, rowFys);
+    return;
+  }
+
+  bankFinalizeImport(bankName, accountNo, batchId, rows);
+}
+
+function bankFinalizeImport(bankName, accountNo, batchId, rows) {
+  if (bankName) {
+    bankUpsertProfile(bankName, accountNo, bankColumnRoles);
+    bankUpsertAccount({bankName:bankName, accountNo:accountNo});
+  }
   var importLog={
     batchId:batchId,
     importedAt:new Date().toISOString(),
-    fileName:bankImportedData.fileName||'',
+    fileName:(bankImportedData&&bankImportedData.fileName)||(_bankPendingImport&&_bankPendingImport.fileName)||'',
     rowCount:rows.length,
     columnMapping:Object.assign({}, bankColumnRoles)
   };
-
   // 既存セッションがあれば自動マージ＋重複排除
   var existing=null;
   if (bankSessionCache&&bankName) {
@@ -6466,7 +6490,7 @@ function bankStartEditing() {
     var mergeResult=bankMergeSessions(existing, {rows:rows}, batchId);
     existing.updatedAt=new Date().toISOString();
     existing.imports=(existing.imports||[]).concat([Object.assign({}, importLog, {addedRows:mergeResult.added, duplicateRows:mergeResult.duplicates})]);
-    existing.completed=false; // 新規取込があったので完了フラグ解除
+    existing.completed=false;
     bankCurrentSession=existing;
     bankEditFilter='attention';bankCsvPage='editing';
     bankSaveSession(existing).then(function(){
@@ -6486,8 +6510,8 @@ function bankStartEditing() {
   var sess={
     id:'bank_'+Date.now(),
     bankName:bankName, accountNo:accountNo,
-    fileName:bankImportedData.fileName,
-    originalHeaders:bankImportedData.headers,
+    fileName:(bankImportedData&&bankImportedData.fileName)||(_bankPendingImport&&_bankPendingImport.fileName)||'',
+    originalHeaders:(bankImportedData&&bankImportedData.headers)||(_bankPendingImport&&_bankPendingImport.headers)||[],
     columnMapping:Object.assign({},bankColumnRoles),
     rows:rows,
     imports:[importLog],
@@ -6503,6 +6527,69 @@ function bankStartEditing() {
   bankSaveSession(sess);
   bankEditFilter='attention';bankCsvPage='editing';
   renderPage();
+}
+
+function bankShowYearMismatchDialog(rowFyList, rowFysCount) {
+  var s=getSettings()||{};
+  var fm=s.fiscalMonth||1;
+  var currentLabel=fyRangeLabel(ledgerYear, fm);
+  var detailLines=rowFyList.map(function(fy){
+    return '<li><strong style="color:#b45309;">'+esc(fyRangeLabel(fy, fm))+'</strong>'
+      +(rowFysCount?' <span style="font-size:11px;color:#92400e;">（'+rowFysCount[fy]+'行）</span>':'')+'</li>';
+  }).join('');
+  var primaryTarget=rowFyList[0];
+  var primaryLabel=fyRangeLabel(primaryTarget, fm);
+  var direction=primaryTarget<ledgerYear?'← 前期':(primaryTarget>ledgerYear?'翌期 →':'');
+  showModal(
+    '<div class="modal-title">⚠ CSVの年度が現在表示と異なります</div>'
+    +'<div style="background:#fef3c7;border-left:4px solid #d97706;padding:12px 14px;border-radius:6px;margin-bottom:12px;font-size:13px;line-height:1.7;">'
+      +'アップロードされたCSVのデータは以下の会計年度に属しています：'
+      +'<ul style="margin:6px 0 6px 18px;padding:0;">'+detailLines+'</ul>'
+      +'<div style="margin-top:8px;">現在表示中の会計年度：<strong style="color:var(--primary);">'+esc(currentLabel)+'</strong></div>'
+    +'</div>'
+    +'<div style="font-size:13px;color:var(--gray-700);margin-bottom:10px;">どちらの年度で取り込みますか？</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px;">'
+      +'<button class="btn btn-primary" style="text-align:left;padding:12px 16px;" onclick="bankYearMismatchMove('+primaryTarget+')">'
+        +'<div style="font-weight:700;font-size:14px;">✅ '+direction+' '+esc(primaryLabel)+' に移動して取り込む（推奨）</div>'
+        +'<div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:3px;">表示年度を切り替えてから取り込みます。月ボタンも正しく緑色になります。</div>'
+      +'</button>'
+      +'<button class="btn btn-secondary" style="text-align:left;padding:12px 16px;" onclick="bankYearMismatchKeep()">'
+        +'<div style="font-weight:700;font-size:14px;">⚠ このまま '+esc(currentLabel)+' で取り込む</div>'
+        +'<div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:3px;">表示中の月ボタンは緑色になりません（CSVは前期データのため）。前期に移動すれば確認できます。</div>'
+      +'</button>'
+      +'<button class="btn btn-outline" style="text-align:left;padding:12px 16px;" onclick="bankYearMismatchCancel()">'
+        +'<div style="font-weight:700;font-size:14px;">❌ キャンセル（取込を中止）</div>'
+        +'<div style="font-size:11px;font-weight:400;opacity:0.7;margin-top:3px;">列マッピング画面に戻ります。マッピングの誤りなど確認してください。</div>'
+      +'</button>'
+    +'</div>'
+  );
+}
+
+function bankYearMismatchMove(targetFy) {
+  closeModal();
+  if (!_bankPendingImport) return;
+  ledgerYear=targetFy;
+  ledgerMonthFrom=0;
+  ledgerMonthTo=0;
+  var p=_bankPendingImport;
+  _bankPendingImport=null;
+  bankFinalizeImport(p.bankName, p.accountNo, p.batchId, p.rows);
+  // タイトルバー側の年度表示も更新
+  if (typeof updateHeader==='function') updateHeader();
+}
+
+function bankYearMismatchKeep() {
+  closeModal();
+  if (!_bankPendingImport) return;
+  var p=_bankPendingImport;
+  _bankPendingImport=null;
+  bankFinalizeImport(p.bankName, p.accountNo, p.batchId, p.rows);
+}
+
+function bankYearMismatchCancel() {
+  closeModal();
+  _bankPendingImport=null;
+  // マッピング画面のまま（何もしない）
 }
 
 function bankResumeSession(id) {
