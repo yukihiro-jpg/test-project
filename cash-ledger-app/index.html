@@ -2287,16 +2287,16 @@ function pageReports() {
         </div>
       </div>
       <div style="border:2px solid #d97706;border-radius:8px;padding:18px;background:#fffbeb;">
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:#92400e;">📁 税理士提出用</div>
-        <div style="font-size:12px;color:#78350f;margin-bottom:6px;">該当データがあるファイルだけ一括ダウンロードします</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:#92400e;">📦 税理士提出用（ZIP一括ダウンロード）</div>
+        <div style="font-size:12px;color:#78350f;margin-bottom:6px;">下記のCSVを <strong>1つのZIPファイル</strong> にまとめてダウンロードします（該当データがあるものだけ含む）</div>
         <ul style="font-size:12px;color:#92400e;margin:0 0 14px 16px;padding:0;line-height:1.8;">
           <li>現金出納帳（期首〜最新）— 常時</li>
           <li>仮払金台帳 / 仮払精算明細表 / 未精算一覧 — <strong>仮払が1件以上ある場合のみ</strong></li>
           <li>立替経費台帳 — <strong>立替が1件以上ある場合のみ</strong></li>
           <li>銀行出納帳 — <strong>「登録完了」済の銀行CSVセッションのみ</strong></li>
-          <li>PDF提出必要資料リスト — <strong>振込明細／借入／自動車関連の対象がある場合のみ</strong></li>
+          <li>PDF提出必要資料リスト — <strong>振込明細／借入／請求書PDF対象がある場合のみ</strong></li>
         </ul>
-        <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="exportTaxAccountantBundle()">📦 一括ダウンロード</button>
+        <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="exportTaxAccountantBundle()">📦 ZIPで一括ダウンロード</button>
       </div>
       <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
         <div style="font-size:15px;font-weight:700;margin-bottom:6px;">💾 バックアップ・復元</div>
@@ -3588,10 +3588,15 @@ function exportTaxAccountantBundle() {
   var jp=todayJP();
   var advancesAll=getAdvances();
   var reimsAll=getReimbursements();
+  var folderName='税理士提出_'+(s&&s.companyName?String(s.companyName).replace(/[\\/:*?"<>|]/g,'_'):'')+'_'+jp;
+  var zipFiles=[];
+  function addCsvFile(name, rows){
+    zipFiles.push({name: folderName+'/'+name, content: rowsToCsvString(rows)});
+  }
 
-  // 1. 現金出納帳（全件 — 期首から最新まで）— 常に出力
-  var ledgerRows=[
-    [`現金出納帳`,s.companyName,`出力日:${today()}`],
+  // 1. 現金出納帳
+  addCsvFile('現金出納帳_'+jp+'.csv', [
+    ['現金出納帳',s.companyName||'',`出力日:${today()}`],
     ['日付','勘定科目','店名・支払先','購入品・内容','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
     ...calcBalances(getEntries()).map(function(e){return [
       e.date,
@@ -3601,13 +3606,12 @@ function exportTaxAccountantBundle() {
       e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払支払':e.type==='settlement'?'仮払精算':e.type==='reimbursement'?'立替返金':'一般',
       e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
     ];})
-  ];
-  dlCSV(ledgerRows, '現金出納帳_'+jp+'.csv');
+  ]);
 
-  // 2-4. 仮払関連 — 仮払が1件以上ある場合のみ出力
+  // 2-4. 仮払関連 — 1件以上のみ
   if (advancesAll.length>0) {
-    var advRows=[
-      [`仮払金台帳`,s.companyName,`出力日:${today()}`],
+    addCsvFile('仮払金台帳_'+jp+'.csv', [
+      ['仮払金台帳',s.companyName||'',`出力日:${today()}`],
       ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用金額','返金額','不足額','状態','精算明細'],
       ...advancesAll.map(function(a){return [
         a.id,a.date,a.employeeName,a.purpose,a.advanceAmount,
@@ -3617,11 +3621,9 @@ function exportTaxAccountantBundle() {
         a.status==='pending'?'未精算':'精算済',
         (a.settlementItems||[]).map(function(it){return (it.date?it.date+' ':'')+( it.storeName||'')+' '+(it.itemName||'')+' '+(it.amount||0)+'円';}).join(' / ')
       ];})
-    ];
-    dlCSV(advRows, '仮払金台帳_'+jp+'.csv');
-
+    ]);
     var detRows=[
-      [`仮払精算明細表`,s.companyName,`出力日:${today()}`],
+      ['仮払精算明細表',s.companyName||'',`出力日:${today()}`],
       ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用日','相手先名称','内容','金額','状態']
     ];
     buildSettlementDetailRows().forEach(function(r){
@@ -3634,22 +3636,20 @@ function exportTaxAccountantBundle() {
         r.status==='pending'?'未精算':'精算済'
       ]);
     });
-    dlCSV(detRows, '仮払精算明細表_'+jp+'.csv');
-
-    var pendRows=[
-      [`未精算一覧`,s.companyName,`出力日:${today()}`],
+    addCsvFile('仮払精算明細表_'+jp+'.csv', detRows);
+    addCsvFile('未精算一覧_'+jp+'.csv', [
+      ['未精算一覧',s.companyName||'',`出力日:${today()}`],
       ['番号','仮払日','氏名','目的','仮払金額'],
       ...advancesAll.filter(function(a){return a.status==='pending';}).map(function(a){
         return [a.id,a.date,a.employeeName,a.purpose,a.advanceAmount];
       })
-    ];
-    dlCSV(pendRows, '未精算一覧_'+jp+'.csv');
+    ]);
   }
 
-  // 5. 立替経費台帳 — 立替が1件以上ある場合のみ出力
+  // 5. 立替経費台帳
   if (reimsAll.length>0) {
     var reimRows=[
-      [`立替経費台帳`,s.companyName,`出力日:${today()}`],
+      ['立替経費台帳',s.companyName||'',`出力日:${today()}`],
       ['番号','登録日','氏名','目的','使用日','店名・支払先','内容','勘定科目','金額（円）','合計','返金日','返金方法','状態']
     ];
     reimsAll.forEach(function(r){
@@ -3667,18 +3667,18 @@ function exportTaxAccountantBundle() {
         });
       }
     });
-    dlCSV(reimRows, '立替経費台帳_'+jp+'.csv');
+    addCsvFile('立替経費台帳_'+jp+'.csv', reimRows);
   }
 
-  // 6. 銀行出納帳（IndexedDBから「登録完了」セッションのみ）+ PDF提出資料リスト
+  // 6. 銀行出納帳・PDF提出資料リスト
   bankLoadAllSessions().then(function(sessions) {
-    if (!sessions||sessions.length===0) return;
+    sessions=sessions||[];
     var completed=sessions.filter(function(s){return s.completed;});
     var pending=sessions.filter(function(s){return !s.completed;});
-    if (completed.length===0 && pending.length>0) {
-      alert('銀行CSVは「登録完了」になったセッションだけが税理士提出用バンドルに含まれます。\n現在 '+pending.length+' 件のセッションが未完了です。\n編集画面で「✅ 登録完了」ボタンを押してから再度実行してください。');
-      return;
+    if (sessions.length>0 && completed.length===0 && pending.length>0) {
+      alert('銀行CSVは「登録完了」になったセッションだけが ZIP に含まれます。\n現在 '+pending.length+' 件のセッションが未完了のため、銀行出納帳ファイルは含まれません。');
     }
+    var safe=function(x){return (x||'').replace(/[\\/:*?"<>|]/g,'_');};
     completed.forEach(function(sess) {
       var rows=[
         ['銀行出納帳', sess.bankName||'', (sess.accountNo?'口座番号:'+sess.accountNo:''), '出力日:'+today()],
@@ -3693,19 +3693,24 @@ function exportTaxAccountantBundle() {
           r.balance!==0?r.balance:''
         ]);
       });
-      var safe=function(s){return (s||'').replace(/[\\/:*?"<>|]/g,'_');};
       var fname='銀行出納帳_'+safe(sess.bankName||'銀行CSV')+(sess.accountNo?'_'+safe(sess.accountNo):'')+'_'+jp+'.csv';
-      dlCSV(rows, fname);
+      addCsvFile(fname, rows);
     });
-
-    // 7. PDF提出必要資料リスト（needsPDF 行を集約）
     var pdfList=buildPdfSubmissionList(completed, s.companyName);
-    if (pdfList.length>2) dlCSV(pdfList, 'PDF提出必要資料リスト_'+jp+'.csv');
+    if (pdfList.length>2) addCsvFile('PDF提出必要資料リスト_'+jp+'.csv', pdfList);
 
-    if (pending.length>0) {
-      alert('完了済の銀行セッション '+completed.length+' 件を出力しました。\n未完了の '+pending.length+' 件は含まれていません（編集画面の「✅ 登録完了」で確定後に再実行してください）。');
+    if (zipFiles.length===0) {
+      alert('出力できるデータがありません。'); return;
     }
-  }).catch(function(e){ console.error('銀行CSV出力に失敗:', e); });
+    downloadZip(zipFiles, folderName+'.zip');
+    if (pending.length>0) {
+      alert('ZIPに '+zipFiles.length+' ファイルを含めて出力しました。\n未完了の銀行セッション '+pending.length+' 件は含まれていません。');
+    }
+  }).catch(function(e){
+    console.error('銀行CSV取得失敗:', e);
+    // 銀行データなしでも出力
+    if (zipFiles.length>0) downloadZip(zipFiles, folderName+'.zip');
+  });
 }
 
 function bankCategoryLabel(reason) {
@@ -3896,9 +3901,8 @@ function bankShowPdfListMonthSelector() {
     pool.forEach(function(sess){
       (sess.rows||[]).forEach(function(r){
         if (bankClassifyRow(r)!=='needsPDF') return;
-        if (!r.date) return;
-        var mk=String(r.date).substring(0,7);
-        if (!/^\d{4}-\d{2}$/.test(mk)) return;
+        var mk=bankDateToMonthKey(r.date);
+        if (!mk) return;
         monthCount[mk]=(monthCount[mk]||0)+1;
         totalCount++;
       });
@@ -3971,10 +3975,8 @@ function bankDownloadPdfListCSV() {
     // 月フィルタを適用 — 日付列(3列目, index 2)で絞込み
     var header=rows.slice(0,2);
     var data=rows.slice(2).filter(function(r){
-      var d=String(r[2]||'');
-      if (!d) return false;
-      var mk=d.substring(0,7);
-      return months.indexOf(mk)!==-1;
+      var mk=bankDateToMonthKey(r[2]);
+      return mk && months.indexOf(mk)!==-1;
     });
     if (data.length===0) { alert('選択した月に該当する取引がありません。'); return; }
     closeModal();
@@ -3990,9 +3992,8 @@ function bankPrintPdfSubmissionList(monthFilter) {
     var entries=bankCollectPdfSubmissionEntries(pool);
     if (monthFilter && monthFilter.length>0) {
       entries=entries.filter(function(e){
-        if (!e.date) return false;
-        var mk=String(e.date).substring(0,7);
-        return monthFilter.indexOf(mk)!==-1;
+        var mk=bankDateToMonthKey(e.date);
+        return mk && monthFilter.indexOf(mk)!==-1;
       });
     }
     if (entries.length===0) {
@@ -4098,14 +4099,93 @@ function exportPendingCSV() {
   dlCSV(rows,`未精算一覧_${today()}.csv`);
 }
 
-function dlCSV(rows,filename) {
+function rowsToCsvString(rows) {
   const bom='﻿';
-  const csv=bom+rows.map(r=>r.map(c=>`"${String(c==null?'':c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  return bom+rows.map(r=>r.map(c=>`"${String(c==null?'':c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+}
+function dlCSV(rows,filename) {
+  const csv=rowsToCsvString(rows);
   const a=Object.assign(document.createElement('a'),{
     href:URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})),
     download:filename
   });
   a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ─── ミニZIP実装（STOREモード、無圧縮） ────────────────────────
+var _crcTable=(function(){
+  var t=new Uint32Array(256), c, k;
+  for (var n=0;n<256;n++) { c=n; for (k=0;k<8;k++) c=((c&1)?(0xEDB88320^(c>>>1)):(c>>>1)); t[n]=c>>>0; }
+  return t;
+})();
+function _crc32(bytes) {
+  var crc=0xFFFFFFFF;
+  for (var i=0;i<bytes.length;i++) crc=(crc>>>8)^_crcTable[(crc^bytes[i])&0xFF];
+  return (crc^0xFFFFFFFF)>>>0;
+}
+function _strToBytes(s) { return new TextEncoder().encode(s); }
+function createZipBlob(files) {
+  // files: [{name:string, content:string|Uint8Array}]
+  var localParts=[], cdParts=[], offset=0, count=files.length;
+  files.forEach(function(f){
+    var nameBytes=_strToBytes(f.name);
+    var contentBytes=typeof f.content==='string'?_strToBytes(f.content):f.content;
+    var crc=_crc32(contentBytes);
+    var lh=new ArrayBuffer(30+nameBytes.length);
+    var lv=new DataView(lh);
+    lv.setUint32(0,0x04034b50,true);
+    lv.setUint16(4,20,true);
+    lv.setUint16(6,0x0800,true); // UTF-8 filename flag
+    lv.setUint16(8,0,true);
+    lv.setUint16(10,0,true);
+    lv.setUint16(12,0x21,true); // dummy date
+    lv.setUint32(14,crc,true);
+    lv.setUint32(18,contentBytes.length,true);
+    lv.setUint32(22,contentBytes.length,true);
+    lv.setUint16(26,nameBytes.length,true);
+    lv.setUint16(28,0,true);
+    new Uint8Array(lh,30).set(nameBytes);
+    localParts.push(new Uint8Array(lh), contentBytes);
+    var cd=new ArrayBuffer(46+nameBytes.length);
+    var cv=new DataView(cd);
+    cv.setUint32(0,0x02014b50,true);
+    cv.setUint16(4,20,true);
+    cv.setUint16(6,20,true);
+    cv.setUint16(8,0x0800,true);
+    cv.setUint16(10,0,true);
+    cv.setUint16(12,0,true);
+    cv.setUint16(14,0x21,true);
+    cv.setUint32(16,crc,true);
+    cv.setUint32(20,contentBytes.length,true);
+    cv.setUint32(24,contentBytes.length,true);
+    cv.setUint16(28,nameBytes.length,true);
+    cv.setUint16(30,0,true);
+    cv.setUint16(32,0,true);
+    cv.setUint16(34,0,true);
+    cv.setUint16(36,0,true);
+    cv.setUint32(38,0,true);
+    cv.setUint32(42,offset,true);
+    new Uint8Array(cd,46).set(nameBytes);
+    cdParts.push(new Uint8Array(cd));
+    offset += 30+nameBytes.length+contentBytes.length;
+  });
+  var cdSize=cdParts.reduce(function(s,p){return s+p.length;},0);
+  var eocd=new ArrayBuffer(22);
+  var ev=new DataView(eocd);
+  ev.setUint32(0,0x06054b50,true);
+  ev.setUint16(4,0,true); ev.setUint16(6,0,true);
+  ev.setUint16(8,count,true); ev.setUint16(10,count,true);
+  ev.setUint32(12,cdSize,true); ev.setUint32(16,offset,true);
+  ev.setUint16(20,0,true);
+  return new Blob(localParts.concat(cdParts, [new Uint8Array(eocd)]), {type:'application/zip'});
+}
+function downloadZip(files, zipName) {
+  var blob=createZipBlob(files);
+  var a=Object.assign(document.createElement('a'),{
+    href:URL.createObjectURL(blob),
+    download:zipName
+  });
+  a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},2000);
 }
 
 function exportBackup() {
@@ -4948,22 +5028,21 @@ function showHowTo(context) {
 
       <!-- VISUAL: 税理士提出用バンドル -->
       <div class="howto-visual">
-        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 📁 税理士提出用（一括ダウンロード）</div>
+        <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 📦 税理士提出用（ZIPで一括ダウンロード）</div>
         <div style="border:2px solid #d97706;border-radius:8px;padding:12px;background:#fffbeb;">
-          <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:6px;">📁 税理士提出用</div>
+          <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:6px;">📦 税理士提出_会社名_YYYY年MM月DD日.zip</div>
           <ul style="font-size:11px;color:#92400e;margin:0 0 8px 16px;padding:0;line-height:1.7;">
-            <li>現金出納帳（期首〜最新）</li>
-            <li>仮払金台帳</li>
-            <li>仮払精算明細表</li>
-            <li>未精算一覧</li>
-            <li>立替経費台帳</li>
-            <li><strong>銀行出納帳</strong>（取込済みCSVセッションごと） <span style="font-size:10px;color:#059669;">★追加</span></li>
+            <li>現金出納帳（期首〜最新）— 常時</li>
+            <li>仮払金台帳 / 仮払精算明細表 / 未精算一覧 — 仮払が1件以上ある場合のみ</li>
+            <li>立替経費台帳 — 立替が1件以上ある場合のみ</li>
+            <li>銀行出納帳（銀行・口座ごと）— 「登録完了」済の銀行CSVセッションのみ</li>
+            <li>PDF提出必要資料リスト — 振込明細／借入／請求書PDF対象がある場合のみ</li>
           </ul>
-          <span class="howto-mock-btn" style="background:#d97706;color:white;font-weight:700;font-size:11px;">📦 一括ダウンロード</span>
+          <span class="howto-mock-btn" style="background:#d97706;color:white;font-weight:700;font-size:11px;">📦 一括ダウンロード(ZIP)</span>
         </div>
         <div class="howto-callout-ok">
-          ✅ 上記の各種ファイルが個別にダウンロードされます。ファイル名に「YYYY年MM月DD日」形式で日付が入ります。<br>
-          ✅ <strong>銀行出納帳</strong>は取込済みの全銀行セッションが <code>銀行出納帳_銀行名_口座番号_日付.csv</code> として出力されます。
+          ✅ 上記すべてのファイルが <strong>1つのZIPファイル</strong> としてダウンロードされます。<br>
+          ✅ ZIP内のフォルダ名は「税理士提出_会社名_日付」形式。フォルダごと税理士に渡せます。
         </div>
       </div>
 
@@ -5344,6 +5423,9 @@ function bankNormalizeDate(str) {
     var yr = 2018 + parseInt(rm[1],10);
     return yr+'-'+rm[2].padStart(2,'0')+'-'+rm[3].padStart(2,'0');
   }
+  // YYYYMMDD（8桁・区切り無し）
+  var ymd = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (ymd) return ymd[1]+'-'+ymd[2]+'-'+ymd[3];
   var parts = s.split(/[\/\-]/);
   if (parts.length>=3) {
     var y = parts[0].length===2 ? '20'+parts[0] : parts[0];
@@ -5360,12 +5442,20 @@ function bankNormalizeDate(str) {
   return String(str);
 }
 
-// 日付文字列から YYYY-MM の月キーを抽出（YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD 等に対応）
+// 日付文字列から YYYY-MM の月キーを抽出（YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD / YYYYMMDD 等に対応）
 function bankDateToMonthKey(d) {
   if (!d) return '';
-  var dm = String(d).match(/^(\d{4})[\-\/\.](\d{1,2})/);
-  if (!dm) return '';
-  return dm[1]+'-'+String(dm[2]).padStart(2,'0');
+  var s=String(d);
+  // YYYY-MM, YYYY/MM, YYYY.MM (区切り有り)
+  var dm=s.match(/^(\d{4})[\-\/\.](\d{1,2})/);
+  if (dm) return dm[1]+'-'+String(dm[2]).padStart(2,'0');
+  // YYYYMMDD（8桁）
+  var ymd=s.match(/^(\d{4})(\d{2})\d{2}$/);
+  if (ymd) return ymd[1]+'-'+ymd[2];
+  // YYYYMM（6桁）
+  var ym=s.match(/^(\d{4})(\d{2})$/);
+  if (ym) return ym[1]+'-'+ym[2];
+  return '';
 }
 
 // 摘要学習・オートコンプリート
@@ -5730,6 +5820,7 @@ function bankPageList() {
     +'<button class="btn btn-primary" onclick="bankNameCache=\'\';bankAcctCache=\'\';bankCsvPage=\'importing\';renderPage()">＋ 新規CSVインポート</button>'
     +'</div>'
     +'</div>'
+    +bankRenderWorkflowGuide()
     +accountsHtml
     +'</div>';
 }
