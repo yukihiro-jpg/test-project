@@ -4878,7 +4878,7 @@ function showHowTo(context) {
       <div class="howto-visual">
         <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 編集画面：要対応行の分類表示</div>
         <div style="background:#fffbeb;border:1px solid #fde047;padding:8px 10px;border-radius:6px;margin-bottom:8px;font-size:11px;color:#713f12;">
-          <div><span class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</span> 未対応 <strong>3</strong>行 / 入力済 1行</div>
+          <div><span class="bank-status-badge bank-status-needinfo-payment">❗ 支払相手の名称・内容</span> / <span class="bank-status-badge bank-status-needinfo-receipt">❗ 入金元の名称・内容</span> 未対応 <strong>3</strong>行 / 入力済 1行</div>
           <div style="margin-top:4px;"><span class="bank-status-badge bank-status-needpdf">📎 関連書類PDFを税理士へ送付</span> 未対応 <strong>2</strong>行 / 送付済 0行<br><span style="font-size:10px;">（内訳: 振込明細PDF 1行 / 借入関連書類PDF 1行）</span></div>
         </div>
         <div style="display:flex;gap:4px;margin-bottom:6px;">
@@ -4888,7 +4888,7 @@ function showHowTo(context) {
         <table class="howto-mock-table" style="font-size:10px;">
           <thead><tr><th>日付</th><th>元の摘要 / 状態</th><th>修正後の摘要</th><th>入金</th><th>出金</th></tr></thead>
           <tbody>
-            <tr style="background:#fee2e2;"><td>4/2</td><td>AD<br><span class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</span></td><td style="background:#fef2f2;border:1px solid #dc2626;">（入力欄）</td><td></td><td>5,000</td></tr>
+            <tr><td>4/2</td><td>AD<br><span class="bank-status-badge bank-status-needinfo-payment">❗ 支払相手の名称・内容を入力</span></td><td>（入力欄）</td><td></td><td>5,000</td></tr>
             <tr style="background:#ede9fe;"><td>4/3</td><td>振込資金<br><span class="bank-status-badge bank-status-needpdf">📎 振込明細PDFを税理士へ送付</span></td><td>振込資金</td><td></td><td>500,000</td></tr>
             <tr style="background:#ede9fe;"><td>4/4</td><td>手形貸付<br><span class="bank-status-badge bank-status-needpdf">📎 借入関連書類PDFを税理士へ送付</span></td><td>手形貸付</td><td>5,000,000</td><td></td></tr>
             <tr><td>4/5</td><td>トヨタ自販東京<br><span class="bank-status-badge bank-status-needpdf">📎 この取引の請求書PDFを税理士へ送付</span></td><td>トヨタ自販東京</td><td></td><td>250,000</td></tr>
@@ -4897,7 +4897,7 @@ function showHowTo(context) {
         <div class="howto-callout">
           <strong>4種類の要対応自動分類：</strong>
           <ul style="margin:4px 0 0 18px;padding:0;font-size:11px;line-height:1.6;">
-            <li><span class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</span> 元摘要が空欄／「AD」「D」「預金機」など相手先名称が無い行 → <strong>摘要欄に入力で解決</strong></li>
+            <li><span class="bank-status-badge bank-status-needinfo-payment">❗ 支払相手の名称・内容</span>（出金行・赤） / <span class="bank-status-badge bank-status-needinfo-receipt">❗ 入金元の名称・内容</span>（入金行・緑） 元摘要が空欄／「AD」「D」「預金機」など相手先名称が無い行 → <strong>摘要欄に入力で解決</strong></li>
             <li><span class="bank-status-badge bank-status-needpdf">📎 振込明細PDF</span> 元摘要に「振込資金」「フリコミカワリキン」等 → 振込明細PDFを税理士へ送付</li>
             <li><span class="bank-status-badge bank-status-needpdf">📎 借入関連書類PDF</span> <strong>入金</strong>100万円以上＋「借入」「手形貸付」「ローン」「融資」「金消」等 → 借入契約書・金消契約書PDFを送付</li>
             <li><span class="bank-status-badge bank-status-needpdf">📎 借入返済関連書類PDF</span> <strong>支払</strong>＋「借入」「手形貸付」「証書貸付」「ローン」等 → <strong>借入金返済予定表＋利息計算書</strong>を送付</li>
@@ -5336,18 +5336,36 @@ function bankParseAmount(str) {
 
 // 日付正規化
 function bankNormalizeDate(str) {
-  if (!str||!str.trim()) return '';
-  var s = str.trim().replace(/[年月・]/g,'/').replace(/[日]/g,'');
+  if (!str||!String(str).trim()) return '';
+  var s = String(str).trim().replace(/[年月・\.]/g,'/').replace(/[日]/g,'').replace(/\s+/g,'');
+  // 令和→西暦: R6/4/15 もしくは R6.4.15
+  var rm = s.match(/^[RrＲｒ](\d{1,2})\/(\d{1,2})\/(\d{1,2})/);
+  if (rm) {
+    var yr = 2018 + parseInt(rm[1],10);
+    return yr+'-'+rm[2].padStart(2,'0')+'-'+rm[3].padStart(2,'0');
+  }
   var parts = s.split(/[\/\-]/);
-  if (parts.length===3) {
+  if (parts.length>=3) {
     var y = parts[0].length===2 ? '20'+parts[0] : parts[0];
-    return y+'-'+parts[1].padStart(2,'0')+'-'+parts[2].padStart(2,'0');
+    if (/^\d{4}$/.test(y) && /^\d{1,2}$/.test(parts[1]) && /^\d{1,2}$/.test(parts[2])) {
+      return y+'-'+parts[1].padStart(2,'0')+'-'+parts[2].padStart(2,'0');
+    }
   }
   if (parts.length===2) {
     var now=new Date();
-    return now.getFullYear()+'-'+parts[0].padStart(2,'0')+'-'+parts[1].padStart(2,'0');
+    if (/^\d{1,2}$/.test(parts[0]) && /^\d{1,2}$/.test(parts[1])) {
+      return now.getFullYear()+'-'+parts[0].padStart(2,'0')+'-'+parts[1].padStart(2,'0');
+    }
   }
-  return str;
+  return String(str);
+}
+
+// 日付文字列から YYYY-MM の月キーを抽出（YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD 等に対応）
+function bankDateToMonthKey(d) {
+  if (!d) return '';
+  var dm = String(d).match(/^(\d{4})[\-\/\.](\d{1,2})/);
+  if (!dm) return '';
+  return dm[1]+'-'+String(dm[2]).padStart(2,'0');
 }
 
 // 摘要学習・オートコンプリート
@@ -5409,12 +5427,13 @@ function bankRemoveAccount(idx) {
   arr.splice(idx,1);
   bankSaveAccounts(arr);
 }
-function bankEnsureProcessedMonths(sess) {
+function bankEnsureProcessedMonths(sess, force) {
   if (!sess) return sess;
-  if (sess.processedMonths && sess.processedMonths.length>0) return sess;
+  if (!force && sess.processedMonths && sess.processedMonths.length>0) return sess;
   var monthsSet={};
   (sess.rows||[]).forEach(function(r){
-    if (r.date && /^\d{4}-\d{2}/.test(r.date)) monthsSet[r.date.substring(0,7)]=true;
+    var mk=bankDateToMonthKey(r.date);
+    if (mk) monthsSet[mk]=true;
   });
   var months=Object.keys(monthsSet).sort();
   sess.processedMonths=months;
@@ -5471,13 +5490,21 @@ function bankGetProcessedMonthsSet(bankName, accountNo) {
   });
   return set;
 }
+function bankSessionCoversMonth(sess, monthKey) {
+  if (!sess) return false;
+  bankEnsureProcessedMonths(sess);
+  if ((sess.processedMonths||[]).indexOf(monthKey)!==-1) return true;
+  // Fallback: 行を直接スキャン（processedMonths が古い形式で取りこぼした場合）
+  return (sess.rows||[]).some(function(r){
+    return bankDateToMonthKey(r.date)===monthKey;
+  });
+}
 function bankFindSessionForMonth(bankName, accountNo, year, month) {
   var monthKey=year+'-'+String(month).padStart(2,'0');
   var key=bankAccountKey(bankName, accountNo);
   var sessions=(bankSessionCache||[]).filter(function(s){
     if (bankAccountKey(s.bankName, s.accountNo)!==key) return false;
-    bankEnsureProcessedMonths(s);
-    return (s.processedMonths||[]).indexOf(monthKey)!==-1;
+    return bankSessionCoversMonth(s, monthKey);
   });
   var completed=sessions.filter(function(s){return s.completed;});
   var ongoing=sessions.filter(function(s){return !s.completed;});
@@ -5628,7 +5655,8 @@ function bankMergeSessions(base, other) {
   // 処理対象月を再計算
   var monthsSet={};
   base.rows.forEach(function(r){
-    if (r.date && /^\d{4}-\d{2}/.test(r.date)) monthsSet[r.date.substring(0,7)]=true;
+    var mk=bankDateToMonthKey(r.date);
+    if (mk) monthsSet[mk]=true;
   });
   var months=Object.keys(monthsSet).sort();
   base.processedMonths=months;
@@ -6139,7 +6167,8 @@ function bankStartEditing() {
 
   var monthsSet={};
   rows.forEach(function(r){
-    if (r.date && /^\d{4}-\d{2}/.test(r.date)) monthsSet[r.date.substring(0,7)]=true;
+    var mk=bankDateToMonthKey(r.date);
+    if (mk) monthsSet[mk]=true;
   });
   var months=Object.keys(monthsSet).sort();
   var sess={
@@ -6278,7 +6307,8 @@ function bankReasonBadge(state, reason, row) {
   if (state==='needsInfo') {
     var isReceipt=!!(row && Number(row.receipt||0)>0);
     var cls=isReceipt?'bank-status-needinfo-receipt':'bank-status-needinfo-payment';
-    return '<div class="bank-status-badge '+cls+'">❗ 相手先情報を入力</div>';
+    var label=isReceipt?'❗ 入金元の名称・内容を入力':'❗ 支払相手の名称・内容を入力';
+    return '<div class="bank-status-badge '+cls+'">'+label+'</div>';
   }
   if (state==='resolvedInfo') return '<div class="bank-status-badge bank-status-resolved">✓ 入力済</div>';
   if (state==='resolvedPDF') return '<div class="bank-status-badge bank-status-resolved">✓ PDF送付済</div>';
@@ -6362,7 +6392,7 @@ function bankPageEdit() {
   } else {
     var bits=[];
     if (attentionCount>0||resolvedCount>0) {
-      bits.push('<div style="margin-bottom:6px;color:#991b1b;"><span class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</span> '
+      bits.push('<div style="margin-bottom:6px;color:#991b1b;"><span class="bank-status-badge bank-status-needinfo-payment">❗ 支払相手の名称・内容</span>／<span class="bank-status-badge bank-status-needinfo-receipt">❗ 入金元の名称・内容</span> '
         +'未対応 <strong>'+attentionCount+'</strong> 行 / 入力済 '+resolvedCount+' 行<br>'
         +'<span style="font-size:11px;color:#7f1d1d;">→ 元摘要が空欄や「AD」「D」「預金機」など相手先名称が無い行です。記帳代行のため摘要欄に相手先と内容を入力してください（ピンク色の行）。</span></div>');
     }
@@ -6457,7 +6487,7 @@ function bankToggleCompleted(completed) {
   }
   bankCurrentSession.completed=!!completed;
   bankCurrentSession.completedAt=completed?new Date().toISOString():null;
-  bankEnsureProcessedMonths(bankCurrentSession);
+  bankEnsureProcessedMonths(bankCurrentSession, true);
   bankSaveSession(bankCurrentSession).then(function(){
     if (bankSessionCache) {
       var idx=bankSessionCache.findIndex(function(s){return s.id===bankCurrentSession.id;});
