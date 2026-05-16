@@ -538,6 +538,47 @@ const ACCOUNT_CATEGORIES = [
   '仕入高','売上高','雑収入','現金過不足'
 ];
 
+const ACCOUNT_ROMAJI = {
+  '旅費交通費':'RYOHIKOUTSUUHI',
+  '接待交際費':'SETTAIKOUSAIHI',
+  '会議費':'KAIGIHI',
+  '通信費':'TSUUSHINHI',
+  '消耗品費':'SHOUMOUHINHI',
+  '事務用品費':'JIMUYOUHINHI',
+  '水道光熱費':'SUIDOUKOUNETSUHI',
+  '地代家賃':'CHIDAIYACHIN',
+  '修繕費':'SHUUZENHI',
+  '広告宣伝費':'KOUKOKUSENDENHI',
+  '新聞図書費':'SHINBUNTOSHOHI',
+  '福利厚生費':'FUKURIKOUSEIHI',
+  '租税公課':'SOZEIKOUKA',
+  '支払手数料':'SHIHARAITESUURYOU',
+  '保険料':'HOKENRYOU',
+  '車両費':'SHARYOUHI',
+  '諸会費':'SHOKAIHI',
+  '外注費':'GAICHUUHI',
+  '給料手当':'KYUURYOUTEATE',
+  '法定福利費':'HOUTEIFUKURIHI',
+  '荷造運賃':'NIZUKURIUNCHIN',
+  '研修費':'KENSHUUHI',
+  '寄付金':'KIFUKIN',
+  '雑費':'ZAPPI',
+  '仕入高':'SHIIREDAKA',
+  '売上高':'URIAGEDAKA',
+  '雑収入':'ZATSUSHUUNYUU',
+  '現金過不足':'GENKINKAFUSOKU'
+};
+
+function matchesAccountQuery(accountName, query) {
+  if (!query) return true;
+  if (!accountName) return false;
+  if (accountName.indexOf(query) !== -1) return true;
+  var q = String(query).toUpperCase();
+  if (String(accountName).toUpperCase().indexOf(q) !== -1) return true;
+  var romaji = ACCOUNT_ROMAJI[accountName];
+  return !!(romaji && romaji.indexOf(q) !== -1);
+}
+
 const ACCOUNT_DESCRIPTIONS = {
   '旅費交通費':  '出張・交通費・宿泊費（電車・バス・タクシー・高速代・ホテル代）',
   '接待交際費':  '取引先の接待・贈答品（会食・慶弔見舞い・お中元・手土産）',
@@ -1021,13 +1062,18 @@ function showSettings() {
     </div>
     <button type="button" onclick="addSettingsLoc()" style="margin-bottom:12px;padding:6px 12px;border:1px solid var(--gray-300);background:white;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;">＋ 拠点を追加</button>
     <div class="divider"></div>
-    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">データ管理</div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">データ管理（バックアップ・復元）</div>
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--gray-700);line-height:1.7;">
+      <strong>📥 全データのバックアップ</strong>: 全拠点・全取引・全設定を1つのJSONに保存します。<br><span style="font-size:11px;color:var(--gray-600);">→ <strong>PCを入れ替えるとき・データ全体を別PCに移すとき</strong>に使います。</span><br>
+      <strong>📥 この拠点のみバックアップ</strong>: タイトルバーで選択中の拠点のデータのみJSONに保存します。<br><span style="font-size:11px;color:var(--gray-600);">→ <strong>支社のPCから本社のPCへ「支社拠点だけ」を送りたいとき</strong>に使います。本社で復元時に「拠点指定マージ復元」を選択。</span>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
-      <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 バックアップ保存（JSON）</button>
+      <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 全データのバックアップ（全拠点）</button>
+      <button class="btn btn-secondary btn-sm" onclick="exportLocationBackup()">📥 この拠点のみバックアップ</button>
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp-f').click()">📤 バックアップから復元</button>
       <input type="file" id="imp-f" accept=".json" style="display:none;" onchange="importBackup(event)">
     </div>
-    <div style="font-size:11px;color:var(--gray-500);margin-top:4px;">※定期的なバックアップを推奨します（ブラウザキャッシュ削除でデータが消えます）</div>
+    <div style="font-size:11px;color:var(--gray-500);margin-top:4px;">※定期的なバックアップを推奨します（ブラウザキャッシュ削除でデータが消える可能性があります）</div>
     <div class="divider"></div>
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🔒 決算管理</div>
     ${renderFiscalCloseSection()}
@@ -1247,7 +1293,7 @@ function updateSearchFilter(field, val) {
   searchFilters[field]=val;
 }
 function applySearch() {
-  searchFilters.account=document.getElementById('sf-account').value;
+  searchFilters.account=document.getElementById('sf-account').value.trim();
   searchFilters.store  =document.getElementById('sf-store').value.trim();
   searchFilters.item   =document.getElementById('sf-item').value.trim();
   searchFilters.amtMin =document.getElementById('sf-amt-min').value.replace(/,/g,'');
@@ -1258,11 +1304,46 @@ function clearSearch() {
   searchFilters={account:'',store:'',item:'',amtMin:'',amtMax:''};
   renderPage();
 }
+
+function renderAccountSuggestions(query) {
+  var box=document.getElementById('sf-account-suggestions');
+  if (!box) return;
+  var q=(query||'').trim();
+  var qUp=q.toUpperCase();
+  var matches=ACCOUNT_CATEGORIES.filter(function(a){
+    if (!q) return true;
+    if (a.indexOf(q)!==-1) return true;
+    if (String(a).toUpperCase().indexOf(qUp)!==-1) return true;
+    var romaji=ACCOUNT_ROMAJI[a];
+    return !!(romaji && romaji.indexOf(qUp)!==-1);
+  });
+  if (matches.length===0) {
+    box.innerHTML='<div style="padding:8px 12px;color:#9ca3af;font-size:12px;">該当する勘定科目がありません（任意の文字列で部分一致検索もできます）</div>';
+  } else {
+    box.innerHTML=matches.map(function(a){
+      var r=ACCOUNT_ROMAJI[a]||'';
+      return '<div onmousedown="event.preventDefault();selectAccountFromSuggestion(\''+esc(a)+'\')" '
+        +'style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--gray-100);font-size:13px;" '
+        +'onmouseover="this.style.background=\'#eff6ff\'" onmouseout="this.style.background=\'\'">'
+        +'<strong>'+esc(a)+'</strong>'
+        +(r?' <span style="font-size:11px;color:#9ca3af;margin-left:6px;">'+r+'</span>':'')
+        +'</div>';
+    }).join('');
+  }
+  box.style.display='block';
+}
+function selectAccountFromSuggestion(account) {
+  var inp=document.getElementById('sf-account');
+  if (inp) inp.value=account;
+  hideAccountSuggestions();
+  applySearch();
+}
+function hideAccountSuggestions() {
+  var box=document.getElementById('sf-account-suggestions');
+  if (box) box.style.display='none';
+}
 function buildSearchPanel() {
   var sf=searchFilters;
-  var accOpts='<option value="">— すべて —</option>'+ACCOUNT_CATEGORIES.map(function(a){
-    return '<option value="'+esc(a)+'" '+(sf.account===a?'selected':'')+'>'+esc(a)+'</option>';
-  }).join('');
   var active=sf.account||sf.store||sf.item||sf.amtMin||sf.amtMax;
   var summary='';
   if (active) {
@@ -1277,8 +1358,14 @@ function buildSearchPanel() {
   return '<div class="no-print" style="background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:14px;margin-bottom:12px;">'
     +'<div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:10px;">🔍 検索条件（複数条件で絞込／空欄は条件なし）</div>'
     +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px;">'
-    +'<div><label style="font-size:11px;font-weight:700;color:var(--gray-700);display:block;margin-bottom:3px;">勘定科目</label>'
-    +'<select id="sf-account" style="width:100%;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;">'+accOpts+'</select></div>'
+    +'<div style="position:relative;"><label style="font-size:11px;font-weight:700;color:var(--gray-700);display:block;margin-bottom:3px;">勘定科目（日本語・ローマ字で入力可）</label>'
+    +'<input type="text" id="sf-account" value="'+esc(sf.account||'')+'" autocomplete="off" placeholder="例: 接待交際費 / SETTAI / KOU" '
+    +'oninput="renderAccountSuggestions(this.value)" '
+    +'onfocus="renderAccountSuggestions(this.value)" '
+    +'onblur="setTimeout(hideAccountSuggestions,180)" '
+    +'style="width:100%;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" />'
+    +'<div id="sf-account-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-300);border-radius:6px;max-height:240px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,0.15);margin-top:2px;"></div>'
+    +'</div>'
     +'<div><label style="font-size:11px;font-weight:700;color:var(--gray-700);display:block;margin-bottom:3px;">店名・支払先（部分一致）</label>'
     +'<input type="text" id="sf-store" value="'+esc(sf.store)+'" placeholder="〇〇商店" style="width:100%;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" /></div>'
     +'<div><label style="font-size:11px;font-weight:700;color:var(--gray-700);display:block;margin-bottom:3px;">内容（部分一致）</label>'
@@ -1514,7 +1601,7 @@ function pageLedger() {
     }
     if (searchMode) {
       var sf=searchFilters;
-      if (sf.account && (e.account||'')!==sf.account) return false;
+      if (sf.account && !matchesAccountQuery(e.account||'', sf.account)) return false;
       if (sf.store && (e.storeName||'').indexOf(sf.store)===-1) return false;
       if (sf.item) {
         var itemTxt=(e.itemName||'')+' '+(e.description||'');
@@ -1606,10 +1693,11 @@ function pageLedger() {
       </div>`:`<div></div>`}
     </div>
     <div class="form-grid" style="margin-bottom:10px;">
-      <div class="form-group"><label>${recLabel}</label><input type="text" inputmode="numeric" id="ae-rec" placeholder="0" oninput="fmtAmtInput(this)" onkeydown="formEnterNext(event,this)" data-next="ae-pay" ${currentEntryKind==='bank_deposit'?'disabled style="background:#f8fafc;"':''} /></div>
-      <div class="form-group"><label>${payLabel}</label><input type="text" inputmode="numeric" id="ae-pay" placeholder="0" oninput="fmtAmtInput(this)" onkeydown="formEnterNext(event,this)" data-next="ae-memo" ${currentEntryKind==='bank_withdraw'?'disabled style="background:#f8fafc;"':''} /></div>
+      <div class="form-group"><label>${recLabel}</label><input type="text" inputmode="numeric" id="ae-rec" placeholder="0" oninput="fmtAmtInput(this);checkRecPayConflict()" onkeydown="formEnterNext(event,this)" data-next="ae-pay" ${currentEntryKind==='bank_deposit'?'disabled style="background:#f8fafc;"':''} /></div>
+      <div class="form-group"><label>${payLabel}</label><input type="text" inputmode="numeric" id="ae-pay" placeholder="0" oninput="fmtAmtInput(this);checkRecPayConflict()" onkeydown="formEnterNext(event,this)" data-next="ae-memo" ${currentEntryKind==='bank_withdraw'?'disabled style="background:#f8fafc;"':''} /></div>
       <div class="form-group" style="grid-column:span 2;"><label>メモ（任意）</label><input type="text" id="ae-memo" placeholder="担当者メモ・備考など" onkeydown="if(event.key==='Enter'){event.preventDefault();submitEntry();}" /></div>
     </div>
+    ${currentEntryKind==='normal'?'<div id="ae-recpay-warn" style="display:none;background:#fef2f2;border:2px solid #dc2626;border-radius:8px;padding:8px 12px;margin:-4px 0 10px;font-size:12px;color:#991b1b;font-weight:700;">⚠ 入金と出金は同時に入力できません。どちらか一方のみご入力ください（誤入力した側を空欄に戻してください）。</div>':''}
     ${currentEntryKind==='normal'?`<div style="margin-bottom:10px;">
       <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">勘定科目（費目）<span style="color:var(--gray-500);font-weight:400;">　※任意 — 経費の分類を選択できます</span></div>
       <div id="ae-account-wrap">${renderAccountPicker('ae-account','','ae')}</div>
@@ -2212,10 +2300,15 @@ function pageReports() {
       </div>
       <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
         <div style="font-size:15px;font-weight:700;margin-bottom:6px;">💾 バックアップ・復元</div>
-        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">全データをJSONで保存・復元（推奨：月1回）</div>
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:6px;line-height:1.7;">
+          <strong>全データのバックアップ</strong>: 全拠点・全データ → <strong>PC入れ替え時はこれ</strong><br>
+          <strong>この拠点のみ</strong>: 選択中拠点のみ → <strong>支社→本社の集約用</strong><br>
+          推奨: 月1回の定期バックアップ
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 バックアップ保存</button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp2').click()">📤 バックアップから復元</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 全データバックアップ</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportLocationBackup()">📥 この拠点のみ</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp2').click()">📤 復元</button>
           <input type="file" id="imp2" accept=".json" style="display:none;" onchange="importBackup(event)">
         </div>
       </div>
@@ -2998,6 +3091,21 @@ function rowFieldEnter(e, rowPrefix, rowIdx, fieldKey) {
 function fmtAmtInput(el) {
   var raw = el.value.replace(/[^\d]/g, '');
   el.value = raw ? Number(raw).toLocaleString('ja-JP') : '';
+}
+
+function checkRecPayConflict() {
+  var recEl=document.getElementById('ae-rec');
+  var payEl=document.getElementById('ae-pay');
+  var warn=document.getElementById('ae-recpay-warn');
+  if (!recEl||!payEl) return;
+  var rec=Number((recEl.value||'').replace(/,/g,''))||0;
+  var pay=Number((payEl.value||'').replace(/,/g,''))||0;
+  var bothFilled=rec>0 && pay>0;
+  recEl.style.borderColor=bothFilled?'#dc2626':'';
+  payEl.style.borderColor=bothFilled?'#dc2626':'';
+  recEl.style.background=bothFilled?'#fef2f2':'';
+  payEl.style.background=bothFilled?'#fef2f2':'';
+  if (warn) warn.style.display=bothFilled?'block':'none';
 }
 
 function learnStore(storeName, account, taxRate, itemName) {
@@ -3895,12 +4003,50 @@ function dlCSV(rows,filename) {
 }
 
 function exportBackup() {
-  const data={settings:getSettings(),entries:getEntries(),advances:getAdvances(),reimbursements:getReimbursements(),exportedAt:new Date().toISOString(),version:'2.2'};
+  const data={settings:getSettings(),entries:getEntries(),advances:getAdvances(),reimbursements:getReimbursements(),exportedAt:new Date().toISOString(),version:'2.2',scope:'full'};
   const a=Object.assign(document.createElement('a'),{
     href:URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),
-    download:`現金管理バックアップ_${today()}.json`
+    download:`現金管理バックアップ_全データ_${today()}.json`
   });
   a.click(); URL.revokeObjectURL(a.href);
+}
+
+function exportLocationBackup() {
+  const s=getSettings();
+  const locs=(s&&s.locations)||[];
+  if (locs.length===0) {
+    alert('拠点が登録されていないため、「全データのバックアップ」と同じになります。');
+    exportBackup();
+    return;
+  }
+  if (!currentLocation || locs.indexOf(currentLocation)===-1) {
+    alert('「全拠点」表示中は拠点別バックアップを作成できません。\n\n先にタイトルバーから対象の拠点を選択してから、もう一度実行してください。');
+    return;
+  }
+  const loc=currentLocation;
+  const filteredEntries=getEntries().filter(function(e){return (e.location||'')===loc;});
+  const filteredAdvances=getAdvances().filter(function(a){return (a.location||'')===loc;});
+  const filteredReims=getReimbursements().filter(function(r){return (r.location||'')===loc;});
+  const data={
+    settings: Object.assign({}, s, {
+      locations:[loc],
+      locationOpeningBalances: { [loc]: (s.locationOpeningBalances||{})[loc]||0 }
+    }),
+    entries: filteredEntries,
+    advances: filteredAdvances,
+    reimbursements: filteredReims,
+    exportedAt: new Date().toISOString(),
+    version: '2.2',
+    scope: 'location',
+    locationName: loc
+  };
+  const safe=loc.replace(/[\\/:*?"<>|]/g,'_');
+  const a=Object.assign(document.createElement('a'),{
+    href:URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),
+    download:`現金管理バックアップ_${safe}_${today()}.json`
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+  alert('「'+loc+'」拠点のデータのみを含むバックアップを保存しました。\n\n受け取り側のPCで「📤 復元」→「🔀 拠点指定マージ復元」を選ぶと、その拠点だけ最新化できます。');
 }
 
 function importBackup(ev) {
@@ -4264,7 +4410,7 @@ function showHowTo(context) {
             </div>
             <div class="howto-mock-field">
               <div class="howto-mock-label">氏名 <span style="color:var(--danger);">*必須</span> <span class="howto-badge" style="background:#d97706;">②</span></div>
-              <div class="howto-mock-input">石塚隼人</div>
+              <div class="howto-mock-input">山田花子</div>
             </div>
             <div class="howto-mock-field">
               <div class="howto-mock-label">金額（円） <span style="color:var(--danger);">*必須</span> <span class="howto-badge" style="background:#d97706;">④</span></div>
@@ -4283,7 +4429,7 @@ function showHowTo(context) {
         </div>
         <div class="howto-callout-ok">
           ✅ 登録すると現金出納帳に<strong>出金として自動記録</strong>されます。<br>
-          ✅ 番号は「氏名-連番」形式（例: 石塚隼人-003）で自動付番されます。
+          ✅ 番号は「氏名-連番」形式（例: 山田花子-003）で自動付番されます。
         </div>
       </div>
 
@@ -4297,8 +4443,8 @@ function showHowTo(context) {
             </tr></thead>
             <tbody>
               <tr>
-                <td><span style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">石塚隼人-003</span></td>
-                <td>2026/06/01</td><td>石塚隼人</td><td>東京出張</td>
+                <td><span style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">山田花子-003</span></td>
+                <td>2026/06/01</td><td>山田花子</td><td>東京出張</td>
                 <td class="r" style="color:var(--danger);">100,000</td>
                 <td><span style="background:#fecaca;color:#991b1b;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">未精算</span></td>
                 <td>
@@ -4330,7 +4476,7 @@ function showHowTo(context) {
       <div class="howto-visual">
         <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 精算入力モーダル</div>
         <div style="background:white;border:2px solid var(--primary-light);border-radius:10px;padding:14px;">
-          <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--primary);">📋 仮払い精算 — 石塚隼人-003（仮払額 ¥100,000）</div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--primary);">📋 仮払い精算 — 山田花子-003（仮払額 ¥100,000）</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
             <div class="howto-mock-field">
               <div class="howto-mock-label">精算日 <span class="howto-badge" style="background:#d97706;">⑥</span></div>
@@ -4405,7 +4551,7 @@ function showHowTo(context) {
             </div>
             <div class="howto-mock-field">
               <div class="howto-mock-label">氏名 <span style="color:var(--danger);">*必須</span> <span class="howto-badge" style="background:#d97706;">②</span></div>
-              <div class="howto-mock-input">石塚隼人</div>
+              <div class="howto-mock-input">山田花子</div>
             </div>
             <div class="howto-mock-field">
               <div class="howto-mock-label">目的・備考 <span class="howto-badge" style="background:#d97706;">③</span></div>
@@ -4449,7 +4595,7 @@ function showHowTo(context) {
             </tr></thead>
             <tbody>
               <tr>
-                <td>2026/05/15</td><td>石塚隼人</td><td>5月分立替</td>
+                <td>2026/05/15</td><td>山田花子</td><td>5月分立替</td>
                 <td class="r">8,000</td>
                 <td><span style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">未返金</span></td>
                 <td>
@@ -4478,7 +4624,7 @@ function showHowTo(context) {
       <div class="howto-visual">
         <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 返金確定モーダル</div>
         <div style="background:white;border:2px solid var(--primary-light);border-radius:10px;padding:14px;">
-          <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--primary);">↩ 立替返金 — 石塚隼人（立替額 ¥8,000）</div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--primary);">↩ 立替返金 — 山田花子（立替額 ¥8,000）</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div class="howto-mock-field">
               <div class="howto-mock-label">返金日 <span class="howto-badge" style="background:#d97706;">⑥</span></div>
@@ -4668,7 +4814,7 @@ function showHowTo(context) {
 
       <div class="howto-step">
         <strong>💾 自動保存</strong><br>
-        編集中の変更は800msのデバウンスで自動的にIndexedDBに保存されます（画面右上に「自動保存済」表示）。ブラウザを閉じてもデータは残り、「▶ 再開」でいつでも続きから編集できます。
+        編集中の変更は <strong>約1秒後</strong> に自動的にIndexedDBに保存されます（画面右上に「自動保存済」表示）。ブラウザを閉じてもデータは残り、「▶ 再開」でいつでも続きから編集できます。
       </div>
     </div>
     `:''}
@@ -4838,8 +4984,8 @@ function showHowTo(context) {
             <tbody>
               <tr><td>05/22</td><td>仮払精算（現金）山田太郎-001</td><td class="r" style="color:var(--success);">3,000</td><td></td><td class="r" style="font-weight:700;">210,780</td></tr>
               <tr style="background:#fef9c3;"><td>05/31</td><td>通帳引出 筑波銀行 通帳より引出し</td><td class="r" style="color:var(--success);">50,000</td><td></td><td class="r" style="font-weight:700;">262,780</td></tr>
-              <tr style="background:#fef9c3;"><td>06/01</td><td>仮払支払 仮払 石塚隼人-003</td><td></td><td class="r" style="color:var(--danger);">100,000</td><td class="r" style="font-weight:700;">162,780</td></tr>
-              <tr><td>06/05</td><td>仮払精算（現金）石塚隼人-003</td><td class="r" style="color:var(--success);">1,000</td><td></td><td class="r" style="font-weight:700;">163,780</td></tr>
+              <tr style="background:#fef9c3;"><td>06/01</td><td>仮払支払 仮払 山田花子-003</td><td></td><td class="r" style="color:var(--danger);">100,000</td><td class="r" style="font-weight:700;">162,780</td></tr>
+              <tr><td>06/05</td><td>仮払精算（現金）山田花子-003</td><td class="r" style="color:var(--success);">1,000</td><td></td><td class="r" style="font-weight:700;">163,780</td></tr>
             </tbody>
           </table>
         </div>
@@ -4872,7 +5018,7 @@ function showHowTo(context) {
         <strong>保存の仕組み</strong><br>
         ・通常データ（設定・取引・仮払・立替）：このブラウザの <code>localStorage</code><br>
         ・銀行CSVセッション：このブラウザの <code>IndexedDB</code><br>
-        編集すると <strong>800ms 後に自動保存</strong>されます（画面右上に「自動保存済 HH:MM」表示）。
+        編集すると <strong>約1秒後に自動保存</strong>されます（画面右上に「自動保存済 HH:MM」表示）。
       </div>
       <div class="howto-step">
         <strong>⚠️ データはPC・ブラウザに紐づきます</strong><br>
