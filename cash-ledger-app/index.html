@@ -3641,21 +3641,29 @@ function todayJP() {
 }
 
 function exportTaxAccountantBundle() {
-  var s=getSettings();
+  var ctx=_exportLocationContext();
+  var s=ctx.settings;
   var jp=todayJP();
-  var advancesAll=getAdvances();
-  var reimsAll=getReimbursements();
-  var folderName='税理士提出_'+(s&&s.companyName?String(s.companyName).replace(/[\\/:*?"<>|]/g,'_'):'')+'_'+jp;
+  var advancesAll=_filterByLocation(getAdvances(), ctx);
+  var reimsAll=_filterByLocation(getReimbursements(), ctx);
+  var locTag=ctx.locationLabel?'_'+ctx.locationLabel.replace(/[\\/:*?"<>|\s]/g,'_'):'';
+  var folderName='税理士提出_'+(s&&s.companyName?String(s.companyName).replace(/[\\/:*?"<>|]/g,'_'):'')+locTag+'_'+jp;
   var zipFiles=[];
   function addCsvFile(name, rows){
     zipFiles.push({name: folderName+'/'+name, content: rowsToCsvString(rows)});
   }
+  // 拠点別期首残高を考慮した残高再計算
+  var openBalForLedger=ctx.useLocFilter
+    ?getLocationOpenBalance(ctx.selectedLocation)
+    :(ctx.locations.length>0 ? getLocationOpenBalance('') : (s.openingBalance||0));
+  var ledgerEntries=_filterByLocation(getEntries(), ctx);
+  var ledgerWithBal=calcBalancesFrom(ledgerEntries, openBalForLedger);
 
   // 1. 現金出納帳
   addCsvFile('現金出納帳_'+jp+'.csv', [
-    ['現金出納帳',s.companyName||'',`出力日:${today()}`],
+    ['現金出納帳',s.companyName||'',`出力日:${today()}`,(ctx.locationLabel||'')],
     ['日付','勘定科目','店名・支払先','購入品・内容','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
-    ...calcBalances(getEntries()).map(function(e){return [
+    ...ledgerWithBal.map(function(e){return [
       e.date,
       e.account||'',
       e.storeName||'', e.itemName||e.description||'',
@@ -4242,79 +4250,197 @@ function _isNumericCell(v) {
   return /^-?\d+(\.\d+)?$/.test(s);
 }
 function downloadExcelXls(filename, opts) {
-  // opts: { title, subtitle, sections:[{title?,headers,rows,colWidths?,numericCols?,totalRow?}] }
-  // multi-sheet not supported (single sheet with sections stacked)
+  // 正規 .xlsx 形式に変更（HTML.xlsだとExcelで警告が出るため）
+  if (filename && /\.xls$/i.test(filename)) filename=filename.replace(/\.xls$/i, '.xlsx');
+  if (filename && !/\.xlsx$/i.test(filename)) filename+='.xlsx';
+  downloadExcelXlsx(filename, opts);
+}
+
+function _xlsxEsc(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\r?\n/g, '&#10;'); }
+function _xlsxColLetter(n) {
+  var s='';
+  while (n>0) { var r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); }
+  return s;
+}
+function _xlsxIsNumeric(v) {
+  if (v==null||v==='') return false;
+  var s=String(v).replace(/,/g,'');
+  return /^-?\d+(\.\d+)?$/.test(s);
+}
+
+function downloadExcelXlsx(filename, opts) {
+  var sheetName=(opts.sheetName||'Sheet1').substring(0,31);
   var sections=opts.sections||[];
-  var maxCols=sections.reduce(function(m,sec){return Math.max(m, (sec.headers||[]).length);},1);
-  var html='<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">'
-    +'<head><meta charset="UTF-8">'
-    +'<meta http-equiv="Content-Type" content="application/vnd.ms-excel;charset=UTF-8">'
-    +'<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>'+_esx(opts.title||'帳票')+'</x:Name>'
-    +'<x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->'
-    +'<style>'
-    +'table { border-collapse:collapse; font-family:"Yu Gothic UI","Meiryo",sans-serif; font-size:11pt; }'
-    +'td, th { vertical-align:middle; }'
-    +'.title { font-size:18pt; font-weight:bold; color:#1e40af; padding:8pt 4pt; }'
-    +'.subtitle { font-size:10pt; color:#4b5563; padding:2pt 4pt; }'
-    +'.section-title { font-size:13pt; font-weight:bold; color:#374151; background:#e5e7eb; padding:6pt 8pt; border-left:4pt solid #1e40af; }'
-    +'.spacer { height:6pt; }'
-    +'.hdr th { background:#1e40af; color:#ffffff; font-weight:bold; border:1pt solid #1e3a8a; padding:6pt 8pt; text-align:center; font-size:10pt; }'
-    +'td.cell { border:0.75pt solid #9ca3af; padding:4pt 8pt; }'
-    +'td.num { mso-number-format:"#\\,##0"; text-align:right; }'
-    +'td.date { mso-number-format:"yyyy/m/d"; }'
-    +'tr.even td.cell { background:#f3f4f6; }'
-    +'.total td { background:#fef3c7; font-weight:bold; border-top:2pt double #1e40af; padding:6pt 8pt; }'
-    +'</style></head><body>';
-  // タイトル
-  if (opts.title) {
-    html+='<table><tr><td colspan="'+maxCols+'" class="title">'+_esx(opts.title)+'</td></tr>';
-    if (opts.subtitle) html+='<tr><td colspan="'+maxCols+'" class="subtitle">'+_esx(opts.subtitle)+'</td></tr>';
-    html+='<tr><td colspan="'+maxCols+'" class="spacer"></td></tr></table>';
-  }
-  sections.forEach(function(sec, sidx){
-    var headers=sec.headers||[];
-    var rows=sec.rows||[];
-    var numCols=sec.numericCols||[];
-    var dateCols=sec.dateCols||[];
-    html+='<table>';
-    if (sec.title) html+='<tr><td colspan="'+headers.length+'" class="section-title">'+_esx(sec.title)+'</td></tr>';
-    // 列幅
-    if (sec.colWidths) {
-      html+='<colgroup>';
-      sec.colWidths.forEach(function(w){ html+='<col style="width:'+w+'pt;">';});
-      html+='</colgroup>';
-    }
-    // ヘッダ
-    html+='<tr class="hdr">'+headers.map(function(h){return '<th>'+_esx(h)+'</th>';}).join('')+'</tr>';
-    // データ
-    rows.forEach(function(row, ri){
-      var trCls=ri%2===1?'even':'';
-      html+='<tr'+(trCls?' class="'+trCls+'"':'')+'>';
-      row.forEach(function(c, ci){
-        var cls='cell';
-        if (numCols.indexOf(ci)>=0 || _isNumericCell(c)) cls+=' num';
-        if (dateCols.indexOf(ci)>=0) cls+=' date';
-        var v=String(c==null?'':c);
-        if (cls.indexOf('num')>=0) v=v.replace(/,/g,'');
-        html+='<td class="'+cls+'">'+_esx(v)+'</td>';
-      });
-      html+='</tr>';
+  var maxCols=sections.reduce(function(m,sec){return Math.max(m,(sec.headers||[]).length);},1);
+
+  // 1. シートXML本体を組み立て
+  var rowsXml='';
+  var rowIdx=1;
+  var mergeCells=[];
+
+  function pushRow(cells) {
+    var rowR=rowIdx;
+    rowsXml+='<row r="'+rowR+'">';
+    cells.forEach(function(c){
+      var ref=_xlsxColLetter(c.col)+rowR;
+      if (c.numeric && c.value!=='') {
+        rowsXml+='<c r="'+ref+'" s="'+c.style+'"><v>'+c.value+'</v></c>';
+      } else {
+        rowsXml+='<c r="'+ref+'" t="inlineStr" s="'+c.style+'"><is><t>'+_xlsxEsc(c.value)+'</t></is></c>';
+      }
     });
-    // 合計行
-    if (sec.totalRow) {
-      html+='<tr class="total">'+sec.totalRow.map(function(c, ci){
-        var cls=(numCols.indexOf(ci)>=0||_isNumericCell(c))?'num':'';
-        return '<td'+(cls?' class="'+cls+'"':'')+'>'+_esx(c==null?'':String(c).replace(/,/g,''))+'</td>';
-      }).join('')+'</tr>';
+    rowsXml+='</row>';
+    rowIdx++;
+  }
+
+  if (opts.title) {
+    pushRow([{col:1, value:opts.title, style:1}]);
+    if (maxCols>1) mergeCells.push(_xlsxColLetter(1)+(rowIdx-1)+':'+_xlsxColLetter(maxCols)+(rowIdx-1));
+  }
+  if (opts.subtitle) {
+    pushRow([{col:1, value:opts.subtitle, style:2}]);
+    if (maxCols>1) mergeCells.push(_xlsxColLetter(1)+(rowIdx-1)+':'+_xlsxColLetter(maxCols)+(rowIdx-1));
+  }
+  if (opts.title||opts.subtitle) rowIdx++; // spacer
+
+  sections.forEach(function(sec, sIdx){
+    if (sIdx>0) rowIdx++; // spacer
+    if (sec.title) {
+      pushRow([{col:1, value:sec.title, style:2}]);
+      if ((sec.headers||[]).length>1) mergeCells.push(_xlsxColLetter(1)+(rowIdx-1)+':'+_xlsxColLetter(sec.headers.length)+(rowIdx-1));
     }
-    html+='</table>';
-    if (sidx<sections.length-1) html+='<table><tr><td class="spacer"></td></tr></table>';
+    var headers=sec.headers||[];
+    var numCols=sec.numericCols||[];
+    var headerCells=headers.map(function(h,ci){return {col:ci+1, value:h, style:3};});
+    pushRow(headerCells);
+    (sec.rows||[]).forEach(function(row,ri){
+      var even=ri%2===1;
+      var cells=row.map(function(c,ci){
+        var v=c==null?'':String(c);
+        var isNum=numCols.indexOf(ci)>=0 || _xlsxIsNumeric(v);
+        var style;
+        if (isNum) style=even?7:5;
+        else style=even?6:4;
+        var cellValue;
+        if (isNum && v!=='') {
+          cellValue=Number(v.replace(/,/g,''));
+        } else {
+          cellValue=v;
+        }
+        return {col:ci+1, value:cellValue, numeric:isNum&&v!=='', style:style};
+      });
+      pushRow(cells);
+    });
+    if (sec.totalRow) {
+      var totalCells=sec.totalRow.map(function(c,ci){
+        var v=c==null?'':String(c);
+        var isNum=numCols.indexOf(ci)>=0 || _xlsxIsNumeric(v);
+        var style=isNum?9:8;
+        return {col:ci+1, value:(isNum&&v!=='')?Number(v.replace(/,/g,'')):v, numeric:isNum&&v!=='', style:style};
+      });
+      pushRow(totalCells);
+    }
   });
-  html+='</body></html>';
-  var bom='﻿';
-  var blob=new Blob([bom+html], {type:'application/vnd.ms-excel;charset=utf-8'});
+
+  // 2. cols (列幅)
+  var colsXml='';
+  if (sections[0] && sections[0].colWidths) {
+    colsXml='<cols>';
+    sections[0].colWidths.forEach(function(w,i){
+      colsXml+='<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" customWidth="1"/>';
+    });
+    colsXml+='</cols>';
+  }
+
+  // 3. mergeCells
+  var mergeXml='';
+  if (mergeCells.length>0) {
+    mergeXml='<mergeCells count="'+mergeCells.length+'">';
+    mergeCells.forEach(function(r){ mergeXml+='<mergeCell ref="'+r+'"/>'; });
+    mergeXml+='</mergeCells>';
+  }
+
+  // 4. シートXML
+  var sheetXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    +'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    +colsXml
+    +'<sheetData>'+rowsXml+'</sheetData>'
+    +mergeXml
+    +'</worksheet>';
+
+  // 5. その他の必須ファイル
+  var contentTypesXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    +'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    +'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    +'<Default Extension="xml" ContentType="application/xml"/>'
+    +'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    +'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+    +'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+    +'</Types>';
+  var relsXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    +'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+    +'</Relationships>';
+  var workbookXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    +'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    +'<sheets><sheet name="'+_xlsxEsc(sheetName)+'" sheetId="1" r:id="rId1"/></sheets>'
+    +'</workbook>';
+  var workbookRelsXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    +'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    +'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+    +'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+    +'</Relationships>';
+  var stylesXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    +'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    +'<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0"/></numFmts>'
+    +'<fonts count="5">'
+    +'<font><sz val="11"/><name val="Yu Gothic UI"/></font>'
+    +'<font><b/><sz val="16"/><color rgb="FF1E40AF"/><name val="Yu Gothic UI"/></font>'
+    +'<font><sz val="10"/><color rgb="FF4B5563"/><name val="Yu Gothic UI"/></font>'
+    +'<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Yu Gothic UI"/></font>'
+    +'<font><b/><sz val="11"/><name val="Yu Gothic UI"/></font>'
+    +'</fonts>'
+    +'<fills count="5">'
+    +'<fill><patternFill patternType="none"/></fill>'
+    +'<fill><patternFill patternType="gray125"/></fill>'
+    +'<fill><patternFill patternType="solid"><fgColor rgb="FF1E40AF"/><bgColor indexed="64"/></patternFill></fill>'
+    +'<fill><patternFill patternType="solid"><fgColor rgb="FFF3F4F6"/><bgColor indexed="64"/></patternFill></fill>'
+    +'<fill><patternFill patternType="solid"><fgColor rgb="FFFEF3C7"/><bgColor indexed="64"/></patternFill></fill>'
+    +'</fills>'
+    +'<borders count="3">'
+    +'<border><left/><right/><top/><bottom/><diagonal/></border>'
+    +'<border><left style="thin"><color rgb="FF9CA3AF"/></left><right style="thin"><color rgb="FF9CA3AF"/></right><top style="thin"><color rgb="FF9CA3AF"/></top><bottom style="thin"><color rgb="FF9CA3AF"/></bottom></border>'
+    +'<border><left style="thin"><color rgb="FF9CA3AF"/></left><right style="thin"><color rgb="FF9CA3AF"/></right><top style="double"><color rgb="FF1E40AF"/></top><bottom style="thin"><color rgb="FF9CA3AF"/></bottom></border>'
+    +'</borders>'
+    +'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+    +'<cellXfs count="10">'
+    +'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+    +'<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+    +'<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
+    +'<xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'
+    +'<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>'
+    +'<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>'
+    +'<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>'
+    +'<xf numFmtId="164" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>'
+    +'<xf numFmtId="0" fontId="4" fillId="4" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>'
+    +'<xf numFmtId="164" fontId="4" fillId="4" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>'
+    +'</cellXfs>'
+    +'<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+    +'</styleSheet>';
+
+  var files=[
+    {name:'[Content_Types].xml', content:contentTypesXml},
+    {name:'_rels/.rels', content:relsXml},
+    {name:'xl/workbook.xml', content:workbookXml},
+    {name:'xl/_rels/workbook.xml.rels', content:workbookRelsXml},
+    {name:'xl/styles.xml', content:stylesXml},
+    {name:'xl/worksheets/sheet1.xml', content:sheetXml}
+  ];
+  var blob=createZipBlob(files);
+  // xlsxのMIMEタイプにBlobを差し替え
+  var xlsxBlob=new Blob([blob], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   var a=Object.assign(document.createElement('a'),{
-    href:URL.createObjectURL(blob),
+    href:URL.createObjectURL(xlsxBlob),
     download:filename
   });
   document.body.appendChild(a);
@@ -4322,14 +4448,38 @@ function downloadExcelXls(filename, opts) {
   setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},2000);
 }
 
+// 拠点フィルタコンテキスト
+function _exportLocationContext() {
+  var s=getSettings()||{};
+  var locs=s.locations||[];
+  var useLocFilter=locs.length>0 && currentLocation && locs.indexOf(currentLocation)!==-1;
+  return {
+    settings:s,
+    locations:locs,
+    useLocFilter:useLocFilter,
+    selectedLocation:useLocFilter?currentLocation:null,
+    locationLabel:useLocFilter?'拠点: '+currentLocation:(locs.length>0?'全拠点合計':''),
+    locationSlug:useLocFilter?'_'+currentLocation.replace(/[\\/:*?"<>|]/g,'_'):(locs.length>0?'_全拠点':'')
+  };
+}
+function _filterByLocation(items, ctx) {
+  if (!ctx.useLocFilter) return items;
+  return items.filter(function(it){return (it.location||'')===ctx.selectedLocation;});
+}
+
 // ─── 帳票ごとのExcel出力関数 ──────────────────────────────────
 function exportLedgerExcel() {
-  var s=getSettings();
+  var ctx=_exportLocationContext();
+  var s=ctx.settings;
   var fm=s.fiscalMonth||1;
   var rangeLabel=reportMonthFrom===0?'全月（通期）':reportMonthFrom+'月'+(reportMonthFrom!==reportMonthTo?'〜'+reportMonthTo+'月':'');
   var fyLabel=fyRangeLabel(ledgerYear, fm);
-  var all=calcBalances(getEntries());
-  // 月範囲フィルタ
+  // 拠点フィルタ + バランス再計算（拠点別期首残高から）
+  var allEntries=_filterByLocation(getEntries(), ctx);
+  var openBal=ctx.useLocFilter
+    ?getLocationOpenBalance(ctx.selectedLocation)
+    :(ctx.locations.length>0 ? getLocationOpenBalance('') : (s.openingBalance||0));
+  var all=calcBalancesFrom(allEntries, openBal);
   var filtered=all.filter(function(e){
     if (reportMonthFrom===0) return true;
     var m=parseInt(String(e.date).split('-')[1])||0;
@@ -4349,13 +4499,13 @@ function exportLedgerExcel() {
   ];});
   var totalRec=filtered.reduce(function(s,e){return s+(e.receiptAmount||0);},0);
   var totalPay=filtered.reduce(function(s,e){return s+(e.paymentAmount||0);},0);
-  downloadExcelXls('現金出納帳_'+(s.companyName||'')+'_'+today()+'.xls', {
-    title:'現 金 出 納 帳',
-    subtitle:'会社名: '+(s.companyName||'')+'　／　会計年度: '+fyLabel+'　／　期間: '+rangeLabel+'　／　出力日: '+today(),
+  downloadExcelXls('現金出納帳_'+(s.companyName||'')+ctx.locationSlug+'_'+today()+'.xlsx', {
+    title:'現 金 出 納 帳'+(ctx.locationLabel?'　【'+ctx.locationLabel+'】':''),
+    subtitle:'会社名: '+(s.companyName||'')+'　／　会計年度: '+fyLabel+'　／　期間: '+rangeLabel+(ctx.locationLabel?'　／　範囲: '+ctx.locationLabel:'')+'　／　出力日: '+today(),
     sections:[{
       headers:['日付','勘定科目','店名・支払先','内容','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
       rows:rows,
-      colWidths:[60,80,100,140,55,55,75,75,80,140],
+      colWidths:[14,18,20,28,12,12,15,15,16,28],
       numericCols:[6,7,8],
       totalRow:['','','','','','合計', totalRec, totalPay, '', '']
     }]
@@ -4363,8 +4513,9 @@ function exportLedgerExcel() {
 }
 
 function exportAdvancesExcel() {
-  var s=getSettings();
-  var advances=getAdvances();
+  var ctx=_exportLocationContext();
+  var s=ctx.settings;
+  var advances=_filterByLocation(getAdvances(), ctx);
   var rows=advances.map(function(a){return [
     a.id, a.date, a.employeeName, a.purpose, a.advanceAmount,
     a.settlementDate||'',
@@ -4375,21 +4526,25 @@ function exportAdvancesExcel() {
     a.status==='pending'?'未精算':'精算済',
     (a.settlementItems||[]).map(function(it){return (it.date?it.date+' ':'')+(it.storeName||'')+' '+(it.itemName||'')+' '+(it.amount||0)+'円';}).join(' / ')
   ];});
-  downloadExcelXls('仮払金台帳_'+(s.companyName||'')+'_'+today()+'.xls', {
-    title:'仮 払 金 台 帳',
-    subtitle:'会社名: '+(s.companyName||'')+'　／　出力日: '+today()+'　／　件数: '+advances.length+'件',
+  downloadExcelXls('仮払金台帳_'+(s.companyName||'')+ctx.locationSlug+'_'+today()+'.xlsx', {
+    title:'仮 払 金 台 帳'+(ctx.locationLabel?'　【'+ctx.locationLabel+'】':''),
+    subtitle:'会社名: '+(s.companyName||'')+(ctx.locationLabel?'　／　範囲: '+ctx.locationLabel:'')+'　／　出力日: '+today()+'　／　件数: '+advances.length+'件',
     sections:[{
       headers:['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用金額','返金額','不足額','状態','精算明細'],
       rows:rows,
-      colWidths:[100,70,80,140,80,70,60,80,75,75,55,260],
+      colWidths:[18,12,14,28,14,12,10,14,14,14,10,52],
       numericCols:[4,7,8,9]
     }]
   });
 }
 
 function exportSettlementDetailExcel() {
-  var s=getSettings();
-  var detailRows=buildSettlementDetailRows();
+  var ctx=_exportLocationContext();
+  var s=ctx.settings;
+  var advFilter=_filterByLocation(getAdvances(), ctx);
+  var advIds={};
+  advFilter.forEach(function(a){advIds[a.id]=true;});
+  var detailRows=buildSettlementDetailRows().filter(function(r){return advIds[r.id];});
   var rows=detailRows.map(function(r){return [
     r.id, r.advDate, r.employeeName, r.purpose, r.advanceAmount,
     r.settlementDate||'',
@@ -4398,21 +4553,22 @@ function exportSettlementDetailExcel() {
     r.amount!=null?r.amount:'',
     r.status==='pending'?'未精算':'精算済'
   ];});
-  downloadExcelXls('仮払精算明細表_'+(s.companyName||'')+'_'+today()+'.xls', {
-    title:'仮 払 精 算 明 細 表',
-    subtitle:'会社名: '+(s.companyName||'')+'　／　出力日: '+today()+'　／　件数: '+detailRows.length+'件',
+  downloadExcelXls('仮払精算明細表_'+(s.companyName||'')+ctx.locationSlug+'_'+today()+'.xlsx', {
+    title:'仮 払 精 算 明 細 表'+(ctx.locationLabel?'　【'+ctx.locationLabel+'】':''),
+    subtitle:'会社名: '+(s.companyName||'')+(ctx.locationLabel?'　／　範囲: '+ctx.locationLabel:'')+'　／　出力日: '+today()+'　／　件数: '+detailRows.length+'件',
     sections:[{
       headers:['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用日','相手先','内容','金額（円）','状態'],
       rows:rows,
-      colWidths:[100,70,80,140,80,70,60,70,120,140,80,55],
+      colWidths:[18,12,14,28,14,12,10,12,24,28,14,10],
       numericCols:[4,10]
     }]
   });
 }
 
 function exportReimbursementsExcel() {
-  var s=getSettings();
-  var reims=getReimbursements();
+  var ctx=_exportLocationContext();
+  var s=ctx.settings;
+  var reims=_filterByLocation(getReimbursements(), ctx);
   var rows=[];
   reims.forEach(function(r){
     if (!r.items||r.items.length===0) {
@@ -4439,13 +4595,13 @@ function exportReimbursementsExcel() {
       });
     }
   });
-  downloadExcelXls('立替経費台帳_'+(s.companyName||'')+'_'+today()+'.xls', {
-    title:'立 替 経 費 台 帳',
-    subtitle:'会社名: '+(s.companyName||'')+'　／　出力日: '+today()+'　／　件数: '+reims.length+'件',
+  downloadExcelXls('立替経費台帳_'+(s.companyName||'')+ctx.locationSlug+'_'+today()+'.xlsx', {
+    title:'立 替 経 費 台 帳'+(ctx.locationLabel?'　【'+ctx.locationLabel+'】':''),
+    subtitle:'会社名: '+(s.companyName||'')+(ctx.locationLabel?'　／　範囲: '+ctx.locationLabel:'')+'　／　出力日: '+today()+'　／　件数: '+reims.length+'件',
     sections:[{
       headers:['番号','登録日','氏名','目的','使用日','店名','内容','勘定科目','金額（円）','合計（円）','返金日','返金方法','状態'],
       rows:rows,
-      colWidths:[110,70,80,120,70,100,140,80,80,80,70,60,55],
+      colWidths:[20,12,14,24,12,20,28,14,14,14,12,10,10],
       numericCols:[8,9]
     }]
   });
