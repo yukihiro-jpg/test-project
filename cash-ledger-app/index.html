@@ -1081,6 +1081,9 @@ function showSettings() {
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🏦 銀行口座マスタ</div>
     <button class="btn btn-secondary btn-sm" onclick="closeModal();showBankAccountsManager()">🏦 解析対象の銀行・口座リストを管理</button>
     <div class="divider"></div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">📋 毎回提出する資料リスト</div>
+    <button class="btn btn-secondary btn-sm" onclick="closeModal();showRequiredDocsManager()">📋 毎回提出する資料を管理</button>
+    <div class="divider"></div>
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🏦 銀行CSV学習履歴</div>
     <button class="btn btn-secondary btn-sm" onclick="closeModal();showBankCsvSettings()">🏦 銀行CSV 学習履歴の管理</button>
     <div class="divider"></div>
@@ -2320,6 +2323,16 @@ function pageReports() {
       </div>
 
       <div style="font-size:14px;font-weight:700;color:#92400e;margin:18px 0 10px;border-left:4px solid #d97706;padding-left:10px;">📦 帳票出力（税理士提出用）</div>
+
+      <div style="${itemRow}border:2px solid #d97706;background:#fffbeb;margin-bottom:10px;">
+        <div style="${labelCol}">
+          <div style="font-size:14px;font-weight:700;color:#92400e;">📄 税理士へ提出する資料リスト</div>
+          <div style="font-size:11px;color:#78350f;margin-top:2px;line-height:1.5;">月選択 → 表示・印刷・PDF保存・CSV保存<br>毎回提出する資料も自動で含まれます</div>
+        </div>
+        <div style="${actCol}">
+          <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="bankShowPdfListMonthSelector()">📄 月選択して出力</button>
+        </div>
+      </div>
 
       <div style="border:2px solid #d97706;border-radius:8px;padding:16px 18px;background:#fffbeb;">
         <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:#92400e;">📦 税理士提出ファイル（ZIP一括ダウンロード）</div>
@@ -3742,16 +3755,36 @@ function bankCategoryLabel(reason) {
   return '振込明細PDF';
 }
 
-function buildPdfSubmissionList(sessions, companyName) {
+function buildPdfSubmissionList(sessions, companyName, monthFilter) {
   var rows=[
     ['PDF提出必要資料リスト', companyName||'', '出力日:'+today()],
-    ['銀行名','口座番号','日付','元の摘要','入金（円）','出金（円）','提出書類区分','補完後摘要']
+    ['区分','銀行名','口座番号','日付','元の摘要','入金（円）','出金（円）','提出書類区分','補完後摘要']
   ];
+  // 1. 毎回提出する資料（選択月別）
+  var requiredDocs=getRequiredDocs();
+  var monthsForReq=(monthFilter&&monthFilter.length>0)?monthFilter:[];
+  if (requiredDocs.length>0 && monthsForReq.length>0) {
+    monthsForReq.slice().sort().forEach(function(mk){
+      var monthLabel=bankFormatMonthShort(mk);
+      requiredDocs.forEach(function(d){
+        rows.push([
+          '毎回提出',
+          '', '', mk,
+          d.name+'（'+monthLabel+'）',
+          '', '',
+          '毎回提出する資料',
+          d.note||''
+        ]);
+      });
+    });
+  }
+  // 2. 銀行CSVから抽出した needsPDF 行
   (sessions||[]).forEach(function(sess) {
     (sess.rows||[]).forEach(function(r) {
       if (bankClassifyRow(r)!=='needsPDF') return;
       var reason=bankRowReason(r);
       rows.push([
+        '銀行明細',
         sess.bankName||'',
         sess.accountNo||'',
         r.date||'',
@@ -3792,7 +3825,39 @@ function bankCollectPdfSubmissionEntries(sessions) {
   return entries;
 }
 
-function bankBuildPdfListHtml(entries, companyName, dateStr, monthLabel) {
+function bankBuildRequiredDocsHtml(docs, selectedMonths) {
+  if (!docs || docs.length===0 || !selectedMonths || selectedMonths.length===0) return '';
+  function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  var sortedMonths=selectedMonths.slice().sort();
+  var rowsHtml='';
+  sortedMonths.forEach(function(mk){
+    var monthLabel=bankFormatMonthShort(mk);
+    docs.forEach(function(d){
+      rowsHtml+='<tr>'
+        +'<td style="white-space:nowrap;font-weight:600;color:#0f172a;">'+escH(d.name)+'（'+escH(monthLabel)+'）</td>'
+        +'<td style="color:#6b7280;font-size:12px;">'+escH(d.note||'')+'</td>'
+        +'</tr>';
+    });
+  });
+  var totalCount=docs.length*sortedMonths.length;
+  return '<div class="bank-section" style="margin-bottom:26px;">'
+    +'<h2 style="background:#0f766e !important;">📋 毎回提出する資料 <span style="font-size:13px;font-weight:600;opacity:0.9;">('+totalCount+'件)</span></h2>'
+    +'<div class="cat-section">'
+    +'<table>'
+    +'<thead><tr>'
+    +'<th>資料名（対象月）</th>'
+    +'<th>メモ</th>'
+    +'</tr></thead>'
+    +'<tbody>'+rowsHtml+'</tbody>'
+    +'</table>'
+    +'</div>'
+    +'</div>';
+}
+
+function bankBuildPdfListHtml(entries, companyName, dateStr, monthLabel, options) {
+  options=options||{};
+  var selectedMonths=options.selectedMonths||[];
+  var requiredDocs=options.requiredDocs||[];
   // 銀行ごとにグループ化、さらに区分ごとに集約
   var byBank={};
   var bankOrder=[];
@@ -3805,7 +3870,7 @@ function bankBuildPdfListHtml(entries, companyName, dateStr, monthLabel) {
     byBank[bk].byCategory[e.category].push(e);
   });
 
-  var totalCount=entries.length;
+  var totalCount=entries.length + (requiredDocs.length*selectedMonths.length);
   var totalByCategory={transfer:0, loan:0, loan_repayment:0, auto:0};
   entries.forEach(function(e){ totalByCategory[e.category]++; });
 
@@ -3908,6 +3973,7 @@ function bankBuildPdfListHtml(entries, companyName, dateStr, monthLabel) {
     +'<strong>振込明細PDF</strong>: 振込資金・カワリキン等、振込明細資料が別途必要な取引<br>'
     +'<strong>借入返済関連書類PDF</strong>: 支払で借入・手形貸付・証書貸付・ローン等のキーワードがある取引（借入金返済予定表、借入時の利息計算書）<br>'
     +'<strong>この取引の請求書PDF</strong>: この支払の内容がわかる請求書が必要な取引</div>'
+    +bankBuildRequiredDocsHtml(requiredDocs, selectedMonths)
     +sections
     +'</body></html>';
 }
@@ -3928,17 +3994,36 @@ function bankShowPdfListMonthSelector() {
         totalCount++;
       });
     });
-    if (totalCount===0) {
-      alert('税理士へ提出が必要な書類のある取引はありません。');
+    var requiredDocs=getRequiredDocs();
+    var hasRequired=requiredDocs.length>0;
+    if (totalCount===0 && !hasRequired) {
+      alert('税理士へ提出が必要な書類のある取引はありません。\n（毎回提出する資料も登録されていません。設定→「📋 毎回提出する資料を管理」で登録できます。）');
       return;
     }
-    var months=Object.keys(monthCount).sort();
+    // 毎回提出する資料がある場合は会計年度の12ヶ月すべてを選択肢に
+    var months;
+    if (hasRequired) {
+      var stg=getSettings()||{};
+      var fm=stg.fiscalMonth||1;
+      months=bankComputeFiscalYearMonths(fm, ledgerYear).map(function(m){return m.key;});
+    } else {
+      months=Object.keys(monthCount).sort();
+    }
     var monthCheckboxes='';
     months.forEach(function(mk){
+      var bankCnt=monthCount[mk]||0;
+      var reqCnt=hasRequired?requiredDocs.length:0;
+      var totalC=bankCnt+reqCnt;
+      var defaultChecked=bankCnt>0; // 銀行データがある月だけ初期チェック
       monthCheckboxes+='<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--gray-200);border-radius:6px;cursor:pointer;background:white;">'
-        +'<input type="checkbox" class="pdf-month-check" value="'+esc(mk)+'" checked style="margin:0;width:16px;height:16px;cursor:pointer;" />'
+        +'<input type="checkbox" class="pdf-month-check" value="'+esc(mk)+'" '+(defaultChecked?'checked':'')+' style="margin:0;width:16px;height:16px;cursor:pointer;" />'
         +'<span style="font-size:14px;font-weight:700;color:#111827;flex:1;">'+esc(bankFormatMonth(mk))+'</span>'
-        +'<span style="font-size:12px;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:10px;font-weight:600;">'+monthCount[mk]+'件</span>'
+        +'<span style="font-size:12px;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:10px;font-weight:600;">'
+        +(bankCnt>0?'銀行 '+bankCnt+'件':'')
+        +(bankCnt>0 && reqCnt>0?' / ':'')
+        +(reqCnt>0?'定型 '+reqCnt+'件':'')
+        +(totalC===0?'対象なし':'')
+        +'</span>'
         +'</label>';
     });
     var html='<div class="modal-title">📄 税理士提出資料リスト — 出力対象月を選択</div>'
@@ -3991,15 +4076,16 @@ function bankDownloadPdfListCSV() {
     var completed=sessions.filter(function(s){return s.completed;});
     var pool=completed.length>0?completed:sessions;
     var s=getSettings();
-    var rows=buildPdfSubmissionList(pool, s.companyName||'');
-    if (rows.length<=2) { alert('該当する取引がありません。'); return; }
-    // 月フィルタを適用 — 日付列(3列目, index 2)で絞込み
+    var rows=buildPdfSubmissionList(pool, s.companyName||'', months);
+    if (rows.length<=2) { alert('該当する取引も毎回提出する資料もありません。'); return; }
     var header=rows.slice(0,2);
     var data=rows.slice(2).filter(function(r){
-      var mk=bankDateToMonthKey(r[2]);
+      // 毎回提出（1列目='毎回提出'）は月フィルタ済みなのでそのまま含める
+      if (r[0]==='毎回提出') return true;
+      var mk=bankDateToMonthKey(r[3]);
       return mk && months.indexOf(mk)!==-1;
     });
-    if (data.length===0) { alert('選択した月に該当する取引がありません。'); return; }
+    if (data.length===0) { alert('選択した月に該当するデータがありません。'); return; }
     closeModal();
     dlCSV(header.concat(data), 'PDF提出必要資料リスト_'+todayJP()+'.csv');
   });
@@ -4017,15 +4103,20 @@ function bankPrintPdfSubmissionList(monthFilter) {
         return mk && monthFilter.indexOf(mk)!==-1;
       });
     }
-    if (entries.length===0) {
-      alert('税理士へ提出が必要な書類のある取引はありません。');
+    var requiredDocs=getRequiredDocs();
+    var hasRequired=requiredDocs.length>0 && monthFilter && monthFilter.length>0;
+    if (entries.length===0 && !hasRequired) {
+      alert('税理士へ提出が必要な書類のある取引はありません。\n（毎回提出する資料も登録されていません。設定から登録できます。）');
       return;
     }
     var s=getSettings();
     var monthLabel=monthFilter && monthFilter.length>0
       ?monthFilter.sort().map(bankFormatMonth).join('・')
       :'全期間';
-    var html=bankBuildPdfListHtml(entries, s.companyName||'', today(), monthLabel);
+    var html=bankBuildPdfListHtml(entries, s.companyName||'', today(), monthLabel, {
+      selectedMonths: monthFilter||[],
+      requiredDocs: requiredDocs
+    });
     var w=window.open('', '_blank');
     if (!w) {
       alert('ポップアップがブロックされました。ブラウザ設定でこのページのポップアップを許可してください。');
@@ -5503,6 +5594,25 @@ function bankSaveProfiles(p) { DB.set('bank_profiles',p); }
 // ── 銀行口座マスタ（解析対象の銀行・口座リスト） ──
 function bankGetAccounts() { return DB.get('bank_accounts')||[]; }
 function bankSaveAccounts(arr) { DB.set('bank_accounts', arr); }
+
+// ── 毎回提出する資料リスト ──
+function getRequiredDocs() { return DB.get('required_docs')||[]; }
+function saveRequiredDocs(arr) { DB.set('required_docs', arr); }
+function addRequiredDoc(doc) {
+  if (!doc||!doc.name||!String(doc.name).trim()) return false;
+  var arr=getRequiredDocs();
+  var name=String(doc.name).trim();
+  if (arr.some(function(d){return d.name===name;})) return false;
+  arr.push({ name:name, note:String(doc.note||'').trim(), createdAt:new Date().toISOString() });
+  saveRequiredDocs(arr);
+  return true;
+}
+function removeRequiredDoc(idx) {
+  var arr=getRequiredDocs();
+  if (idx<0||idx>=arr.length) return;
+  arr.splice(idx,1);
+  saveRequiredDocs(arr);
+}
 function bankAccountKey(bankName, accountNo) {
   return (bankName||'').trim()+'|'+(accountNo||'').trim();
 }
@@ -5573,6 +5683,11 @@ function bankFormatMonth(yyyymm) {
   if (!yyyymm) return '';
   var m=String(yyyymm).match(/^(\d{4})-(\d{2})$/);
   return m ? m[1]+'年'+parseInt(m[2],10)+'月' : yyyymm;
+}
+function bankFormatMonthShort(yyyymm) {
+  if (!yyyymm) return '';
+  var m=String(yyyymm).match(/^\d{4}-(\d{2})$/);
+  return m ? parseInt(m[1],10)+'月分' : yyyymm;
 }
 function bankComputeFiscalYearMonths(fm, fyYear) {
   var months=[];
@@ -7131,6 +7246,204 @@ function bankConfirmImportAccounts() {
   closeModal();
   alert('銀行口座マスタを更新しました。\n新規追加: '+added+'件\n上書き: '+updated+'件\n\n取込元のCSVファイルはアプリ内に保存されていません。');
   showBankAccountsManager();
+}
+
+// ─── 毎回提出する資料リストの管理画面 ───────────────────────
+let _pendingRequiredDocsImport=null;
+
+function showRequiredDocsManager() {
+  var docs=getRequiredDocs();
+  var rowsHtml;
+  if (docs.length===0) {
+    rowsHtml='<div style="font-size:12px;color:var(--gray-500);padding:12px;text-align:center;">登録された資料はありません。下のフォーム、またはExcel(CSV)インポートから登録してください。</div>';
+  } else {
+    rowsHtml='<div style="overflow-x:auto;border:1px solid var(--gray-200);border-radius:8px;">'
+      +'<table style="width:100%;font-size:13px;border-collapse:collapse;">'
+      +'<thead style="background:var(--gray-100);"><tr>'
+      +'<th style="padding:6px 10px;text-align:left;width:50px;">No.</th>'
+      +'<th style="padding:6px 10px;text-align:left;">資料名</th>'
+      +'<th style="padding:6px 10px;text-align:left;">メモ</th>'
+      +'<th style="padding:6px 10px;width:80px;"></th>'
+      +'</tr></thead><tbody>';
+    docs.forEach(function(d,i){
+      rowsHtml+='<tr style="border-top:1px solid var(--gray-200);">'
+        +'<td style="padding:6px 10px;color:var(--gray-500);">'+(i+1)+'</td>'
+        +'<td style="padding:6px 10px;font-weight:600;">'+esc(d.name||'')+'</td>'
+        +'<td style="padding:6px 10px;color:var(--gray-600);">'+esc(d.note||'')+'</td>'
+        +'<td style="padding:6px 10px;"><button class="btn btn-danger btn-xs" onclick="removeRequiredDocConfirm('+i+')">削除</button></td>'
+        +'</tr>';
+    });
+    rowsHtml+='</tbody></table></div>';
+  }
+
+  showModal(
+    '<div class="modal-title">📋 毎回提出する資料リスト</div>'
+    +'<div style="font-size:12px;color:var(--gray-600);margin-bottom:12px;line-height:1.7;">ここに登録した資料は<strong>税理士提出資料リスト（PDF）</strong>に毎回自動的に掲載されます。出力対象月を選ぶと「資料名（〇月分）」の形式で表示・印刷されます。<br>例: <code>売上明細</code> → 5月選択時は「<strong>売上明細（5月分）</strong>」</div>'
+    +rowsHtml
+    +'<div class="divider"></div>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">📥 Excel(CSV)で一括インポート／エクスポート</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
+      +'<button class="btn btn-secondary btn-sm" onclick="exportRequiredDocsTemplate()">📥 テンプレートをダウンロード</button>'
+      +'<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'req-docs-imp\').click()">📤 Excel(CSV)からインポート</button>'
+      +'<input type="file" id="req-docs-imp" accept=".csv" style="display:none;" onchange="importRequiredDocsFile(event)">'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--gray-500);margin-bottom:14px;">'
+      +'1. テンプレートをダウンロード（既存データがあれば編集用として出力）<br>'
+      +'2. Excelで開き、資料名を追記して保存（CSV形式のまま）<br>'
+      +'3. 「Excel(CSV)からインポート」で取込 → 内容確認 → 確定<br>'
+      +'<strong>※ インポートしたCSVファイル自体はアプリ内に保存されません</strong>'
+    +'</div>'
+    +'<div class="divider"></div>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px;">＋ 個別に1件追加</div>'
+    +'<div style="display:grid;grid-template-columns:2fr 3fr;gap:6px;margin-bottom:8px;">'
+      +'<input type="text" id="rd-name" placeholder="資料名（必須） 例: 売上明細" style="padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" />'
+      +'<input type="text" id="rd-note" placeholder="メモ（任意） 例: 主要取引先別" style="padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;" />'
+    +'</div>'
+    +'<button class="btn btn-primary btn-sm" onclick="addRequiredDocFromForm()">＋ この内容で登録</button>'
+    +'<div class="modal-actions">'
+      +'<button class="btn btn-secondary" onclick="closeModal()">閉じる</button>'
+    +'</div>'
+  , true);
+}
+
+function addRequiredDocFromForm() {
+  var name=(document.getElementById('rd-name')||{value:''}).value.trim();
+  if (!name) { alert('資料名は必須です。'); return; }
+  var note=(document.getElementById('rd-note')||{value:''}).value;
+  if (!addRequiredDoc({name:name, note:note})) {
+    alert('同じ資料名がすでに登録されています。'); return;
+  }
+  showRequiredDocsManager();
+}
+
+function removeRequiredDocConfirm(idx) {
+  var arr=getRequiredDocs();
+  var d=arr[idx];
+  if (!d) return;
+  if (!confirm('「'+(d.name||'')+'」を毎回提出する資料リストから削除しますか？')) return;
+  removeRequiredDoc(idx);
+  showRequiredDocsManager();
+}
+
+function exportRequiredDocsTemplate() {
+  var headers=['資料名(必須)','メモ'];
+  var rows=[headers];
+  var existing=getRequiredDocs();
+  if (existing.length>0) {
+    existing.forEach(function(d){ rows.push([d.name||'', d.note||'']); });
+  } else {
+    rows.push(['売上明細','']);
+    rows.push(['売掛金一覧','主要取引先別']);
+    rows.push(['仕入明細','']);
+    rows.push(['給与明細','']);
+    rows.push(['','']);
+  }
+  dlCSV(rows, '毎回提出する資料リスト_'+today()+'.csv');
+}
+
+function importRequiredDocsFile(event) {
+  var file=event.target.files[0];
+  if (!file) return;
+  var reader=new FileReader();
+  reader.onload=function(e) {
+    var buf=e.target.result;
+    var enc=bankDetectEncoding(buf);
+    var text;
+    try { text=new TextDecoder(enc,{fatal:false}).decode(buf); }
+    catch (ex) { text=new TextDecoder('utf-8',{fatal:false}).decode(buf); }
+    if (text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+
+    var parsed=bankParseCSV(text);
+    if (parsed.length<2) {
+      alert('CSVが空、もしくは形式が違います。テンプレートをご利用ください。');
+      return;
+    }
+    var headers=parsed[0]||[];
+    var nameIdx=headers.findIndex(function(h){return String(h||'').indexOf('資料名')!==-1;});
+    if (nameIdx===-1) {
+      alert('ヘッダ行に「資料名」が見つかりません。\nテンプレートをご利用ください。');
+      return;
+    }
+    var noteIdx=headers.findIndex(function(h){return String(h||'').indexOf('メモ')!==-1;});
+
+    var docs=[];
+    for (var i=1;i<parsed.length;i++) {
+      var row=parsed[i];
+      if (!row||row.every(function(c){return !String(c||'').trim();})) continue;
+      var name=String(row[nameIdx]||'').trim();
+      if (!name) continue;
+      docs.push({
+        name:name,
+        note:noteIdx>=0?String(row[noteIdx]||'').trim():''
+      });
+    }
+    if (docs.length===0) {
+      alert('有効なデータ行（資料名が入った行）が見つかりません。'); return;
+    }
+    showRequiredDocsImportPreview(docs);
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value='';
+}
+
+function showRequiredDocsImportPreview(docs) {
+  _pendingRequiredDocsImport=docs;
+  var existing=getRequiredDocs();
+  var existingNames={};
+  existing.forEach(function(d){ existingNames[d.name]=true; });
+
+  var newCount=0, updCount=0;
+  docs.forEach(function(d){
+    if (existingNames[d.name]) updCount++;
+    else newCount++;
+  });
+
+  var html='<div class="modal-title">📤 毎回提出する資料リストの取込確認</div>'
+    +'<div style="font-size:12px;color:var(--gray-600);margin-bottom:10px;">取込件数: <strong>'+docs.length+'</strong> 件（新規 <span style="color:#059669;">'+newCount+'</span> 件 / 上書き <span style="color:#d97706;">'+updCount+'</span> 件）</div>'
+    +'<div style="max-height:300px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:8px;">'
+    +'<table style="width:100%;font-size:12px;border-collapse:collapse;">'
+    +'<thead style="background:var(--gray-100);position:sticky;top:0;"><tr>'
+    +'<th style="padding:6px 8px;text-align:left;">区分</th>'
+    +'<th style="padding:6px 8px;text-align:left;">資料名</th>'
+    +'<th style="padding:6px 8px;text-align:left;">メモ</th>'
+    +'</tr></thead><tbody>';
+  docs.forEach(function(d){
+    var isUpd=existingNames[d.name];
+    html+='<tr style="border-top:1px solid var(--gray-200);">'
+      +'<td style="padding:5px 8px;">'+(isUpd?'<span style="color:#d97706;font-weight:600;">上書</span>':'<span style="color:#059669;font-weight:600;">新規</span>')+'</td>'
+      +'<td style="padding:5px 8px;">'+esc(d.name)+'</td>'
+      +'<td style="padding:5px 8px;">'+esc(d.note||'')+'</td>'
+      +'</tr>';
+  });
+  html+='</tbody></table></div>';
+  html+='<div style="font-size:11px;color:var(--gray-500);margin-top:8px;">※ 確定後、取り込んだCSVファイル自体はアプリ内に保存されません。</div>';
+  html+='<div class="modal-actions">'
+    +'<button class="btn btn-secondary" onclick="_pendingRequiredDocsImport=null;closeModal();showRequiredDocsManager();">キャンセル</button>'
+    +'<button class="btn btn-primary" onclick="confirmImportRequiredDocs()">'+docs.length+'件を登録する</button>'
+    +'</div>';
+  showModal(html, true);
+}
+
+function confirmImportRequiredDocs() {
+  if (!_pendingRequiredDocsImport) return;
+  var arr=getRequiredDocs();
+  var nameToIdx={};
+  arr.forEach(function(d,i){ nameToIdx[d.name]=i; });
+  var added=0, updated=0;
+  _pendingRequiredDocsImport.forEach(function(d){
+    if (nameToIdx[d.name]!=null) {
+      arr[nameToIdx[d.name]]=Object.assign({}, arr[nameToIdx[d.name]], {name:d.name, note:d.note});
+      updated++;
+    } else {
+      arr.push({name:d.name, note:d.note, createdAt:new Date().toISOString()});
+      added++;
+    }
+  });
+  saveRequiredDocs(arr);
+  _pendingRequiredDocsImport=null;
+  closeModal();
+  alert('毎回提出する資料リストを更新しました。\n新規追加: '+added+'件\n上書き: '+updated+'件\n\n取込元のCSVファイルはアプリ内に保存されていません。');
+  showRequiredDocsManager();
 }
 
 function showBankCsvSettings() {
