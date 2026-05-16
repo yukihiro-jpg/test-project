@@ -2241,6 +2241,19 @@ function pageReports() {
       return `
       <div style="font-size:14px;font-weight:700;color:var(--primary);margin:4px 0 10px;border-left:4px solid var(--primary);padding-left:10px;">🏢 帳票出力（会社管理用）</div>
 
+      <div style="${itemRow}background:#eff6ff;border-color:var(--primary);">
+        <div style="${labelCol}">
+          <div style="font-size:14px;font-weight:700;color:var(--primary);">📊 サマリ（PL / CF）</div>
+          <div style="font-size:11px;color:var(--gray-700);margin-top:2px;">収益・費用・キャッシュフロー集計</div>
+        </div>
+        <div style="${actCol}">
+          <button class="btn btn-primary btn-sm" onclick="summaryTab='pl';showPage('pl-report')">📈 PL（損益）</button>
+          <button class="btn btn-secondary btn-sm" onclick="summaryTab='cf';showPage('pl-report')">💰 CF</button>
+          <button class="btn btn-outline btn-sm" onclick="showPage('pl-report');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="summaryTab='pl';showPage('pl-report');setTimeout(()=>exportPLCSV(),100)">📥 CSV</button>
+        </div>
+      </div>
+
       <div style="${itemRow}">
         <div style="${labelCol}">
           <div style="font-size:14px;font-weight:700;">📒 現金出納帳</div>
@@ -2255,10 +2268,10 @@ function pageReports() {
           <div style="font-size:11px;color:var(--gray-500);">
             現在: <strong>${reportMonthFrom===0?'全月（通期）':reportMonthFrom+'月'+(reportMonthFrom!==reportMonthTo?'〜'+reportMonthTo+'月':'')}</strong>　<span style="color:var(--gray-400);">💡 Shift＋クリックで範囲</span>
           </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="btn btn-outline btn-sm" onclick="exportLedgerReportPrint()">🖨️ 印刷/PDF</button>
-            <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSVReport()">📥 CSV出力</button>
-          </div>
+        </div>
+        <div style="flex:0 0 auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn btn-outline btn-sm" onclick="exportLedgerReportPrint()">🖨️ 印刷/PDF</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSVReport()">📥 CSV出力</button>
         </div>
       </div>
 
@@ -2285,18 +2298,6 @@ function pageReports() {
         </div>
       </div>
 
-      <div style="${itemRow}background:#eff6ff;border-color:var(--primary);">
-        <div style="${labelCol}">
-          <div style="font-size:14px;font-weight:700;color:var(--primary);">📊 サマリ（PL / CF）</div>
-          <div style="font-size:11px;color:var(--gray-700);margin-top:2px;">収益・費用・キャッシュフロー集計</div>
-        </div>
-        <div style="${actCol}">
-          <button class="btn btn-primary btn-sm" onclick="summaryTab='pl';showPage('pl-report')">📈 PL（損益）</button>
-          <button class="btn btn-secondary btn-sm" onclick="summaryTab='cf';showPage('pl-report')">💰 CF</button>
-          <button class="btn btn-outline btn-sm" onclick="showPage('pl-report');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
-          <button class="btn btn-secondary btn-sm" onclick="summaryTab='pl';showPage('pl-report');setTimeout(()=>exportPLCSV(),100)">📥 CSV</button>
-        </div>
-      </div>
 
       <div style="${itemRow}">
         <div style="${labelCol}">
@@ -2334,17 +2335,21 @@ function pageReports() {
         </div>
       </div>
 
-      <div style="border:2px solid #d97706;border-radius:8px;padding:16px 18px;background:#fffbeb;">
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:#92400e;">📦 税理士提出ファイル（ZIP一括ダウンロード）</div>
-        <div style="font-size:12px;color:#78350f;margin-bottom:6px;">下記のCSVを <strong>1つのZIPファイル</strong> にまとめてダウンロードします（該当データがあるものだけ含む）</div>
-        <ul style="font-size:12px;color:#92400e;margin:0 0 12px 16px;padding:0;line-height:1.8;">
-          <li>現金出納帳（期首〜最新）— 常時</li>
-          <li>仮払金台帳 / 仮払精算明細表 / 未精算一覧 — <strong>仮払が1件以上ある場合のみ</strong></li>
-          <li>立替経費台帳 — <strong>立替が1件以上ある場合のみ</strong></li>
-          <li>銀行出納帳 — <strong>「登録完了」済の銀行CSVセッションのみ</strong></li>
-          <li>PDF提出必要資料リスト — <strong>振込明細／借入返済／請求書PDF対象がある場合のみ</strong></li>
-        </ul>
-        <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="exportTaxAccountantBundle()">📦 ZIPで一括ダウンロード</button>
+      <div style="border:2px solid #d97706;border-radius:8px;padding:14px 16px;background:#fffbeb;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:280px;">
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px;color:#92400e;">📦 税理士提出ファイル（ZIP一括ダウンロード）</div>
+          <div style="font-size:12px;color:#78350f;margin-bottom:6px;">下記のCSVを <strong>1つのZIPファイル</strong> にまとめてダウンロードします（該当データがあるものだけ含む）</div>
+          <ul style="font-size:11px;color:#92400e;margin:0 0 0 16px;padding:0;line-height:1.7;">
+            <li>現金出納帳（期首〜最新）— 常時</li>
+            <li>仮払金台帳 / 仮払精算明細表 / 未精算一覧 — <strong>仮払が1件以上ある場合のみ</strong></li>
+            <li>立替経費台帳 — <strong>立替が1件以上ある場合のみ</strong></li>
+            <li>銀行出納帳 — <strong>「登録完了」済の銀行CSVセッションのみ</strong></li>
+            <li>PDF提出必要資料リスト — <strong>振込明細／借入返済／請求書PDF対象がある場合のみ</strong></li>
+          </ul>
+        </div>
+        <div style="flex:0 0 auto;">
+          <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="exportTaxAccountantBundle()">📦 ZIPで一括ダウンロード</button>
+        </div>
       </div>
       `;
     })()}
@@ -3828,29 +3833,20 @@ function bankCollectPdfSubmissionEntries(sessions) {
 function bankBuildRequiredDocsHtml(docs, selectedMonths) {
   if (!docs || docs.length===0 || !selectedMonths || selectedMonths.length===0) return '';
   function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-  var sortedMonths=selectedMonths.slice().sort();
-  var rowsHtml='';
+  // 月は降順で表示（最新月から）
+  var sortedMonths=selectedMonths.slice().sort(function(a,b){return b.localeCompare(a);});
+  var lines='';
   sortedMonths.forEach(function(mk){
     var monthLabel=bankFormatMonthShort(mk);
     docs.forEach(function(d){
-      rowsHtml+='<tr>'
-        +'<td style="white-space:nowrap;font-weight:600;color:#0f172a;">'+escH(d.name)+'（'+escH(monthLabel)+'）</td>'
-        +'<td style="color:#6b7280;font-size:12px;">'+escH(d.note||'')+'</td>'
-        +'</tr>';
+      var note=d.note?'（'+escH(d.note)+'）':'';
+      lines+='<li style="margin-bottom:8px;line-height:1.7;"><strong>'+escH(d.name)+'</strong>'+note+' の <strong>'+escH(monthLabel)+'</strong>をご用意ください。</li>';
     });
   });
   var totalCount=docs.length*sortedMonths.length;
-  return '<div class="bank-section" style="margin-bottom:26px;">'
-    +'<h2 style="background:#0f766e !important;">📋 毎回提出する資料 <span style="font-size:13px;font-weight:600;opacity:0.9;">('+totalCount+'件)</span></h2>'
-    +'<div class="cat-section">'
-    +'<table>'
-    +'<thead><tr>'
-    +'<th>資料名（対象月）</th>'
-    +'<th>メモ</th>'
-    +'</tr></thead>'
-    +'<tbody>'+rowsHtml+'</tbody>'
-    +'</table>'
-    +'</div>'
+  return '<div class="required-section">'
+    +'<h2>📋 毎回提出する資料 <span style="font-size:13px;font-weight:600;opacity:0.9;">('+totalCount+'件)</span></h2>'
+    +'<ol class="nl-list">'+lines+'</ol>'
     +'</div>';
 }
 
@@ -3899,32 +3895,35 @@ function bankBuildPdfListHtml(entries, companyName, dateStr, monthLabel, options
     return '#ede9fe';
   }
 
+  function fmtDateJa(d) {
+    var m = String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? (m[1]+'年'+parseInt(m[2],10)+'月'+parseInt(m[3],10)+'日') : (d||'');
+  }
+  function docInstruction(cat) {
+    if (cat==='loan')           return '借入契約書または金消契約書のPDF';
+    if (cat==='loan_repayment') return '借入金返済予定表および借入時の利息計算書のPDF';
+    if (cat==='auto')           return 'この支払の内容がわかる請求書のPDF';
+    return '振込明細のPDF';
+  }
+  function sentenceFor(r, cat) {
+    var dir = r.isReceipt ? '入金' : '出金';
+    var amt = fmtAmt(r.amount);
+    var orig = escHtml(r.orig||'(摘要なし)');
+    var desc = (r.desc && r.desc!==r.orig) ? '（補完後摘要: '+escHtml(r.desc)+'）' : '';
+    return fmtDateJa(r.date)+'の <strong>'+orig+'</strong>'+desc+'（'+dir+' '+amt+'円）について、'+docInstruction(cat)+'をご用意ください。';
+  }
+
   var sections=bankOrder.map(function(bk){
     var b=byBank[bk];
     var subs=['transfer','loan','loan_repayment','auto'].map(function(cat){
       var items=b.byCategory[cat];
       if (items.length===0) return '';
-      var rowsHtml=items.map(function(r){
-        return '<tr>'
-          +'<td style="white-space:nowrap;">'+escHtml(r.date)+'</td>'
-          +'<td>'+escHtml(r.orig)+'</td>'
-          +'<td class="r">'+(r.isReceipt?fmtAmt(r.amount):'')+'</td>'
-          +'<td class="r">'+(!r.isReceipt?fmtAmt(r.amount):'')+'</td>'
-          +'<td>'+escHtml(r.desc)+'</td>'
-          +'</tr>';
+      var listHtml=items.map(function(r,i){
+        return '<li style="margin-bottom:8px;line-height:1.7;">'+sentenceFor(r, cat)+'</li>';
       }).join('');
       return '<div class="cat-section">'
         +'<h3 style="background:'+catBg(cat)+';color:'+catColor(cat)+';">📎 '+catLabel(cat)+' <span style="font-size:13px;font-weight:600;">('+items.length+'件)</span></h3>'
-        +'<table>'
-        +'<thead><tr>'
-        +'<th style="width:90px;">日付</th>'
-        +'<th>元の摘要</th>'
-        +'<th class="r" style="width:110px;">入金（円）</th>'
-        +'<th class="r" style="width:110px;">出金（円）</th>'
-        +'<th>補完後摘要</th>'
-        +'</tr></thead>'
-        +'<tbody>'+rowsHtml+'</tbody>'
-        +'</table>'
+        +'<ol class="nl-list">'+listHtml+'</ol>'
         +'</div>';
     }).join('');
     return '<div class="bank-section">'
@@ -3954,6 +3953,11 @@ function bankBuildPdfListHtml(entries, companyName, dateStr, monthLabel, options
     +'.bank-section h2 { font-size: 18px; background: #1e40af; color: #ffffff; padding: 10px 16px; border-radius: 8px; margin: 0 0 12px 0; }'
     +'.cat-section { margin: 12px 0 18px 0; page-break-inside: avoid; }'
     +'.cat-section h3 { font-size: 15px; padding: 8px 14px; border-radius: 6px; margin: 0 0 8px 0; }'
+    +'.nl-list { margin: 4px 0 0 4px; padding-left: 22px; font-size: 14px; color: #1f2937; }'
+    +'.nl-list li { padding: 4px 0; line-height: 1.75; }'
+    +'.nl-list strong { color: #0f172a; }'
+    +'.required-section { margin-bottom: 26px; page-break-inside: avoid; }'
+    +'.required-section h2 { font-size: 18px; background: #0f766e; color: #ffffff; padding: 10px 16px; border-radius: 8px; margin: 0 0 10px 0; }'
     +'table { width: 100%; border-collapse: collapse; font-size: 13px; }'
     +'th, td { padding: 7px 10px; border: 1px solid #d1d5db; text-align: left; vertical-align: top; line-height: 1.5; }'
     +'th { background: #f3f4f6; font-weight: 700; font-size: 12px; color: #374151; }'
@@ -4009,6 +4013,8 @@ function bankShowPdfListMonthSelector() {
     } else {
       months=Object.keys(monthCount).sort();
     }
+    // 税理士提出は降順表示（最新月が上）
+    months=months.slice().sort(function(a,b){return b.localeCompare(a);});
     var monthCheckboxes='';
     months.forEach(function(mk){
       var bankCnt=monthCount[mk]||0;
