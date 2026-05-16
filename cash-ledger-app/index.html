@@ -2225,94 +2225,116 @@ function pageReports() {
       <div class="card-title" style="margin-bottom:0;border:none;padding:0;">📄 帳票出力</div>
       <button class="btn btn-outline btn-sm" onclick="showHowTo('reports')" style="font-size:12px;">📖 操作方法</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;">
-      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">📒 現金出納帳</div>
-        <div style="font-size:12px;color:var(--gray-500);margin-bottom:10px;">月別の入出金明細と残高一覧</div>
-        <div style="margin-bottom:12px;">
-          <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">出力月範囲</div>
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <button class="btn btn-xs ${reportMonthFrom===0?'btn-primary':'btn-secondary'}" onclick="reportMonthFrom=0;reportMonthTo=0;_reportFirstClick=0;renderPage()">全月</button>
-            ${(function(){
-              const s=getSettings(); const fm=s.fiscalMonth||1;
-              const fiscalMonths=Array.from({length:12},function(_,i){return ((fm-1+i)%12)+1;});
-              return fiscalMonths.map(function(m){
-                const act=reportMonthFrom!==0&&isMonthInRange(m,reportMonthFrom,reportMonthTo,fm);
-                return '<button class="btn btn-xs '+(act?'btn-primary':'btn-secondary')+'" onclick="reportMonthClick('+m+',event)">'+m+'月</button>';
-              }).join('');
-            })()}
-          </div>
-          <div style="font-size:11px;color:var(--gray-500);margin-top:4px;">
-            現在: <strong>${reportMonthFrom===0?'全月（通期）':reportMonthFrom+'月'+(reportMonthFrom!==reportMonthTo?'〜'+reportMonthTo+'月':'')}</strong>　<span style="color:var(--gray-400);">💡 Shiftキー＋クリックで範囲選択</span>
-          </div>
+    ${(function(){
+      const s=getSettings(); const fm=s.fiscalMonth||1;
+      const fiscalMonths=Array.from({length:12},function(_,i){return ((fm-1+i)%12)+1;});
+      const monthBar=fiscalMonths.map(function(m){
+        const act=reportMonthFrom!==0&&isMonthInRange(m,reportMonthFrom,reportMonthTo,fm);
+        return '<button class="btn btn-xs '+(act?'btn-primary':'btn-secondary')+'" onclick="reportMonthClick('+m+',event)">'+m+'月</button>';
+      }).join('');
+      const itemRow='border:1px solid var(--gray-200);border-radius:8px;padding:14px 16px;background:white;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:8px;';
+      const labelCol='flex:0 0 230px;';
+      const actCol='flex:1;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;';
+      return `
+      <div style="font-size:14px;font-weight:700;color:var(--primary);margin:4px 0 10px;border-left:4px solid var(--primary);padding-left:10px;">🏢 帳票出力（会社管理用）</div>
+
+      <div style="${itemRow}">
+        <div style="${labelCol}">
+          <div style="font-size:14px;font-weight:700;">📒 現金出納帳</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:2px;">月別の入出金明細と残高一覧</div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-outline btn-sm" onclick="exportLedgerReportPrint()">🖨️ 印刷/PDF</button>
-          <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSVReport()">📥 CSV出力</button>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:280px;">
+          <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+            <span style="font-size:11px;font-weight:700;color:var(--gray-600);">出力月:</span>
+            <button class="btn btn-xs ${reportMonthFrom===0?'btn-primary':'btn-secondary'}" onclick="reportMonthFrom=0;reportMonthTo=0;_reportFirstClick=0;renderPage()">全月</button>
+            ${monthBar}
+          </div>
+          <div style="font-size:11px;color:var(--gray-500);">
+            現在: <strong>${reportMonthFrom===0?'全月（通期）':reportMonthFrom+'月'+(reportMonthFrom!==reportMonthTo?'〜'+reportMonthTo+'月':'')}</strong>　<span style="color:var(--gray-400);">💡 Shift＋クリックで範囲</span>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" onclick="exportLedgerReportPrint()">🖨️ 印刷/PDF</button>
+            <button class="btn btn-secondary btn-sm" onclick="exportLedgerCSVReport()">📥 CSV出力</button>
+          </div>
         </div>
       </div>
-      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">💼 仮払金台帳</div>
-        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">仮払いの一覧と精算状況</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+
+      <div style="${itemRow}">
+        <div style="${labelCol}">
+          <div style="font-size:14px;font-weight:700;">💼 仮払金台帳</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:2px;">仮払いの一覧と精算状況</div>
+        </div>
+        <div style="${actCol}">
           <button class="btn btn-outline btn-sm" onclick="showPage('advances');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
           <button class="btn btn-secondary btn-sm" onclick="exportAdvancesCSV()">📥 CSV出力</button>
         </div>
       </div>
-      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">📋 仮払精算明細表</div>
-        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">使用明細を1行ずつ展開した詳細表（仮払いごとに何に使ったかを全件表示）</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+
+      <div style="${itemRow}">
+        <div style="${labelCol}">
+          <div style="font-size:14px;font-weight:700;">📋 仮払精算明細表</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:2px;">使用明細を1行ずつ展開した詳細表</div>
+        </div>
+        <div style="${actCol}">
           <button class="btn btn-outline btn-sm" onclick="showPage('settlement-detail')">👁️ 表示</button>
           <button class="btn btn-outline btn-sm" onclick="showPage('settlement-detail');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
           <button class="btn btn-secondary btn-sm" onclick="exportSettlementDetailCSV()">📥 CSV出力</button>
         </div>
       </div>
-      <div style="border:1px solid var(--primary);border-radius:8px;padding:18px;background:var(--primary-light);">
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:var(--primary);">📊 サマリ</div>
-        <div style="font-size:12px;color:var(--gray-700);margin-bottom:12px;">収益・費用・キャッシュフローを集計します</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+
+      <div style="${itemRow}background:#eff6ff;border-color:var(--primary);">
+        <div style="${labelCol}">
+          <div style="font-size:14px;font-weight:700;color:var(--primary);">📊 サマリ（PL / CF）</div>
+          <div style="font-size:11px;color:var(--gray-700);margin-top:2px;">収益・費用・キャッシュフロー集計</div>
+        </div>
+        <div style="${actCol}">
           <button class="btn btn-primary btn-sm" onclick="summaryTab='pl';showPage('pl-report')">📈 PL（損益）</button>
-          <button class="btn btn-secondary btn-sm" onclick="summaryTab='cf';showPage('pl-report')">💰 CF（キャッシュフロー）</button>
+          <button class="btn btn-secondary btn-sm" onclick="summaryTab='cf';showPage('pl-report')">💰 CF</button>
           <button class="btn btn-outline btn-sm" onclick="showPage('pl-report');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
           <button class="btn btn-secondary btn-sm" onclick="summaryTab='pl';showPage('pl-report');setTimeout(()=>exportPLCSV(),100)">📥 CSV</button>
         </div>
       </div>
-      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">⚠️ 未精算一覧</div>
-        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">精算未完了の仮払い（${pending.length}件）</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+
+      <div style="${itemRow}">
+        <div style="${labelCol}">
+          <div style="font-size:14px;font-weight:700;">⚠️ 未精算一覧</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:2px;">精算未完了の仮払い（${pending.length}件）</div>
+        </div>
+        <div style="${actCol}">
           <button class="btn btn-outline btn-sm" onclick="advFilter='pending';showPage('advances');setTimeout(()=>window.print(),300)">🖨️ 印刷/PDF</button>
           <button class="btn btn-secondary btn-sm" onclick="exportPendingCSV()">📥 CSV出力</button>
         </div>
       </div>
-      <div style="border:2px solid #d97706;border-radius:8px;padding:18px;background:#fffbeb;">
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:#92400e;">📦 税理士提出用（ZIP一括ダウンロード）</div>
-        <div style="font-size:12px;color:#78350f;margin-bottom:6px;">下記のCSVを <strong>1つのZIPファイル</strong> にまとめてダウンロードします（該当データがあるものだけ含む）</div>
-        <ul style="font-size:12px;color:#92400e;margin:0 0 14px 16px;padding:0;line-height:1.8;">
-          <li>現金出納帳（期首〜最新）— 常時</li>
-          <li>仮払金台帳 / 仮払精算明細表 / 未精算一覧 — <strong>仮払が1件以上ある場合のみ</strong></li>
-          <li>立替経費台帳 — <strong>立替が1件以上ある場合のみ</strong></li>
-          <li>銀行出納帳 — <strong>「登録完了」済の銀行CSVセッションのみ</strong></li>
-          <li>PDF提出必要資料リスト — <strong>振込明細／借入／請求書PDF対象がある場合のみ</strong></li>
-        </ul>
-        <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="exportTaxAccountantBundle()">📦 ZIPで一括ダウンロード</button>
-      </div>
-      <div style="border:1px solid var(--gray-200);border-radius:8px;padding:18px;">
-        <div style="font-size:15px;font-weight:700;margin-bottom:6px;">💾 バックアップ・復元</div>
-        <div style="font-size:12px;color:var(--gray-500);margin-bottom:6px;line-height:1.7;">
-          <strong>全データのバックアップ</strong>: 全拠点・全データ → <strong>PC入れ替え時はこれ</strong><br>
-          <strong>この拠点のみ</strong>: 選択中拠点のみ → <strong>支社→本社の集約用</strong><br>
-          推奨: 月1回の定期バックアップ
+
+      <div style="${itemRow}">
+        <div style="${labelCol}">
+          <div style="font-size:14px;font-weight:700;">💾 バックアップ・復元</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:2px;line-height:1.5;">全データ→PC入替用 ／ この拠点のみ→集約用</div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 全データバックアップ</button>
+        <div style="${actCol}">
+          <button class="btn btn-secondary btn-sm" onclick="exportBackup()">📥 全データ</button>
           <button class="btn btn-secondary btn-sm" onclick="exportLocationBackup()">📥 この拠点のみ</button>
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('imp2').click()">📤 復元</button>
           <input type="file" id="imp2" accept=".json" style="display:none;" onchange="importBackup(event)">
         </div>
       </div>
-    </div>
+
+      <div style="font-size:14px;font-weight:700;color:#92400e;margin:18px 0 10px;border-left:4px solid #d97706;padding-left:10px;">📦 帳票出力（税理士提出用）</div>
+
+      <div style="border:2px solid #d97706;border-radius:8px;padding:16px 18px;background:#fffbeb;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;color:#92400e;">📦 税理士提出ファイル（ZIP一括ダウンロード）</div>
+        <div style="font-size:12px;color:#78350f;margin-bottom:6px;">下記のCSVを <strong>1つのZIPファイル</strong> にまとめてダウンロードします（該当データがあるものだけ含む）</div>
+        <ul style="font-size:12px;color:#92400e;margin:0 0 12px 16px;padding:0;line-height:1.8;">
+          <li>現金出納帳（期首〜最新）— 常時</li>
+          <li>仮払金台帳 / 仮払精算明細表 / 未精算一覧 — <strong>仮払が1件以上ある場合のみ</strong></li>
+          <li>立替経費台帳 — <strong>立替が1件以上ある場合のみ</strong></li>
+          <li>銀行出納帳 — <strong>「登録完了」済の銀行CSVセッションのみ</strong></li>
+          <li>PDF提出必要資料リスト — <strong>振込明細／借入返済／請求書PDF対象がある場合のみ</strong></li>
+        </ul>
+        <button class="btn btn-sm" style="background:#d97706;color:white;font-weight:700;border:none;" onclick="exportTaxAccountantBundle()">📦 ZIPで一括ダウンロード</button>
+      </div>
+      `;
+    })()}
   </div>`;
 }
 
@@ -3884,9 +3906,8 @@ function bankBuildPdfListHtml(entries, companyName, dateStr, monthLabel) {
     +(summaryRow?'<div class="summary">'+summaryRow+'</div>':'')
     +'<div class="intro">下記取引について、対応する書類のPDFを税理士にご送付ください。<br>'
     +'<strong>振込明細PDF</strong>: 振込資金・カワリキン等、振込明細資料が別途必要な取引<br>'
-    +'<strong>借入関連書類PDF</strong>: 高額入金で借入・手形貸付・ローン等のキーワードがある取引（金消契約書、借用書等）<br>'
     +'<strong>借入返済関連書類PDF</strong>: 支払で借入・手形貸付・証書貸付・ローン等のキーワードがある取引（借入金返済予定表、借入時の利息計算書）<br>'
-    +'<strong>この取引の請求書PDF</strong>: 自動車関連会社等への支払で請求書PDFが必要な取引（整備明細書、購入契約書、車検証等）</div>'
+    +'<strong>この取引の請求書PDF</strong>: この支払の内容がわかる請求書が必要な取引</div>'
     +sections
     +'</body></html>';
 }
@@ -5732,16 +5753,23 @@ function bankScheduleAutoSave() {
 }
 
 // セッションマージ（同銀行・同口座の重複排除）
-function bankMergeSessions(base, other) {
-  var seen=new Set(base.rows.map(function(r){
-    return r.date+'_'+r.receipt+'_'+r.payment+'_'+r.balance;
-  }));
-  var added=0;
+function bankRowDedupKey(r) {
+  return (r.date||'')+'|'+String(r.descriptionOriginal||'').trim()+'|'+(r.receipt||0)+'|'+(r.payment||0)+'|'+(r.balance||0);
+}
+
+function bankMergeSessions(base, other, batchId) {
+  var seen=new Set(base.rows.map(bankRowDedupKey));
+  var added=0, dup=0;
   other.rows.forEach(function(r) {
-    var k=r.date+'_'+r.receipt+'_'+r.payment+'_'+r.balance;
-    if (!seen.has(k)) { base.rows.push(r); seen.add(k); added++; }
+    var k=bankRowDedupKey(r);
+    if (!seen.has(k)) {
+      if (batchId && !r.batchId) r.batchId=batchId;
+      base.rows.push(r); seen.add(k); added++;
+    } else {
+      dup++;
+    }
   });
-  base.rows.sort(function(a,b){return a.date.localeCompare(b.date);});
+  base.rows.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
   // 処理対象月を再計算
   var monthsSet={};
   base.rows.forEach(function(r){
@@ -5752,7 +5780,73 @@ function bankMergeSessions(base, other) {
   base.processedMonths=months;
   base.firstProcessedMonth=months[0]||null;
   base.lastProcessedMonth=months[months.length-1]||null;
-  return added;
+  return { added:added, duplicates:dup };
+}
+
+function bankRemoveImportBatch(sess, batchId) {
+  if (!sess||!batchId) return 0;
+  var before=sess.rows.length;
+  sess.rows=sess.rows.filter(function(r){return r.batchId!==batchId;});
+  var removed=before-sess.rows.length;
+  if (sess.imports) sess.imports=sess.imports.filter(function(im){return im.batchId!==batchId;});
+  bankEnsureProcessedMonths(sess, true);
+  return removed;
+}
+
+function bankRenderImportHistory(sess) {
+  if (!sess) return '';
+  var imports=sess.imports||[];
+  if (imports.length===0) return '';
+  var html='<div style="background:#f9fafb;border:1px solid var(--gray-200);border-radius:8px;padding:10px 14px;margin-bottom:10px;">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">📋 このセッションの取込履歴（'+imports.length+'件）— 列マッピングを間違えた回だけ個別に削除できます</div>'
+    +'<div style="display:flex;flex-direction:column;gap:4px;">';
+  // 新しい順で表示
+  imports.slice().reverse().forEach(function(im){
+    var dt=im.importedAt?new Date(im.importedAt).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+    var rowCount=sess.rows.filter(function(r){return r.batchId===im.batchId;}).length;
+    var detail=(im.addedRows!=null)
+      ?'新規 '+im.addedRows+'行 / 重複除外 '+(im.duplicateRows||0)+'行'
+      :im.rowCount+'行';
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:6px 8px;background:white;border:1px solid var(--gray-200);border-radius:5px;font-size:12px;flex-wrap:wrap;">'
+      +'<span style="font-family:monospace;color:#6b7280;font-size:11px;min-width:90px;">'+esc(dt)+'</span>'
+      +'<span style="flex:1;min-width:140px;">📄 '+esc(im.fileName||'(ファイル名不明)')+'</span>'
+      +'<span style="color:#6b7280;font-size:11px;">'+detail+'（残: '+rowCount+'行）</span>'
+      +'<button class="btn btn-danger btn-xs" style="font-size:11px;" onclick="bankDeleteImportBatch(\''+esc(im.batchId)+'\')">🗑 この取込を削除</button>'
+      +'</div>';
+  });
+  html+='</div></div>';
+  return html;
+}
+
+function bankDeleteImportBatch(batchId) {
+  if (!bankCurrentSession||!batchId) return;
+  var im=(bankCurrentSession.imports||[]).find(function(x){return x.batchId===batchId;});
+  if (!im) { alert('該当する取込履歴が見つかりません。'); return; }
+  var rowCount=bankCurrentSession.rows.filter(function(r){return r.batchId===batchId;}).length;
+  if (!confirm('この取込（'+(im.fileName||'')+'）を削除します。\n対象 '+rowCount+' 行が消去されます（列マッピング誤りの取り消し用）。\n\nよろしいですか？')) return;
+  bankRemoveImportBatch(bankCurrentSession, batchId);
+  if (bankCurrentSession.rows.length===0) {
+    // 全行なくなったらセッション自体を削除
+    if (confirm('このセッションには行が残っていません。\nセッションごと削除しますか？')) {
+      bankDeleteSession(bankCurrentSession.id).then(function(){
+        if (bankSessionCache) {
+          bankSessionCache=bankSessionCache.filter(function(s){return s.id!==bankCurrentSession.id;});
+        }
+        bankCurrentSession=null;
+        bankCsvPage='list';
+        renderPage();
+      });
+      return;
+    }
+  }
+  bankCurrentSession.updatedAt=new Date().toISOString();
+  bankSaveSession(bankCurrentSession).then(function(){
+    if (bankSessionCache) {
+      var idx=bankSessionCache.findIndex(function(s){return s.id===bankCurrentSession.id;});
+      if (idx>=0) bankSessionCache[idx]=bankCurrentSession;
+    }
+    renderPage();
+  });
 }
 
 // ── ページ関数 ──────────────────────────────────────────────────────────────
@@ -6222,12 +6316,12 @@ function bankStartEditing() {
     bankUpsertAccount({bankName:bankName, accountNo:accountNo});
   }
   var descCols=bankColumnRoles.description||[];
+  var batchId='batch_'+Date.now();
   var rows=bankImportedData.rows.map(function(row) {
     var dateStr=bankColumnRoles.date!=null?bankNormalizeDate(row[bankColumnRoles.date]||''):'';
     var descOrig=descCols.map(function(c){return (row[c]||'').trim();}).filter(function(s){return s;}).join(' ');
     var rec=bankColumnRoles.receipt!=null?bankParseAmount(row[bankColumnRoles.receipt]):0;
     var pay=bankColumnRoles.payment!=null?bankParseAmount(row[bankColumnRoles.payment]):0;
-    // 入出金が1列(プラスマイナス)で表現されている場合、正→入金、負→出金として分割
     if (bankColumnRoles.amount!=null) {
       var amt=bankParseAmount(row[bankColumnRoles.amount]);
       if (amt>0) rec=amt;
@@ -6236,24 +6330,36 @@ function bankStartEditing() {
     var bal=bankColumnRoles.balance!=null?bankParseAmount(row[bankColumnRoles.balance]):0;
     var probe={descriptionOriginal:descOrig, receipt:rec, payment:pay};
     var initDesc=(bankClassifyRow(probe)==='needsInfo')?'':descOrig;
-    return {date:dateStr, descriptionOriginal:descOrig, description:initDesc, receipt:rec, payment:pay, balance:bal};
+    return {date:dateStr, descriptionOriginal:descOrig, description:initDesc, receipt:rec, payment:pay, balance:bal, batchId:batchId};
   }).filter(function(r){return r.date||r.receipt||r.payment||r.balance!==0;});
-  rows.sort(function(a,b){return a.date.localeCompare(b.date);});
+  rows.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
 
-  // 既存セッションとのマージ確認
+  var importLog={
+    batchId:batchId,
+    importedAt:new Date().toISOString(),
+    fileName:bankImportedData.fileName||'',
+    rowCount:rows.length,
+    columnMapping:Object.assign({}, bankColumnRoles)
+  };
+
+  // 既存セッションがあれば自動マージ＋重複排除
   var existing=null;
   if (bankSessionCache&&bankName) {
     existing=bankSessionCache.find(function(s){return s.bankName===bankName&&s.accountNo===accountNo;});
   }
   if (existing) {
-    var added=bankMergeSessions(existing,{rows:rows.map(function(r){return Object.assign({},r);})});
-    if (confirm('同じ銀行・口座のセッションが存在します。\n重複を除いて '+added+' 行をマージしますか？\n（キャンセルすると新規セッションとして保存します）')) {
-      existing.updatedAt=new Date().toISOString();
-      bankCurrentSession=existing;
-      bankEditFilter='attention';bankCsvPage='editing';
-      bankSaveSession(existing).then(function(){renderPage();});
-      return;
-    }
+    var mergeResult=bankMergeSessions(existing, {rows:rows}, batchId);
+    existing.updatedAt=new Date().toISOString();
+    existing.imports=(existing.imports||[]).concat([Object.assign({}, importLog, {addedRows:mergeResult.added, duplicateRows:mergeResult.duplicates})]);
+    existing.completed=false; // 新規取込があったので完了フラグ解除
+    bankCurrentSession=existing;
+    bankEditFilter='attention';bankCsvPage='editing';
+    bankSaveSession(existing).then(function(){
+      var msg='【自動マージ】'+rows.length+'行を取り込みました。\n　 新規追加: '+mergeResult.added+'行\n　 重複（取込済）: '+mergeResult.duplicates+'行';
+      if (mergeResult.duplicates>0) alert(msg);
+      renderPage();
+    });
+    return;
   }
 
   var monthsSet={};
@@ -6269,6 +6375,7 @@ function bankStartEditing() {
     originalHeaders:bankImportedData.headers,
     columnMapping:Object.assign({},bankColumnRoles),
     rows:rows,
+    imports:[importLog],
     processedMonths:months,
     firstProcessedMonth:months[0]||null,
     lastProcessedMonth:months[months.length-1]||null,
@@ -6527,6 +6634,7 @@ function bankPageEdit() {
     +'</div>'
     +'</div>'
     +alertHtml
+    +bankRenderImportHistory(sess)
     +filterBar
     +'<div style="overflow-x:auto;"><table class="table-grid" style="font-size:13px;">'
     +'<thead><tr>'
