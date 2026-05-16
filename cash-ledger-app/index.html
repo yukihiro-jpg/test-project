@@ -3641,101 +3641,119 @@ function todayJP() {
 }
 
 function exportTaxAccountantBundle() {
-  var ctx=_exportLocationContext();
-  var s=ctx.settings;
+  var s=getSettings()||{};
+  var locs=(s.locations||[]).slice();
   var jp=todayJP();
-  var advancesAll=_filterByLocation(getAdvances(), ctx);
-  var reimsAll=_filterByLocation(getReimbursements(), ctx);
-  var locTag=ctx.locationLabel?'_'+ctx.locationLabel.replace(/[\\/:*?"<>|\s]/g,'_'):'';
-  var folderName='税理士提出_'+(s&&s.companyName?String(s.companyName).replace(/[\\/:*?"<>|]/g,'_'):'')+locTag+'_'+jp;
+  var folderName='税理士提出_'+(s&&s.companyName?String(s.companyName).replace(/[\\/:*?"<>|]/g,'_'):'')+'_'+jp;
   var zipFiles=[];
-  function addCsvFile(name, rows){
-    zipFiles.push({name: folderName+'/'+name, content: rowsToCsvString(rows)});
+  var safe=function(x){return String(x||'').replace(/[\\/:*?"<>|]/g,'_');};
+
+  // 出力対象拠点: 拠点未登録なら [null]（ルート直下）、拠点ありなら各拠点を順番に
+  var targets = locs.length>0 ? locs.slice() : [null];
+
+  function addCsvFile(loc, name, rows){
+    var sub = loc===null ? '' : safe(loc)+'/';
+    zipFiles.push({name: folderName+'/'+sub+name, content: rowsToCsvString(rows)});
   }
-  // 拠点別期首残高を考慮した残高再計算
-  var openBalForLedger=ctx.useLocFilter
-    ?getLocationOpenBalance(ctx.selectedLocation)
-    :(ctx.locations.length>0 ? getLocationOpenBalance('') : (s.openingBalance||0));
-  var ledgerEntries=_filterByLocation(getEntries(), ctx);
-  var ledgerWithBal=calcBalancesFrom(ledgerEntries, openBalForLedger);
+  function filterByLoc(items, loc){
+    if (loc===null) return items;
+    return items.filter(function(it){return (it.location||'')===loc;});
+  }
 
-  // 1. 現金出納帳
-  addCsvFile('現金出納帳_'+jp+'.csv', [
-    ['現金出納帳',s.companyName||'',`出力日:${today()}`,(ctx.locationLabel||'')],
-    ['日付','勘定科目','店名・支払先','購入品・内容','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
-    ...ledgerWithBal.map(function(e){return [
-      e.date,
-      e.account||'',
-      e.storeName||'', e.itemName||e.description||'',
-      e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
-      e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払支払':e.type==='settlement'?'仮払精算':e.type==='reimbursement'?'立替返金':'一般',
-      e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
-    ];})
-  ]);
+  // ── 拠点ごとに 現金出納帳・仮払・立替 を出力 ──
+  targets.forEach(function(loc){
+    var locLabel = loc===null ? '' : '拠点: '+loc;
+    var openBal = loc===null
+      ? (locs.length>0 ? getLocationOpenBalance('') : (s.openingBalance||0))
+      : getLocationOpenBalance(loc);
+    var ledgerEntries=filterByLoc(getEntries(), loc);
+    var ledgerWithBal=calcBalancesFrom(ledgerEntries, openBal);
+    var advancesAll=filterByLoc(getAdvances(), loc);
+    var reimsAll=filterByLoc(getReimbursements(), loc);
 
-  // 2-4. 仮払関連 — 1件以上のみ
-  if (advancesAll.length>0) {
-    addCsvFile('仮払金台帳_'+jp+'.csv', [
-      ['仮払金台帳',s.companyName||'',`出力日:${today()}`],
-      ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用金額','返金額','不足額','状態','精算明細'],
-      ...advancesAll.map(function(a){return [
-        a.id,a.date,a.employeeName,a.purpose,a.advanceAmount,
-        a.settlementDate||'',
-        a.settlementMethod==='transfer'?'振込':a.settlementMethod==='cash'?'現金':'',
-        a.usedAmount==null?'':a.usedAmount, a.returnAmount==null?'':a.returnAmount, a.shortageAmount==null?'':a.shortageAmount,
-        a.status==='pending'?'未精算':'精算済',
-        (a.settlementItems||[]).map(function(it){return (it.date?it.date+' ':'')+( it.storeName||'')+' '+(it.itemName||'')+' '+(it.amount||0)+'円';}).join(' / ')
+    // 1. 現金出納帳
+    addCsvFile(loc, '現金出納帳_'+jp+'.csv', [
+      ['現金出納帳',s.companyName||'','出力日:'+today(),locLabel],
+      ['日付','勘定科目','店名・支払先','購入品・内容','税区分','種別','入金（円）','出金（円）','残高（円）','メモ'],
+      ...ledgerWithBal.map(function(e){return [
+        e.date,
+        e.account||'',
+        e.storeName||'', e.itemName||e.description||'',
+        e.taxRate===10?'課税10%':e.taxRate===8?'軽減8%':e.taxRate===0?'非課税':'',
+        e.entryKind==='bank_withdraw'?'通帳引出':e.entryKind==='bank_deposit'?'通帳預入':e.type==='advance'?'仮払支払':e.type==='settlement'?'仮払精算':e.type==='reimbursement'?'立替返金':'一般',
+        e.receiptAmount||'', e.paymentAmount||'', e.balance, e.memo||''
       ];})
     ]);
-    var detRows=[
-      ['仮払精算明細表',s.companyName||'',`出力日:${today()}`],
-      ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用日','相手先名称','内容','金額','状態']
-    ];
-    buildSettlementDetailRows().forEach(function(r){
-      detRows.push([
-        r.id, r.advDate, r.employeeName, r.purpose, r.advanceAmount,
-        r.settlementDate||'',
-        r.settlementMethod==='transfer'?'振込':r.settlementMethod==='cash'?'現金':'',
-        r.usageDate||'', r.storeName||'', r.itemName||'',
-        r.amount!=null?r.amount:'',
-        r.status==='pending'?'未精算':'精算済'
+
+    // 2-4. 仮払関連 — 1件以上のみ
+    if (advancesAll.length>0) {
+      addCsvFile(loc, '仮払金台帳_'+jp+'.csv', [
+        ['仮払金台帳',s.companyName||'','出力日:'+today(),locLabel],
+        ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用金額','返金額','不足額','状態','精算明細'],
+        ...advancesAll.map(function(a){return [
+          a.id,a.date,a.employeeName,a.purpose,a.advanceAmount,
+          a.settlementDate||'',
+          a.settlementMethod==='transfer'?'振込':a.settlementMethod==='cash'?'現金':'',
+          a.usedAmount==null?'':a.usedAmount, a.returnAmount==null?'':a.returnAmount, a.shortageAmount==null?'':a.shortageAmount,
+          a.status==='pending'?'未精算':'精算済',
+          (a.settlementItems||[]).map(function(it){return (it.date?it.date+' ':'')+( it.storeName||'')+' '+(it.itemName||'')+' '+(it.amount||0)+'円';}).join(' / ')
+        ];})
       ]);
-    });
-    addCsvFile('仮払精算明細表_'+jp+'.csv', detRows);
-    addCsvFile('未精算一覧_'+jp+'.csv', [
-      ['未精算一覧',s.companyName||'',`出力日:${today()}`],
-      ['番号','仮払日','氏名','目的','仮払金額'],
-      ...advancesAll.filter(function(a){return a.status==='pending';}).map(function(a){
-        return [a.id,a.date,a.employeeName,a.purpose,a.advanceAmount];
-      })
-    ]);
-  }
+      var detRows=[
+        ['仮払精算明細表',s.companyName||'','出力日:'+today(),locLabel],
+        ['番号','仮払日','氏名','目的','仮払金額','精算日','精算方法','使用日','相手先名称','内容','金額','状態']
+      ];
+      buildSettlementDetailRows().filter(function(r){
+        if (loc===null) return true;
+        // 元の仮払エントリの拠点で絞り込む
+        var adv=advancesAll.find(function(a){return a.id===r.id;});
+        return !!adv;
+      }).forEach(function(r){
+        detRows.push([
+          r.id, r.advDate, r.employeeName, r.purpose, r.advanceAmount,
+          r.settlementDate||'',
+          r.settlementMethod==='transfer'?'振込':r.settlementMethod==='cash'?'現金':'',
+          r.usageDate||'', r.storeName||'', r.itemName||'',
+          r.amount!=null?r.amount:'',
+          r.status==='pending'?'未精算':'精算済'
+        ]);
+      });
+      addCsvFile(loc, '仮払精算明細表_'+jp+'.csv', detRows);
+      addCsvFile(loc, '未精算一覧_'+jp+'.csv', [
+        ['未精算一覧',s.companyName||'','出力日:'+today(),locLabel],
+        ['番号','仮払日','氏名','目的','仮払金額'],
+        ...advancesAll.filter(function(a){return a.status==='pending';}).map(function(a){
+          return [a.id,a.date,a.employeeName,a.purpose,a.advanceAmount];
+        })
+      ]);
+    }
 
-  // 5. 立替経費台帳
-  if (reimsAll.length>0) {
-    var reimRows=[
-      ['立替経費台帳',s.companyName||'',`出力日:${today()}`],
-      ['番号','登録日','氏名','目的','使用日','店名・支払先','内容','勘定科目','金額（円）','合計','返金日','返金方法','状態']
-    ];
-    reimsAll.forEach(function(r){
-      if (!r.items||r.items.length===0) {
-        reimRows.push([r.id,r.registeredDate,r.employeeName,r.purpose||'','','','','','',r.totalAmount,r.reimbursementDate||'',r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':'',r.status==='pending'?'未返金':'返金済']);
-      } else {
-        r.items.forEach(function(it,idx){
-          reimRows.push([
-            r.id, idx===0?r.registeredDate:'', idx===0?r.employeeName:'', idx===0?(r.purpose||''):'',
-            it.date||'', it.storeName||'', it.itemName||'', it.account||'', it.amount||0,
-            idx===0?r.totalAmount:'',
-            idx===0?(r.reimbursementDate||''):'', idx===0?(r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':''):'',
-            idx===0?(r.status==='pending'?'未返金':'返金済'):''
-          ]);
-        });
-      }
-    });
-    addCsvFile('立替経費台帳_'+jp+'.csv', reimRows);
-  }
+    // 5. 立替経費台帳
+    if (reimsAll.length>0) {
+      var reimRows=[
+        ['立替経費台帳',s.companyName||'','出力日:'+today(),locLabel],
+        ['番号','登録日','氏名','目的','使用日','店名・支払先','内容','勘定科目','金額（円）','合計','返金日','返金方法','状態']
+      ];
+      reimsAll.forEach(function(r){
+        if (!r.items||r.items.length===0) {
+          reimRows.push([r.id,r.registeredDate,r.employeeName,r.purpose||'','','','','','',r.totalAmount,r.reimbursementDate||'',r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':'',r.status==='pending'?'未返金':'返金済']);
+        } else {
+          r.items.forEach(function(it,idx){
+            reimRows.push([
+              r.id, idx===0?r.registeredDate:'', idx===0?r.employeeName:'', idx===0?(r.purpose||''):'',
+              it.date||'', it.storeName||'', it.itemName||'', it.account||'', it.amount||0,
+              idx===0?r.totalAmount:'',
+              idx===0?(r.reimbursementDate||''):'', idx===0?(r.reimbursementMethod==='transfer'?'振込':r.reimbursementMethod==='cash'?'現金':''):'',
+              idx===0?(r.status==='pending'?'未返金':'返金済'):''
+            ]);
+          });
+        }
+      });
+      addCsvFile(loc, '立替経費台帳_'+jp+'.csv', reimRows);
+    }
+  });
 
-  // 6. 銀行出納帳・PDF提出資料リスト
+  // ── 銀行CSV・PDF提出資料リスト ──
   bankLoadAllSessions().then(function(sessions) {
     sessions=sessions||[];
     var completed=sessions.filter(function(s){return s.completed;});
@@ -3743,7 +3761,8 @@ function exportTaxAccountantBundle() {
     if (sessions.length>0 && completed.length===0 && pending.length>0) {
       alert('銀行CSVは「登録完了」になったセッションだけが ZIP に含まれます。\n現在 '+pending.length+' 件のセッションが未完了のため、銀行出納帳ファイルは含まれません。');
     }
-    var safe=function(x){return (x||'').replace(/[\\/:*?"<>|]/g,'_');};
+    // 銀行出納帳: 拠点に紐付かないため、拠点ありなら「銀行/」サブフォルダ、なしならルート
+    var bankSub = locs.length>0 ? '銀行/' : '';
     completed.forEach(function(sess) {
       var rows=[
         ['銀行出納帳', sess.bankName||'', (sess.accountNo?'口座番号:'+sess.accountNo:''), '出力日:'+today()],
@@ -3759,10 +3778,16 @@ function exportTaxAccountantBundle() {
         ]);
       });
       var fname='銀行出納帳_'+safe(sess.bankName||'銀行CSV')+(sess.accountNo?'_'+safe(sess.accountNo):'')+'_'+jp+'.csv';
-      addCsvFile(fname, rows);
+      zipFiles.push({name: folderName+'/'+bankSub+fname, content: rowsToCsvString(rows)});
     });
+
+    // PDF提出必要資料リスト: 各拠点のサブフォルダに同じものを配置（拠点ありの場合）
     var pdfList=buildPdfSubmissionList(completed, s.companyName);
-    if (pdfList.length>2) addCsvFile('PDF提出必要資料リスト_'+jp+'.csv', pdfList);
+    if (pdfList.length>2) {
+      targets.forEach(function(loc){
+        addCsvFile(loc, 'PDF提出必要資料リスト_'+jp+'.csv', pdfList);
+      });
+    }
 
     if (zipFiles.length===0) {
       alert('出力できるデータがありません。'); return;
@@ -3773,7 +3798,6 @@ function exportTaxAccountantBundle() {
     }
   }).catch(function(e){
     console.error('銀行CSV取得失敗:', e);
-    // 銀行データなしでも出力
     if (zipFiles.length>0) downloadZip(zipFiles, folderName+'.zip');
   });
 }
@@ -5540,17 +5564,19 @@ function showHowTo(context) {
         <div style="border:2px solid #d97706;border-radius:8px;padding:12px;background:#fffbeb;">
           <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:6px;">📦 税理士提出_会社名_YYYY年MM月DD日.zip</div>
           <ul style="font-size:11px;color:#92400e;margin:0 0 8px 16px;padding:0;line-height:1.7;">
-            <li>現金出納帳（期首〜最新）— 常時</li>
-            <li>仮払金台帳 / 仮払精算明細表 / 未精算一覧 — 仮払が1件以上ある場合のみ</li>
-            <li>立替経費台帳 — 立替が1件以上ある場合のみ</li>
+            <li><strong>拠点を登録している場合</strong>：ZIP内に拠点別サブフォルダ（例 <code>本社/</code> <code>支社/</code>）を作成し、各拠点の現金出納帳・仮払・立替・資料リストを格納</li>
+            <li><strong>銀行出納帳</strong>は拠点に紐付かないため、拠点ありの場合は <code>銀行/</code> サブフォルダにまとめて格納</li>
+            <li>現金出納帳（期首〜最新）— 常時、拠点別の期首残高で計算</li>
+            <li>仮払金台帳 / 仮払精算明細表 / 未精算一覧 — その拠点の仮払が1件以上ある場合のみ</li>
+            <li>立替経費台帳 — その拠点の立替が1件以上ある場合のみ</li>
             <li>銀行出納帳（銀行・口座ごと）— 「登録完了」済の銀行CSVセッションのみ</li>
-            <li>PDF提出必要資料リスト — 振込明細／借入／請求書PDF対象がある場合のみ</li>
+            <li>PDF提出必要資料リスト — 振込明細／借入／請求書PDF対象がある場合のみ（拠点ありなら各拠点サブフォルダ内に配置）</li>
           </ul>
           <span class="howto-mock-btn" style="background:#d97706;color:white;font-weight:700;font-size:11px;">📦 一括ダウンロード(ZIP)</span>
         </div>
         <div class="howto-callout-ok">
           ✅ 上記すべてのファイルが <strong>1つのZIPファイル</strong> としてダウンロードされます。<br>
-          ✅ ZIP内のフォルダ名は「税理士提出_会社名_日付」形式。フォルダごと税理士に渡せます。
+          ✅ 拠点ごとのサブフォルダ構造になっているので、税理士はフォルダ単位で各拠点を確認できます。
         </div>
       </div>
 
