@@ -411,6 +411,8 @@
       transition: box-shadow 0.15s;
     }
     .bank-session-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .bank-row-needinfo td { background: #fee2e2 !important; }
+    .bank-row-needinfo:hover td { background: #fecaca !important; }
     .bank-status-badge { display:inline-block;font-size:12px;font-weight:700;padding:4px 9px;border-radius:5px;margin-top:4px;white-space:nowrap;line-height:1.4; }
     .bank-status-needinfo         { background:#dc2626;color:white; }
     .bank-status-needinfo-payment { background:#dc2626;color:white; }
@@ -1095,6 +1097,7 @@ let bankImportedData=null;
 let bankColumnRoles={};
 let bankActiveRole=null;
 let bankEditFilter='attention';
+let bankTargetMonth=null;
 let bankNameCache='';
 let bankAcctCache='';
 let bankSessionCache=null;
@@ -4518,6 +4521,8 @@ function showHowTo(context) {
         銀行からダウンロードした口座取引CSVを取り込み、空欄や略号だけの摘要を補完して、税理士提出用のクリーンな出納帳CSVに整える機能です。一度設定した銀行は自動で記憶され、次回以降は列の割当を自動復元します。
       </div>
 
+      ${bankRenderWorkflowGuide()}
+
       <!-- VISUAL: セッション一覧 -->
       <div class="howto-visual">
         <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;">▼ 銀行CSVセッション一覧</div>
@@ -5214,18 +5219,29 @@ function bankGetProcessedMonthsSet(bankName, accountNo) {
   });
   return set;
 }
-function bankRenderProgressBar(bankName, accountNo, fm, fyYear) {
+function bankRenderProgressBar(bankName, accountNo, fm, fyYear, accountIdx) {
   var done=bankGetProcessedMonthsSet(bankName, accountNo);
   var months=bankComputeFiscalYearMonths(fm, fyYear);
-  var html='<div style="display:flex;gap:2px;margin-top:6px;align-items:stretch;">';
+  var clickable=accountIdx!=null;
+  var html='<div style="display:flex;gap:3px;align-items:stretch;">';
   months.forEach(function(m){
     var isDone=!!done[m.key];
     var bg=isDone?'#059669':'#e5e7eb';
-    var color=isDone?'#ffffff':'#9ca3af';
+    var color=isDone?'#ffffff':'#374151';
     var border=isDone?'1px solid #047857':'1px solid #d1d5db';
-    html+='<div title="'+m.year+'年'+m.month+'月'+(isDone?'（処理済）':'（未処理）')+'" '
-      +'style="flex:1;min-width:0;text-align:center;font-size:11px;font-weight:700;color:'+color+';background:'+bg+';border:'+border+';padding:5px 1px;border-radius:4px;">'
-      +m.month+'月</div>';
+    var hoverBg=isDone?'#047857':'#bfdbfe';
+    var hoverColor=isDone?'#ffffff':'#1e40af';
+    var title=m.year+'年'+m.month+'月'
+      +(isDone?'（処理済）':'（未処理）')
+      +(clickable?' — クリックでこの月のCSVを取込':'');
+    var cellId='bank-mon-'+(accountIdx||0)+'-'+m.month;
+    html+='<div'
+      +(clickable?' onclick="event.stopPropagation();bankStartImportForMonth('+accountIdx+','+m.year+','+m.month+')"':'')
+      +(clickable?' onmouseover="this.dataset.bg=this.style.background;this.dataset.cl=this.style.color;this.style.background=\''+hoverBg+'\';this.style.color=\''+hoverColor+'\'"':'')
+      +(clickable?' onmouseout="this.style.background=this.dataset.bg||\''+bg+'\';this.style.color=this.dataset.cl||\''+color+'\'"':'')
+      +' title="'+title+'"'
+      +' style="flex:1;min-width:42px;text-align:center;font-size:13px;font-weight:700;color:'+color+';background:'+bg+';border:'+border+';padding:7px 4px;border-radius:5px;'+(clickable?'cursor:pointer;':'')+'transition:all 0.1s;">'
+      +(isDone?'✓ ':'')+m.month+'月</div>';
   });
   html+='</div>';
   return html;
@@ -5408,14 +5424,14 @@ function bankPageList() {
     var fyLabelForBar=fyRangeLabel(ledgerYear, fmForBar);
     accountsHtml='<div style="margin-bottom:18px;">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;">'
-        +'<div style="font-size:14px;font-weight:700;color:var(--gray-700);">🏦 解析対象の銀行口座（'+accounts.length+'件）— 行をクリックで新規CSVを取り込み</div>'
+        +'<div style="font-size:14px;font-weight:700;color:var(--gray-700);">🏦 解析対象の銀行口座（'+accounts.length+'件）— <strong>該当月のボタンをクリック</strong>してCSVを取り込みます</div>'
         +'<div style="font-size:11px;color:var(--gray-500);">会計年度: '+esc(fyLabelForBar)+'</div>'
       +'</div>'
       +'<div style="display:flex;flex-direction:column;gap:6px;">';
     accounts.forEach(function(a,i){
       var prog=bankGetAccountProgress(a.bankName, a.accountNo);
       var subtitle=[a.branchName||'', a.accountType||''].filter(function(x){return x;}).join(' ');
-      var progressBar=bankRenderProgressBar(a.bankName, a.accountNo, fmForBar, ledgerYear);
+      var progressBar=bankRenderProgressBar(a.bankName, a.accountNo, fmForBar, ledgerYear, i);
       var statusBadge='';
       if (prog.lastProcessedMonth) {
         statusBadge='<span style="background:#dcfce7;color:#166534;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;">✅ '+esc(bankFormatMonth(prog.lastProcessedMonth))+'まで</span>';
@@ -5423,9 +5439,7 @@ function bankPageList() {
         statusBadge='<span style="background:#f3f4f6;color:#6b7280;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;">未処理</span>';
       }
       if (prog.ongoingCount>0) statusBadge+=' <span style="background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;">編集中 '+prog.ongoingCount+'</span>';
-      accountsHtml+='<div style="display:flex;align-items:center;gap:14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;cursor:pointer;transition:box-shadow 0.15s, transform 0.1s;flex-wrap:wrap;" '
-        +'onmouseover="this.style.boxShadow=\'0 2px 8px rgba(30,64,175,0.2)\';this.style.transform=\'translateY(-1px)\'" onmouseout="this.style.boxShadow=\'\';this.style.transform=\'\'" '
-        +'onclick="bankStartImportForAccount('+i+')">'
+      accountsHtml+='<div style="display:flex;align-items:center;gap:14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;flex-wrap:wrap;">'
         +'<div style="flex:0 0 auto;min-width:220px;">'
           +'<div style="font-size:16px;font-weight:700;color:#111827;line-height:1.2;">🏦 '+esc(a.bankName||'')+'</div>'
           +'<div style="font-size:12px;color:var(--gray-600);margin-top:3px;">'
@@ -5433,11 +5447,8 @@ function bankPageList() {
             +'<span style="font-family:monospace;font-weight:600;color:var(--gray-800);">'+esc(a.accountNo||'')+'</span>'
           +'</div>'
         +'</div>'
-        +'<div style="flex:1;min-width:280px;">'+progressBar+'</div>'
-        +'<div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">'
-          +'<div>'+statusBadge+'</div>'
-          +'<span class="btn btn-primary btn-sm" style="font-size:11px;padding:5px 11px;">＋ 新規CSV取込</span>'
-        +'</div>'
+        +'<div style="flex:1;min-width:300px;">'+progressBar+'</div>'
+        +'<div style="flex:0 0 auto;">'+statusBadge+'</div>'
         +'</div>';
     });
     accountsHtml+='</div></div>';
@@ -5459,7 +5470,6 @@ function bankPageList() {
     +'<button class="btn btn-primary" onclick="bankNameCache=\'\';bankAcctCache=\'\';bankCsvPage=\'importing\';renderPage()">＋ 新規CSVインポート</button>'
     +'</div>'
     +'</div>'
-    +bankRenderWorkflowGuide()
     +accountsHtml
     +(sessionCount>0
        ?'<div style="font-size:13px;font-weight:700;color:var(--gray-700);margin:18px 0 8px;">📂 取込履歴（'+sessionCount+'件） — クリックで編集の続きから再開できます</div>'
@@ -5484,20 +5494,32 @@ function bankRenderWorkflowGuide() {
   return '<div style="margin-top:24px;background:#ffffff;border:2px solid #dbeafe;border-radius:12px;padding:18px 20px;">'
     +'<div style="font-size:16px;font-weight:700;color:var(--primary);margin-bottom:14px;">🔄 銀行CSV解析の流れ</div>'
     +'<div style="display:flex;gap:6px;align-items:stretch;flex-wrap:wrap;">'
-      +step('1','📂','CSV取込', '銀行口座マスタの<strong>口座カードをクリック</strong>、または「＋ 新規CSVインポート」からCSVファイルをドラッグ＆ドロップ。')
+      +step('1','📅','取込む月をクリック', '銀行口座行の月別バーから<strong>取り込みたい月のボタン</strong>（例: 5月）をクリックします。')
       +arrow
-      +step('2','📋','列マッピング', '日付/摘要/入金/出金/残高 の列を自動検出。同じ銀行の2回目以降は前回設定を自動復元します。')
+      +step('2','📂','CSVをアップロード', '取込画面に該当月のCSVファイルをドラッグ＆ドロップ、または選択。')
       +arrow
-      +step('3','✏️','要対応行を編集', '<span class="bank-status-badge bank-status-needinfo-payment" style="font-size:10px;">❗</span>と<span class="bank-status-badge bank-status-needpdf" style="font-size:10px;">📎</span>のバッジが付いた行を確認・摘要入力。')
+      +step('3','📋','列マッピングを確認', '日付/摘要/入金/出金/残高 の列を自動検出。同じ銀行の2回目以降は前回設定を自動復元します。')
       +arrow
-      +step('4','✅','登録完了で確定', '編集画面右上の<strong>「✅ 登録完了」</strong>ボタンを押すと、<strong>月別進捗バーに色がつきます</strong>。これを押さないと進捗反映されません。', true)
+      +step('4','✏️','ピンク色の行を編集', '<span class="bank-status-badge bank-status-needinfo-payment" style="font-size:10px;">❗ 相手先情報</span>のピンク背景の行に摘要を入力。<span class="bank-status-badge bank-status-needpdf" style="font-size:10px;">📎 PDF</span>のバッジ行は税理士に送付するPDFのお知らせ（入力不要）。')
       +arrow
-      +step('5','📄','PDF印刷', '上の<strong>「📄 提出資料リスト(PDF)」</strong>ボタンで税理士提出用の必要書類リストをPDFとして印刷／保存。')
+      +step('5','✅','登録完了で確定', '編集画面右上の<strong>「✅ 登録完了」</strong>ボタンを押すと一覧画面に戻り、<strong>その月の進捗バーが緑色</strong>になります。', true)
     +'</div>'
     +'<div style="margin-top:12px;font-size:11px;color:var(--gray-600);background:#f9fafb;border-left:3px solid #93c5fd;padding:8px 12px;border-radius:4px;">'
-      +'💡 月別進捗バー（各口座カード内）は「<strong>登録完了</strong>」を押したセッションの処理対象月が緑色になります。タイトルバーの「← 前期 / 翌期 →」ボタンで会計年度を切り替えると、その年度の進捗が表示されます。'
+      +'💡 月別進捗バー（各口座行）は「<strong>登録完了</strong>」を押したセッションの処理対象月が緑色になります。タイトルバーの「← 前期 / 翌期 →」ボタンで会計年度を切り替えると、その年度の進捗が表示されます。<br>'
+      +'💡 完了したセッションは画面上の「<strong>📄 提出資料リスト(PDF)</strong>」ボタンから、税理士へ送付すべき資料リストをPDFで印刷／保存できます。'
     +'</div>'
     +'</div>';
+}
+
+function bankStartImportForMonth(accountIdx, year, month) {
+  var accounts=bankGetAccounts();
+  var a=accounts[accountIdx];
+  if (!a) return;
+  bankNameCache=a.bankName||'';
+  bankAcctCache=a.accountNo||'';
+  bankTargetMonth=year+'-'+String(month).padStart(2,'0');
+  bankCsvPage='importing';
+  renderPage();
 }
 
 function bankStartImportForAccount(idx) {
@@ -5511,11 +5533,23 @@ function bankStartImportForAccount(idx) {
 }
 
 function bankPageImport() {
+  var hint='';
+  if (bankNameCache||bankAcctCache||bankTargetMonth) {
+    hint='<div style="background:#dbeafe;color:#1e40af;padding:8px 14px;border-radius:6px;margin-bottom:14px;font-size:13px;font-weight:700;">'
+      +'📅 '
+      +(bankTargetMonth?'<strong>'+bankFormatMonth(bankTargetMonth)+'分</strong> ':'')
+      +'のCSVを取込中'
+      +(bankNameCache?'　／　🏦 '+esc(bankNameCache):'')
+      +(bankAcctCache?'　口座番号: '+esc(bankAcctCache):'')
+      +'</div>';
+  }
   return '<div class="card">'
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">'
-    +'<button class="btn btn-secondary btn-sm" onclick="bankCsvPage=\'list\';renderPage()">← 一覧に戻る</button>'
+    +'<button class="btn btn-secondary btn-sm" onclick="bankCsvPage=\'list\';bankTargetMonth=null;renderPage()">← 一覧に戻る</button>'
     +'<div class="card-title" style="margin:0;border:none;padding:0;">📂 CSVインポート</div>'
+    +'<button class="btn btn-outline btn-sm" style="margin-left:auto;font-size:12px;" onclick="showHowTo(\'bank-csv\')">📖 操作方法</button>'
     +'</div>'
+    +hint
     +'<div id="bank-drop-zone" class="bank-drop-zone" ondragover="event.preventDefault();this.classList.add(\'drag-over\')" ondragleave="this.classList.remove(\'drag-over\')" ondrop="bankOnDrop(event)">'
     +'<div style="font-size:48px;margin-bottom:12px;">📂</div>'
     +'<div style="font-size:15px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">CSVファイルをドラッグ&amp;ドロップ</div>'
@@ -5802,6 +5836,7 @@ function bankPageMapping() {
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">'
     +'<button class="btn btn-secondary btn-sm" onclick="bankCsvPage=\'importing\';bankImportedData=null;renderPage()">← 戻る</button>'
     +'<div class="card-title" style="margin:0;border:none;padding:0;">📋 列マッピング設定</div>'
+    +'<button class="btn btn-outline btn-sm" style="margin-left:auto;font-size:12px;" onclick="showHowTo(\'bank-csv\')">📖 操作方法</button>'
     +'</div>'
     +profileHtml
     +'<div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px;border:1px solid var(--gray-200);">'
@@ -6043,8 +6078,10 @@ function bankPageEdit() {
     }
   });
 
-  var attentionCount=stateCounts.needsInfo+stateCounts.needsPDF;
-  var resolvedCount=stateCounts.resolvedInfo+stateCounts.resolvedPDF;
+  // needsPDF は「未対応」扱いせず、ユーザーへのお知らせとして扱う
+  var attentionCount=stateCounts.needsInfo;
+  var resolvedCount=stateCounts.resolvedInfo;
+  var pdfCount=stateCounts.needsPDF;
   var showAttentionOnly=(bankEditFilter==='attention');
 
   var visibleRows=rows.map(function(r,i){return {r:r,i:i,state:bankRowState(r)};});
@@ -6065,7 +6102,8 @@ function bankPageEdit() {
       ?'<datalist id="'+dlId+'">'+suggestions.map(function(s){return '<option value="'+esc(s)+'">';}).join('')+'</datalist>'
       :'';
     var badge=bankReasonBadge(state, reason, r);
-    return '<tr>'
+    var rowCls=(state==='needsInfo')?' class="bank-row-needinfo"':'';
+    return '<tr data-row-idx="'+i+'"'+rowCls+'>'
       +'<td style="white-space:nowrap;font-size:13px;vertical-align:top;">'+esc(r.date||'')+'</td>'
       +'<td style="font-size:13px;max-width:220px;overflow:hidden;vertical-align:top;">'
         +'<div style="font-weight:600;">'+esc(r.descriptionOriginal||'(空欄)')+'</div>'
@@ -6091,34 +6129,35 @@ function bankPageEdit() {
   }
 
   var alertHtml='';
-  if (stateCounts.needsInfo===0 && stateCounts.needsPDF===0) {
-    alertHtml='<div class="alert alert-success" style="margin-bottom:10px;">✅ 全ての要対応行が処理されています</div>';
+  if (attentionCount===0 && pdfCount===0) {
+    alertHtml='<div class="alert alert-success" style="margin-bottom:10px;">✅ 全ての対応が完了しています</div>';
   } else {
     var bits=[];
-    if (stateCounts.needsInfo>0||stateCounts.resolvedInfo>0) {
+    if (attentionCount>0||resolvedCount>0) {
       bits.push('<div style="margin-bottom:6px;color:#991b1b;"><span class="bank-status-badge bank-status-needinfo">❗ 相手先情報を入力</span> '
-        +'未対応 <strong>'+stateCounts.needsInfo+'</strong> 行 / 入力済 '+stateCounts.resolvedInfo+' 行<br>'
-        +'<span style="font-size:11px;color:#7f1d1d;">→ 元摘要が空欄や「AD」「D」「預金機」など相手先名称が無い行です。記帳代行のため摘要欄に相手先と内容を入力してください。</span></div>');
+        +'未対応 <strong>'+attentionCount+'</strong> 行 / 入力済 '+resolvedCount+' 行<br>'
+        +'<span style="font-size:11px;color:#7f1d1d;">→ 元摘要が空欄や「AD」「D」「預金機」など相手先名称が無い行です。記帳代行のため摘要欄に相手先と内容を入力してください（ピンク色の行）。</span></div>');
     }
-    if (stateCounts.needsPDF>0) {
+    if (pdfCount>0) {
       var pdfDetail=[];
       if (pdfReasonCounts.transfer>0) pdfDetail.push('振込明細PDF '+pdfReasonCounts.transfer+'行');
       if (pdfReasonCounts.loan>0)     pdfDetail.push('借入関連書類PDF '+pdfReasonCounts.loan+'行');
       if (pdfReasonCounts.auto>0)     pdfDetail.push('自動車関連書類PDF '+pdfReasonCounts.auto+'行');
       var detailLine=pdfDetail.length>0?'（内訳: '+pdfDetail.join(' / ')+'）':'';
       bits.push('<div style="color:#5b21b6;"><span class="bank-status-badge bank-status-needpdf">📎 関連書類PDFを税理士へ送付</span> '
-        +'該当 <strong>'+stateCounts.needsPDF+'</strong> 行 '+detailLine+'<br>'
-        +'<span style="font-size:11px;color:#4c1d95;">→ ①振込明細資料が別途必要な行、②高額入金で借入関連の摘要がある行、③自動車関連会社への支払行。<strong>「📄 提出資料リスト(PDF)」</strong>ボタンで全件まとめた提出用PDFリストを印刷／保存できます。</span></div>');
+        +'<strong>お知らせ:</strong> '+pdfCount+' 行 '+detailLine+'<br>'
+        +'<span style="font-size:11px;color:#4c1d95;">→ 税理士に送付すべき書類のピックアップ表示です（未対応扱いではありません）。<strong>「📄 提出資料リスト(PDF)」</strong>ボタンで全件まとめた提出用PDFを印刷／保存できます。</span></div>');
     }
     alertHtml='<div class="alert" style="margin-bottom:10px;background:#fffbeb;border:1px solid #fde047;color:#713f12;padding:10px 14px;">'
       +bits.join('<div style="height:8px;"></div>')
       +'</div>';
   }
 
+  var attnFilterCount=attentionCount+resolvedCount+pdfCount;
   var filterBar='<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">'
     +'<span style="font-size:12px;color:var(--gray-600);font-weight:700;">表示:</span>'
     +'<button class="btn btn-xs '+(showAttentionOnly?'btn-primary':'btn-secondary')+'" onclick="bankSetEditFilter(\'attention\')">'
-    +'⚠ 要対応行のみ（'+(attentionCount+resolvedCount)+'行）</button>'
+    +'⚠ 要対応行・PDF対象のみ（'+attnFilterCount+'行）</button>'
     +'<button class="btn btn-xs '+(!showAttentionOnly?'btn-primary':'btn-secondary')+'" onclick="bankSetEditFilter(\'all\')">'
     +'📋 全明細を表示（'+rows.length+'行）</button>'
     +(showAttentionOnly?'<span style="font-size:11px;color:var(--gray-500);">※ 通常の取引行（'+stateCounts.ok+'行）は非表示</span>':'')
@@ -6129,6 +6168,7 @@ function bankPageEdit() {
     +'<button class="btn btn-secondary btn-sm" onclick="bankCsvPage=\'list\';bankCurrentSession=null;renderPage()">← 一覧に戻る</button>'
     +'<div style="font-size:15px;font-weight:700;">🏦 '+esc(sess.bankName||'（銀行名未設定）')+'</div>'
     +(sess.accountNo?'<div style="font-size:12px;color:var(--gray-500);">口座: '+esc(sess.accountNo)+'</div>':'')
+    +'<button class="btn btn-outline btn-sm" style="font-size:12px;" onclick="showHowTo(\'bank-csv\')">📖 操作方法</button>'
     +'<div style="margin-left:auto;display:flex;gap:8px;align-items:center;">'
     +'<span id="bank-save-ind" style="font-size:11px;color:var(--gray-400);opacity:0.5;"></span>'
     +(sess.completed
@@ -6163,6 +6203,9 @@ function bankUpdateDesc(rowIdx, value) {
   var r=bankCurrentSession.rows[rowIdx];
   if (!r) return;
   r.description=value;
+  // 行のピンク背景を動的に切り替え（needsInfo→white）
+  var tr=document.querySelector('tr[data-row-idx="'+rowIdx+'"]');
+  if (tr) tr.className=(bankRowState(r)==='needsInfo')?'bank-row-needinfo':'';
   bankScheduleAutoSave();
 }
 function bankTogglePdfSent(rowIdx, checked) {
@@ -6176,12 +6219,12 @@ function bankTogglePdfSent(rowIdx, checked) {
 function bankToggleCompleted(completed) {
   if (!bankCurrentSession) return;
   if (completed) {
+    // needsPDF はお知らせのみで「未対応」扱いしない
     var attn=bankCurrentSession.rows.filter(function(r){
-      var s=bankRowState(r);
-      return s==='needsInfo'||s==='needsPDF';
+      return bankRowState(r)==='needsInfo';
     }).length;
     if (attn>0) {
-      if (!confirm('まだ未対応の行が '+attn+' 行あります。\n本当に登録完了にしますか？\n（登録完了にすると、帳票出力の「税理士提出用一括ダウンロード」に含まれます）')) return;
+      if (!confirm('まだ相手先情報が未入力の行が '+attn+' 行あります（ピンク色の行）。\n本当に登録完了にしますか？')) return;
     }
   }
   bankCurrentSession.completed=!!completed;
@@ -6191,6 +6234,12 @@ function bankToggleCompleted(completed) {
     if (bankSessionCache) {
       var idx=bankSessionCache.findIndex(function(s){return s.id===bankCurrentSession.id;});
       if (idx>=0) bankSessionCache[idx]=bankCurrentSession;
+    }
+    if (completed) {
+      // 登録完了したら一覧画面に戻り、月別進捗バーを更新表示
+      bankCurrentSession=null;
+      bankCsvPage='list';
+      bankTargetMonth=null;
     }
     renderPage();
   });
