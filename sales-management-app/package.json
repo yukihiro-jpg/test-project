@@ -19,10 +19,11 @@
     "dist:mac": "npm run build && electron-builder --mac",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "postinstall": "node scripts/install-sqlite-stub.cjs",
+    "setup": "node scripts/install-sqlite-stub.cjs"
   },
   "dependencies": {
-    "better-sqlite3": "file:./vendor/better-sqlite3",
     "@google/genai": "^0.3.0",
     "archiver": "^7.0.1",
     "dayjs": "^1.11.13",
