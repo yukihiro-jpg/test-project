@@ -11,8 +11,6 @@ files:
 extraResources:
   - from: resources
     to: resources
-asarUnpack:
-  - "**/node_modules/better-sqlite3/**/*"
 win:
   target:
     - target: nsis

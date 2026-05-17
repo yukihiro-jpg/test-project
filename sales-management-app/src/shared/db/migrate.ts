@@ -1,4 +1,5 @@
-import type Database from 'better-sqlite3';
+// シム/better-sqlite3 どちらでも受けられるよう最小インターフェースに緩める
+type DbLike = { exec(sql: string): unknown };
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS customers (
@@ -197,6 +198,6 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 `;
 
-export function migrate(db: Database.Database): void {
+export function migrate(db: DbLike): void {
   db.exec(DDL);
 }

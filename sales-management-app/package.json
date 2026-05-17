@@ -6,6 +6,9 @@
   "author": "SmartAccount",
   "license": "UNLICENSED",
   "private": true,
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "dev": "concurrently -k -n vite,electron -c blue,green \"vite\" \"wait-on tcp:5173 && tsc -p tsconfig.node.json && electron .\"",
     "build:renderer": "vite build",
@@ -16,13 +19,11 @@
     "dist:mac": "npm run build && electron-builder --mac",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "postinstall": "electron-builder install-app-deps"
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@google/genai": "^0.3.0",
     "archiver": "^7.0.1",
-    "better-sqlite3": "^11.3.0",
     "dayjs": "^1.11.13",
     "drizzle-orm": "^0.36.0",
     "exceljs": "^4.4.0",
@@ -36,9 +37,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.7.0",
     "@types/archiver": "^6.0.2",
-    "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.7.5",
     "@types/pdfmake": "^0.2.9",
     "@types/react": "^18.3.11",
@@ -48,7 +47,7 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.0.1",
     "drizzle-kit": "^0.28.0",
-    "electron": "^32.1.2",
+    "electron": "^35.0.0",
     "electron-builder": "^25.0.5",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
