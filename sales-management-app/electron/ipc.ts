@@ -15,6 +15,7 @@ import * as arAgingService from '../src/shared/services/arAgingService';
 import * as apAgingService from '../src/shared/services/apAgingService';
 import * as inventoryService from '../src/shared/services/inventoryService';
 import * as backupService from '../src/shared/services/backupService';
+import * as sampleDataService from '../src/shared/services/sampleDataService';
 import { makeSettingsService, type SafeStorageLike } from '../src/shared/services/settingsService';
 import { sales_invoices, purchase_invoices } from '../src/shared/db/schema';
 import { sql } from 'drizzle-orm';
@@ -277,6 +278,52 @@ export function registerIpc(ctx: Ctx) {
     },
     pdf: {
       // exposed indirectly; salesInvoices.generatePdf is the main entry
+    },
+    sample: {
+      customers: async () => {
+        const res = await dialog.showSaveDialog({
+          title: '得意先サンプルを保存',
+          defaultPath: 'sample-customers.xlsx',
+          filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+        });
+        if (res.canceled || !res.filePath) return null;
+        const buf = await sampleDataService.generateCustomerSample();
+        fs.writeFileSync(res.filePath, buf);
+        return res.filePath;
+      },
+      suppliers: async () => {
+        const res = await dialog.showSaveDialog({
+          title: '仕入先サンプルを保存',
+          defaultPath: 'sample-suppliers.xlsx',
+          filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+        });
+        if (res.canceled || !res.filePath) return null;
+        const buf = await sampleDataService.generateSupplierSample();
+        fs.writeFileSync(res.filePath, buf);
+        return res.filePath;
+      },
+      products: async () => {
+        const res = await dialog.showSaveDialog({
+          title: '商品マスタサンプルを保存',
+          defaultPath: 'sample-products.xlsx',
+          filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+        });
+        if (res.canceled || !res.filePath) return null;
+        const buf = await sampleDataService.generateProductSample();
+        fs.writeFileSync(res.filePath, buf);
+        return res.filePath;
+      },
+      deliveries: async () => {
+        const res = await dialog.showSaveDialog({
+          title: '売上納品サンプルを保存',
+          defaultPath: 'sample-deliveries.xlsx',
+          filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+        });
+        if (res.canceled || !res.filePath) return null;
+        const buf = await sampleDataService.generateDeliverySample();
+        fs.writeFileSync(res.filePath, buf);
+        return res.filePath;
+      }
     }
   };
 

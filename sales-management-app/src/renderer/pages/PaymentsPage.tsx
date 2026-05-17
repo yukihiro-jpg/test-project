@@ -13,8 +13,17 @@ interface Alloc {
   adjustment_reason: string;
 }
 
+type SortKey = 'due_date' | 'invoice_no' | 'counterparty' | 'total_inc_tax' | 'paid_amount' | 'outstanding';
+type SortDir = 'asc' | 'desc';
+
 export default function PaymentsPage() {
   const [tab, setTab] = useState<TabKey>('receipt');
+  const [arSortKey, setArSortKey] = useState<SortKey>('due_date');
+  const [arSortDir, setArSortDir] = useState<SortDir>('asc');
+  const [apSortKey, setApSortKey] = useState<SortKey>('due_date');
+  const [apSortDir, setApSortDir] = useState<SortDir>('asc');
+  const [recLockedCustomer, setRecLockedCustomer] = useState(false);
+  const [payLockedSupplier, setPayLockedSupplier] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
   const [offsetRows, setOffsetRows] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
@@ -261,6 +270,73 @@ export default function PaymentsPage() {
       </div>
 
       {tab === 'receipt' && (
+        <>
+          <div className="bg-white border rounded p-4 mb-4">
+            <h3 className="font-semibold mb-2">未消込の売上請求書一覧</h3>
+            <table className="w-full text-sm border">
+              <thead className="bg-gray-100">
+                <tr>
+                  {([
+                    ['due_date', '入金予定日'],
+                    ['invoice_no', '請求書No'],
+                    ['counterparty', '取引先'],
+                    ['total_inc_tax', '請求額'],
+                    ['paid_amount', '消込済額'],
+                    ['outstanding', '残額']
+                  ] as Array<[SortKey, string]>).map(([k, label]) => (
+                    <th key={k}
+                        className="px-2 py-1 text-left cursor-pointer select-none hover:bg-gray-200"
+                        onClick={() => {
+                          if (arSortKey === k) setArSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                          else { setArSortKey(k); setArSortDir('asc'); }
+                        }}>
+                      {label}{arSortKey === k ? (arSortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                    </th>
+                  ))}
+                  <th className="px-2 py-1 text-left">状態</th>
+                  <th className="px-2 py-1"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {!arRows.length && <tr><td colSpan={8} className="px-2 py-3 text-center text-gray-500">未消込の売上請求書はありません</td></tr>}
+                {[...arRows].sort((a, b) => {
+                  const dir = arSortDir === 'asc' ? 1 : -1;
+                  const av = arSortKey === 'counterparty' ? a.customer_name : (a as any)[arSortKey];
+                  const bv = arSortKey === 'counterparty' ? b.customer_name : (b as any)[arSortKey];
+                  if (av == null) return 1;
+                  if (bv == null) return -1;
+                  return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+                }).map(r => {
+                  const today = new Date().toISOString().slice(0, 10);
+                  const overdue = r.due_date < today;
+                  return (
+                    <tr key={r.invoice_id} className="border-t">
+                      <td className="px-2 py-1">{r.due_date}</td>
+                      <td className="px-2 py-1">{r.invoice_no}</td>
+                      <td className="px-2 py-1">{r.customer_name}</td>
+                      <td className="px-2 py-1 text-right">{r.total_inc_tax.toLocaleString()}</td>
+                      <td className="px-2 py-1 text-right">{r.paid_amount.toLocaleString()}</td>
+                      <td className="px-2 py-1 text-right">{r.outstanding.toLocaleString()}</td>
+                      <td className="px-2 py-1">
+                        {r.paid_amount > 0 ? <span className="text-yellow-700">一部入金</span>
+                          : overdue ? <span className="text-red-600">期日超過</span>
+                          : <span className="text-gray-700">未入金</span>}
+                      </td>
+                      <td className="px-2 py-1">
+                        <SecondaryButton onClick={() => {
+                          setRecCustomerId(r.customer_id);
+                          setRecLockedCustomer(true);
+                          setRecDate(today);
+                          setRecAmount(r.outstanding);
+                          setRecAllocs([{ invoice_type: 'sales', invoice_id: r.invoice_id, allocated_amount: r.outstanding, adjustment_amount: 0, adjustment_reason: '' }]);
+                        }}>消込登録</SecondaryButton>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         <div className="bg-white border rounded p-4 mb-4">
           <div className="grid grid-cols-4 gap-2">
             <FormField label="入金日"><Input type="date" value={recDate} onChange={e => setRecDate(e.target.value)} /></FormField>
@@ -272,10 +348,17 @@ export default function PaymentsPage() {
             </FormField>
             <FormField label="入金額"><Input type="number" value={recAmount} onChange={e => setRecAmount(Number(e.target.value))} /></FormField>
             <FormField label="取引先">
-              <Select value={recCustomerId === '' ? '' : String(recCustomerId)} onChange={e => { setRecCustomerId(e.target.value === '' ? '' : Number(e.target.value)); setRecAllocs([]); }}>
-                <option value="">（選択）</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </Select>
+              {recLockedCustomer ? (
+                <div className="flex items-center gap-2">
+                  <Input readOnly value={customers.find(c => c.id === recCustomerId)?.name ?? ''} />
+                  <button type="button" className="text-xs text-blue-600 underline" onClick={() => { setRecLockedCustomer(false); setRecCustomerId(''); setRecAllocs([]); }}>解除</button>
+                </div>
+              ) : (
+                <Select value={recCustomerId === '' ? '' : String(recCustomerId)} onChange={e => { setRecCustomerId(e.target.value === '' ? '' : Number(e.target.value)); setRecAllocs([]); }}>
+                  <option value="">（選択）</option>
+                  {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </Select>
+              )}
             </FormField>
           </div>
           <FormField label="メモ"><Input value={recMemo} onChange={e => setRecMemo(e.target.value)} /></FormField>
@@ -316,11 +399,81 @@ export default function PaymentsPage() {
               })}
             </tbody>
           </table>
-          <div className="flex justify-end mt-3"><Button onClick={saveReceipt}>保存</Button></div>
+          <div className="flex justify-end mt-3">
+            <Button onClick={async () => { await saveReceipt(); setRecLockedCustomer(false); }}>保存</Button>
+          </div>
         </div>
+        </>
       )}
 
       {tab === 'payment' && (
+        <>
+          <div className="bg-white border rounded p-4 mb-4">
+            <h3 className="font-semibold mb-2">未消込の仕入請求書一覧</h3>
+            <table className="w-full text-sm border">
+              <thead className="bg-gray-100">
+                <tr>
+                  {([
+                    ['due_date', '支払予定日'],
+                    ['invoice_no', '請求書No'],
+                    ['counterparty', '取引先'],
+                    ['total_inc_tax', '請求額'],
+                    ['paid_amount', '消込済額'],
+                    ['outstanding', '残額']
+                  ] as Array<[SortKey, string]>).map(([k, label]) => (
+                    <th key={k}
+                        className="px-2 py-1 text-left cursor-pointer select-none hover:bg-gray-200"
+                        onClick={() => {
+                          if (apSortKey === k) setApSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                          else { setApSortKey(k); setApSortDir('asc'); }
+                        }}>
+                      {label}{apSortKey === k ? (apSortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                    </th>
+                  ))}
+                  <th className="px-2 py-1 text-left">状態</th>
+                  <th className="px-2 py-1"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {!apRows.length && <tr><td colSpan={8} className="px-2 py-3 text-center text-gray-500">未消込の仕入請求書はありません</td></tr>}
+                {[...apRows].sort((a, b) => {
+                  const dir = apSortDir === 'asc' ? 1 : -1;
+                  const av = apSortKey === 'counterparty' ? a.supplier_name : (a as any)[apSortKey];
+                  const bv = apSortKey === 'counterparty' ? b.supplier_name : (b as any)[apSortKey];
+                  if (av == null) return 1;
+                  if (bv == null) return -1;
+                  return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+                }).map(r => {
+                  const today = new Date().toISOString().slice(0, 10);
+                  const overdue = r.due_date < today;
+                  return (
+                    <tr key={r.invoice_id} className="border-t">
+                      <td className="px-2 py-1">{r.due_date}</td>
+                      <td className="px-2 py-1">{r.invoice_no}</td>
+                      <td className="px-2 py-1">{r.supplier_name}</td>
+                      <td className="px-2 py-1 text-right">{r.total_inc_tax.toLocaleString()}</td>
+                      <td className="px-2 py-1 text-right">{r.paid_amount.toLocaleString()}</td>
+                      <td className="px-2 py-1 text-right">{r.outstanding.toLocaleString()}</td>
+                      <td className="px-2 py-1">
+                        {r.paid_amount > 0 ? <span className="text-yellow-700">一部支払</span>
+                          : overdue ? <span className="text-red-600">期日超過</span>
+                          : <span className="text-gray-700">未払</span>}
+                      </td>
+                      <td className="px-2 py-1">
+                        <SecondaryButton onClick={() => {
+                          setPaySupplierId(r.supplier_id);
+                          setPayLockedSupplier(true);
+                          setPayDate(today);
+                          setPayAmount(r.outstanding);
+                          setPayAllocs([{ invoice_type: 'purchase', invoice_id: r.invoice_id, allocated_amount: r.outstanding, adjustment_amount: 0, adjustment_reason: '' }]);
+                        }}>消込登録</SecondaryButton>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         <div className="bg-white border rounded p-4 mb-4">
           <div className="grid grid-cols-4 gap-2">
             <FormField label="出金日"><Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} /></FormField>
@@ -332,10 +485,17 @@ export default function PaymentsPage() {
             </FormField>
             <FormField label="出金額"><Input type="number" value={payAmount} onChange={e => setPayAmount(Number(e.target.value))} /></FormField>
             <FormField label="仕入先">
-              <Select value={paySupplierId === '' ? '' : String(paySupplierId)} onChange={e => { setPaySupplierId(e.target.value === '' ? '' : Number(e.target.value)); setPayAllocs([]); }}>
-                <option value="">（選択）</option>
-                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
+              {payLockedSupplier ? (
+                <div className="flex items-center gap-2">
+                  <Input readOnly value={suppliers.find(s => s.id === paySupplierId)?.name ?? ''} />
+                  <button type="button" className="text-xs text-blue-600 underline" onClick={() => { setPayLockedSupplier(false); setPaySupplierId(''); setPayAllocs([]); }}>解除</button>
+                </div>
+              ) : (
+                <Select value={paySupplierId === '' ? '' : String(paySupplierId)} onChange={e => { setPaySupplierId(e.target.value === '' ? '' : Number(e.target.value)); setPayAllocs([]); }}>
+                  <option value="">（選択）</option>
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+              )}
             </FormField>
           </div>
           <FormField label="メモ"><Input value={payMemo} onChange={e => setPayMemo(e.target.value)} /></FormField>
@@ -376,8 +536,11 @@ export default function PaymentsPage() {
               })}
             </tbody>
           </table>
-          <div className="flex justify-end mt-3"><Button onClick={savePayment}>保存</Button></div>
+          <div className="flex justify-end mt-3">
+            <Button onClick={async () => { await savePayment(); setPayLockedSupplier(false); }}>保存</Button>
+          </div>
         </div>
+        </>
       )}
 
       {tab === 'offset' && (

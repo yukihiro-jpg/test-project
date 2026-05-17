@@ -31,7 +31,8 @@ const api = {
   backup: make('backup'),
   settings: make('settings'),
   dashboard: make('dashboard'),
-  pdf: make('pdf')
+  pdf: make('pdf'),
+  sample: make('sample')
 };
 
 // 既存ページが window.api.* を参照しているため互換維持

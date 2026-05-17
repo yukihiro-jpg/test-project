@@ -114,11 +114,30 @@ export default function SettingsPage() {
         <Button onClick={() => setBankEdit({ name: '', opening_balance: 0, is_default: 0 })}>新規口座</Button>
       </section>
 
-      <section>
+      <section className="mb-6">
         <h2 className="font-semibold mb-2">バックアップ</h2>
         <div className="flex gap-2">
           <Button onClick={exportBackup}>バックアップ作成</Button>
           <DangerButton onClick={restoreBackup}>バックアップから復元</DangerButton>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="font-semibold mb-2">動作確認用サンプルデータ</h2>
+        <p className="text-sm text-gray-600 mb-2">各種マスタ・取引のダミーデータが入った Excel ファイルをダウンロードできます。インポート機能の動作確認や、入力フォーマットの参考にご利用ください。</p>
+        <div className="flex flex-wrap gap-2">
+          <SecondaryButton onClick={async () => {
+            try { const p = await window.api.sample.customers(); if (p) setMsg('得意先サンプルを保存しました: ' + p); } catch (e: any) { showError(e); }
+          }}>得意先サンプル（30件）</SecondaryButton>
+          <SecondaryButton onClick={async () => {
+            try { const p = await window.api.sample.suppliers(); if (p) setMsg('仕入先サンプルを保存しました: ' + p); } catch (e: any) { showError(e); }
+          }}>仕入先サンプル（30件）</SecondaryButton>
+          <SecondaryButton onClick={async () => {
+            try { const p = await window.api.sample.products(); if (p) setMsg('商品マスタサンプルを保存しました: ' + p); } catch (e: any) { showError(e); }
+          }}>在庫（商品マスタ）サンプル（30件）</SecondaryButton>
+          <SecondaryButton onClick={async () => {
+            try { const p = await window.api.sample.deliveries(); if (p) setMsg('売上納品サンプルを保存しました: ' + p); } catch (e: any) { showError(e); }
+          }}>売上納品サンプル（30件）</SecondaryButton>
         </div>
       </section>
 
