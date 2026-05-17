@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-electron
+build/release
+*.db
+*.db-journal
+.env
+.env.local
+.DS_Store
+*.log
