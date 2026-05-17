@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import { Button, FormField, Input, Select, SecondaryButton, DangerButton } from '../components/FormField';
+import { showError, showInfo } from '../components/toast';
 
 interface DeliveryLine {
   product_id?: number | null;
@@ -47,13 +48,14 @@ export default function DeliveriesPage() {
   };
 
   const aggregate = async () => {
-    if (!selected.length) { alert('納品を選択してください'); return; }
+    if (!selected.length) { showInfo('納品を選択してください'); return; }
     if (!confirm(`${selected.length} 件を請求書化しますか？`)) return;
     try {
       const id = await window.api.deliveries.aggregateToInvoice(selected.map(Number), {});
-      alert('請求書を作成しました (id=' + id + ')');
+      const inv = await window.api.salesInvoices.get(id);
+      showInfo('請求書を作成しました: ' + (inv?.invoice_no ?? `id=${id}`));
       setSelected([]); load();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { showError(e); }
   };
 
   const updLine = (i: number, patch: Partial<DeliveryLine>) => {
@@ -72,7 +74,7 @@ export default function DeliveriesPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">納品書</h1>
         <div className="flex gap-2">
-          <SecondaryButton onClick={aggregate}>選択を請求書化</SecondaryButton>
+          <SecondaryButton onClick={aggregate}>選択した納品から請求書作成</SecondaryButton>
           <Button onClick={openNew}>新規</Button>
         </div>
       </div>

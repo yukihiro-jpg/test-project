@@ -81,6 +81,54 @@ async function importPrices(db: AppDb, buffer: ArrayBuffer, field: 'sales_unit_p
   return { inserted, updated, errors };
 }
 
+export async function generateSalesPriceTemplate(_db: AppDb): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('商品マスタ_売上単価');
+  ws.columns = [
+    { header: '商品コード', key: 'code', width: 14 },
+    { header: '商品名', key: 'name', width: 28 },
+    { header: '単位', key: 'unit', width: 8 },
+    { header: '売上単価', key: 'price', width: 12 },
+    { header: '税率', key: 'tax', width: 6 }
+  ];
+  ws.addRow({ code: 'P001', name: 'サンプル商品A', unit: '個', price: 1000, tax: 10 });
+  const buf = await wb.xlsx.writeBuffer();
+  return Buffer.from(buf as ArrayBuffer);
+}
+
+export async function generatePurchasePriceTemplate(_db: AppDb): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('商品マスタ_仕入単価');
+  ws.columns = [
+    { header: '商品コード', key: 'code', width: 14 },
+    { header: '商品名', key: 'name', width: 28 },
+    { header: '単位', key: 'unit', width: 8 },
+    { header: '仕入単価', key: 'price', width: 12 },
+    { header: '税率', key: 'tax', width: 6 }
+  ];
+  ws.addRow({ code: 'P001', name: 'サンプル商品A', unit: '個', price: 700, tax: 10 });
+  const buf = await wb.xlsx.writeBuffer();
+  return Buffer.from(buf as ArrayBuffer);
+}
+
+export async function getOrCreateByName(db: AppDb, name: string, opts?: { unit?: string; purchase_unit_price?: number; tax_rate?: number }): Promise<Product> {
+  if (!name) throw new Error('商品名が空です');
+  const existing = db.select().from(products).where(eq(products.name, name)).get() as Product | undefined;
+  if (existing) return existing;
+  // generate code
+  const base = 'AUTO-';
+  const cnt = db.$sqlite.prepare(`SELECT COUNT(*) AS c FROM products WHERE code LIKE ?`).get(base + '%') as { c: number };
+  const code = `${base}${String(cnt.c + 1).padStart(4, '0')}`;
+  const r = db.insert(products).values({
+    code, name,
+    unit: opts?.unit ?? null,
+    sales_unit_price: 0,
+    purchase_unit_price: opts?.purchase_unit_price ?? 0,
+    tax_rate: opts?.tax_rate ?? 10
+  }).returning().get();
+  return r as Product;
+}
+
 export async function importSalesPricesFromExcel(db: AppDb, buffer: ArrayBuffer) {
   return importPrices(db, buffer, 'sales_unit_price', '売上単価');
 }

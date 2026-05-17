@@ -141,7 +141,17 @@ export async function generatePdf(db: AppDb, id: number, companyInfo: { name?: s
     }
   };
   const printer = new PdfPrinter(fonts);
-  const lineRows = (inv.lines ?? []).map(l => [l.description, String(l.quantity), String(l.unit_price), String(l.amount_ex_tax)]);
+  const lineRows = (inv.lines ?? []).map(l => [l.description, String(l.quantity), String(l.unit_price), `${l.tax_rate}%`, String(l.amount_ex_tax)]);
+  // Per-tax-rate breakdown for qualified invoice (適格請求書) requirement.
+  const byRate = new Map<number, number>();
+  for (const l of inv.lines ?? []) {
+    byRate.set(l.tax_rate, (byRate.get(l.tax_rate) ?? 0) + l.amount_ex_tax);
+  }
+  const taxBreakdownRows: any[][] = [];
+  for (const [rate, sum] of Array.from(byRate.entries()).sort((a, b) => b[0] - a[0])) {
+    const tax = Math.round((sum * rate) / 100);
+    taxBreakdownRows.push([`${rate}% 対象`, String(sum), String(tax)]);
+  }
   const docDef: any = {
     content: [
       { text: 'INVOICE / 請求書', style: 'header' },
@@ -160,10 +170,21 @@ export async function generatePdf(db: AppDb, id: number, companyInfo: { name?: s
       {
         table: {
           headerRows: 1,
-          widths: ['*', 50, 60, 70],
+          widths: ['*', 40, 60, 40, 70],
           body: [
-            ['Description', 'Qty', 'Unit Price', 'Amount (ex tax)'],
+            ['Description', 'Qty', 'Unit Price', 'Tax', 'Amount (ex tax)'],
             ...lineRows
+          ]
+        }
+      },
+      { text: ' ' },
+      {
+        table: {
+          headerRows: 1,
+          widths: [80, 80, 80],
+          body: [
+            ['Tax bracket', 'Subtotal (ex tax)', 'Tax amount'],
+            ...taxBreakdownRows
           ]
         }
       },

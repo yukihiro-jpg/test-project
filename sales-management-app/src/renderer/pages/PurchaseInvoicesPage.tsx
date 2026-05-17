@@ -3,6 +3,7 @@ import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import PdfParseConfirmModal from '../components/PdfParseConfirmModal';
 import { Button, DangerButton, FormField, Input, Select, SecondaryButton } from '../components/FormField';
+import { showError, showInfo } from '../components/toast';
 
 interface Line { product_id?: number | null; description: string; quantity: number; unit_price: number; tax_rate: number; purchase_date?: string | null }
 
@@ -13,6 +14,7 @@ export default function PurchaseInvoicesPage() {
   const [edit, setEdit] = useState<any | null>(null);
   const [parsed, setParsed] = useState<any | null>(null);
   const [parseOpen, setParseOpen] = useState(false);
+  const [pendingPdf, setPendingPdf] = useState<ArrayBuffer | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = () => Promise.all([
@@ -46,13 +48,19 @@ export default function PurchaseInvoicesPage() {
     const f = e.target.files?.[0];
     if (!f) return;
     const buf = await f.arrayBuffer();
+    setPendingPdf(buf);
     setParseOpen(true); setParsed(null);
     try {
       const result = await window.api.purchaseInvoices.parsePdf(buf);
       setParsed(result);
     } catch (err: any) {
       setParseOpen(false);
-      alert('PDF解析エラー: ' + err.message);
+      setPendingPdf(null);
+      if (err?.code === 'NO_API_KEY' || /API ?キー/.test(err?.message ?? '')) {
+        alert('設定画面で Gemini API キーを登録してください');
+      } else {
+        showError(err);
+      }
     }
     if (fileRef.current) fileRef.current.value = '';
   };
@@ -135,23 +143,37 @@ export default function PurchaseInvoicesPage() {
 
       <PdfParseConfirmModal
         open={parseOpen}
-        onClose={() => setParseOpen(false)}
+        onClose={() => { setParseOpen(false); setPendingPdf(null); }}
         parsed={parsed}
         suppliers={suppliers}
         onSave={async (data) => {
-          const lines = data.lines.map(l => {
-            const prod = products.find(p => p.name === l.product_name);
-            return { product_id: prod?.id ?? null, description: l.product_name, quantity: l.quantity, unit_price: l.unit_price, tax_rate: l.tax_rate, purchase_date: l.purchase_date };
-          });
-          await window.api.purchaseInvoices.create({
-            invoice_no: data.invoice_no,
-            supplier_id: data.supplier_id,
-            issue_date: data.issue_date,
-            due_date: data.due_date,
-            status: 'issued',
-            lines
-          });
-          setParseOpen(false); setParsed(null); load();
+          try {
+            // Auto-create missing products by name.
+            const lines = [];
+            for (const l of data.lines) {
+              let prod = products.find(p => p.name === l.product_name);
+              if (!prod && l.product_name) {
+                prod = await window.api.products.getOrCreateByName(l.product_name, { purchase_unit_price: l.unit_price, tax_rate: l.tax_rate });
+              }
+              lines.push({ product_id: prod?.id ?? null, description: l.product_name, quantity: l.quantity, unit_price: l.unit_price, tax_rate: l.tax_rate, purchase_date: l.purchase_date });
+            }
+            const inv = await window.api.purchaseInvoices.create({
+              invoice_no: data.invoice_no,
+              supplier_id: data.supplier_id,
+              issue_date: data.issue_date,
+              due_date: data.due_date,
+              status: 'issued',
+              lines
+            });
+            if (pendingPdf && inv?.id) {
+              try { await window.api.purchaseInvoices.savePdfFile(pendingPdf, inv.id); } catch { /* ignore */ }
+            }
+            setParseOpen(false); setParsed(null); setPendingPdf(null);
+            showInfo('仕入請求書を取り込みました: ' + (inv?.invoice_no ?? ''));
+            load();
+          } catch (e: any) {
+            showError(e);
+          }
         }}
       />
     </div>

@@ -3,6 +3,7 @@ import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import { Button, DangerButton, FormField, Input, Select, SecondaryButton } from '../components/FormField';
 import ExcelImportButton from '../components/ExcelImportButton';
+import { showError } from '../components/toast';
 
 export default function ProductsPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -27,6 +28,14 @@ export default function ProductsPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">商品マスタ</h1>
         <div className="flex gap-2">
+          <SecondaryButton onClick={async () => {
+            try { const p = await window.api.products.downloadSalesPriceTemplate(); if (p) alert('保存しました: ' + p); }
+            catch (e: any) { showError(e); }
+          }}>売上単価テンプレ</SecondaryButton>
+          <SecondaryButton onClick={async () => {
+            try { const p = await window.api.products.downloadPurchasePriceTemplate(); if (p) alert('保存しました: ' + p); }
+            catch (e: any) { showError(e); }
+          }}>仕入単価テンプレ</SecondaryButton>
           <ExcelImportButton label="売上単価取込" onImport={buf => window.api.products.importSalesPricesFromExcel(buf).then(r => { load(); return r; })} />
           <ExcelImportButton label="仕入単価取込" onImport={buf => window.api.products.importPurchasePricesFromExcel(buf).then(r => { load(); return r; })} />
           <Button onClick={() => setEdit({ code: '', name: '', tax_rate: 10, sales_unit_price: 0, purchase_unit_price: 0 })}>新規</Button>

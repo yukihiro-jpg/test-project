@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable';
 import { Button, FormField, Input, Select, SecondaryButton } from '../components/FormField';
 import Modal from '../components/Modal';
+import { showError } from '../components/toast';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 export default function CashflowPage() {
+  const navigate = useNavigate();
   const today = new Date();
   const m0 = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
-  const m1 = new Date(today.getFullYear(), today.getMonth() + 3, 0).toISOString().slice(0, 10);
+  const m1 = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10);
 
   const [from, setFrom] = useState(m0);
   const [to, setTo] = useState(m1);
@@ -34,7 +37,12 @@ export default function CashflowPage() {
   const del = async (id: number) => {
     if (!confirm('削除しますか？')) return;
     try { await window.api.cashflow.delete(id); load(); }
-    catch (e: any) { alert(e.message); }
+    catch (e: any) { showError(e); }
+  };
+
+  const gotoSource = (sourceType: string) => {
+    if (sourceType === 'sales_invoice') navigate('/sales-invoices');
+    else if (sourceType === 'purchase_invoice') navigate('/purchase-invoices');
   };
 
   return (
@@ -49,7 +57,7 @@ export default function CashflowPage() {
             {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </Select>
         </FormField>
-        <Button onClick={() => setEdit({ type: 'in', scheduled_date: new Date().toISOString().slice(0, 10), amount: 0, status: 'scheduled', category: '' })}>手動追加</Button>
+        <Button onClick={() => setEdit({ type: 'in', scheduled_date: new Date().toISOString().slice(0, 10), amount: 0, status: 'scheduled', category: '' })}>個別登録</Button>
       </div>
 
       <div className="bg-white border rounded p-2 mb-4" style={{ height: 280 }}>
@@ -71,8 +79,11 @@ export default function CashflowPage() {
           { key: 'type', header: '区分', render: r => r.type === 'in' ? '入金' : '出金' },
           { key: 'amount', header: '金額', render: r => r.amount?.toLocaleString() },
           { key: 'category', header: 'カテゴリ' },
-          { key: 'source_type', header: '出所' },
-          { key: 'status', header: '状態' },
+          { key: 'source_type', header: '出所', render: r => r.source_type === 'manual' ? '手動' :
+            <button className="text-blue-600 underline" onClick={e => { e.stopPropagation(); gotoSource(r.source_type); }}>
+              {r.source_type === 'sales_invoice' ? '売上請求書' : '仕入請求書'} #{r.source_id}
+            </button> },
+          { key: 'status', header: '状態', render: r => r.status === 'completed' ? '完了' : r.status === 'cancelled' ? '取消' : '予定' },
           { key: 'memo', header: 'メモ' },
           { key: 'act', header: '操作', render: r => r.source_type === 'manual' ?
             <span><button className="text-blue-600 mr-2" onClick={e => { e.stopPropagation(); setEdit({ ...r }); }}>編集</button>

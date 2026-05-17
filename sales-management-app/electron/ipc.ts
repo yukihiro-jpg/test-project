@@ -37,7 +37,18 @@ export function registerIpc(ctx: Ctx) {
       create: (input: any) => customerService.create(db, input),
       update: (id: number, input: any) => customerService.update(db, id, input),
       delete: (id: number) => customerService.remove(db, id),
-      importFromExcel: (buf: ArrayBuffer) => customerService.importFromExcel(db, buf)
+      importFromExcel: (buf: ArrayBuffer) => customerService.importFromExcel(db, buf),
+      downloadTemplate: async () => {
+        const res = await dialog.showSaveDialog({
+          title: '取引先テンプレートを保存',
+          defaultPath: 'customers-template.xlsx',
+          filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+        });
+        if (res.canceled || !res.filePath) return null;
+        const buf = await customerService.generateTemplateExcel(db);
+        fs.writeFileSync(res.filePath, buf);
+        return res.filePath;
+      }
     },
     suppliers: {
       list: () => supplierService.list(db),
@@ -45,7 +56,18 @@ export function registerIpc(ctx: Ctx) {
       create: (input: any) => supplierService.create(db, input),
       update: (id: number, input: any) => supplierService.update(db, id, input),
       delete: (id: number) => supplierService.remove(db, id),
-      importFromExcel: (buf: ArrayBuffer) => supplierService.importFromExcel(db, buf)
+      importFromExcel: (buf: ArrayBuffer) => supplierService.importFromExcel(db, buf),
+      downloadTemplate: async () => {
+        const res = await dialog.showSaveDialog({
+          title: '仕入先テンプレートを保存',
+          defaultPath: 'suppliers-template.xlsx',
+          filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+        });
+        if (res.canceled || !res.filePath) return null;
+        const buf = await supplierService.generateTemplateExcel(db);
+        fs.writeFileSync(res.filePath, buf);
+        return res.filePath;
+      }
     },
     products: {
       list: () => productService.list(db),
@@ -54,7 +76,30 @@ export function registerIpc(ctx: Ctx) {
       update: (id: number, input: any) => productService.update(db, id, input),
       delete: (id: number) => productService.remove(db, id),
       importSalesPricesFromExcel: (buf: ArrayBuffer) => productService.importSalesPricesFromExcel(db, buf),
-      importPurchasePricesFromExcel: (buf: ArrayBuffer) => productService.importPurchasePricesFromExcel(db, buf)
+      importPurchasePricesFromExcel: (buf: ArrayBuffer) => productService.importPurchasePricesFromExcel(db, buf),
+      downloadSalesPriceTemplate: async () => {
+        const res = await dialog.showSaveDialog({
+          title: '売上単価テンプレートを保存',
+          defaultPath: 'products-sales-template.xlsx',
+          filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+        });
+        if (res.canceled || !res.filePath) return null;
+        const buf = await productService.generateSalesPriceTemplate(db);
+        fs.writeFileSync(res.filePath, buf);
+        return res.filePath;
+      },
+      downloadPurchasePriceTemplate: async () => {
+        const res = await dialog.showSaveDialog({
+          title: '仕入単価テンプレートを保存',
+          defaultPath: 'products-purchase-template.xlsx',
+          filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+        });
+        if (res.canceled || !res.filePath) return null;
+        const buf = await productService.generatePurchasePriceTemplate(db);
+        fs.writeFileSync(res.filePath, buf);
+        return res.filePath;
+      },
+      getOrCreateByName: (name: string, opts?: any) => productService.getOrCreateByName(db, name, opts)
     },
     bankAccounts: {
       list: () => bankAccountService.list(db),
@@ -171,17 +216,22 @@ export function registerIpc(ctx: Ctx) {
         const start = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
         const end = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10);
         const monthSales = db.$sqlite.prepare(`SELECT COALESCE(SUM(total_inc_tax),0) AS s FROM sales_invoices WHERE issue_date BETWEEN ? AND ? AND status != 'void'`).get(start, end) as { s: number };
+        const monthPurchase = db.$sqlite.prepare(`SELECT COALESCE(SUM(total_inc_tax),0) AS s FROM purchase_invoices WHERE issue_date BETWEEN ? AND ? AND status != 'void'`).get(start, end) as { s: number };
         const asOf = today.toISOString().slice(0, 10);
         const ar = await arAgingService.getReceivablesAsOf(db, asOf);
         const ap = await apAgingService.getPayablesAsOf(db, asOf);
         const monthIn = db.$sqlite.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM cashflow_entries WHERE type='in' AND scheduled_date BETWEEN ? AND ?`).get(start, end) as { s: number };
         const monthOut = db.$sqlite.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM cashflow_entries WHERE type='out' AND scheduled_date BETWEEN ? AND ?`).get(start, end) as { s: number };
+        const weekEnd = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+        const upcoming = db.$sqlite.prepare(`SELECT type, scheduled_date, amount, memo, source_type, source_id FROM cashflow_entries WHERE status='scheduled' AND scheduled_date BETWEEN ? AND ? ORDER BY scheduled_date ASC LIMIT 30`).all(asOf, weekEnd) as Array<{ type: string; scheduled_date: string; amount: number; memo: string | null; source_type: string; source_id: number | null }>;
         return {
           monthSales: monthSales.s,
+          monthPurchase: monthPurchase.s,
           arTotal: ar.rows.reduce((s, r) => s + r.outstanding, 0),
           apTotal: ap.rows.reduce((s, r) => s + r.outstanding, 0),
           monthIn: monthIn.s,
-          monthOut: monthOut.s
+          monthOut: monthOut.s,
+          upcoming
         };
       }
     },

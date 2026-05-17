@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import { Button, FormField, Input, Select, SecondaryButton } from '../components/FormField';
+import { showError, showInfo } from '../components/toast';
 
 export default function PaymentsPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -56,14 +57,34 @@ export default function PaymentsPage() {
     if (!edit) return;
     const allocTotal = edit.allocations.reduce((s: number, a: any) => s + a.allocated_amount, 0);
     if (allocTotal > edit.amount) { if (!confirm('割当合計が入出金額を超えています。続けますか？')) return; }
-    await window.api.payments.create(edit);
-    setEdit(null); load();
+    try {
+      await window.api.payments.create(edit);
+      setEdit(null); load();
+      showInfo('入出金を登録しました');
+    } catch (e: any) { showError(e); }
   };
 
   const del = async (id: number) => {
     if (!confirm('削除しますか？')) return;
-    await window.api.payments.delete(id);
-    load();
+    try { await window.api.payments.delete(id); load(); }
+    catch (e: any) { showError(e); }
+  };
+
+  const autoAllocate = () => {
+    if (!edit) return;
+    let remaining = edit.amount as number;
+    const allocs: any[] = [];
+    for (const inv of candidates()) {
+      if (remaining <= 0) break;
+      const already = edit.allocations.find((a: any) => a.invoice_id === inv.id && a.invoice_type === inv.invoice_type)?.allocated_amount ?? 0;
+      const outstanding = (inv.total_inc_tax as number) - already;
+      const take = Math.min(remaining, Math.max(0, outstanding));
+      if (take > 0) {
+        allocs.push({ invoice_type: inv.invoice_type, invoice_id: inv.id, allocated_amount: take });
+        remaining -= take;
+      }
+    }
+    setEdit({ ...edit, allocations: allocs });
   };
 
   return (
@@ -77,6 +98,11 @@ export default function PaymentsPage() {
           { key: 'date', header: '日付' },
           { key: 'type', header: '区分', render: r => r.type === 'receipt' ? '入金' : '出金' },
           { key: 'amount', header: '金額', render: r => r.amount?.toLocaleString() },
+          { key: 'counterparty', header: '取引先', render: r => {
+            const list = r.counterparty_type === 'customer' ? customers : r.counterparty_type === 'supplier' ? suppliers : [];
+            return list.find((x: any) => x.id === r.counterparty_id)?.name ?? '';
+          } },
+          { key: 'bank', header: '銀行口座', render: r => banks.find((b: any) => b.id === r.bank_account_id)?.name ?? '' },
           { key: 'memo', header: '備考' },
           { key: 'del', header: '削除', render: r => <button className="text-red-600" onClick={() => del(r.id)}>削除</button> }
         ]} />
@@ -109,10 +135,16 @@ export default function PaymentsPage() {
             </div>
             <FormField label="メモ"><Input value={edit.memo ?? ''} onChange={e => setEdit({ ...edit, memo: e.target.value })} /></FormField>
 
-            <h3 className="font-semibold mt-4 mb-2">消込（請求書への割当）</h3>
+            <div className="flex items-center justify-between mt-4 mb-2">
+              <h3 className="font-semibold">消込（請求書への割当）</h3>
+              <SecondaryButton onClick={autoAllocate}>残額を自動割当</SecondaryButton>
+            </div>
             <table className="w-full text-sm border">
               <thead className="bg-gray-100"><tr><th>請求書番号</th><th>発行日</th><th>合計</th><th>状態</th><th>割当額</th></tr></thead>
               <tbody>
+                {!candidates().length && (
+                  <tr><td colSpan={5} className="px-2 py-3 text-center text-gray-500">未払の請求書はありません</td></tr>
+                )}
                 {candidates().map((inv: any) => (
                   <tr key={inv.invoice_type + ':' + inv.id} className="border-t">
                     <td className="px-1">{inv.invoice_no}</td>

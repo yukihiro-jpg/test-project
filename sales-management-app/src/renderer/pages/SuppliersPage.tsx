@@ -3,6 +3,7 @@ import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import { Button, DangerButton, FormField, Input, SecondaryButton } from '../components/FormField';
 import ExcelImportButton from '../components/ExcelImportButton';
+import { showError } from '../components/toast';
 
 export default function SuppliersPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -27,6 +28,10 @@ export default function SuppliersPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">取引先（仕入先）</h1>
         <div className="flex gap-2">
+          <SecondaryButton onClick={async () => {
+            try { const p = await window.api.suppliers.downloadTemplate(); if (p) alert('テンプレートを保存しました: ' + p); }
+            catch (e: any) { showError(e); }
+          }}>テンプレートDL</SecondaryButton>
           <ExcelImportButton label="Excel取込" onImport={buf => window.api.suppliers.importFromExcel(buf).then(r => { load(); return r; })} />
           <Button onClick={() => setEdit({ code: '', name: '' })}>新規</Button>
         </div>

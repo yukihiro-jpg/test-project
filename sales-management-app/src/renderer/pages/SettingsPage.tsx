@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Button, DangerButton, FormField, Input, SecondaryButton, Select } from '../components/FormField';
 import Modal from '../components/Modal';
+import { showError } from '../components/toast';
 
 export default function SettingsPage() {
-  const [company, setCompany] = useState({ name: '', address: '', phone: '', registered_invoice_no: '' });
+  const [company, setCompany] = useState({ name: '', postal_code: '', address: '', phone: '', registered_invoice_no: '' });
   const [apiKey, setApiKey] = useState('');
   const [apiKeySet, setApiKeySet] = useState(false);
   const [banks, setBanks] = useState<any[]>([]);
@@ -14,9 +15,10 @@ export default function SettingsPage() {
     const all = await window.api.settings.getAll();
     setCompany({
       name: all.company_name ?? '',
+      postal_code: all.company_postal_code ?? '',
       address: all.company_address ?? '',
       phone: all.company_phone ?? '',
-      registered_invoice_no: all.registered_invoice_no ?? ''
+      registered_invoice_no: all.registered_invoice_no ?? all.company_registered_invoice_no ?? ''
     });
     setApiKeySet(all.gemini_api_key === '***SET***');
     setBanks(await window.api.bankAccounts.list());
@@ -24,11 +26,16 @@ export default function SettingsPage() {
   useEffect(() => { load(); }, []);
 
   const saveCompany = async () => {
-    await window.api.settings.set('company_name', company.name);
-    await window.api.settings.set('company_address', company.address);
-    await window.api.settings.set('company_phone', company.phone);
-    await window.api.settings.set('registered_invoice_no', company.registered_invoice_no);
-    setMsg('会社情報を保存しました');
+    try {
+      await window.api.settings.set('company_name', company.name);
+      await window.api.settings.set('company_postal_code', company.postal_code);
+      await window.api.settings.set('company_address', company.address);
+      await window.api.settings.set('company_phone', company.phone);
+      // Write to both the historical key (used by sales PDF generator) and the spec key for compatibility.
+      await window.api.settings.set('registered_invoice_no', company.registered_invoice_no);
+      await window.api.settings.set('company_registered_invoice_no', company.registered_invoice_no);
+      setMsg('会社情報を保存しました');
+    } catch (e: any) { showError(e); }
   };
   const saveApiKey = async () => {
     if (!apiKey) return;
@@ -50,13 +57,17 @@ export default function SettingsPage() {
   };
 
   const exportBackup = async () => {
-    const p = await window.api.backup.exportAll();
-    if (p) setMsg('バックアップを保存しました: ' + p);
+    try {
+      const p = await window.api.backup.exportAll();
+      if (p) setMsg('バックアップを保存しました: ' + p);
+    } catch (e: any) { showError(e); }
   };
   const restoreBackup = async () => {
     if (!confirm('現在のデータが上書きされます。続行しますか？')) return;
-    const m = await window.api.backup.restoreFromZip();
-    if (m) setMsg(m);
+    try {
+      const m = await window.api.backup.restoreFromZip();
+      if (m) setMsg(m);
+    } catch (e: any) { showError(e); }
   };
 
   return (
@@ -67,6 +78,7 @@ export default function SettingsPage() {
       <section className="mb-6">
         <h2 className="font-semibold mb-2">会社情報</h2>
         <FormField label="会社名"><Input value={company.name} onChange={e => setCompany({ ...company, name: e.target.value })} /></FormField>
+        <FormField label="郵便番号"><Input value={company.postal_code} onChange={e => setCompany({ ...company, postal_code: e.target.value })} /></FormField>
         <FormField label="住所"><Input value={company.address} onChange={e => setCompany({ ...company, address: e.target.value })} /></FormField>
         <FormField label="電話"><Input value={company.phone} onChange={e => setCompany({ ...company, phone: e.target.value })} /></FormField>
         <FormField label="適格請求書番号"><Input value={company.registered_invoice_no} onChange={e => setCompany({ ...company, registered_invoice_no: e.target.value })} /></FormField>
@@ -74,10 +86,10 @@ export default function SettingsPage() {
       </section>
 
       <section className="mb-6">
-        <h2 className="font-semibold mb-2">Gemini APIキー</h2>
+        <h2 className="font-semibold mb-2">Gemini APIキー {apiKeySet && <span className="ml-2 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded">設定済み</span>}</h2>
         <p className="text-sm text-gray-600 mb-2">仕入請求書PDFの自動解析に使用します。安全な保管領域に暗号化して保存します。</p>
-        <FormField label={apiKeySet ? 'APIキー（設定済 / 再入力で上書き）' : 'APIキー'}>
-          <Input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} />
+        <FormField label={apiKeySet ? 'APIキー（再入力で上書き）' : 'APIキー'}>
+          <Input type="password" placeholder={apiKeySet ? '（保存済み・伏字）' : ''} value={apiKey} onChange={e => setApiKey(e.target.value)} />
         </FormField>
         <Button onClick={saveApiKey} disabled={!apiKey}>保存</Button>
       </section>
@@ -87,6 +99,9 @@ export default function SettingsPage() {
         <table className="w-full text-sm border mb-2">
           <thead className="bg-gray-100"><tr><th>名称</th><th>銀行</th><th>支店</th><th>口座番号</th><th>期首残高</th><th>既定</th></tr></thead>
           <tbody>
+            {!banks.length && (
+              <tr><td colSpan={6} className="px-2 py-4 text-center text-gray-500">銀行口座が登録されていません</td></tr>
+            )}
             {banks.map(b => (
               <tr key={b.id} className="border-t cursor-pointer hover:bg-blue-50" onClick={() => setBankEdit({ ...b })}>
                 <td className="px-2">{b.name}</td><td className="px-2">{b.bank_name}</td><td className="px-2">{b.branch_name}</td>

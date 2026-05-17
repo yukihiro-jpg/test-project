@@ -43,6 +43,27 @@ export async function remove(db: AppDb, id: number): Promise<void> {
   db.delete(suppliers).where(eq(suppliers.id, id)).run();
 }
 
+export async function generateTemplateExcel(_db: AppDb): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('仕入先');
+  ws.columns = [
+    { header: '取引先コード', key: 'code', width: 14 },
+    { header: '取引先名', key: 'name', width: 28 },
+    { header: 'カナ', key: 'kana', width: 20 },
+    { header: '郵便番号', key: 'postal', width: 12 },
+    { header: '住所', key: 'address', width: 36 },
+    { header: '電話番号', key: 'phone', width: 16 },
+    { header: 'メール', key: 'email', width: 22 },
+    { header: '適格請求書番号', key: 'rin', width: 18 },
+    { header: 'サイト日数', key: 'site', width: 10 },
+    { header: '締日', key: 'close', width: 8 },
+    { header: '支払日', key: 'pay', width: 8 }
+  ];
+  ws.addRow({ code: 'S001', name: 'サンプル商事', kana: 'サンプルショウジ', postal: '100-0001', address: '東京都千代田区...', phone: '03-0000-0000', email: 'supplier@example.com', rin: 'T9876543210987', site: 30, close: 31, pay: 31 });
+  const buf = await wb.xlsx.writeBuffer();
+  return Buffer.from(buf as ArrayBuffer);
+}
+
 export async function importFromExcel(db: AppDb, buffer: ArrayBuffer): Promise<{ inserted: number; updated: number; errors: string[] }> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);

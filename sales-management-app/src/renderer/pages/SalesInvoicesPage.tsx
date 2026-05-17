@@ -80,7 +80,7 @@ export default function SalesInvoicesPage() {
           { key: 'customer_id', header: '顧客', render: r => customerName(r.customer_id) },
           { key: 'total_inc_tax', header: '合計', render: r => r.total_inc_tax?.toLocaleString() },
           { key: 'status', header: '状態' },
-          { key: 'pdf', header: 'PDF', render: r => <button className="text-blue-600 underline" onClick={e => { e.stopPropagation(); pdf(r.id); }}>出力</button> }
+          { key: 'pdf', header: 'PDF', render: r => <button className="text-blue-600 underline" onClick={e => { e.stopPropagation(); pdf(r.id); }}>PDF出力</button> }
         ]} />
       <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? '請求書編集' : '新規請求書'} widthClass="max-w-4xl">
         {edit && (
