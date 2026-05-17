@@ -1,0 +1,9 @@
+{
+  "name": "better-sqlite3",
+  "version": "11.99.0-stub",
+  "description": "better-sqlite3 互換スタブ。実体は Node.js 22+ 内蔵 node:sqlite を使う。",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "private": true
+}
