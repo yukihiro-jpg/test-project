@@ -10,7 +10,7 @@ export function openDatabase(filePath: string): AppDb {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
   migrate(sqlite as any);
-  const db = drizzle(sqlite as any, { schema }) as AppDb;
+  const db = drizzle(sqlite as any, { schema }) as unknown as AppDb;
   db.$sqlite = sqlite;
   return db;
 }
