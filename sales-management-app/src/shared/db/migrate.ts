@@ -198,6 +198,22 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 `;
 
+const ADDITIVE_DDL = `
+CREATE TABLE IF NOT EXISTS invoice_offsets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT NOT NULL,
+  sales_invoice_id INTEGER NOT NULL,
+  purchase_invoice_id INTEGER NOT NULL,
+  amount INTEGER NOT NULL,
+  memo TEXT,
+  created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+);
+`;
+
 export function migrate(db: DbLike): void {
   db.exec(DDL);
+  db.exec(ADDITIVE_DDL);
+  // Additive column migrations - idempotent
+  try { db.exec("ALTER TABLE payment_allocations ADD COLUMN adjustment_amount INTEGER NOT NULL DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE payment_allocations ADD COLUMN adjustment_reason TEXT"); } catch {}
 }

@@ -1,7 +1,7 @@
 import type { AppDb } from '../db/client';
-import { payments, payment_allocations, sales_invoices, purchase_invoices, cashflow_entries } from '../db/schema';
+import { payments, payment_allocations, sales_invoices, purchase_invoices, cashflow_entries, invoice_offsets } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
-import type { Payment, PaymentAllocation } from '../types';
+import type { Payment, PaymentAllocation, InvoiceOffset } from '../types';
 import { markCashflowCompleted } from './cashflowSync';
 
 export async function list(db: AppDb): Promise<Payment[]> {
@@ -15,20 +15,33 @@ export async function get(db: AppDb, id: number): Promise<Payment | undefined> {
   return p;
 }
 
-function updateInvoiceStatusForAllocation(db: AppDb, alloc: PaymentAllocation, paymentDate: string) {
-  const table = alloc.invoice_type === 'sales' ? sales_invoices : purchase_invoices;
-  const inv = db.select().from(table as any).where(eq((table as any).id, alloc.invoice_id)).get() as any;
+/**
+ * Returns total settled amount on an invoice = allocated + adjustment from payment_allocations
+ * plus any invoice_offsets recorded for the invoice.
+ */
+function totalSettledForInvoice(db: AppDb, invoiceType: 'sales' | 'purchase', invoiceId: number): number {
+  const allocs = db.select().from(payment_allocations)
+    .where(and(eq(payment_allocations.invoice_type, invoiceType), eq(payment_allocations.invoice_id, invoiceId))).all() as PaymentAllocation[];
+  let total = allocs.reduce((s, a) => s + (a.allocated_amount ?? 0) + (a.adjustment_amount ?? 0), 0);
+  // include invoice_offsets
+  const offCol = invoiceType === 'sales' ? 'sales_invoice_id' : 'purchase_invoice_id';
+  const off = db.$sqlite.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM invoice_offsets WHERE ${offCol} = ?`).get(invoiceId) as { s: number };
+  total += off.s ?? 0;
+  return total;
+}
+
+function updateInvoiceStatusForInvoice(db: AppDb, invoiceType: 'sales' | 'purchase', invoiceId: number, paymentDate: string) {
+  const table = invoiceType === 'sales' ? sales_invoices : purchase_invoices;
+  const inv = db.select().from(table as any).where(eq((table as any).id, invoiceId)).get() as any;
   if (!inv) return;
-  // total allocated so far
-  const all = db.select().from(payment_allocations)
-    .where(and(eq(payment_allocations.invoice_type, alloc.invoice_type), eq(payment_allocations.invoice_id, alloc.invoice_id))).all() as PaymentAllocation[];
-  const total = all.reduce((s, a) => s + a.allocated_amount, 0);
+  const total = totalSettledForInvoice(db, invoiceType, invoiceId);
   let status: string = inv.status;
   if (total >= inv.total_inc_tax) status = 'paid';
   else if (total > 0) status = 'partially_paid';
-  db.update(table as any).set({ status }).where(eq((table as any).id, alloc.invoice_id)).run();
-  if (status === 'paid') {
-    markCashflowCompleted(db, alloc.invoice_type === 'sales' ? 'sales_invoice' : 'purchase_invoice', alloc.invoice_id, paymentDate);
+  else status = inv.status === 'paid' || inv.status === 'partially_paid' ? 'issued' : inv.status;
+  db.update(table as any).set({ status }).where(eq((table as any).id, invoiceId)).run();
+  if (status === 'paid' && paymentDate) {
+    markCashflowCompleted(db, invoiceType === 'sales' ? 'sales_invoice' : 'purchase_invoice', invoiceId, paymentDate);
   }
 }
 
@@ -49,9 +62,11 @@ export async function create(db: AppDb, input: Partial<Payment> & { allocations?
         payment_id: ins.id,
         invoice_type: a.invoice_type,
         invoice_id: a.invoice_id,
-        allocated_amount: a.allocated_amount
+        allocated_amount: a.allocated_amount ?? 0,
+        adjustment_amount: a.adjustment_amount ?? 0,
+        adjustment_reason: a.adjustment_reason ?? null
       }).run();
-      updateInvoiceStatusForAllocation(db, a, input.date!);
+      updateInvoiceStatusForInvoice(db, a.invoice_type, a.invoice_id, input.date!);
     }
 
     // Add a manual completed cashflow entry recording the actual payment movement
@@ -77,9 +92,40 @@ export async function remove(db: AppDb, id: number): Promise<void> {
     const allocs = db.select().from(payment_allocations).where(eq(payment_allocations.payment_id, id)).all() as PaymentAllocation[];
     db.delete(payment_allocations).where(eq(payment_allocations.payment_id, id)).run();
     db.delete(payments).where(eq(payments.id, id)).run();
+    // also delete linked manual cashflow entry
+    db.$sqlite.prepare(`DELETE FROM cashflow_entries WHERE source_type='manual' AND source_id=?`).run(id);
     // recompute invoice statuses
     for (const a of allocs) {
-      updateInvoiceStatusForAllocation(db, a, '');
+      updateInvoiceStatusForInvoice(db, a.invoice_type, a.invoice_id, '');
     }
+  })();
+}
+
+export async function createOffset(db: AppDb, input: Omit<InvoiceOffset, 'id' | 'created_at'>): Promise<InvoiceOffset> {
+  return db.$sqlite.transaction(() => {
+    const ins = db.insert(invoice_offsets).values({
+      date: input.date,
+      sales_invoice_id: input.sales_invoice_id,
+      purchase_invoice_id: input.purchase_invoice_id,
+      amount: input.amount,
+      memo: input.memo ?? null
+    }).returning().get() as any;
+    updateInvoiceStatusForInvoice(db, 'sales', input.sales_invoice_id, input.date);
+    updateInvoiceStatusForInvoice(db, 'purchase', input.purchase_invoice_id, input.date);
+    return ins as InvoiceOffset;
+  })();
+}
+
+export async function listOffsets(db: AppDb): Promise<InvoiceOffset[]> {
+  return db.select().from(invoice_offsets).all() as InvoiceOffset[];
+}
+
+export async function removeOffset(db: AppDb, id: number): Promise<void> {
+  db.$sqlite.transaction(() => {
+    const row = db.select().from(invoice_offsets).where(eq(invoice_offsets.id, id)).get() as InvoiceOffset | undefined;
+    if (!row) return;
+    db.delete(invoice_offsets).where(eq(invoice_offsets.id, id)).run();
+    updateInvoiceStatusForInvoice(db, 'sales', row.sales_invoice_id, row.date);
+    updateInvoiceStatusForInvoice(db, 'purchase', row.purchase_invoice_id, row.date);
   })();
 }

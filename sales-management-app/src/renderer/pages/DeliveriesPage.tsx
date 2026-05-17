@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import { Button, FormField, Input, Select, SecondaryButton, DangerButton } from '../components/FormField';
@@ -13,22 +14,42 @@ interface DeliveryLine {
   amount_ex_tax?: number;
 }
 
+type TabKey = 'pending' | 'invoiced';
+
 export default function DeliveriesPage() {
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<TabKey>('pending');
   const [rows, setRows] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [selected, setSelected] = useState<Array<string | number>>([]);
   const [edit, setEdit] = useState<any | null>(null);
+  const [filterCustomerId, setFilterCustomerId] = useState<number | ''>('');
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+  const [filterDateTo, setFilterDateTo] = useState<string>('');
+
+  const buildOptions = () => {
+    const opts: any = { status: tab === 'pending' ? 'uninvoiced' : 'invoiced_only' };
+    if (filterCustomerId !== '' && filterCustomerId != null) opts.customerId = Number(filterCustomerId);
+    if (filterDateFrom) opts.dateFrom = filterDateFrom;
+    if (filterDateTo) opts.dateTo = filterDateTo;
+    return opts;
+  };
 
   const load = () => Promise.all([
-    window.api.deliveries.list().then(setRows),
+    window.api.deliveries.list(buildOptions()).then(setRows),
     window.api.customers.list().then(setCustomers),
     window.api.products.list().then(setProducts)
   ]);
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [tab, filterCustomerId, filterDateFrom, filterDateTo]);
 
   const openNew = () => setEdit({ customer_id: customers[0]?.id ?? 0, delivery_date: new Date().toISOString().slice(0, 10), lines: [{ product_name_snapshot: '', quantity: 1, unit_price: 0, tax_rate: 10 }] });
   const openEdit = async (r: any) => {
+    if (tab === 'invoiced' && r.invoice_id) {
+      // navigate to sales invoices page
+      navigate(`/sales-invoices?invoiceId=${r.invoice_id}`);
+      return;
+    }
     const full = await window.api.deliveries.get(r.id);
     setEdit(full);
   };
@@ -69,24 +90,66 @@ export default function DeliveriesPage() {
   };
   const customerName = (id: number) => customers.find(c => c.id === id)?.name ?? '';
 
+  const pendingColumns = [
+    { key: 'id', header: 'ID' },
+    { key: 'delivery_date', header: '納品日' },
+    { key: 'customer_id', header: '取引先', render: (r: any) => customerName(r.customer_id) },
+    { key: 'status', header: '状態' },
+    { key: 'notes', header: '備考' }
+  ];
+
+  const invoicedColumns = [
+    { key: 'id', header: 'ID' },
+    { key: 'delivery_date', header: '納品日' },
+    { key: 'customer_id', header: '取引先', render: (r: any) => customerName(r.customer_id) },
+    { key: 'invoice_no', header: '請求書No', render: (r: any) => r.invoice_no ?? '' },
+    { key: 'invoice_issue_date', header: '請求書発行日', render: (r: any) => r.invoice_issue_date ?? '' }
+  ];
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">納品書</h1>
         <div className="flex gap-2">
-          <SecondaryButton onClick={aggregate}>選択した納品から請求書作成</SecondaryButton>
+          {tab === 'pending' && (
+            <SecondaryButton onClick={aggregate}>選択した納品から請求書作成</SecondaryButton>
+          )}
           <Button onClick={openNew}>新規</Button>
         </div>
       </div>
-      <DataTable rows={rows} getRowKey={r => r.id} onRowClick={openEdit}
-        selectable selectedIds={selected} onSelectionChange={setSelected}
-        columns={[
-          { key: 'id', header: 'ID' },
-          { key: 'delivery_date', header: '納品日' },
-          { key: 'customer_id', header: '顧客', render: r => customerName(r.customer_id) },
-          { key: 'status', header: '状態' },
-          { key: 'invoice_id', header: '請求書ID' }
-        ]} />
+
+      <div className="flex gap-2 border-b mb-4">
+        <button
+          className={`px-4 py-2 text-sm ${tab === 'pending' ? 'border-b-2 border-blue-600 font-semibold' : 'text-gray-600'}`}
+          onClick={() => { setTab('pending'); setSelected([]); }}>請求書未作成</button>
+        <button
+          className={`px-4 py-2 text-sm ${tab === 'invoiced' ? 'border-b-2 border-blue-600 font-semibold' : 'text-gray-600'}`}
+          onClick={() => { setTab('invoiced'); setSelected([]); }}>請求書作成済み</button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+        <FormField label="取引先フィルタ">
+          <Select value={filterCustomerId === '' ? '' : String(filterCustomerId)} onChange={e => setFilterCustomerId(e.target.value === '' ? '' : Number(e.target.value))}>
+            <option value="">（全て）</option>
+            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
+        </FormField>
+        <FormField label="納品日 From"><Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} /></FormField>
+        <FormField label="納品日 To"><Input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} /></FormField>
+        <div className="flex items-end">
+          <SecondaryButton onClick={() => { setFilterCustomerId(''); setFilterDateFrom(''); setFilterDateTo(''); }}>クリア</SecondaryButton>
+        </div>
+      </div>
+
+      {tab === 'pending' ? (
+        <DataTable rows={rows} getRowKey={r => r.id} onRowClick={openEdit}
+          selectable selectedIds={selected} onSelectionChange={setSelected}
+          columns={pendingColumns} />
+      ) : (
+        <DataTable rows={rows} getRowKey={r => r.id} onRowClick={openEdit}
+          columns={invoicedColumns} />
+      )}
+
       <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? '納品編集' : '新規納品'} widthClass="max-w-4xl">
         {edit && (
           <div>

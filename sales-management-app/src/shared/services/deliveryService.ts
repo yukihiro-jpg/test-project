@@ -5,8 +5,42 @@ import type { Delivery, DeliveryLine, Customer } from '../types';
 import { computeInvoiceTotals, computeLineAmount, todayISO, addDaysISO } from './utils';
 import { upsertCashflowForSalesInvoice } from './cashflowSync';
 
-export async function list(db: AppDb): Promise<Delivery[]> {
-  return db.select().from(deliveries).all() as Delivery[];
+export interface DeliveryListOptions {
+  status?: 'pending' | 'invoiced' | 'uninvoiced' | 'invoiced_only';
+  customerId?: number;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export async function list(db: AppDb, options: DeliveryListOptions = {}): Promise<Array<Delivery & { invoice_no?: string | null; invoice_issue_date?: string | null }>> {
+  const where: string[] = [];
+  const params: any[] = [];
+  if (options.status === 'pending' || options.status === 'uninvoiced') {
+    where.push("(d.status = 'pending' OR d.invoice_id IS NULL)");
+  } else if (options.status === 'invoiced' || options.status === 'invoiced_only') {
+    where.push("d.invoice_id IS NOT NULL");
+  }
+  if (options.customerId != null) {
+    where.push("d.customer_id = ?");
+    params.push(options.customerId);
+  }
+  if (options.dateFrom) {
+    where.push("d.delivery_date >= ?");
+    params.push(options.dateFrom);
+  }
+  if (options.dateTo) {
+    where.push("d.delivery_date <= ?");
+    params.push(options.dateTo);
+  }
+  const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
+  const sql = `
+    SELECT d.*, si.invoice_no AS invoice_no, si.issue_date AS invoice_issue_date
+    FROM deliveries d
+    LEFT JOIN sales_invoices si ON si.id = d.invoice_id
+    ${whereSql}
+    ORDER BY d.delivery_date DESC, d.id DESC
+  `;
+  return db.$sqlite.prepare(sql).all(...params) as any;
 }
 
 export async function get(db: AppDb, id: number): Promise<Delivery | undefined> {

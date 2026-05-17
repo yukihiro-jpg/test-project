@@ -36,6 +36,7 @@ export async function getReceivablesAsOf(db: AppDb, asOfDate: string) {
     if (inv.status === 'void') continue;
     const allocs = db.select({
       allocated_amount: payment_allocations.allocated_amount,
+      adjustment_amount: payment_allocations.adjustment_amount,
       date: payments.date
     })
       .from(payment_allocations)
@@ -45,8 +46,10 @@ export async function getReceivablesAsOf(db: AppDb, asOfDate: string) {
         eq(payment_allocations.invoice_id, inv.id),
         lte(payments.date, asOfDate)
       ))
-      .all() as Array<{ allocated_amount: number; date: string }>;
-    const paid = allocs.reduce((s, a) => s + a.allocated_amount, 0);
+      .all() as Array<{ allocated_amount: number; adjustment_amount: number | null; date: string }>;
+    const paidFromAllocs = allocs.reduce((s, a) => s + (a.allocated_amount ?? 0) + (a.adjustment_amount ?? 0), 0);
+    const offsetRow = db.$sqlite.prepare(`SELECT COALESCE(SUM(amount),0) AS s FROM invoice_offsets WHERE sales_invoice_id = ? AND date <= ?`).get(inv.id, asOfDate) as { s: number };
+    const paid = paidFromAllocs + (offsetRow.s ?? 0);
     const outstanding = inv.total_inc_tax - paid;
     if (outstanding <= 0) continue;
     const customer = db.select().from(customers).where(eq(customers.id, inv.customer_id)).get() as any;

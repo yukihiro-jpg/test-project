@@ -160,7 +160,19 @@ export const payment_allocations = sqliteTable('payment_allocations', {
   payment_id: integer('payment_id').notNull(),
   invoice_type: text('invoice_type').notNull(),
   invoice_id: integer('invoice_id').notNull(),
-  allocated_amount: integer('allocated_amount').notNull().default(0)
+  allocated_amount: integer('allocated_amount').notNull().default(0),
+  adjustment_amount: integer('adjustment_amount').notNull().default(0),
+  adjustment_reason: text('adjustment_reason')
+});
+
+export const invoice_offsets = sqliteTable('invoice_offsets', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  date: text('date').notNull(),
+  sales_invoice_id: integer('sales_invoice_id').notNull(),
+  purchase_invoice_id: integer('purchase_invoice_id').notNull(),
+  amount: integer('amount').notNull(),
+  memo: text('memo'),
+  created_at: text('created_at').default(sql`(CURRENT_TIMESTAMP)`)
 });
 
 export const cashflow_entries = sqliteTable('cashflow_entries', {

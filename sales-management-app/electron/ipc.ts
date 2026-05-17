@@ -109,7 +109,7 @@ export function registerIpc(ctx: Ctx) {
       delete: (id: number) => bankAccountService.remove(db, id)
     },
     deliveries: {
-      list: () => deliveryService.list(db),
+      list: (opts?: any) => deliveryService.list(db, opts ?? {}),
       get: (id: number) => deliveryService.get(db, id),
       create: (input: any) => deliveryService.create(db, input),
       update: (id: number, input: any) => deliveryService.update(db, id, input),
@@ -156,7 +156,10 @@ export function registerIpc(ctx: Ctx) {
       list: () => paymentService.list(db),
       get: (id: number) => paymentService.get(db, id),
       create: (input: any) => paymentService.create(db, input),
-      delete: (id: number) => paymentService.remove(db, id)
+      delete: (id: number) => paymentService.remove(db, id),
+      createOffset: (input: any) => paymentService.createOffset(db, input),
+      listOffsets: () => paymentService.listOffsets(db),
+      removeOffset: (id: number) => paymentService.removeOffset(db, id)
     },
     cashflow: {
       list: (filter: any) => cashflowService.list(db, filter ?? {}),
@@ -233,6 +236,43 @@ export function registerIpc(ctx: Ctx) {
           monthOut: monthOut.s,
           upcoming
         };
+      },
+      overdueReceivables: async () => {
+        const asOf = new Date().toISOString().slice(0, 10);
+        const ar = await arAgingService.getReceivablesAsOf(db, asOf);
+        const asOfMs = new Date(asOf + 'T00:00:00Z').getTime();
+        return ar.rows
+          .filter(r => r.due_date < asOf && r.outstanding > 0)
+          .map(r => ({
+            invoice_id: r.invoice_id,
+            invoice_no: r.invoice_no,
+            customer_id: r.customer_id,
+            customer_name: r.customer_name,
+            due_date: r.due_date,
+            outstanding: r.outstanding,
+            days_overdue: Math.max(0, Math.floor((asOfMs - new Date(r.due_date + 'T00:00:00Z').getTime()) / 86400000))
+          }))
+          .sort((a, b) => b.days_overdue - a.days_overdue);
+      },
+      upcomingPayables: async (days?: number) => {
+        const d = days ?? 14;
+        const today = new Date();
+        const asOf = today.toISOString().slice(0, 10);
+        const limit = new Date(today.getTime() + d * 86400000).toISOString().slice(0, 10);
+        const ap = await apAgingService.getPayablesAsOf(db, asOf);
+        const asOfMs = new Date(asOf + 'T00:00:00Z').getTime();
+        return ap.rows
+          .filter(r => r.due_date >= asOf && r.due_date <= limit && r.outstanding > 0)
+          .map(r => ({
+            invoice_id: r.invoice_id,
+            invoice_no: r.invoice_no,
+            supplier_id: r.supplier_id,
+            supplier_name: r.supplier_name,
+            due_date: r.due_date,
+            outstanding: r.outstanding,
+            days_remaining: Math.max(0, Math.floor((new Date(r.due_date + 'T00:00:00Z').getTime() - asOfMs) / 86400000))
+          }))
+          .sort((a, b) => a.days_remaining - b.days_remaining);
       }
     },
     pdf: {

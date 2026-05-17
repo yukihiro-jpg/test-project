@@ -136,6 +136,18 @@ export interface PaymentAllocation {
   invoice_type: 'sales' | 'purchase';
   invoice_id: ID;
   allocated_amount: number;
+  adjustment_amount?: number;
+  adjustment_reason?: string | null;
+}
+
+export interface InvoiceOffset {
+  id?: ID;
+  date: string;
+  sales_invoice_id: ID;
+  purchase_invoice_id: ID;
+  amount: number;
+  memo?: string | null;
+  created_at?: string | null;
 }
 
 export interface Payment {
