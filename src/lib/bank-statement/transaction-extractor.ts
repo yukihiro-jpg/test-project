@@ -756,12 +756,18 @@ function extractTransactions(
     const dateText = getCellByColumn(row, mapping.dateColumn)
     let date = parseDate(dateText)
     if (!date && lastDate && row.cells.some((c, i) => i !== mapping.dateColumn && c && c.trim())) {
-      // 日付が空でも他の列にデータがある → 直前の日付を引き継ぐ
       if (row.cells.some((c) => /合計|小計|総計/.test(c || ''))) continue
       date = lastDate
     }
-    if (!date) continue // 日付もデータもない行はスキップ（ヘッダー等）
-    lastDate = date
+    // 日付列が未設定（-1）の場合: データがある行は日付空で作成
+    if (!date && mapping.dateColumn >= 0) continue
+    if (!date && mapping.dateColumn < 0) {
+      // 日付列なし: 金額データがある行のみ通す
+      const hasData = row.cells.some((c) => { const n = parseInt((c || '').replace(/[,、\s]/g, '')); return !isNaN(n) && n > 0 })
+      if (!hasData) continue
+      date = ''
+    }
+    if (date) lastDate = date
 
     let baseDesc = ''
     if (mapping.descriptionColumns && mapping.descriptionColumns.length > 0) {
