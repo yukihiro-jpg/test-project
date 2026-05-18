@@ -710,14 +710,43 @@ export default function BankStatementContent() {
 
       try {
         const result: ParseResult = applyColumnMapping(rawPages, mapping, pendingSourceType)
-        // 列マッピング結果のページに画像URLを付与
         if (pendingImageUrls) {
           result.pages = result.pages.map((page, i) => ({
             ...page,
             imageDataUrl: pendingImageUrls[i] || page.imageDataUrl,
           }))
         }
-        applyParseResultFn(result, uploadConfig)
+
+        // 請求書の場合: 専用ロジックで借方/貸方を直接配置
+        if (uploadConfig.documentType === 'sales-invoice' || uploadConfig.documentType === 'purchase-invoice') {
+          setPages((prev) => [...prev, ...result.pages])
+          const allTx = result.pages.flatMap((p) => p.transactions)
+          const invoiceEntries = allTx.filter((tx) => tx.deposit || tx.withdrawal).map((tx) => {
+            const entry = createBlankEntry()
+            entry.date = tx.date?.replace(/-/g, '') || ''
+            const amount = tx.withdrawal || tx.deposit || 0
+            entry.debitAmount = amount
+            entry.creditAmount = amount
+            entry.description = tx.description || ''
+            entry.originalDescription = tx.description || ''
+            if (uploadConfig.creditCode) {
+              entry.creditCode = uploadConfig.creditCode
+              entry.creditName = uploadConfig.creditName || ''
+              entry.creditSubCode = uploadConfig.creditSubCode || ''
+              entry.creditSubName = uploadConfig.creditSubName || ''
+            }
+            if (uploadConfig.debitCode) {
+              entry.debitCode = uploadConfig.debitCode
+              entry.debitName = uploadConfig.debitName || ''
+              entry.debitSubCode = uploadConfig.debitSubCode || ''
+              entry.debitSubName = uploadConfig.debitSubName || ''
+            }
+            return entry
+          })
+          setJournalEntries((prev) => [...prev, ...invoiceEntries])
+        } else {
+          applyParseResultFn(result, uploadConfig)
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : '列マッピングの適用に失敗しました')
       } finally {
