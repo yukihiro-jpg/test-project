@@ -527,7 +527,30 @@ export default function BankStatementContent() {
         }
 
         if (config.documentType === 'sales-invoice' || config.documentType === 'purchase-invoice') {
-          // 請求書処理
+          const fileName = config.file.name.toLowerCase()
+          const isExcelCsv = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')
+
+          if (isExcelCsv) {
+            // Excel/CSV請求書: 通帳と同じ列マッピング方式で処理
+            const result = await parseFile(config.file, config.accountCode)
+            clearInterval(progressTimer)
+            setLoadingProgress(100)
+            if (result.pdfFile) pdfFileRef.current = result.pdfFile
+            if (result.needsColumnMapping && result.rawPages) {
+              setRawPages(result.rawPages)
+              setPendingSourceType(result.sourceType)
+              setPendingImageUrls(result.pageImageUrls || null)
+              setShowColumnMapping(true)
+              setIsLoading(false)
+              return
+            }
+            applyParseResultFn(result, config)
+            setIsLoading(false)
+            setLoadingProgress(0)
+            return
+          }
+
+          // PDF請求書: Gemini OCRで解析
           const { renderPdfPageToImage, getPdfPageCount } = await import('@/lib/bank-statement/pdf-text-parser')
           const pageCount = await getPdfPageCount(config.file)
           const imageDataUrls: string[] = []
