@@ -90,7 +90,7 @@ export default function UploadDialog({ accountMaster, subAccountMaster, onUpload
           file, ...period,
         })
       } else {
-        if (!debitCode || !creditCode) return
+        if (!debitCode && !creditCode) return
         onUpload({
           documentType: docType,
           accountCode: '', accountName: '',
@@ -116,7 +116,7 @@ export default function UploadDialog({ accountMaster, subAccountMaster, onUpload
         isBankLike ? !!(accountCode && accountName)
           : isCreditCard ? !!(creditCode && creditName)
             : isReceipt ? !!(creditCode && creditName)
-              : !!(debitCode && creditCode)
+              : !!(debitCode || creditCode)
       )
   )
 
