@@ -872,7 +872,25 @@ export default function JournalEntryTable({
             }).length}件表示中
           </span>
         )}
-        <div className="ml-auto">
+        <div className="ml-auto flex gap-1">
+          <button
+            onClick={() => {
+              const dateStr = prompt('全仕訳の日付を一括設定します。\nYYYYMMDD形式で入力してください（例: 20250430）')
+              if (!dateStr || dateStr.length !== 8) return
+              onEntriesChange(entries.map((e) => ({ ...e, date: dateStr })))
+            }}
+            className="px-2 py-1 text-xs bg-white text-gray-700 border border-gray-300 rounded hover:bg-gray-50">
+            日付一括
+          </button>
+          <button
+            onClick={() => {
+              const prefix = prompt('全仕訳の摘要の先頭に挿入するテキストを入力\n（例: 2025年4月分 ）')
+              if (!prefix) return
+              onEntriesChange(entries.map((e) => ({ ...e, description: `${prefix}${e.description}`.slice(0, 40) })))
+            }}
+            className="px-2 py-1 text-xs bg-white text-gray-700 border border-gray-300 rounded hover:bg-gray-50">
+            摘要先頭挿入
+          </button>
           <button
             onClick={() => setShowAccountSummary((v) => !v)}
             className={`px-2 py-1 text-xs rounded ${showAccountSummary ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}>

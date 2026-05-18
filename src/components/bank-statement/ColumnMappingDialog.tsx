@@ -78,7 +78,7 @@ export default function ColumnMappingDialog({ rawPages, initialMapping, onConfir
   }
 
   const hasAmount = mapping.depositColumn >= 0 || mapping.withdrawalColumn >= 0
-  const canConfirm = mapping.dateColumn >= 0 && hasAmount
+  const canConfirm = hasAmount
 
   const handleConfirm = () => {
     onConfirm({
