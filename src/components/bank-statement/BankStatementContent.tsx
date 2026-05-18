@@ -33,7 +33,7 @@ import type {
   ColumnMapping,
 } from '@/lib/bank-statement/types'
 import { parseFile, applyColumnMapping } from '@/lib/bank-statement/transaction-extractor'
-import { mapTransactionsToJournalEntries } from '@/lib/bank-statement/journal-mapper'
+import { mapTransactionsToJournalEntries, createBlankEntry } from '@/lib/bank-statement/journal-mapper'
 import { getPatterns } from '@/lib/bank-statement/pattern-store'
 import { loadAccountMaster, loadSubAccountMaster, loadAccountTaxMaster, getDefaultTaxCode } from '@/lib/bank-statement/account-master'
 import { getDefaultTaxCodeByName, isPL } from '@/lib/bank-statement/tax-codes'
@@ -549,7 +549,34 @@ export default function BankStatementContent() {
               setIsLoading(false)
               return
             }
-            applyParseResultFn(result, config)
+            // 請求書Excelは通帳ロジックではなく、直接科目を配置
+            setPages((prev) => [...prev, ...result.pages])
+            const allTx = result.pages.flatMap((p) => p.transactions)
+            const invoiceEntries = allTx.filter((tx) => tx.deposit || tx.withdrawal).map((tx) => {
+              const entry = createBlankEntry()
+              entry.date = tx.date?.replace(/-/g, '') || ''
+              const amount = tx.withdrawal || tx.deposit || 0
+              entry.debitAmount = amount
+              entry.creditAmount = amount
+              entry.description = tx.description || ''
+              entry.originalDescription = tx.description || ''
+              // 仕入請求書: 借方=空(経費科目)、貸方=未払金等
+              // 売上請求書: 借方=売掛金等、貸方=空(売上科目)
+              if (config.creditCode) {
+                entry.creditCode = config.creditCode
+                entry.creditName = config.creditName || ''
+                entry.creditSubCode = config.creditSubCode || ''
+                entry.creditSubName = config.creditSubName || ''
+              }
+              if (config.debitCode) {
+                entry.debitCode = config.debitCode
+                entry.debitName = config.debitName || ''
+                entry.debitSubCode = config.debitSubCode || ''
+                entry.debitSubName = config.debitSubName || ''
+              }
+              return entry
+            })
+            setJournalEntries((prev) => [...prev, ...invoiceEntries])
             setIsLoading(false)
             setLoadingProgress(0)
             return
