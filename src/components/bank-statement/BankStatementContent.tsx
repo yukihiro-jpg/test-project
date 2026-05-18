@@ -162,14 +162,19 @@ export default function BankStatementContent() {
       if (config.periodTo) setLastPeriodTo(config.periodTo)
 
       const patterns = getPatterns()
+      // 請求書の場合: accountCodeが空でcreditCode/debitCodeがある → そちらを通帳科目として使う
+      const effectiveAccountCode = config.accountCode || config.creditCode || config.debitCode || ''
+      const effectiveAccountName = config.accountCode ? config.accountName : (config.creditCode ? config.creditName || '' : config.debitName || '')
+      const effectiveSubCode = config.accountCode ? config.accountSubCode : (config.creditCode ? config.creditSubCode : config.debitSubCode)
+      const effectiveSubName = config.accountCode ? config.accountSubName : (config.creditCode ? config.creditSubName : config.debitSubName)
       const entries = mapTransactionsToJournalEntries(
         result.pages,
-        config.accountCode,
-        config.accountName,
+        effectiveAccountCode,
+        effectiveAccountName,
         patterns,
         accountMaster,
-        config.accountSubCode,
-        config.accountSubName,
+        effectiveSubCode,
+        effectiveSubName,
       )
       // 科目別消費税CDを自動設定（パターン学習で設定済みでないもの）
       const taxMaster = loadAccountTaxMaster()
