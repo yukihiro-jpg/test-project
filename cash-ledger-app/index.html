@@ -6075,6 +6075,7 @@ function bankEnsureProcessedMonths(sess, force) {
   if (!force && sess.processedMonths && sess.processedMonths.length>0) return sess;
   var monthsSet={};
   (sess.rows||[]).forEach(function(r){
+    if (!bankIsCountableRow(r)) return; // 繰越行は処理月から除外
     var mk=bankDateToMonthKey(r.date);
     if (mk) monthsSet[mk]=true;
   });
@@ -6144,6 +6145,7 @@ function bankSessionCoversMonth(sess, monthKey) {
   if ((sess.processedMonths||[]).indexOf(monthKey)!==-1) return true;
   // Fallback: 行を直接スキャン（processedMonths が古い形式で取りこぼした場合）
   return (sess.rows||[]).some(function(r){
+    if (!bankIsCountableRow(r)) return false; // 繰越行は除外
     return bankDateToMonthKey(r.date)===monthKey;
   });
 }
@@ -6289,6 +6291,23 @@ function bankScheduleAutoSave() {
   }, 800);
 }
 
+// 繰越（前月繰越・前期繰越・開始残高など）行の判定。
+// 通帳CSVの先頭やページ境界に出現し、入出金が無く残高のみが入っている行。
+// これらは「取引」ではないため、処理対象月や会計年度の判定からは除外する。
+function bankIsCarryoverRow(r) {
+  if (!r) return false;
+  if (Number(r.receipt||0)!==0 || Number(r.payment||0)!==0) return false;
+  var orig=String((r.descriptionOriginal!=null?r.descriptionOriginal:r.description)||'').trim();
+  if (!orig) return false;
+  // 「繰越」「繰り越し」「前月繰越」「前期繰越」「開始残高」「前残」など
+  return /繰越|繰り越し|前残|前月残|前期残|開始残高|期首残|キソウザン|ｷｿｳｻﾞﾝ|くりこし|クリコシ|ｸﾘｺｼ/.test(orig);
+}
+
+// 月別進捗・年度判定の対象とする行か（繰越行は除外）
+function bankIsCountableRow(r) {
+  return !!r && !bankIsCarryoverRow(r);
+}
+
 // セッションマージ（同銀行・同口座の重複排除）
 function bankRowDedupKey(r) {
   return (r.date||'')+'|'+String(r.descriptionOriginal||'').trim()+'|'+(r.receipt||0)+'|'+(r.payment||0)+'|'+(r.balance||0);
@@ -6307,9 +6326,10 @@ function bankMergeSessions(base, other, batchId) {
     }
   });
   base.rows.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
-  // 処理対象月を再計算
+  // 処理対象月を再計算（繰越行は除外）
   var monthsSet={};
   base.rows.forEach(function(r){
+    if (!bankIsCountableRow(r)) return;
     var mk=bankDateToMonthKey(r.date);
     if (mk) monthsSet[mk]=true;
   });
@@ -6565,11 +6585,55 @@ function bankReadFile(file) {
     var hdrIdx=bankFindBestHeaderRow(parsed);
     var headerRow=parsed[hdrIdx]||parsed[0];
     var hdrLen=headerRow.length;
+    // ページ境界等で同じヘッダー/プリアンブルが本文中に再出現するCSVに対応:
+    // ・ヘッダー語（年月日/摘要/残高...）を多く含む行 → 継続ヘッダーとしてスキップ
+    // ・口座情報語（銀行名/口座番号/支店名/期間F/期間T）を含む行 → プリアンブルとしてスキップ
+    // ・継続ヘッダー直前の数行（通常は銀行情報/期間行）も合わせてスキップ
+    var headerKw=['年月日','取引日','日付','摘要','内容','取引内容','残高','差引残高','差引'];
+    var preambleKw=['銀行名','口座情報','口座番号','支店名','支店コード','取引期間','期間From','期間To','期間Ｆ','期間Ｔ'];
+    function rowKwScore(row, kws){
+      if (!row) return 0;
+      // 全角英数字を半角に正規化してから判定（「期間Ｆｒｏｍ」「期間Ｔｏ」等の銀行CSVに対応）
+      var t=row.map(function(c){
+        var s=(c||'').trim();
+        return s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(ch){
+          return String.fromCharCode(ch.charCodeAt(0)-0xFEE0);
+        });
+      }).join('|');
+      var n=0;
+      for (var ki=0; ki<kws.length; ki++) {
+        var kw=kws[ki].replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(ch){
+          return String.fromCharCode(ch.charCodeAt(0)-0xFEE0);
+        });
+        if (t.indexOf(kw)!==-1) n++;
+      }
+      return n;
+    }
+    var continuationHeaderIdxs=[];
+    for (var pi=hdrIdx+1; pi<parsed.length; pi++) {
+      if (rowKwScore(parsed[pi], headerKw) >= 2) continuationHeaderIdxs.push(pi);
+    }
+    var bankSkipSet={};
+    continuationHeaderIdxs.forEach(function(ci){
+      bankSkipSet[ci]=true;
+      // 継続ヘッダー直前の最大2行（プリアンブル）も合わせてスキップ
+      for (var d=1; d<=2; d++) {
+        var bi=ci-d;
+        if (bi>hdrIdx) bankSkipSet[bi]=true;
+      }
+    });
+    // プリアンブル語を含む行は位置に関わらず全てスキップ
+    for (var pi2=hdrIdx+1; pi2<parsed.length; pi2++) {
+      if (bankSkipSet[pi2]) continue;
+      if (rowKwScore(parsed[pi2], preambleKw) >= 1) bankSkipSet[pi2]=true;
+    }
     bankImportedData={
       fileName:file.name, encoding:enc,
       headers:headerRow,
       preambleRowCount:hdrIdx,
-      rows:parsed.slice(hdrIdx+1).filter(function(r){
+      rows:parsed.slice(hdrIdx+1).filter(function(r, ri){
+        var absIdx=hdrIdx+1+ri;
+        if (bankSkipSet[absIdx]) return false;
         if (!r.some(function(c){return (c||'').trim()!=='';})) return false;
         return r.length>=Math.max(3, Math.floor(hdrLen/2));
       })
@@ -6852,6 +6916,7 @@ function bankStartEditing() {
   var accountNo=(document.getElementById('bank-acct-input')||{value:bankAcctCache}).value.trim();
   var descCols=bankColumnRoles.description||[];
   var batchId='batch_'+Date.now();
+  // 1) 各行を変換（順序非依存処理）
   var rows=bankImportedData.rows.map(function(row) {
     var dateStr=bankColumnRoles.date!=null?bankNormalizeDate(row[bankColumnRoles.date]||''):'';
     var descOrig=descCols.map(function(c){return (row[c]||'').trim();}).filter(function(s){return s;}).join(' ');
@@ -6865,13 +6930,40 @@ function bankStartEditing() {
     var bal=bankColumnRoles.balance!=null?bankParseAmount(row[bankColumnRoles.balance]):0;
     var probe={descriptionOriginal:descOrig, receipt:rec, payment:pay};
     var initDesc=(bankClassifyRow(probe)==='needsInfo')?'':descOrig;
-    return {date:dateStr, descriptionOriginal:descOrig, description:initDesc, receipt:rec, payment:pay, balance:bal, batchId:batchId};
-  }).filter(function(r){return r.date||r.receipt||r.payment||r.balance!==0;});
+    // 日付が「YYYY-MM-DD」形式に正規化できなかった場合は空とみなす
+    // （プリアンブル残骸の口座番号などが date 列に紛れ込むのを防ぐ）
+    var normalized=/^\d{4}-\d{2}-\d{2}$/.test(dateStr);
+    return {
+      date: normalized ? dateStr : '',
+      descriptionOriginal:descOrig, description:initDesc,
+      receipt:rec, payment:pay, balance:bal, batchId:batchId
+    };
+  });
+  // 2) 内容が空のプレースホルダ行を先に除去
+  //    （摘要・入出金・残高がすべて空の行は、その後の「日付継承」対象にしない）
+  rows=rows.filter(function(r){
+    if ((r.descriptionOriginal||'').trim()) return true;
+    if (r.receipt!==0 || r.payment!==0 || r.balance!==0) return true;
+    return false;
+  });
+  // 3) 日付が空白の行は直前の行から継承
+  //    （銀行CSVが「上のセルと同じ日付の場合は空欄」とする仕様への対応）
+  var lastDate='';
+  rows.forEach(function(r){
+    if (r.date) lastDate=r.date;
+    else if (lastDate) r.date=lastDate;
+  });
+  // 4) 繰越行を検出してマーキング（処理月・年度判定から除外する印）
+  rows.forEach(function(r){
+    if (bankIsCarryoverRow(r)) r.isCarryover=true;
+  });
+  // 5) 日付順に整列
   rows.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
 
-  // === 年度ミスマッチ検出 ===
+  // === 年度ミスマッチ検出（繰越行は除外。前月末日の繰越行で誤判定されないようにする） ===
   var rowFys={};
   rows.forEach(function(r){
+    if (!bankIsCountableRow(r)) return;
     var fy=getFiscalYearForDate(r.date);
     if (fy!=null) rowFys[fy]=(rowFys[fy]||0)+1;
   });
@@ -6925,6 +7017,7 @@ function bankFinalizeImport(bankName, accountNo, batchId, rows) {
 
   var monthsSet={};
   rows.forEach(function(r){
+    if (!bankIsCountableRow(r)) return; // 繰越行は処理月から除外
     var mk=bankDateToMonthKey(r.date);
     if (mk) monthsSet[mk]=true;
   });
@@ -7126,6 +7219,10 @@ function bankRowClassName(state) {
 }
 
 function bankReasonBadge(state, reason, row) {
+  // 繰越行（前月繰越・前期繰越など）は「処理不要・残高表示用」と明示する
+  if (row && row.isCarryover) {
+    return '<div class="bank-status-badge" style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;">📘 繰越（残高表示・処理対象外）</div>';
+  }
   if (state==='needsInfo') {
     var isReceipt=!!(row && Number(row.receipt||0)>0);
     var cls=isReceipt?'bank-status-needinfo-receipt':'bank-status-needinfo-payment';
