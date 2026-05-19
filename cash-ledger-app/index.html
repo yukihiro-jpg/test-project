@@ -6291,6 +6291,19 @@ function bankScheduleAutoSave() {
   }, 800);
 }
 
+// セッションの主たる会計年度（最初の処理対象月から算出）
+function bankSessionPrimaryFy(sess) {
+  if (!sess) return null;
+  var m=sess.firstProcessedMonth;
+  if (!m) {
+    // 念のため processedMonths からも探す
+    var months=(sess.processedMonths||[]).slice().sort();
+    m=months[0];
+  }
+  if (!m) return null;
+  return getFiscalYearForDate(String(m)+'-01');
+}
+
 // 繰越（前月繰越・前期繰越・開始残高など）行の判定。
 // 通帳CSVの先頭やページ境界に出現し、入出金が無く残高のみが入っている行。
 // これらは「取引」ではないため、処理対象月や会計年度の判定からは除外する。
@@ -7070,7 +7083,7 @@ function bankShowYearMismatchDialog(rowFyList, rowFysCount) {
       +'</button>'
       +'<button class="btn btn-secondary" style="text-align:left;padding:12px 16px;" onclick="bankYearMismatchKeep()">'
         +'<div style="font-weight:700;font-size:14px;">⚠ このまま '+esc(currentLabel)+' で取り込む</div>'
-        +'<div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:3px;">表示中の月ボタンは緑色になりません（CSVは前期データのため）。前期に移動すれば確認できます。</div>'
+        +'<div style="font-size:11px;font-weight:400;opacity:0.85;margin-top:3px;">取込・編集中は表示中の月ボタンが点灯しませんが、「✅ 登録完了」を押した時点で自動的にCSVの年度（'+esc(primaryLabel)+'）に切り替わり、該当月が緑色で点灯します。</div>'
       +'</button>'
       +'<button class="btn btn-outline" style="text-align:left;padding:12px 16px;" onclick="bankYearMismatchCancel()">'
         +'<div style="font-weight:700;font-size:14px;">❌ キャンセル（取込を中止）</div>'
@@ -7414,6 +7427,22 @@ function bankToggleCompleted(completed) {
       if (idx>=0) bankSessionCache[idx]=bankCurrentSession;
     }
     if (completed) {
+      // セッションの処理月が現在表示中の会計年度に含まれない場合、
+      // 自動的にセッションが属する会計年度へ切替（進捗バーの該当月が確実に点灯するようにする）。
+      // 例: 4月始まり会計年度・現在FY2026表示中の状態で、4月CSV（FY2025データ）を取込→完了したケース。
+      var sessFy=bankSessionPrimaryFy(bankCurrentSession);
+      if (sessFy!=null && sessFy!==ledgerYear) {
+        var months=(bankCurrentSession.processedMonths||[]).map(function(mk){
+          return getFiscalYearForDate(mk+'-01');
+        });
+        // 現在年度に該当月が全く無い場合のみ切替
+        if (months.indexOf(ledgerYear)===-1) {
+          ledgerYear=sessFy;
+          ledgerMonthFrom=0;
+          ledgerMonthTo=0;
+          if (typeof updateHeader==='function') updateHeader();
+        }
+      }
       // 登録完了したら一覧画面に戻り、月別進捗バーを更新表示
       bankCurrentSession=null;
       bankCsvPage='list';
