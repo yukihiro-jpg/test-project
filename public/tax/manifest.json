@@ -1,0 +1,13 @@
+{
+  "name": "源泉所得税 納付書アシスタント",
+  "short_name": "源泉納付書",
+  "start_url": "/tax",
+  "scope": "/tax",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1f2937",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/tax/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
