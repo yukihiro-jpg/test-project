@@ -46,6 +46,11 @@ export default function TaxHome() {
             <Field label="住所(所在地)" v={payer.address} on={v => update('address', v)} />
             <Field label="氏名(名称)" v={payer.name} on={v => update('name', v)} />
             <Field label="電話番号" v={payer.phone} on={v => update('phone', v)} />
+            <label className="flex items-center gap-2 mt-2">
+              <input type="checkbox" checked={payer.noukiTokurei}
+                onChange={e => setPayer({ ...payer, noukiTokurei: e.target.checked })} />
+              <span className="text-sm">納期の特例を適用(半年に1回納付)</span>
+            </label>
           </div>
         ) : (
           <div className="text-sm text-gray-700 space-y-0.5">
@@ -54,6 +59,7 @@ export default function TaxHome() {
             <div>氏名: {payer.name || '—'}</div>
             <div>住所: {payer.address || '—'}</div>
             <div>電話: {payer.phone || '—'}</div>
+            <div>納期の特例: {payer.noukiTokurei ? '適用' : '通常(翌月10日)'}</div>
           </div>
         )}
       </div>

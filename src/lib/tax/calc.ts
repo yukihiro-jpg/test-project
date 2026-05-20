@@ -38,3 +38,43 @@ export function calcKoyoOtsuTax(salaryAfterInsurance: number): number {
     return Math.max(0, Math.floor(t))
   }
 }
+
+// 税理士等の報酬（所204条1項2号）: 1回の支払額が100万円以下 → 10.21%
+// 100万円超 → 100万円までは10.21%、超過部分は20.42%
+export function calcZeirishiTax(amount: number): number {
+  if (amount <= 0) return 0
+  if (amount <= 1000000) return Math.floor(amount * 0.1021)
+  return Math.floor(1000000 * 0.1021 + (amount - 1000000) * 0.2042)
+}
+
+// 源泉所得税の納付期限
+// 通常: 給与等の支払日の翌月10日
+// 納期の特例: 1〜6月支払分 → 7月10日 / 7〜12月支払分 → 翌年1月20日
+// いずれも土日祝日の場合は次の平日（祝日判定は省略し、土日のみ繰り下げ）
+export function calcDueDate(paymentDate: Date, tokurei: boolean): Date {
+  let due: Date
+  if (tokurei) {
+    const y = paymentDate.getFullYear()
+    const m = paymentDate.getMonth() + 1
+    if (m >= 1 && m <= 6) {
+      due = new Date(y, 6, 10) // 7/10
+    } else {
+      due = new Date(y + 1, 0, 20) // 翌年1/20
+    }
+  } else {
+    const y = paymentDate.getFullYear()
+    const m = paymentDate.getMonth()
+    // 翌月10日
+    due = new Date(y, m + 1, 10)
+  }
+  // 土日繰り下げ
+  while (due.getDay() === 0 || due.getDay() === 6) {
+    due = new Date(due.getFullYear(), due.getMonth(), due.getDate() + 1)
+  }
+  return due
+}
+
+export function formatJpDate(d: Date): string {
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${'日月火水木金土'[d.getDay()]}）`
+}
+
