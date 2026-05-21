@@ -1,0 +1,14 @@
+{
+  "name": "漢字ドリル 小4",
+  "short_name": "漢字ドリル",
+  "description": "小学4年生（上・新学社）の漢字ドリル",
+  "start_url": "/kanji",
+  "scope": "/kanji",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff7ed",
+  "theme_color": "#fff7ed",
+  "icons": [
+    { "src": "/kanji/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
