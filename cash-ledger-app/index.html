@@ -202,6 +202,24 @@
     input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+    /* 現金取引フォーム: 日付〜メモを横一列に並べて、登録した内容を画面スクロールなしで確認できるようにする */
+    .entry-row-compact {
+      display: grid;
+      grid-template-columns: 130px minmax(130px,1.2fr) minmax(130px,1.2fr) 108px 105px 105px minmax(130px,1.4fr);
+      gap: 8px;
+    }
+    .entry-row-compact.no-tax {
+      grid-template-columns: 130px minmax(140px,1.3fr) minmax(140px,1.3fr) 110px 110px minmax(140px,1.5fr);
+    }
+    /* ラベルが1行/2行に分かれても入力欄の高さが揃うように、ラベル領域を2行ぶん確保し下揃え */
+    .entry-row-compact .form-group label {
+      min-height: 30px; line-height: 1.25;
+      display: flex; align-items: flex-end;
+    }
+    @media (max-width: 1100px) {
+      .entry-row-compact,
+      .entry-row-compact.no-tax { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    }
     .form-group { display: flex; flex-direction: column; }
     .form-group label { font-size: 12px; font-weight: 700; color: var(--gray-700); margin-bottom: 4px; }
     .form-group.req label::after { content: " *"; color: var(--danger); }
@@ -1679,7 +1697,7 @@ function pageLedger() {
     </div>
     ${hintHtml}
     ${needsLocPick?`<div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#92400e;font-weight:700;">⚠️ 「全拠点」表示中は取引登録できません。ヘッダーの拠点ボタンから処理する拠点を選択してください。</div>`:''}
-    <div class="form-grid" style="margin-bottom:10px;">
+    <div class="entry-row-compact ${currentEntryKind==='normal'?'':'no-tax'}" style="margin-bottom:10px;">
       <div class="form-group req"><label>日付</label>${dateInputsMD('ae-date', today(), 'ae-store')}</div>
       <div class="form-group req"><label>${storeLabel}</label>
         <input type="text" id="ae-store" placeholder="${storePlaceholder}" ${currentEntryKind==='normal'?'list="ae-store-list" autocomplete="off"':''} lang="ja" style="ime-mode:active;" onkeydown="formEnterNext(event,this)" data-next="ae-item" onblur="if(currentEntryKind==='normal')applyStoreMemory()" />
@@ -1696,12 +1714,10 @@ function pageLedger() {
           <option value="8">軽減税率（8%）</option>
           <option value="0">非課税</option>
         </select>
-      </div>`:`<div></div>`}
-    </div>
-    <div class="form-grid" style="margin-bottom:10px;">
+      </div>`:''}
       <div class="form-group"><label>${recLabel}</label><input type="text" inputmode="numeric" id="ae-rec" placeholder="0" oninput="fmtAmtInput(this);checkRecPayConflict()" onkeydown="formEnterNext(event,this)" data-next="ae-pay" ${currentEntryKind==='bank_deposit'?'disabled style="background:#f8fafc;"':''} /></div>
       <div class="form-group"><label>${payLabel}</label><input type="text" inputmode="numeric" id="ae-pay" placeholder="0" oninput="fmtAmtInput(this);checkRecPayConflict()" onkeydown="formEnterNext(event,this)" data-next="ae-memo" ${currentEntryKind==='bank_withdraw'?'disabled style="background:#f8fafc;"':''} /></div>
-      <div class="form-group" style="grid-column:span 2;"><label>メモ（任意）</label><input type="text" id="ae-memo" placeholder="担当者メモ・備考など" onkeydown="if(event.key==='Enter'){event.preventDefault();submitEntry();}" /></div>
+      <div class="form-group"><label>メモ（任意）</label><input type="text" id="ae-memo" placeholder="担当者メモ・備考など" onkeydown="if(event.key==='Enter'){event.preventDefault();submitEntry();}" /></div>
     </div>
     ${currentEntryKind==='normal'?'<div id="ae-recpay-warn" style="display:none;background:#fef2f2;border:2px solid #dc2626;border-radius:8px;padding:8px 12px;margin:-4px 0 10px;font-size:12px;color:#991b1b;font-weight:700;">⚠ 入金と出金は同時に入力できません。どちらか一方のみご入力ください（誤入力した側を空欄に戻してください）。</div>':''}
     ${currentEntryKind==='normal'?`<div style="margin-bottom:10px;">
