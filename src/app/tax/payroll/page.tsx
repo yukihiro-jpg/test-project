@@ -15,15 +15,15 @@ export default function PayrollPage() {
   const [month, setMonth] = useState(now.getMonth() + 1)
 
   useEffect(() => {
-    const s = load()
-    setEmployees(s.employees)
-    setEntries(s.payroll)
-    setTokurei(s.payer.noukiTokurei)
+    load().then(s => {
+      setEmployees(s.employees)
+      setEntries(s.payroll)
+      setTokurei(s.payer.noukiTokurei)
+    })
   }, [])
 
   useEffect(() => {
-    const s = load()
-    setPaymentDate(s.paymentDates[ymKey(year, month)] || '')
+    load().then(s => setPaymentDate(s.paymentDates[ymKey(year, month)] || ''))
   }, [year, month])
 
   const monthEntries = useMemo(
@@ -31,24 +31,24 @@ export default function PayrollPage() {
     [entries, year, month],
   )
 
-  const upsert = (employeeId: string, patch: Partial<PayrollEntry>) => {
-    const s = load()
+  const upsert = async (employeeId: string, patch: Partial<PayrollEntry>) => {
+    const s = await load()
     const idx = s.payroll.findIndex(p => p.employeeId === employeeId && p.year === year && p.month === month)
     if (idx >= 0) {
       s.payroll[idx] = { ...s.payroll[idx], ...patch }
     } else {
       s.payroll.push({ id: uid(), employeeId, year, month, amount: 0, ...patch })
     }
-    save(s)
+    await save(s)
     setEntries(s.payroll)
   }
 
-  const updatePaymentDate = (v: string) => {
+  const updatePaymentDate = async (v: string) => {
     setPaymentDate(v)
-    const s = load()
+    const s = await load()
     if (v) s.paymentDates[ymKey(year, month)] = v
     else delete s.paymentDates[ymKey(year, month)]
-    save(s)
+    await save(s)
   }
 
   const find = (eid: string) => monthEntries.find(e => e.employeeId === eid)

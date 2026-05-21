@@ -9,23 +9,23 @@ export default function EmployeesPage() {
   const [name, setName] = useState('')
   const [kind, setKind] = useState<EmployeeKind>('koyo_otsu')
 
-  useEffect(() => { setList(load().employees) }, [])
+  useEffect(() => { load().then(s => setList(s.employees)) }, [])
 
-  const add = () => {
+  const add = async () => {
     if (!name.trim()) return
-    const s = load()
+    const s = await load()
     s.employees.push({ id: uid(), name: name.trim(), kind, createdAt: Date.now() })
-    save(s)
+    await save(s)
     setList(s.employees)
     setName('')
   }
 
-  const del = (id: string) => {
+  const del = async (id: string) => {
     if (!confirm('削除しますか?')) return
-    const s = load()
+    const s = await load()
     s.employees = s.employees.filter(e => e.id !== id)
     s.payroll = s.payroll.filter(p => p.employeeId !== id)
-    save(s)
+    await save(s)
     setList(s.employees)
   }
 
@@ -56,7 +56,7 @@ export default function EmployeesPage() {
             <option value="zeirishi">税理士等(報酬)</option>
           </select>
         </label>
-        <button onClick={add} className="w-full bg-blue-600 text-white rounded py-2">追加</button>
+        <button onClick={() => void add()} className="w-full bg-blue-600 text-white rounded py-2">追加</button>
       </div>
 
       <ul className="space-y-2">
@@ -68,7 +68,7 @@ export default function EmployeesPage() {
                 {e.kind === 'koyo_otsu' ? '一般従業員(乙欄)' : e.kind === 'hostess' ? 'ホステス日雇・派遣' : '税理士等(報酬)'}
               </div>
             </div>
-            <button onClick={() => del(e.id)} className="text-red-600 text-sm">削除</button>
+            <button onClick={() => void del(e.id)} className="text-red-600 text-sm">削除</button>
           </li>
         ))}
         {list.length === 0 && (

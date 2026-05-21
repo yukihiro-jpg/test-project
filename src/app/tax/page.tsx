@@ -8,15 +8,15 @@ export default function TaxHome() {
   const [payer, setPayer] = useState<PayerInfo | null>(null)
   const [edit, setEdit] = useState(false)
 
-  useEffect(() => { setPayer(load().payer) }, [])
+  useEffect(() => { load().then(s => setPayer(s.payer)) }, [])
 
   if (!payer) return null
 
   const update = (k: keyof PayerInfo, v: string) => setPayer({ ...payer, [k]: v })
-  const saveAll = () => {
-    const s = load()
+  const saveAll = async () => {
+    const s = await load()
     s.payer = payer
-    save(s)
+    await save(s)
     setEdit(false)
   }
 
@@ -32,7 +32,7 @@ export default function TaxHome() {
           <h2 className="font-semibold text-sm">納付者情報</h2>
           <button
             className="text-blue-600 text-sm"
-            onClick={() => (edit ? saveAll() : setEdit(true))}
+            onClick={() => (edit ? void saveAll() : setEdit(true))}
           >
             {edit ? '保存' : '編集'}
           </button>
@@ -89,7 +89,7 @@ export default function TaxHome() {
 
       <p className="text-[10px] text-gray-400 mt-6 leading-relaxed">
         ※ Safari/Chrome の「ホーム画面に追加」でアプリのように使えます。<br/>
-        ※ データはこの端末内にのみ保存されます。
+        ※ データはサーバーに安全に保存されます。
       </p>
     </main>
   )

@@ -15,10 +15,11 @@ export default function ExportPage() {
   const [month, setMonth] = useState(now.getMonth() + 1)
 
   useEffect(() => {
-    const s = load()
-    setEmployees(s.employees)
-    setPayroll(s.payroll)
-    setDaily(s.hostessDaily)
+    load().then(s => {
+      setEmployees(s.employees)
+      setPayroll(s.payroll)
+      setDaily(s.hostessDaily)
+    })
   }, [])
 
   const nameOf = (id: string) => employees.find(e => e.id === id)?.name || ''

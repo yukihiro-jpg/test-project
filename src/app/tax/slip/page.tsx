@@ -21,16 +21,16 @@ export default function SlipPage() {
   const [type, setType] = useState<SlipType>('kyuyo')
 
   useEffect(() => {
-    const s = load()
-    setEmployees(s.employees)
-    setPayroll(s.payroll)
-    setDaily(s.hostessDaily)
-    setPayer(s.payer)
+    load().then(s => {
+      setEmployees(s.employees)
+      setPayroll(s.payroll)
+      setDaily(s.hostessDaily)
+      setPayer(s.payer)
+    })
   }, [])
 
   useEffect(() => {
-    const s = load()
-    setPaymentDate(s.paymentDates[ymKey(year, month)] || '')
+    load().then(s => setPaymentDate(s.paymentDates[ymKey(year, month)] || ''))
   }, [year, month])
 
   const reiwaYear = year - 2018

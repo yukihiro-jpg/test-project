@@ -27,8 +27,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // 管理画面
-  if (pathname.startsWith('/admin')) {
+  // 管理画面・税務アプリ画面
+  if (pathname.startsWith('/admin') || pathname.startsWith('/tax')) {
     if (!(await isAuthenticated(request))) {
       const loginUrl = new URL('/admin-login', request.url)
       loginUrl.searchParams.set('redirect', pathname)
@@ -44,6 +44,7 @@ export async function middleware(request: NextRequest) {
     '/api/admin-mynumber',
     '/api/admin-locks',
     '/api/admin-unlock',
+    '/api/store',
   ]
   if (protectedApiPaths.some((p) => pathname.startsWith(p))) {
     if (!(await isAuthenticated(request))) {
@@ -57,11 +58,13 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/admin/:path*',
+    '/tax/:path*',
     '/api/register-company/:path*',
     '/api/download-zip/:path*',
     '/api/qrcode-pdf/:path*',
     '/api/admin-mynumber/:path*',
     '/api/admin-locks/:path*',
     '/api/admin-unlock/:path*',
+    '/api/store/:path*',
   ],
 }

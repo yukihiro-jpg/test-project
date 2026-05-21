@@ -40,9 +40,7 @@ export type PayerInfo = {
   noukiTokurei: boolean // 納期の特例 を選択しているか
 }
 
-const KEY = 'tax-app-v1'
-
-type Store = {
+export type Store = {
   employees: Employee[]
   payroll: PayrollEntry[]
   hostessDaily: HostessDailyEntry[]
@@ -67,26 +65,38 @@ const empty: Store = {
   paymentDates: {},
 }
 
-export function load(): Store {
+function normalize(parsed: unknown): Store {
+  if (!parsed || typeof parsed !== 'object') return empty
+  const p = parsed as Partial<Store>
+  return {
+    ...empty,
+    ...p,
+    employees: p.employees || [],
+    payroll: p.payroll || [],
+    hostessDaily: p.hostessDaily || [],
+    payer: { ...empty.payer, ...(p.payer || {}) },
+    paymentDates: { ...empty.paymentDates, ...(p.paymentDates || {}) },
+  }
+}
+
+export async function load(): Promise<Store> {
   if (typeof window === 'undefined') return empty
   try {
-    const raw = localStorage.getItem(KEY)
-    if (!raw) return empty
-    const parsed = JSON.parse(raw)
-    return {
-      ...empty,
-      ...parsed,
-      hostessDaily: parsed.hostessDaily || [],
-      payer: { ...empty.payer, ...(parsed.payer || {}) },
-      paymentDates: { ...empty.paymentDates, ...(parsed.paymentDates || {}) },
-    }
+    const res = await fetch('/api/store', { cache: 'no-store' })
+    if (!res.ok) return empty
+    const data = await res.json()
+    return normalize(data)
   } catch {
     return empty
   }
 }
 
-export function save(store: Store) {
-  localStorage.setItem(KEY, JSON.stringify(store))
+export async function save(store: Store): Promise<void> {
+  await fetch('/api/store', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(store),
+  })
 }
 
 export function uid(): string {

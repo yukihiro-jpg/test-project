@@ -14,29 +14,30 @@ export default function HostessDailyPage() {
   const [amount, setAmount] = useState('')
 
   useEffect(() => {
-    const s = load()
-    setEmployees(s.employees.filter(e => e.kind === 'hostess'))
-    setDaily(s.hostessDaily)
+    load().then(s => {
+      setEmployees(s.employees.filter(e => e.kind === 'hostess'))
+      setDaily(s.hostessDaily)
+    })
   }, [])
 
   const tax = amount ? calcHostessDailyTax(parseInt(amount) || 0) : 0
   const net = amount ? (parseInt(amount) || 0) - tax : 0
 
-  const add = () => {
+  const add = async () => {
     const a = parseInt(amount) || 0
     if (!employeeId || a <= 0 || !date) return
-    const s = load()
+    const s = await load()
     s.hostessDaily.push({ id: uid(), employeeId, date, amount: a })
-    save(s)
+    await save(s)
     setDaily(s.hostessDaily)
     setAmount('')
   }
 
-  const del = (id: string) => {
+  const del = async (id: string) => {
     if (!confirm('削除しますか?')) return
-    const s = load()
+    const s = await load()
     s.hostessDaily = s.hostessDaily.filter(d => d.id !== id)
-    save(s)
+    await save(s)
     setDaily(s.hostessDaily)
   }
 
@@ -101,7 +102,7 @@ export default function HostessDailyPage() {
           </div>
         )}
 
-        <button onClick={add} className="w-full bg-blue-600 text-white rounded py-2 disabled:opacity-40"
+        <button onClick={() => void add()} className="w-full bg-blue-600 text-white rounded py-2 disabled:opacity-40"
           disabled={!employeeId || !amount}>
           記録する
         </button>
@@ -129,7 +130,7 @@ export default function HostessDailyPage() {
                   総額 {d.amount.toLocaleString()} / 税 {t.toLocaleString()} / 手取 {(d.amount - t).toLocaleString()}
                 </div>
               </div>
-              <button onClick={() => del(d.id)} className="text-red-600 text-xs">削除</button>
+              <button onClick={() => void del(d.id)} className="text-red-600 text-xs">削除</button>
             </li>
           )
         })}
