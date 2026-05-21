@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { Employee, PayrollEntry, load, save, uid, ymKey } from '@/lib/tax/storage'
-import { calcHostessTax, calcKoyoOtsuTax, calcZeirishiTax, calcDueDate, formatJpDate } from '@/lib/tax/calc'
+import { calcKoyoOtsuTax, calcZeirishiTax, calcDueDate, formatJpDate } from '@/lib/tax/calc'
 
 export default function PayrollPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -99,16 +99,14 @@ export default function PayrollPage() {
       </div>
 
       <ul className="space-y-3">
-        {employees.map(emp => {
+        {employees.filter(e => e.kind !== 'hostess').map(emp => {
           const e = find(emp.id)
           const amount = e?.amount ?? 0
           const spot = e?.spotAmount ?? 0
-          const days = e?.days ?? 0
           const ins = e?.socialInsurance ?? 0
           const override = e?.manualTaxOverride ?? null
           let auto = 0
-          if (emp.kind === 'hostess') auto = calcHostessTax(amount, days)
-          else if (emp.kind === 'zeirishi') auto = calcZeirishiTax(amount) + calcZeirishiTax(spot)
+          if (emp.kind === 'zeirishi') auto = calcZeirishiTax(amount) + calcZeirishiTax(spot)
           else auto = calcKoyoOtsuTax(Math.max(0, amount - ins))
           const tax = override != null ? override : auto
 
@@ -118,7 +116,7 @@ export default function PayrollPage() {
                 <div>
                   <div className="font-medium">{emp.name}</div>
                   <div className="text-xs text-gray-500">
-                    {emp.kind === 'koyo_otsu' ? '一般従業員(乙欄)' : emp.kind === 'hostess' ? 'ホステス日雇・派遣' : '税理士等(報酬)'}
+                    {emp.kind === 'koyo_otsu' ? '一般従業員(乙欄)' : '税理士等(報酬)'}
                   </div>
                 </div>
                 <div className="text-right">
@@ -150,29 +148,19 @@ export default function PayrollPage() {
               ) : (
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <label>
-                    <span className="text-xs text-gray-500">支払額(円)</span>
+                    <span className="text-xs text-gray-500">支給額(円)</span>
                     <input type="number" inputMode="numeric"
                       className="w-full border rounded px-2 py-1.5"
                       value={amount || ''}
                       onChange={ev => upsert(emp.id, { amount: parseInt(ev.target.value) || 0 })} />
                   </label>
-                  {emp.kind === 'hostess' ? (
-                    <label>
-                      <span className="text-xs text-gray-500">出勤日数</span>
-                      <input type="number" inputMode="numeric"
-                        className="w-full border rounded px-2 py-1.5"
-                        value={days || ''}
-                        onChange={ev => upsert(emp.id, { days: parseInt(ev.target.value) || 0 })} />
-                    </label>
-                  ) : (
-                    <label>
-                      <span className="text-xs text-gray-500">社会保険料(円)</span>
-                      <input type="number" inputMode="numeric"
-                        className="w-full border rounded px-2 py-1.5"
-                        value={ins || ''}
-                        onChange={ev => upsert(emp.id, { socialInsurance: parseInt(ev.target.value) || 0 })} />
-                    </label>
-                  )}
+                  <label>
+                    <span className="text-xs text-gray-500">社会保険料(円)</span>
+                    <input type="number" inputMode="numeric"
+                      className="w-full border rounded px-2 py-1.5"
+                      value={ins || ''}
+                      onChange={ev => upsert(emp.id, { socialInsurance: parseInt(ev.target.value) || 0 })} />
+                  </label>
                 </div>
               )}
 
@@ -195,6 +183,12 @@ export default function PayrollPage() {
           </li>
         )}
       </ul>
+
+      {employees.some(e => e.kind === 'hostess') && (
+        <div className="mt-4 bg-pink-50 border border-pink-200 rounded p-3 text-sm">
+          ホステスの支払は <Link href="/tax/hostess-daily" className="text-blue-600 underline">日々の支払画面</Link> から入力してください。
+        </div>
+      )}
     </main>
   )
 }

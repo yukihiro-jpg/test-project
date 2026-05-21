@@ -67,15 +67,23 @@ export default function TaxHome() {
       <div className="grid gap-3">
         <Link href="/tax/employees" className="block bg-white rounded-lg shadow p-4">
           <div className="font-semibold">① 従業員の登録</div>
-          <div className="text-xs text-gray-500 mt-1">本名と区分(一般従業員/ホステス日雇)を登録します。</div>
+          <div className="text-xs text-gray-500 mt-1">本名と区分(一般従業員/ホステス/税理士)を登録します。</div>
+        </Link>
+        <Link href="/tax/hostess-daily" className="block bg-white rounded-lg shadow p-4 border-l-4 border-pink-400">
+          <div className="font-semibold">② ホステスの日々の支払</div>
+          <div className="text-xs text-gray-500 mt-1">出勤の最後にその日の支払額を入力。源泉控除後の手取額が出ます。</div>
         </Link>
         <Link href="/tax/payroll" className="block bg-white rounded-lg shadow p-4">
-          <div className="font-semibold">② 月の給与・報酬を入力</div>
-          <div className="text-xs text-gray-500 mt-1">月ごとに支払額を入力します。税額は自動計算されます。</div>
+          <div className="font-semibold">③ 月の給与・税理士報酬を入力</div>
+          <div className="text-xs text-gray-500 mt-1">一般従業員・税理士の月次入力。支給日・納付期限もここで。</div>
         </Link>
         <Link href="/tax/slip" className="block bg-white rounded-lg shadow p-4">
-          <div className="font-semibold">③ 納付書イメージを表示</div>
+          <div className="font-semibold">④ 納付書イメージを表示</div>
           <div className="text-xs text-gray-500 mt-1">月を選んで給与所得・報酬料金の納付書イメージを表示します。</div>
+        </Link>
+        <Link href="/tax/export" className="block bg-white rounded-lg shadow p-4 border-l-4 border-emerald-400">
+          <div className="font-semibold">⑤ CSV書き出し（税理士へ送る）</div>
+          <div className="text-xs text-gray-500 mt-1">給与台帳・支払台帳をCSVにして共有・送信できます。</div>
         </Link>
       </div>
 

@@ -11,6 +11,11 @@ export function calcHostessTax(amount: number, days: number): number {
   return Math.floor(base * HOSTESS_RATE)
 }
 
+// 1日分のホステス報酬の源泉徴収税額
+export function calcHostessDailyTax(amount: number): number {
+  return calcHostessTax(amount, 1)
+}
+
 // 月額表 乙欄 電算機計算（令和7年分・8年分共通の主要係数）
 // A = 社会保険料等控除後の給与等の金額
 export function calcKoyoOtsuTax(salaryAfterInsurance: number): number {

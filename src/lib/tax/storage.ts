@@ -14,11 +14,19 @@ export type PayrollEntry = {
   employeeId: string
   year: number
   month: number
-  amount: number // 月額（給与/ホステス支払/税理士月額顧問料）
+  amount: number // 月額（給与/税理士月額顧問料）
   spotAmount?: number // 税理士のスポット報酬等
   days?: number
   socialInsurance?: number
   manualTaxOverride?: number | null
+}
+
+// ホステス用：日別の支払記録
+export type HostessDailyEntry = {
+  id: string
+  employeeId: string
+  date: string // YYYY-MM-DD
+  amount: number // その日の支払額(税込・控除前)
 }
 
 export type PayerInfo = {
@@ -37,6 +45,7 @@ const KEY = 'tax-app-v1'
 type Store = {
   employees: Employee[]
   payroll: PayrollEntry[]
+  hostessDaily: HostessDailyEntry[]
   payer: PayerInfo
   paymentDates: { [yearMonth: string]: string } // "YYYY-M" -> "YYYY-MM-DD"
 }
@@ -44,6 +53,7 @@ type Store = {
 const empty: Store = {
   employees: [],
   payroll: [],
+  hostessDaily: [],
   payer: {
     address: '',
     name: '',
@@ -66,6 +76,7 @@ export function load(): Store {
     return {
       ...empty,
       ...parsed,
+      hostessDaily: parsed.hostessDaily || [],
       payer: { ...empty.payer, ...(parsed.payer || {}) },
       paymentDates: { ...empty.paymentDates, ...(parsed.paymentDates || {}) },
     }

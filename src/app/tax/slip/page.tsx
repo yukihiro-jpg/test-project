@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { Employee, PayerInfo, PayrollEntry, load, ymKey } from '@/lib/tax/storage'
-import { calcHostessTax, calcKoyoOtsuTax, calcZeirishiTax, calcDueDate, formatJpDate } from '@/lib/tax/calc'
+import { Employee, HostessDailyEntry, PayerInfo, PayrollEntry, load, ymKey } from '@/lib/tax/storage'
+import { calcHostessDailyTax, calcKoyoOtsuTax, calcZeirishiTax, calcDueDate, formatJpDate } from '@/lib/tax/calc'
 import SlipKyuyo from '@/components/tax/SlipKyuyo'
 import SlipHoshu from '@/components/tax/SlipHoshu'
 
@@ -12,6 +12,7 @@ type SlipType = 'kyuyo' | 'hoshu'
 export default function SlipPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [payroll, setPayroll] = useState<PayrollEntry[]>([])
+  const [daily, setDaily] = useState<HostessDailyEntry[]>([])
   const [payer, setPayer] = useState<PayerInfo | null>(null)
   const [paymentDate, setPaymentDate] = useState('')
   const now = new Date()
@@ -23,6 +24,7 @@ export default function SlipPage() {
     const s = load()
     setEmployees(s.employees)
     setPayroll(s.payroll)
+    setDaily(s.hostessDaily)
     setPayer(s.payer)
   }, [])
 
@@ -44,26 +46,31 @@ export default function SlipPage() {
       const emp = employees.find(e => e.id === p.employeeId)
       if (!emp) return
       let auto = 0
-      if (emp.kind === 'hostess') auto = calcHostessTax(p.amount, p.days || 0)
-      else if (emp.kind === 'zeirishi') auto = calcZeirishiTax(p.amount) + calcZeirishiTax(p.spotAmount || 0)
-      else auto = calcKoyoOtsuTax(Math.max(0, p.amount - (p.socialInsurance || 0)))
+      if (emp.kind === 'zeirishi') auto = calcZeirishiTax(p.amount) + calcZeirishiTax(p.spotAmount || 0)
+      else if (emp.kind === 'koyo_otsu') auto = calcKoyoOtsuTax(Math.max(0, p.amount - (p.socialInsurance || 0)))
       const tax = p.manualTaxOverride != null ? p.manualTaxOverride : auto
-      if (emp.kind === 'hostess') {
-        result.hostess.people += 1
-        result.hostess.amount += p.amount
-        result.hostess.tax += tax
-      } else if (emp.kind === 'zeirishi') {
+      if (emp.kind === 'zeirishi') {
         result.zeirishi.people += 1
         result.zeirishi.amount += p.amount + (p.spotAmount || 0)
         result.zeirishi.tax += tax
-      } else {
+      } else if (emp.kind === 'koyo_otsu') {
         result.koyo.people += 1
         result.koyo.amount += p.amount
         result.koyo.tax += tax
       }
     })
+    // ホステスは日別データから集計（人員は当月に支払のあった人の延べ人数ではなく実人数）
+    const hostessIds = new Set<string>()
+    daily.forEach(d => {
+      const dt = new Date(d.date + 'T00:00:00')
+      if (dt.getFullYear() !== year || dt.getMonth() + 1 !== month) return
+      hostessIds.add(d.employeeId)
+      result.hostess.amount += d.amount
+      result.hostess.tax += calcHostessDailyTax(d.amount)
+    })
+    result.hostess.people = hostessIds.size
     return result
-  }, [payroll, employees, year, month])
+  }, [payroll, daily, employees, year, month])
 
   const dueDateText = useMemo(() => {
     if (!paymentDate || !payer) return ''
