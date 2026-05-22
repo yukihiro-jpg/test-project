@@ -143,6 +143,31 @@
     .acct-chip.recent:hover { border-color: #d97706; background: #fef3c7; color: #92400e; }
     .acct-chip.selected { border-color: var(--primary); background: var(--primary); color: white; font-weight: 700; }
     .acct-chip.selected:hover { background: #1d4ed8; }
+    .acct-chip-mark {
+      display: inline-block; min-width: 16px; padding: 0 4px; margin-right: 4px;
+      border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 14px;
+      vertical-align: 1px;
+    }
+    .acct-chip-mark.in   { background: #d1fae5; color: #065f46; }
+    .acct-chip-mark.out  { background: #fee2e2; color: #991b1b; }
+    .acct-chip-mark.both { background: #e0e7ff; color: #3730a3; }
+    .acct-chip.selected .acct-chip-mark { background: rgba(255,255,255,0.25); color: white; }
+    .acct-dir-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 11px; font-weight: 700; line-height: 1.4;
+    }
+    .acct-dir-badge.in   { background: #d1fae5; color: #065f46; }
+    .acct-dir-badge.out  { background: #fee2e2; color: #991b1b; }
+    .acct-dir-badge.both { background: #e0e7ff; color: #3730a3; }
+    .acct-mgr-row {
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+      border: 1px solid var(--gray-200); border-radius: 8px; margin-bottom: 6px;
+      background: white; transition: all 0.12s;
+    }
+    .acct-mgr-row:hover { border-color: var(--primary); background: #f8fafc; }
+    .acct-mgr-row.is-custom { border-left: 3px solid #8b5cf6; }
+    .acct-mgr-name { flex: 1; font-size: 13px; font-weight: 600; color: var(--gray-700); }
+    .acct-mgr-actions { display: flex; gap: 4px; }
     .badge-acct {
       display: inline-block; padding: 1px 7px; border-radius: 10px;
       font-size: 10px; font-weight: 600; background: #ecfeff; color: #155e75;
@@ -546,15 +571,91 @@ const DB = {
   raw(k)    { return localStorage.getItem('ca_'+k); },
 };
 
-const ACCOUNT_CATEGORIES = [
-  '旅費交通費','接待交際費','会議費','通信費',
-  '消耗品費','事務用品費','水道光熱費','地代家賃',
-  '修繕費','広告宣伝費','新聞図書費','福利厚生費',
-  '租税公課','支払手数料','保険料','車両費',
-  '諸会費','外注費','給料手当','法定福利費',
-  '荷造運賃','研修費','寄付金','雑費',
-  '仕入高','売上高','雑収入','現金過不足'
+const DEFAULT_ACCOUNT_DEFS = [
+  { name:'旅費交通費', direction:'out' },
+  { name:'接待交際費', direction:'out' },
+  { name:'会議費',     direction:'out' },
+  { name:'通信費',     direction:'out' },
+  { name:'消耗品費',   direction:'out' },
+  { name:'事務用品費', direction:'out' },
+  { name:'水道光熱費', direction:'out' },
+  { name:'地代家賃',   direction:'out' },
+  { name:'修繕費',     direction:'out' },
+  { name:'広告宣伝費', direction:'out' },
+  { name:'新聞図書費', direction:'out' },
+  { name:'福利厚生費', direction:'out' },
+  { name:'租税公課',   direction:'out' },
+  { name:'支払手数料', direction:'out' },
+  { name:'保険料',     direction:'out' },
+  { name:'車両費',     direction:'out' },
+  { name:'諸会費',     direction:'out' },
+  { name:'外注費',     direction:'out' },
+  { name:'給料手当',   direction:'out' },
+  { name:'法定福利費', direction:'out' },
+  { name:'荷造運賃',   direction:'out' },
+  { name:'研修費',     direction:'out' },
+  { name:'寄付金',     direction:'out' },
+  { name:'雑費',       direction:'out' },
+  { name:'仕入高',     direction:'out' },
+  { name:'売上高',     direction:'in'  },
+  { name:'雑収入',     direction:'in'  },
+  { name:'現金過不足', direction:'both' }
 ];
+
+const ACCOUNT_CATEGORIES = DEFAULT_ACCOUNT_DEFS.map(function(d){ return d.name; });
+
+function _normalizeAccountDef(d) {
+  var name = String((d && d.name) || '').trim();
+  var dir = d && d.direction;
+  if (dir !== 'in' && dir !== 'out' && dir !== 'both') dir = 'both';
+  return name ? { name: name, direction: dir } : null;
+}
+
+function getAccountDefs() {
+  var v = DB.get('accounts');
+  if (Array.isArray(v) && v.length > 0) {
+    var seen = {};
+    var out = [];
+    v.forEach(function(d){
+      var n = _normalizeAccountDef(d);
+      if (n && !seen[n.name]) { seen[n.name] = true; out.push(n); }
+    });
+    if (out.length > 0) return out;
+  }
+  return DEFAULT_ACCOUNT_DEFS.map(function(d){ return { name:d.name, direction:d.direction }; });
+}
+
+function saveAccountDefs(defs) {
+  var clean = [];
+  var seen = {};
+  (defs||[]).forEach(function(d){
+    var n = _normalizeAccountDef(d);
+    if (n && !seen[n.name]) { seen[n.name] = true; clean.push(n); }
+  });
+  DB.set('accounts', clean);
+  syncAccountCategories();
+  return clean;
+}
+
+function syncAccountCategories() {
+  var names = getAccountDefs().map(function(d){ return d.name; });
+  ACCOUNT_CATEGORIES.length = 0;
+  names.forEach(function(n){ ACCOUNT_CATEGORIES.push(n); });
+}
+
+function getAccountDirection(name) {
+  if (!name) return 'both';
+  var def = getAccountDefs().find(function(d){ return d.name === name; });
+  return def ? def.direction : 'both';
+}
+
+function accountDirectionLabel(dir) {
+  if (dir === 'in')  return '💰入金';
+  if (dir === 'out') return '💸出金';
+  return '🔄両方';
+}
+
+syncAccountCategories();
 
 const ACCOUNT_ROMAJI = {
   '旅費交通費':'RYOHIKOUTSUUHI',
@@ -1098,6 +1199,9 @@ function showSettings() {
     <div class="divider"></div>
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🔒 決算管理</div>
     ${renderFiscalCloseSection()}
+    <div class="divider"></div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">📘 勘定科目マスタ</div>
+    <button class="btn btn-secondary btn-sm" onclick="closeModal();showAccountsManager()">📘 勘定科目の管理（方向・追加・編集）</button>
     <div class="divider"></div>
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🏦 銀行口座マスタ</div>
     <button class="btn btn-secondary btn-sm" onclick="closeModal();showBankAccountsManager()">🏦 解析対象の銀行・口座リストを管理</button>
@@ -1720,6 +1824,7 @@ function pageLedger() {
       <div class="form-group"><label>メモ（任意）</label><input type="text" id="ae-memo" placeholder="担当者メモ・備考など" onkeydown="if(event.key==='Enter'){event.preventDefault();submitEntry();}" /></div>
     </div>
     ${currentEntryKind==='normal'?'<div id="ae-recpay-warn" style="display:none;background:#fef2f2;border:2px solid #dc2626;border-radius:8px;padding:8px 12px;margin:-4px 0 10px;font-size:12px;color:#991b1b;font-weight:700;">⚠ 入金と出金は同時に入力できません。どちらか一方のみご入力ください（誤入力した側を空欄に戻してください）。</div>':''}
+    ${currentEntryKind==='normal'?'<div id="ae-acct-dir-hint" style="display:none;font-size:12px;font-weight:700;margin:-4px 0 10px;padding:6px 10px;background:#f8fafc;border-radius:6px;"></div>':''}
     ${currentEntryKind==='normal'?`<div style="margin-bottom:10px;">
       <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">勘定科目（費目）<span style="color:var(--gray-500);font-weight:400;">　※任意 — 経費の分類を選択できます</span></div>
       <div id="ae-account-wrap">${renderAccountPicker('ae-account','','ae')}</div>
@@ -3094,15 +3199,126 @@ function performYearClose() {
   renderPage();
 }
 
+function showAccountsManager() {
+  const defs = getAccountDefs();
+  const defaultNames = DEFAULT_ACCOUNT_DEFS.map(function(d){ return d.name; });
+  const rows = defs.map(function(d, i){
+    const isCustom = defaultNames.indexOf(d.name) < 0;
+    const dirLabel = accountDirectionLabel(d.direction);
+    return '<div class="acct-mgr-row'+(isCustom?' is-custom':'')+'">'
+      + '<span class="acct-mgr-name">'+esc(d.name)+(isCustom?' <span style="font-size:10px;color:#8b5cf6;font-weight:600;">(追加)</span>':'')+'</span>'
+      + '<span class="acct-dir-badge '+d.direction+'">'+dirLabel+'</span>'
+      + '<div class="acct-mgr-actions">'
+        + '<button class="btn btn-xs btn-secondary" onclick="showAccountEditDialog('+i+')">✏️ 編集</button>'
+        + '<button class="btn btn-xs" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;" onclick="removeAccountAt('+i+')">🗑 削除</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+  showModal(
+    '<div class="modal-title">📘 勘定科目マスタの管理</div>'
+    + '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--gray-700);line-height:1.7;">'
+      + '各勘定科目に「入金専用 / 出金専用 / 両方OK」の方向を設定できます。<br>'
+      + '取引登録時にその科目を選ぶと、対応する金額欄だけ入力できる状態になります。<br>'
+      + '<strong>＋ 新規追加</strong> ボタンで独自の科目を追加できます。'
+      + '</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">'
+      + '<button class="btn btn-primary btn-sm" onclick="showAccountEditDialog(-1)">＋ 新規追加</button>'
+      + '<button class="btn btn-secondary btn-sm" onclick="resetAccountsToDefault()">↺ デフォルトに戻す</button>'
+      + '</div>'
+    + '<div style="max-height:50vh;overflow-y:auto;padding:2px;">'+rows+'</div>'
+    + '<div class="modal-actions">'
+      + '<button class="btn btn-secondary" onclick="closeModal();showSettings()">← 設定に戻る</button>'
+      + '<button class="btn btn-primary" onclick="closeModal()">閉じる</button>'
+      + '</div>'
+  );
+}
+
+function showAccountEditDialog(index) {
+  const defs = getAccountDefs();
+  const isNew = index < 0;
+  const cur = isNew ? { name:'', direction:'out' } : defs[index];
+  if (!isNew && !cur) return;
+  showModal(
+    '<div class="modal-title">'+(isNew?'＋ 勘定科目を追加':'✏️ 勘定科目を編集')+'</div>'
+    + '<div class="form-group req" style="margin-bottom:14px;">'
+      + '<label>科目名</label>'
+      + '<input type="text" id="acct-edit-name" value="'+esc(cur.name)+'" placeholder="例: 研究開発費" lang="ja" style="ime-mode:active;" />'
+      + '</div>'
+    + '<div class="form-group" style="margin-bottom:14px;">'
+      + '<label>方向（入金 / 出金 / 両方）</label>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">'
+        + '<label style="flex:1;min-width:120px;cursor:pointer;padding:10px;border:2px solid '+(cur.direction==='out'?'#dc2626':'var(--gray-300)')+';border-radius:8px;background:'+(cur.direction==='out'?'#fef2f2':'white')+';display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;">'
+          + '<input type="radio" name="acct-edit-dir" value="out" '+(cur.direction==='out'?'checked':'')+' onchange="document.querySelectorAll(\'[name=acct-edit-dir]\').forEach(function(r){r.parentElement.style.borderColor=r.checked?(r.value===\'in\'?\'#059669\':r.value===\'out\'?\'#dc2626\':\'#4f46e5\'):\'var(--gray-300)\';r.parentElement.style.background=r.checked?(r.value===\'in\'?\'#f0fdf4\':r.value===\'out\'?\'#fef2f2\':\'#eef2ff\'):\'white\';})" /> 💸 出金専用'
+          + '</label>'
+        + '<label style="flex:1;min-width:120px;cursor:pointer;padding:10px;border:2px solid '+(cur.direction==='in'?'#059669':'var(--gray-300)')+';border-radius:8px;background:'+(cur.direction==='in'?'#f0fdf4':'white')+';display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;">'
+          + '<input type="radio" name="acct-edit-dir" value="in" '+(cur.direction==='in'?'checked':'')+' onchange="document.querySelectorAll(\'[name=acct-edit-dir]\').forEach(function(r){r.parentElement.style.borderColor=r.checked?(r.value===\'in\'?\'#059669\':r.value===\'out\'?\'#dc2626\':\'#4f46e5\'):\'var(--gray-300)\';r.parentElement.style.background=r.checked?(r.value===\'in\'?\'#f0fdf4\':r.value===\'out\'?\'#fef2f2\':\'#eef2ff\'):\'white\';})" /> 💰 入金専用'
+          + '</label>'
+        + '<label style="flex:1;min-width:120px;cursor:pointer;padding:10px;border:2px solid '+(cur.direction==='both'?'#4f46e5':'var(--gray-300)')+';border-radius:8px;background:'+(cur.direction==='both'?'#eef2ff':'white')+';display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;">'
+          + '<input type="radio" name="acct-edit-dir" value="both" '+(cur.direction==='both'?'checked':'')+' onchange="document.querySelectorAll(\'[name=acct-edit-dir]\').forEach(function(r){r.parentElement.style.borderColor=r.checked?(r.value===\'in\'?\'#059669\':r.value===\'out\'?\'#dc2626\':\'#4f46e5\'):\'var(--gray-300)\';r.parentElement.style.background=r.checked?(r.value===\'in\'?\'#f0fdf4\':r.value===\'out\'?\'#fef2f2\':\'#eef2ff\'):\'white\';})" /> 🔄 両方OK'
+          + '</label>'
+        + '</div>'
+      + '<div style="font-size:11px;color:var(--gray-500);margin-top:6px;line-height:1.6;">'
+        + '・出金専用: 費用科目（例: 旅費交通費・消耗品費）<br>'
+        + '・入金専用: 収益科目（例: 売上高・雑収入）<br>'
+        + '・両方OK: 現金過不足のように両方ありえる科目'
+        + '</div>'
+      + '</div>'
+    + '<div class="modal-actions">'
+      + '<button class="btn btn-secondary" onclick="closeModal();showAccountsManager()">キャンセル</button>'
+      + '<button class="btn btn-primary" onclick="saveAccountEdit('+index+')">保存</button>'
+      + '</div>'
+  );
+}
+
+function saveAccountEdit(index) {
+  const nameEl = document.getElementById('acct-edit-name');
+  const dirRadio = document.querySelector('input[name=acct-edit-dir]:checked');
+  const name = (nameEl ? nameEl.value : '').trim();
+  const dir  = dirRadio ? dirRadio.value : 'both';
+  if (!name) { alert('科目名を入力してください。'); return; }
+  const defs = getAccountDefs();
+  const isNew = index < 0;
+  const conflict = defs.findIndex(function(d, i){ return d.name===name && i!==index; });
+  if (conflict >= 0) { alert('「'+name+'」は既に登録されています。別の名前にしてください。'); return; }
+  if (isNew) {
+    defs.push({ name:name, direction:dir });
+  } else {
+    defs[index] = { name:name, direction:dir };
+  }
+  saveAccountDefs(defs);
+  closeModal();
+  showAccountsManager();
+}
+
+function removeAccountAt(index) {
+  const defs = getAccountDefs();
+  const target = defs[index];
+  if (!target) return;
+  if (!confirm('「'+target.name+'」を勘定科目マスタから削除しますか？\n\n※ 過去の取引データはそのまま残ります（科目名のラベルのみ消えます）。\n※「↺ デフォルトに戻す」で復活できます（既定科目の場合）。')) return;
+  defs.splice(index, 1);
+  saveAccountDefs(defs);
+  showAccountsManager();
+}
+
+function resetAccountsToDefault() {
+  if (!confirm('勘定科目マスタを工場出荷時の28科目（既定の方向）にリセットしますか？\n\n※ 追加した独自科目はすべて削除されます。\n※ 過去の取引データはそのまま残ります。')) return;
+  DB.set('accounts', null);
+  syncAccountCategories();
+  showAccountsManager();
+}
+
 function renderAccountPicker(inputId, selectedValue, prefix) {
-  const recent = getRecentAccounts();
+  const recent = getRecentAccounts().filter(function(n){ return ACCOUNT_CATEGORIES.indexOf(n) >= 0; });
   const sel = selectedValue || '';
   const rest = ACCOUNT_CATEGORIES.filter(function(c){ return recent.indexOf(c) < 0; });
   const chip = function(name, isRecent) {
+    const dir = getAccountDirection(name);
+    const dirClass = ' dir-'+dir;
     const selClass = name===sel ? ' selected' : (isRecent ? ' recent' : '');
     const desc = ACCOUNT_DESCRIPTIONS[name];
-    const titleAttr = desc ? ' title="'+esc(desc)+'"' : '';
-    return '<div class="acct-chip'+selClass+'"'+titleAttr+' onclick="pickAccount(\''+prefix+'\',\''+esc(name).replace(/'/g,"\\'")+'\')">'+esc(name)+'</div>';
+    const titleAttr = desc ? ' title="'+esc(desc)+' ['+accountDirectionLabel(dir)+']"' : ' title="'+accountDirectionLabel(dir)+'"';
+    const marker = dir==='in' ? '<span class="acct-chip-mark in">入</span>' : dir==='out' ? '<span class="acct-chip-mark out">出</span>' : '<span class="acct-chip-mark both">両</span>';
+    return '<div class="acct-chip'+selClass+dirClass+'"'+titleAttr+' onclick="pickAccount(\''+prefix+'\',\''+esc(name).replace(/'/g,"\\'")+'\')">'+marker+esc(name)+'</div>';
   };
   let html = '<input type="hidden" id="'+inputId+'" value="'+esc(sel)+'" />';
   if (recent.length > 0) {
@@ -3130,6 +3346,46 @@ function pickAccount(prefix, name) {
   if (input) input.value = name;
   const wrap = document.getElementById(prefix+'-account-wrap');
   if (wrap) wrap.innerHTML = renderAccountPicker(prefix+'-account', name, prefix);
+  applyAccountDirectionToForm(prefix, name);
+}
+
+function applyAccountDirectionToForm(prefix, name) {
+  // 通帳取引（bank_withdraw/deposit）は方向固定なので何もしない
+  if (prefix === 'ae' && typeof currentEntryKind !== 'undefined' && currentEntryKind !== 'normal') return;
+  const recEl = document.getElementById(prefix+'-rec');
+  const payEl = document.getElementById(prefix+'-pay');
+  const hintEl = document.getElementById(prefix+'-acct-dir-hint');
+  if (!recEl || !payEl) return;
+  const dir = name ? getAccountDirection(name) : 'both';
+  const _setLock = function(el, locked) {
+    if (locked) {
+      el.dataset.dirLocked = '1';
+      el.disabled = true;
+      el.style.background = '#f1f5f9';
+      el.style.color = 'var(--gray-400)';
+    } else if (el.dataset.dirLocked === '1') {
+      delete el.dataset.dirLocked;
+      el.disabled = false;
+      el.style.background = '';
+      el.style.color = '';
+    }
+  };
+  if (dir === 'out') {
+    _setLock(recEl, true);
+    _setLock(payEl, false);
+    if (hintEl) { hintEl.textContent = '💸 「'+name+'」は出金専用 — 出金額に入力してください'; hintEl.style.display='block'; hintEl.style.color='#b45309'; }
+    setTimeout(function(){ if (!payEl.disabled) payEl.focus(); }, 30);
+  } else if (dir === 'in') {
+    _setLock(payEl, true);
+    _setLock(recEl, false);
+    if (hintEl) { hintEl.textContent = '💰 「'+name+'」は入金専用 — 入金額に入力してください'; hintEl.style.display='block'; hintEl.style.color='#047857'; }
+    setTimeout(function(){ if (!recEl.disabled) recEl.focus(); }, 30);
+  } else {
+    _setLock(recEl, false);
+    _setLock(payEl, false);
+    if (hintEl) hintEl.style.display = 'none';
+  }
+  if (typeof checkRecPayConflict === 'function' && prefix === 'ae') checkRecPayConflict();
 }
 
 function formEnterNext(e, el) {
@@ -3206,7 +3462,14 @@ function applyStoreMemory() {
   var hint=[];
   if (recalled.account) {
     var acctEl=document.getElementById('ae-account');
-    if (acctEl&&!acctEl.value) { acctEl.value=recalled.account; hint.push('勘定科目: '+recalled.account); }
+    if (acctEl&&!acctEl.value) {
+      if (ACCOUNT_CATEGORIES.indexOf(recalled.account) >= 0) {
+        pickAccount('ae', recalled.account);
+      } else {
+        acctEl.value=recalled.account;
+      }
+      hint.push('勘定科目: '+recalled.account);
+    }
   }
   if (recalled.taxRate!==null&&recalled.taxRate!==undefined) {
     var taxEl=document.getElementById('ae-tax');
@@ -3269,6 +3532,14 @@ function submitEntry() {
   } else {
     if (rec===0&&pay===0){ alert('入金か出金のいずれかを入力してください。'); return; }
     if (rec>0&&pay>0){ alert('入金と出金を同時に入力することはできません。'); return; }
+    if (account) {
+      const dir = getAccountDirection(account);
+      if (dir==='out' && rec>0) {
+        if (!confirm('「'+account+'」は出金専用の科目ですが、入金として登録しようとしています。\n\nこのまま登録しますか？\n（設定画面の「勘定科目マスタ」で方向を変更できます）')) return;
+      } else if (dir==='in' && pay>0) {
+        if (!confirm('「'+account+'」は入金専用の科目ですが、出金として登録しようとしています。\n\nこのまま登録しますか？\n（設定画面の「勘定科目マスタ」で方向を変更できます）')) return;
+      }
+    }
     const taxRate = taxV===''?null:Number(taxV);
     if (account) addRecentAccount(account);
     addEntry({ date, storeName:store, itemName:item, description:`${store} ${item}`, receiptAmount:rec, paymentAmount:pay, taxRate, account, memo, type:'normal', entryKind:'normal', location });
@@ -3351,6 +3622,17 @@ function submitEditEntry(id, entryKind) {
 
   if (entryKind==='normal'&&rec===0&&pay===0){ alert('入金か出金のいずれかを入力してください。'); return; }
   if (entryKind==='normal'&&rec>0&&pay>0){ alert('入金と出金を同時に入力することはできません。'); return; }
+
+  if (entryKind==='normal' && data.account) {
+    const dir = getAccountDirection(data.account);
+    const recAmt = rec || 0;
+    const payAmt = pay || 0;
+    if (dir==='out' && recAmt>0) {
+      if (!confirm('「'+data.account+'」は出金専用の科目ですが、入金として登録しようとしています。\n\nこのまま保存しますか？')) return;
+    } else if (dir==='in' && payAmt>0) {
+      if (!confirm('「'+data.account+'」は入金専用の科目ですが、出金として登録しようとしています。\n\nこのまま保存しますか？')) return;
+    }
+  }
 
   updateEntry(id, data);
   closeModal(); updateHeader(); renderPage();
