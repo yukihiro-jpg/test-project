@@ -230,7 +230,7 @@
     /* 現金取引フォーム: 日付〜メモを横一列に並べて、登録した内容を画面スクロールなしで確認できるようにする */
     .entry-row-compact {
       display: grid;
-      grid-template-columns: 130px minmax(130px,1.2fr) minmax(130px,1.2fr) 108px 105px 105px minmax(130px,1.4fr);
+      grid-template-columns: 130px minmax(120px,1.1fr) minmax(120px,1.1fr) minmax(140px,1.2fr) 105px 100px 100px minmax(120px,1.3fr);
       gap: 8px;
     }
     .entry-row-compact.no-tax {
@@ -1809,10 +1809,13 @@ function pageLedger() {
         <span id="ae-store-hint" style="display:none;font-size:11px;color:#6d28d9;margin-top:2px;font-weight:600;"></span>
       </div>
       <div class="form-group req"><label>${itemLabel}</label>
-        <input type="text" id="ae-item" ${itemFixed?`value="${itemFixed}" readonly style="background:#f8fafc;color:var(--gray-500);cursor:not-allowed;"`:` lang="ja" style="ime-mode:active;"`} placeholder="${itemFixed||'文房具・コピー用紙'}" onkeydown="formEnterNext(event,this)" data-next="${currentEntryKind==='normal'?'ae-tax':'ae-rec'}" />
+        <input type="text" id="ae-item" ${itemFixed?`value="${itemFixed}" readonly style="background:#f8fafc;color:var(--gray-500);cursor:not-allowed;"`:` lang="ja" style="ime-mode:active;"`} placeholder="${itemFixed||'文房具・コピー用紙'}" onkeydown="formEnterNext(event,this)" data-next="${currentEntryKind==='normal'?'ae-account-display':'ae-rec'}" />
       </div>
+      ${currentEntryKind==='normal'?`<div class="form-group"><label>勘定科目（任意）</label>
+        <input type="text" id="ae-account-display" placeholder="クリックで選択" readonly value="" onclick="openAccountPicker('ae')" onfocus="openAccountPicker('ae')" onkeydown="if(event.key==='Enter'){event.preventDefault();var n=document.getElementById('ae-tax');if(n){closeAccountPicker('ae');n.focus();}}" style="cursor:pointer;background:white;" />
+      </div>`:''}
       ${currentEntryKind==='normal'?`<div class="form-group"><label>消費税区分</label>
-        <select id="ae-tax" onkeydown="formEnterNext(event,this)" data-next="ae-rec">
+        <select id="ae-tax" onkeydown="formEnterNext(event,this)" data-next="ae-rec" onfocus="closeAccountPicker('ae')">
           <option value="">— 選択なし —</option>
           <option value="10">課税（10%）</option>
           <option value="8">軽減税率（8%）</option>
@@ -1825,8 +1828,11 @@ function pageLedger() {
     </div>
     ${currentEntryKind==='normal'?'<div id="ae-recpay-warn" style="display:none;background:#fef2f2;border:2px solid #dc2626;border-radius:8px;padding:8px 12px;margin:-4px 0 10px;font-size:12px;color:#991b1b;font-weight:700;">⚠ 入金と出金は同時に入力できません。どちらか一方のみご入力ください（誤入力した側を空欄に戻してください）。</div>':''}
     ${currentEntryKind==='normal'?'<div id="ae-acct-dir-hint" style="display:none;font-size:12px;font-weight:700;margin:-4px 0 10px;padding:6px 10px;background:#f8fafc;border-radius:6px;"></div>':''}
-    ${currentEntryKind==='normal'?`<div style="margin-bottom:10px;">
-      <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:6px;">勘定科目（費目）<span style="color:var(--gray-500);font-weight:400;">　※任意 — 経費の分類を選択できます</span></div>
+    ${currentEntryKind==='normal'?`<div id="ae-account-panel" style="display:none;margin-bottom:10px;padding:10px 12px;background:#f8fafc;border:1px solid var(--gray-200);border-radius:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="font-size:12px;font-weight:700;color:var(--gray-700);">勘定科目（費目）<span style="color:var(--gray-500);font-weight:400;">　※任意 — 経費の分類を選択できます</span></div>
+        <button type="button" class="btn btn-xs btn-secondary" onclick="closeAccountPicker('ae')">✕ 閉じる</button>
+      </div>
       <div id="ae-account-wrap">${renderAccountPicker('ae-account','','ae')}</div>
     </div>`:''}
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -3346,7 +3352,27 @@ function pickAccount(prefix, name) {
   if (input) input.value = name;
   const wrap = document.getElementById(prefix+'-account-wrap');
   if (wrap) wrap.innerHTML = renderAccountPicker(prefix+'-account', name, prefix);
+  const disp = document.getElementById(prefix+'-account-display');
+  if (disp) {
+    if (name) {
+      const dir = getAccountDirection(name);
+      const mark = dir==='in'?'💰':dir==='out'?'💸':'🔄';
+      disp.value = mark+' '+name;
+    } else {
+      disp.value = '';
+    }
+  }
   applyAccountDirectionToForm(prefix, name);
+}
+
+function openAccountPicker(prefix) {
+  const panel = document.getElementById(prefix+'-account-panel');
+  if (panel) panel.style.display = '';
+}
+
+function closeAccountPicker(prefix) {
+  const panel = document.getElementById(prefix+'-account-panel');
+  if (panel) panel.style.display = 'none';
 }
 
 function applyAccountDirectionToForm(prefix, name) {
@@ -3551,6 +3577,8 @@ function submitEntry() {
   document.getElementById('ae-rec').value='';
   document.getElementById('ae-pay').value='';
   document.getElementById('ae-memo').value='';
+  if (typeof pickAccount === 'function' && document.getElementById('ae-account')) pickAccount('ae','');
+  if (typeof closeAccountPicker === 'function') closeAccountPicker('ae');
   updateHeader(); renderPage();
 }
 
