@@ -1209,6 +1209,9 @@ function showSettings() {
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">📋 毎回提出する資料リスト</div>
     <button class="btn btn-secondary btn-sm" onclick="closeModal();showRequiredDocsManager()">📋 毎回提出する資料を管理</button>
     <div class="divider"></div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">📌 提出書類ガイド（取引別チェックリスト）</div>
+    <button class="btn btn-secondary btn-sm" onclick="closeModal();showSubmissionGuideManager()">📌 取引別の提出書類ガイドを管理</button>
+    <div class="divider"></div>
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;font-weight:700;">🏦 銀行CSV学習履歴</div>
     <button class="btn btn-secondary btn-sm" onclick="closeModal();showBankCsvSettings()">🏦 銀行CSV 学習履歴の管理</button>
     <div class="divider"></div>
@@ -4225,6 +4228,30 @@ function bankBuildRequiredDocsHtml(docs, selectedMonths) {
     +'</div>';
 }
 
+function bankBuildSubmissionGuideHtml(guide) {
+  if (!guide || guide.length===0) return '';
+  function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  var byCat={}; var catOrder=[];
+  guide.forEach(function(d){
+    var c=d.category||'その他';
+    if (!byCat[c]) { byCat[c]=[]; catOrder.push(c); }
+    byCat[c].push(d);
+  });
+  var blocks=catOrder.map(function(c){
+    var items=byCat[c].map(function(d){
+      return '<li style="margin-bottom:8px;line-height:1.7;"><strong>'+escH(d.trigger)+'</strong>'
+        +(d.docs?' → '+escH(d.docs):'')+'</li>';
+    }).join('');
+    return '<div class="guide-cat"><h3>'+escH(c)+'</h3><ul class="nl-list">'+items+'</ul></div>';
+  }).join('');
+  return '<div class="guide-section">'
+    +'<h2>📌 該当する取引があれば提出してください（確認用）</h2>'
+    +'<div class="guide-note">下記のような取引が今期にあった場合は、対応する書類も併せてご提出ください。'
+    +'該当がなければ提出は不要です。</div>'
+    +blocks
+    +'</div>';
+}
+
 function bankBuildPdfListHtml(entries, companyName, dateStr, monthLabel, options) {
   options=options||{};
   var selectedMonths=options.selectedMonths||[];
@@ -4333,6 +4360,11 @@ function bankBuildPdfListHtml(entries, companyName, dateStr, monthLabel, options
     +'.nl-list strong { color: #0f172a; }'
     +'.required-section { margin-bottom: 26px; page-break-inside: avoid; }'
     +'.required-section h2 { font-size: 18px; background: #0f766e; color: #ffffff; padding: 10px 16px; border-radius: 8px; margin: 0 0 10px 0; }'
+    +'.guide-section { margin-bottom: 26px; page-break-inside: avoid; }'
+    +'.guide-section h2 { font-size: 18px; background: #b45309; color: #ffffff; padding: 10px 16px; border-radius: 8px; margin: 0 0 10px 0; }'
+    +'.guide-note { background: #fffbeb; border-left: 5px solid #f59e0b; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; line-height: 1.8; border-radius: 4px; color: #78350f; }'
+    +'.guide-cat { margin: 10px 0 14px 0; page-break-inside: avoid; }'
+    +'.guide-cat h3 { font-size: 14px; color: #92400e; border-bottom: 2px solid #fcd34d; padding-bottom: 4px; margin: 0 0 6px 0; }'
     +'table { width: 100%; border-collapse: collapse; font-size: 13px; }'
     +'th, td { padding: 7px 10px; border: 1px solid #d1d5db; text-align: left; vertical-align: top; line-height: 1.5; }'
     +'th { background: #f3f4f6; font-weight: 700; font-size: 12px; color: #374151; }'
@@ -4354,6 +4386,7 @@ function bankBuildPdfListHtml(entries, companyName, dateStr, monthLabel, options
     +'<strong>この取引の請求書PDF</strong>: この支払の内容がわかる請求書が必要な取引</div>'
     +bankBuildRequiredDocsHtml(requiredDocs, selectedMonths)
     +sections
+    +bankBuildSubmissionGuideHtml(options.submissionGuide||[])
     +'</body></html>';
 }
 
@@ -4376,7 +4409,12 @@ function bankShowPdfListMonthSelector() {
     var requiredDocs=getRequiredDocs();
     var hasRequired=requiredDocs.length>0;
     if (totalCount===0 && !hasRequired) {
-      alert('税理士へ提出が必要な書類のある取引はありません。\n（毎回提出する資料も登録されていません。設定→「📋 毎回提出する資料を管理」で登録できます。）');
+      if (getSubmissionGuide().length>0) {
+        // 銀行データも定型資料も無いが提出書類ガイドはある → 月選択不要で直接出力
+        bankPrintPdfSubmissionList([]);
+        return;
+      }
+      alert('税理士へ提出が必要な書類のある取引はありません。\n（毎回提出する資料・提出書類ガイドも登録されていません。設定→「📋 毎回提出する資料を管理」で登録できます。）');
       return;
     }
     // 毎回提出する資料がある場合は会計年度の12ヶ月すべてを選択肢に
@@ -4485,9 +4523,10 @@ function bankPrintPdfSubmissionList(monthFilter) {
       });
     }
     var requiredDocs=getRequiredDocs();
+    var submissionGuide=getSubmissionGuide();
     var hasRequired=requiredDocs.length>0 && monthFilter && monthFilter.length>0;
-    if (entries.length===0 && !hasRequired) {
-      alert('税理士へ提出が必要な書類のある取引はありません。\n（毎回提出する資料も登録されていません。設定から登録できます。）');
+    if (entries.length===0 && !hasRequired && submissionGuide.length===0) {
+      alert('税理士へ提出が必要な書類のある取引はありません。\n（毎回提出する資料・提出書類ガイドも登録されていません。設定から登録できます。）');
       return;
     }
     var s=getSettings();
@@ -4496,7 +4535,8 @@ function bankPrintPdfSubmissionList(monthFilter) {
       :'全期間';
     var html=bankBuildPdfListHtml(entries, s.companyName||'', today(), monthLabel, {
       selectedMonths: monthFilter||[],
-      requiredDocs: requiredDocs
+      requiredDocs: requiredDocs,
+      submissionGuide: submissionGuide
     });
     var w=window.open('', '_blank');
     if (!w) {
@@ -6346,6 +6386,42 @@ function bankSaveAccounts(arr) { DB.set('bank_accounts', arr); }
 // ── 毎回提出する資料リスト ──
 function getRequiredDocs() { return DB.get('required_docs')||[]; }
 function saveRequiredDocs(arr) { DB.set('required_docs', arr); }
+
+const DEFAULT_SUBMISSION_GUIDE = [
+  { category:'資産の取得・売却', trigger:'40万円以上の備品・機械・車両等の購入', docs:'請求書・売買契約書' },
+  { category:'資産の取得・売却', trigger:'不動産（土地・建物）の取得・売却', docs:'売買契約書・仲介手数料の領収書・登記関連書類' },
+  { category:'借入・リース',     trigger:'銀行等からの新規借入',             docs:'金銭消費貸借契約書・返済予定表・利息計算書' },
+  { category:'借入・リース',     trigger:'リースの新規契約',                 docs:'リース契約書・リース返済予定表' },
+  { category:'保険',             trigger:'損害保険・生命保険の新規契約',     docs:'保険契約のしおり' },
+  { category:'保険',             trigger:'保険の満期・解約・返戻',           docs:'満期返戻金等の支払通知書' },
+  { category:'従業員の入退社',   trigger:'従業員の入社・退職があった場合',   docs:'対象者の氏名・フリガナ・郵便番号・住所・生年月日・マイナンバー・前職の源泉徴収票' }
+];
+
+function _normalizeGuideItem(d) {
+  var category = String((d && d.category) || '').trim();
+  var trigger  = String((d && d.trigger)  || '').trim();
+  var docs     = String((d && d.docs)     || '').trim();
+  return trigger ? { category: category||'その他', trigger: trigger, docs: docs } : null;
+}
+
+function getSubmissionGuide() {
+  var v = DB.get('submission_guide');
+  if (Array.isArray(v)) {
+    var out = [];
+    v.forEach(function(d){ var n=_normalizeGuideItem(d); if (n) out.push(n); });
+    return out;
+  }
+  return DEFAULT_SUBMISSION_GUIDE.map(function(d){ return { category:d.category, trigger:d.trigger, docs:d.docs }; });
+}
+
+function saveSubmissionGuide(arr) {
+  var clean = [];
+  (arr||[]).forEach(function(d){ var n=_normalizeGuideItem(d); if (n) clean.push(n); });
+  DB.set('submission_guide', clean);
+  return clean;
+}
+
+function resetSubmissionGuideToDefault() { DB.set('submission_guide', null); }
 function addRequiredDoc(doc) {
   if (!doc||!doc.name||!String(doc.name).trim()) return false;
   var arr=getRequiredDocs();
@@ -8292,6 +8368,114 @@ function removeRequiredDocConfirm(idx) {
   if (!confirm('「'+(d.name||'')+'」を毎回提出する資料リストから削除しますか？')) return;
   removeRequiredDoc(idx);
   showRequiredDocsManager();
+}
+
+function showSubmissionGuideManager() {
+  var guide=getSubmissionGuide();
+  var byCat={}; var catOrder=[];
+  guide.forEach(function(d,i){
+    var c=d.category||'その他';
+    if (!byCat[c]) { byCat[c]=[]; catOrder.push(c); }
+    byCat[c].push({ d:d, i:i });
+  });
+  var listHtml;
+  if (guide.length===0) {
+    listHtml='<div style="font-size:12px;color:var(--gray-500);padding:12px;text-align:center;">登録された項目はありません。下のフォーム、または「↺ 既定の内容に戻す」から登録してください。</div>';
+  } else {
+    listHtml=catOrder.map(function(c){
+      var rows=byCat[c].map(function(o){
+        return '<div class="acct-mgr-row">'
+          +'<span class="acct-mgr-name"><strong>'+esc(o.d.trigger)+'</strong>'
+          +(o.d.docs?'<br><span style="font-size:12px;color:var(--gray-600);font-weight:400;">→ '+esc(o.d.docs)+'</span>':'')+'</span>'
+          +'<div class="acct-mgr-actions">'
+            +'<button class="btn btn-xs btn-secondary" onclick="showGuideEditDialog('+o.i+')">✏️ 編集</button>'
+            +'<button class="btn btn-xs" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;" onclick="removeGuideAt('+o.i+')">🗑 削除</button>'
+          +'</div>'
+          +'</div>';
+      }).join('');
+      return '<div style="margin-bottom:12px;"><div style="font-size:12px;font-weight:700;color:#92400e;border-bottom:2px solid #fcd34d;padding-bottom:3px;margin-bottom:6px;">'+esc(c)+'</div>'+rows+'</div>';
+    }).join('');
+  }
+  showModal(
+    '<div class="modal-title">📌 提出書類ガイド（取引別チェックリスト）</div>'
+    +'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#78350f;line-height:1.7;">'
+      +'「こういう取引をしたら、この書類も提出してください」という<strong>確認用チェックリスト</strong>です。<br>'
+      +'ここに登録した項目は<strong>税理士提出資料リスト（PDF/印刷）に毎回掲載</strong>されます（該当がなければ提出は不要、という案内付き）。'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">'
+      +'<button class="btn btn-primary btn-sm" onclick="showGuideEditDialog(-1)">＋ 新規追加</button>'
+      +'<button class="btn btn-secondary btn-sm" onclick="resetGuideToDefaultConfirm()">↺ 既定の内容に戻す</button>'
+    +'</div>'
+    +'<div style="max-height:48vh;overflow-y:auto;padding:2px;">'+listHtml+'</div>'
+    +'<div class="modal-actions">'
+      +'<button class="btn btn-secondary" onclick="closeModal();showSettings()">← 設定に戻る</button>'
+      +'<button class="btn btn-primary" onclick="closeModal()">閉じる</button>'
+    +'</div>'
+  , true);
+}
+
+function showGuideEditDialog(index) {
+  var guide=getSubmissionGuide();
+  var isNew=index<0;
+  var cur=isNew?{category:'',trigger:'',docs:''}:guide[index];
+  if (!isNew && !cur) return;
+  var cats=['資産の取得・売却','借入・リース','保険','従業員の入退社','その他'];
+  var catFromList=cats.indexOf(cur.category)>=0;
+  var catOptions=cats.map(function(c){
+    return '<option value="'+esc(c)+'" '+(cur.category===c?'selected':'')+'>'+esc(c)+'</option>';
+  }).join('')+'<option value="__custom__" '+(!catFromList&&cur.category?'selected':'')+'>その他（自由入力）…</option>';
+  showModal(
+    '<div class="modal-title">'+(isNew?'＋ 提出書類ガイドを追加':'✏️ 提出書類ガイドを編集')+'</div>'
+    +'<div class="form-group" style="margin-bottom:12px;"><label>カテゴリ</label>'
+      +'<select id="guide-edit-cat" onchange="var v=this.value;var f=document.getElementById(\'guide-edit-cat-custom\');f.style.display=(v===\'__custom__\')?\'block\':\'none\';">'+catOptions+'</select>'
+      +'<input type="text" id="guide-edit-cat-custom" placeholder="カテゴリ名を入力" value="'+(!catFromList?esc(cur.category):'')+'" style="display:'+(!catFromList&&cur.category?'block':'none')+';margin-top:6px;padding:7px 9px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;width:100%;" />'
+    +'</div>'
+    +'<div class="form-group req" style="margin-bottom:12px;"><label>どんな取引をしたら（条件）</label>'
+      +'<input type="text" id="guide-edit-trigger" value="'+esc(cur.trigger)+'" placeholder="例: 40万円以上の備品・機械・車両等の購入" lang="ja" style="ime-mode:active;" />'
+    +'</div>'
+    +'<div class="form-group" style="margin-bottom:14px;"><label>提出すべき書類</label>'
+      +'<input type="text" id="guide-edit-docs" value="'+esc(cur.docs)+'" placeholder="例: 請求書・売買契約書" lang="ja" style="ime-mode:active;" />'
+    +'</div>'
+    +'<div class="modal-actions">'
+      +'<button class="btn btn-secondary" onclick="closeModal();showSubmissionGuideManager()">キャンセル</button>'
+      +'<button class="btn btn-primary" onclick="saveGuideEdit('+index+')">保存</button>'
+    +'</div>'
+  , true);
+}
+
+function saveGuideEdit(index) {
+  var catSel=document.getElementById('guide-edit-cat');
+  var cat=catSel?catSel.value:'';
+  if (cat==='__custom__') {
+    var cf=document.getElementById('guide-edit-cat-custom');
+    cat=cf?cf.value.trim():'';
+  }
+  var trigger=(document.getElementById('guide-edit-trigger')||{value:''}).value.trim();
+  var docs=(document.getElementById('guide-edit-docs')||{value:''}).value.trim();
+  if (!trigger) { alert('「どんな取引をしたら」の条件を入力してください。'); return; }
+  var guide=getSubmissionGuide();
+  var item={ category:cat||'その他', trigger:trigger, docs:docs };
+  if (index<0) guide.push(item);
+  else guide[index]=item;
+  saveSubmissionGuide(guide);
+  closeModal();
+  showSubmissionGuideManager();
+}
+
+function removeGuideAt(index) {
+  var guide=getSubmissionGuide();
+  var t=guide[index];
+  if (!t) return;
+  if (!confirm('「'+(t.trigger||'')+'」を提出書類ガイドから削除しますか？')) return;
+  guide.splice(index,1);
+  saveSubmissionGuide(guide);
+  showSubmissionGuideManager();
+}
+
+function resetGuideToDefaultConfirm() {
+  if (!confirm('提出書類ガイドを既定の内容（7項目）に戻しますか？\n\n※ 追加・編集した項目はすべて上書きされます。')) return;
+  resetSubmissionGuideToDefault();
+  showSubmissionGuideManager();
 }
 
 function exportRequiredDocsTemplate() {
