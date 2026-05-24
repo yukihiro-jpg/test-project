@@ -1155,6 +1155,55 @@ function testNotifyClientSyncUploads() {
   notifyClientSyncUploads();
 }
 
+// 過去30日分の同期ログを対象に通知テスト（メールが届くか確認用）
+function testNotifyRecentUploads() {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  PropertiesService.getScriptProperties().setProperty(
+    SYNC_NOTIFY_CONFIG.PROPERTY_KEY, thirtyDaysAgo.toISOString()
+  );
+  console.log('チェックポイントを30日前に設定しました。過去30日分をスキャンします。');
+  notifyClientSyncUploads();
+}
+
+// 各顧問先の _sync_logs の中身を確認（フォルダ巡回が機能しているか診断用）
+function debugScanSyncLogs() {
+  const parentFolder = getParentFolder_();
+  if (!parentFolder) {
+    console.log('親フォルダが取得できません（CONFIG.ROOT_FOLDER_ID を確認）');
+    return;
+  }
+  console.log('親フォルダ: ' + parentFolder.getName());
+
+  const clientFolders = parentFolder.getFolders();
+  let totalClients = 0;
+  let totalLogs = 0;
+
+  while (clientFolders.hasNext()) {
+    const clientFolder = clientFolders.next();
+    totalClients++;
+    const logsFolders = clientFolder.getFoldersByName(SYNC_NOTIFY_CONFIG.LOGS_FOLDER_NAME);
+    if (!logsFolders.hasNext()) {
+      console.log(`  ${clientFolder.getName()}: _sync_logs なし`);
+      continue;
+    }
+    const logsFolder = logsFolders.next();
+    const logFiles = logsFolder.getFiles();
+    let count = 0;
+    let latest = null;
+    while (logFiles.hasNext()) {
+      const f = logFiles.next();
+      count++;
+      totalLogs++;
+      const updated = f.getLastUpdated();
+      if (!latest || updated > latest) latest = updated;
+    }
+    const latestStr = latest ? Utilities.formatDate(latest, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm') : 'なし';
+    console.log(`  ${clientFolder.getName()}: ログ${count}件, 最新 ${latestStr}`);
+  }
+
+  console.log(`合計: 顧問先${totalClients}件 / ログファイル${totalLogs}件`);
+}
+
 // 「最後にチェックした時刻」をリセット（過去の同期ログを再通知したい時に使う）
 function resetSyncNotifyCheckpoint() {
   PropertiesService.getScriptProperties().deleteProperty(SYNC_NOTIFY_CONFIG.PROPERTY_KEY);
