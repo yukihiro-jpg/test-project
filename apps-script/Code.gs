@@ -1005,7 +1005,11 @@ function notifyClientSyncUploads() {
       logsScanned++;
 
       try {
-        const content = logFile.getBlob().getDataAsString('UTF-8');
+        let content = logFile.getBlob().getDataAsString('UTF-8');
+        // PowerShell 5.1 が付与する UTF-8 BOM を除去（先頭の U+FEFF）
+        if (content.charCodeAt(0) === 0xFEFF) {
+          content = content.slice(1);
+        }
         const data = JSON.parse(content);
         if (!data.operations || !Array.isArray(data.operations)) continue;
 

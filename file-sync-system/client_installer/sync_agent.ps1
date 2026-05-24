@@ -871,7 +871,9 @@ function Send-SyncLog {
 
         $logFileName = "sync_log_$($Config.DeviceName)_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
         $tmpFile = Join-Path $env:TEMP $logFileName
-        $logData | ConvertTo-Json -Depth 5 | Out-File -FilePath $tmpFile -Encoding utf8
+        # BOMなしUTF-8で書き出す（JSON.parse がBOMで失敗するのを防ぐ）
+        $jsonText = $logData | ConvertTo-Json -Depth 5
+        [System.IO.File]::WriteAllText($tmpFile, $jsonText, (New-Object System.Text.UTF8Encoding $false))
 
         try {
             Send-DriveFile -LocalPath $tmpFile -FolderId $logFolderId -RemoteName $logFileName | Out-Null
