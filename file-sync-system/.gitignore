@@ -1,0 +1,16 @@
+# Python キャッシュ
+__pycache__/
+*.pyc
+*.pyo
+
+# 認証鍵（絶対にコミットしない）
+service_account.json
+**/service_account.json
+
+# 生成されたインストーラー
+installers/
+
+# ローカル設定・ログ
+sync.log
+sync_manifest.json
+upload_log.json
