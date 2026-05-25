@@ -1,8 +1,8 @@
 @echo off
-chcp 65001 >nul 2>&1
+chcp 932 >nul 2>&1
 setlocal EnableDelayedExpansion
 
-title ç¾é‡‘å‡ºç´å¸³ãƒ»ä»®æ‰•ç®¡ç†ã‚·ã‚¹ãƒ†ãƒ  - æœ€æ–°ç‰ˆã‚’èµ·å‹•
+title Œ»‹ào”[’ E‰¼•¥ŠÇ—ƒVƒXƒeƒ€ - ÅV”Å‚ð‹N“®
 
 set "BRANCH=app/cash-ledger-with-bank-csv"
 set "REPO_ROOT=%~dp0..\.."
@@ -11,82 +11,82 @@ set "APP_FILE=%REPO_ROOT%\cash-ledger-app\index.html"
 cls
 echo.
 echo ============================================================
-echo    ç¾é‡‘å‡ºç´å¸³ãƒ»ä»®æ‰•ç®¡ç†ã‚·ã‚¹ãƒ†ãƒ 
-echo    æœ€æ–°ç‰ˆã®å–å¾—ã¨èµ·å‹•ï¼ˆç¨Žç†å£«äº‹å‹™æ‰€ç”¨ï¼‰
+echo    Œ»‹ào”[’ E‰¼•¥ŠÇ—ƒVƒXƒeƒ€
+echo    ÅV”Å‚ÌŽæ“¾‚Æ‹N“®iÅ—ŽmŽ––±Š—pj
 echo ============================================================
 echo.
-echo  ã“ã®ãƒ©ãƒ³ãƒãƒ£ãƒ¼ã¯æ¬¡ã®ã“ã¨ã‚’è¡Œã„ã¾ã™:
+echo  ‚±‚Ìƒ‰ƒ“ƒ`ƒƒ[‚ÍŽŸ‚Ì‚±‚Æ‚ðs‚¢‚Ü‚·:
 echo.
-echo    1. GitHub ã‹ã‚‰æœ¬ç•ªãƒ–ãƒ©ãƒ³ãƒ ^(%BRANCH%^) ã®æœ€æ–°ã‚’å–å¾—
-echo    2. Chrome / Edge ã®ã‚¢ãƒ—ãƒªãƒ¢ãƒ¼ãƒ‰ã§ index.html ã‚’èµ·å‹•
+echo    1. GitHub ‚©‚ç–{”Ôƒuƒ‰ƒ“ƒ` ^(%BRANCH%^) ‚ÌÅV‚ðŽæ“¾
+echo    2. Chrome / Edge ‚ÌƒAƒvƒŠƒ‚[ƒh‚Å index.html ‚ð‹N“®
 echo.
-echo  â€» ã“ã®ãƒ•ã‚©ãƒ«ãƒ€é…ä¸‹ã¯æ¥­å‹™å°‚ç”¨ã‚¯ãƒ­ãƒ¼ãƒ³ã¨ã—ã¦ã”åˆ©ç”¨ãã ã•ã„
-echo    ï¼ˆæ‰‹å…ƒã§ç·¨é›†ã™ã‚‹ã¨ pull ã«å¤±æ•—ã™ã‚‹å ´åˆãŒã‚ã‚Šã¾ã™ï¼‰
+echo  ¦ ‚±‚ÌƒtƒHƒ‹ƒ_”z‰º‚Í‹Æ–±ê—pƒNƒ[ƒ“‚Æ‚µ‚Ä‚²—˜—p‚­‚¾‚³‚¢
+echo    iŽèŒ³‚Å•ÒW‚·‚é‚Æ pull ‚ÉŽ¸”s‚·‚éê‡‚ª‚ ‚è‚Ü‚·j
 echo.
 
-REM ----- ãƒªãƒã‚¸ãƒˆãƒªãƒ«ãƒ¼ãƒˆã¸ç§»å‹• -----
+REM ----- ƒŠƒ|ƒWƒgƒŠƒ‹[ƒg‚ÖˆÚ“® -----
 pushd "%REPO_ROOT%" >nul 2>&1
 if errorlevel 1 (
-  echo [ã‚¨ãƒ©ãƒ¼] ãƒªãƒã‚¸ãƒˆãƒªãƒ«ãƒ¼ãƒˆã«ç§»å‹•ã§ãã¾ã›ã‚“: %REPO_ROOT%
+  echo [ƒGƒ‰[] ƒŠƒ|ƒWƒgƒŠƒ‹[ƒg‚ÉˆÚ“®‚Å‚«‚Ü‚¹‚ñ: %REPO_ROOT%
   pause
   exit /b 1
 )
 
-REM ----- git ã®å­˜åœ¨ç¢ºèª -----
+REM ----- git ‚Ì‘¶ÝŠm”F -----
 where git >nul 2>&1
 if errorlevel 1 (
-  echo [è­¦å‘Š] git ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“ã€‚æœ€æ–°ç‰ˆã®å–å¾—ã‚’ã‚¹ã‚­ãƒƒãƒ—ã—ã¦ãƒ­ãƒ¼ã‚«ãƒ«ã§èµ·å‹•ã—ã¾ã™ã€‚
+  echo [Œx] git ‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñBÅV”Å‚ÌŽæ“¾‚ðƒXƒLƒbƒv‚µ‚Äƒ[ƒJƒ‹‚Å‹N“®‚µ‚Ü‚·B
   goto :launch
 )
 
-REM ----- git ãƒªãƒã‚¸ãƒˆãƒªã‹ã©ã†ã‹ç¢ºèª -----
+REM ----- git ƒŠƒ|ƒWƒgƒŠ‚©‚Ç‚¤‚©Šm”F -----
 git rev-parse --is-inside-work-tree >nul 2>&1
 if errorlevel 1 (
-  echo [è­¦å‘Š] ã“ã®å ´æ‰€ã¯ git ãƒªãƒã‚¸ãƒˆãƒªã§ã¯ã‚ã‚Šã¾ã›ã‚“ã€‚ãƒ­ãƒ¼ã‚«ãƒ«ã®å†…å®¹ã§èµ·å‹•ã—ã¾ã™ã€‚
+  echo [Œx] ‚±‚ÌêŠ‚Í git ƒŠƒ|ƒWƒgƒŠ‚Å‚Í‚ ‚è‚Ü‚¹‚ñBƒ[ƒJƒ‹‚Ì“à—e‚Å‹N“®‚µ‚Ü‚·B
   goto :launch
 )
 
-REM ----- æœ€æ–°ç‰ˆã‚’å–å¾— -----
-echo --- æœ€æ–°ç‰ˆã‚’å–å¾—ã—ã¦ã„ã¾ã™ ---
+REM ----- ÅV”Å‚ðŽæ“¾ -----
+echo --- ÅV”Å‚ðŽæ“¾‚µ‚Ä‚¢‚Ü‚· ---
 git fetch origin %BRANCH%
 if errorlevel 1 (
-  echo  [è­¦å‘Š] fetch ã«å¤±æ•—ã—ã¾ã—ãŸï¼ˆãƒãƒƒãƒˆãƒ¯ãƒ¼ã‚¯ or èªè¨¼ï¼‰ã€‚ãƒ­ãƒ¼ã‚«ãƒ«ã®å†…å®¹ã§èµ·å‹•ã—ã¾ã™ã€‚
+  echo  [Œx] fetch ‚ÉŽ¸”s‚µ‚Ü‚µ‚½iƒlƒbƒgƒ[ƒN or ”FØjBƒ[ƒJƒ‹‚Ì“à—e‚Å‹N“®‚µ‚Ü‚·B
   goto :launch
 )
 
-REM ----- ç¾åœ¨ã®ãƒ–ãƒ©ãƒ³ãƒã‚’ç¢ºèªã—ã€å¿…è¦ãªã‚‰åˆ‡æ›¿ -----
+REM ----- Œ»Ý‚Ìƒuƒ‰ƒ“ƒ`‚ðŠm”F‚µA•K—v‚È‚çØ‘Ö -----
 for /f "delims=" %%B in ('git rev-parse --abbrev-ref HEAD') do set "CURRENT_BRANCH=%%B"
 if not "!CURRENT_BRANCH!"=="%BRANCH%" (
-  echo  [æƒ…å ±] ãƒ–ãƒ©ãƒ³ãƒã‚’åˆ‡ã‚Šæ›¿ãˆã¾ã™: !CURRENT_BRANCH! -^> %BRANCH%
+  echo  [î•ñ] ƒuƒ‰ƒ“ƒ`‚ðØ‚è‘Ö‚¦‚Ü‚·: !CURRENT_BRANCH! -^> %BRANCH%
   git switch %BRANCH% >nul 2>&1
   if errorlevel 1 (
     git switch -c %BRANCH% origin/%BRANCH% >nul 2>&1
     if errorlevel 1 (
-      echo  [è­¦å‘Š] ãƒ–ãƒ©ãƒ³ãƒåˆ‡æ›¿ã«å¤±æ•—ã—ã¾ã—ãŸã€‚ãƒ­ãƒ¼ã‚«ãƒ«ã®å†…å®¹ã§èµ·å‹•ã—ã¾ã™ã€‚
+      echo  [Œx] ƒuƒ‰ƒ“ƒ`Ø‘Ö‚ÉŽ¸”s‚µ‚Ü‚µ‚½Bƒ[ƒJƒ‹‚Ì“à—e‚Å‹N“®‚µ‚Ü‚·B
       goto :launch
     )
   )
 )
 
-REM ----- æ—©é€ã‚Šãƒžãƒ¼ã‚¸ã§æ›´æ–° -----
+REM ----- ‘‘—‚èƒ}[ƒW‚ÅXV -----
 git pull --ff-only origin %BRANCH%
 if errorlevel 1 (
-  echo  [è­¦å‘Š] pull ã«å¤±æ•—ã—ã¾ã—ãŸï¼ˆæ‰‹å…ƒã«æœªã‚³ãƒŸãƒƒãƒˆã®å¤‰æ›´ãŒã‚ã‚‹ã‹ã‚‚ï¼‰ã€‚
-  echo         ãƒ­ãƒ¼ã‚«ãƒ«ã®å†…å®¹ã§èµ·å‹•ã—ã¾ã™ã€‚
+  echo  [Œx] pull ‚ÉŽ¸”s‚µ‚Ü‚µ‚½iŽèŒ³‚É–¢ƒRƒ~ƒbƒg‚Ì•ÏX‚ª‚ ‚é‚©‚àjB
+  echo         ƒ[ƒJƒ‹‚Ì“à—e‚Å‹N“®‚µ‚Ü‚·B
 ) else (
-  echo  [OK] æœ€æ–°ç‰ˆã«æ›´æ–°ã—ã¾ã—ãŸ
+  echo  [OK] ÅV”Å‚ÉXV‚µ‚Ü‚µ‚½
 )
 
 :launch
 echo.
 if not exist "%APP_FILE%" (
-  echo [ã‚¨ãƒ©ãƒ¼] index.html ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“: %APP_FILE%
+  echo [ƒGƒ‰[] index.html ‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñ: %APP_FILE%
   popd
   pause
   exit /b 1
 )
 
-REM ----- Chrome æ¤œå‡º -----
+REM ----- Chrome ŒŸo -----
 set "BROWSER="
 set "BROWSER_NAME="
 for %%P in (
@@ -100,7 +100,7 @@ for %%P in (
   )
 )
 
-REM ----- Edge æ¤œå‡ºï¼ˆChrome æœªå°Žå…¥æ™‚ã®ãƒ•ã‚©ãƒ¼ãƒ«ãƒãƒƒã‚¯ï¼‰ -----
+REM ----- Edge ŒŸoiChrome –¢“±“üŽž‚ÌƒtƒH[ƒ‹ƒoƒbƒNj -----
 if not defined BROWSER (
   for %%P in (
     "%PROGRAMFILES(X86)%\Microsoft\Edge\Application\msedge.exe"
@@ -113,21 +113,21 @@ if not defined BROWSER (
   )
 )
 
-REM ----- file:// URL ç”¨ã«ãƒãƒƒã‚¯ã‚¹ãƒ©ãƒƒã‚·ãƒ¥ã‚’ã‚¹ãƒ©ãƒƒã‚·ãƒ¥ã¸å¤‰æ› -----
+REM ----- file:// URL —p‚ÉƒoƒbƒNƒXƒ‰ƒbƒVƒ…‚ðƒXƒ‰ƒbƒVƒ…‚Ö•ÏŠ· -----
 set "APP_FILE_FWD=!APP_FILE:\=/!"
 
-echo --- ã‚¢ãƒ—ãƒªã‚’èµ·å‹•ã—ã¾ã™ ---
+echo --- ƒAƒvƒŠ‚ð‹N“®‚µ‚Ü‚· ---
 if defined BROWSER (
-  echo  [OK] !BROWSER_NAME! ã®ã‚¢ãƒ—ãƒªãƒ¢ãƒ¼ãƒ‰ã§èµ·å‹•ã—ã¾ã™
+  echo  [OK] !BROWSER_NAME! ‚ÌƒAƒvƒŠƒ‚[ƒh‚Å‹N“®‚µ‚Ü‚·
   start "" "!BROWSER!" --app="file:///!APP_FILE_FWD!"
 ) else (
-  echo  [æƒ…å ±] Chrome/Edge ãŒè¦‹ã¤ã‹ã‚‰ãªã„ãŸã‚ã€æ—¢å®šã®ãƒ–ãƒ©ã‚¦ã‚¶ã§é–‹ãã¾ã™
+  echo  [î•ñ] Chrome/Edge ‚ªŒ©‚Â‚©‚ç‚È‚¢‚½‚ßAŠù’è‚Ìƒuƒ‰ƒEƒU‚ÅŠJ‚«‚Ü‚·
   start "" "file:///!APP_FILE_FWD!"
 )
 
 popd
 echo.
-echo ã“ã®ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã¯æ•°ç§’å¾Œã«è‡ªå‹•ã§é–‰ã˜ã¾ã™ã€‚
+echo ‚±‚ÌƒEƒBƒ“ƒhƒE‚Í”•bŒã‚ÉŽ©“®‚Å•Â‚¶‚Ü‚·B
 ping -n 3 127.0.0.1 >nul 2>&1
 endlocal
 exit /b 0

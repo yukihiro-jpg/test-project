@@ -1,72 +1,72 @@
 @echo off
-chcp 65001 >/dev/null 2>&1
+chcp 932 >/dev/null 2>&1
 setlocal EnableDelayedExpansion
 
-title ç¾é‡‘å‡ºç´å¸³ãƒ»ä»®æ‰•ç®¡ç†ã‚·ã‚¹ãƒ†ãƒ  ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ©ãƒ¼
+title Œ»‹ào”[’ E‰¼•¥ŠÇ—ƒVƒXƒeƒ€ ƒCƒ“ƒXƒg[ƒ‰[
 
-set "TARGET_DIR=%USERPROFILE%\Documents\ç¾é‡‘å‡ºç´å¸³"
+set "TARGET_DIR=%USERPROFILE%\Documents\Œ»‹ào”[’ "
 set "APP_FILE=%TARGET_DIR%\index.html"
 set "ICON_FILE=%TARGET_DIR%\app.ico"
 set "SOURCE=%~dp0index.html"
 set "ICON_SOURCE=%~dp0app.ico"
 set "DESKTOP=%USERPROFILE%\Desktop"
-set "SHORTCUT=%DESKTOP%\ç¾é‡‘å‡ºç´å¸³.lnk"
-set "URL_SHORTCUT=%DESKTOP%\ç¾é‡‘å‡ºç´å¸³.url"
+set "SHORTCUT=%DESKTOP%\Œ»‹ào”[’ .lnk"
+set "URL_SHORTCUT=%DESKTOP%\Œ»‹ào”[’ .url"
 
 cls
 echo.
 echo ============================================================
-echo    ç¾é‡‘å‡ºç´å¸³ãƒ»ä»®æ‰•ç®¡ç†ã‚·ã‚¹ãƒ†ãƒ 
-echo    ã‹ã‚“ãŸã‚“ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ©ãƒ¼
+echo    Œ»‹ào”[’ E‰¼•¥ŠÇ—ƒVƒXƒeƒ€
+echo    ‚©‚ñ‚½‚ñƒCƒ“ƒXƒg[ƒ‰[
 echo ============================================================
 echo.
-echo  ã“ã®ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ©ãƒ¼ã¯æ¬¡ã®ã“ã¨ã‚’è¡Œã„ã¾ã™:
+echo  ‚±‚ÌƒCƒ“ƒXƒg[ƒ‰[‚ÍŽŸ‚Ì‚±‚Æ‚ðs‚¢‚Ü‚·:
 echo.
-echo    1. ã‚¢ãƒ—ãƒªæœ¬ä½“ã‚’ä»¥ä¸‹ã®ãƒ•ã‚©ãƒ«ãƒ€ã«ã‚³ãƒ”ãƒ¼ã—ã¾ã™
+echo    1. ƒAƒvƒŠ–{‘Ì‚ðˆÈ‰º‚ÌƒtƒHƒ‹ƒ_‚ÉƒRƒs[‚µ‚Ü‚·
 echo       %TARGET_DIR%
-echo    2. ãƒ‡ã‚¹ã‚¯ãƒˆãƒƒãƒ—ã«èµ·å‹•ã‚¢ã‚¤ã‚³ãƒ³ã‚’ä½œæˆã—ã¾ã™
-echo       ï¼ˆãƒ–ãƒ©ã‚¦ã‚¶ã®ã‚¿ãƒ–ã§ã¯ãªãã€ã‚¢ãƒ—ãƒªå°‚ç”¨ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã§é–‹ãã¾ã™ï¼‰
+echo    2. ƒfƒXƒNƒgƒbƒv‚É‹N“®ƒAƒCƒRƒ“‚ðì¬‚µ‚Ü‚·
+echo       iƒuƒ‰ƒEƒU‚Ìƒ^ƒu‚Å‚Í‚È‚­AƒAƒvƒŠê—pƒEƒBƒ“ƒhƒE‚ÅŠJ‚«‚Ü‚·j
 echo.
-echo  â€» ãƒãƒƒãƒˆãƒ¯ãƒ¼ã‚¯é€šä¿¡ã¯ä¸€åˆ‡è¡Œã„ã¾ã›ã‚“
-echo  â€» ã™ã¹ã¦ã®ãƒ‡ãƒ¼ã‚¿ã¯ã”åˆ©ç”¨ã®ãƒ‘ã‚½ã‚³ãƒ³å†…ã«ä¿å­˜ã•ã‚Œã¾ã™
+echo  ¦ ƒlƒbƒgƒ[ƒN’ÊM‚ÍˆêØs‚¢‚Ü‚¹‚ñ
+echo  ¦ ‚·‚×‚Ä‚Ìƒf[ƒ^‚Í‚²—˜—p‚Ìƒpƒ\ƒRƒ““à‚É•Û‘¶‚³‚ê‚Ü‚·
 echo.
 
 if not exist "%SOURCE%" (
-  echo [ã‚¨ãƒ©ãƒ¼] index.html ãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“ã€‚
-  echo ã“ã®ãƒãƒƒãƒãƒ•ã‚¡ã‚¤ãƒ«ã¯ index.html ã¨åŒã˜ãƒ•ã‚©ãƒ«ãƒ€ã‹ã‚‰å®Ÿè¡Œã—ã¦ãã ã•ã„ã€‚
+  echo [ƒGƒ‰[] index.html ‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñB
+  echo ‚±‚Ìƒoƒbƒ`ƒtƒ@ƒCƒ‹‚Í index.html ‚Æ“¯‚¶ƒtƒHƒ‹ƒ_‚©‚çŽÀs‚µ‚Ä‚­‚¾‚³‚¢B
   echo.
   pause
   exit /b 1
 )
 
-echo Enterã‚­ãƒ¼ã§ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã‚’é–‹å§‹ã—ã¾ã™ã€‚
-echo ï¼ˆä¸­æ­¢ã™ã‚‹å ´åˆã¯ã“ã®ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã‚’é–‰ã˜ã¦ãã ã•ã„ï¼‰
+echo EnterƒL[‚ÅƒCƒ“ƒXƒg[ƒ‹‚ðŠJŽn‚µ‚Ü‚·B
+echo i’†Ž~‚·‚éê‡‚Í‚±‚ÌƒEƒBƒ“ƒhƒE‚ð•Â‚¶‚Ä‚­‚¾‚³‚¢j
 pause >/dev/null
 
 echo.
-echo --- ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ä¸­ ---
+echo --- ƒCƒ“ƒXƒg[ƒ‹’† ---
 
 if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
 
 if exist "%APP_FILE%" (
-  echo  [æƒ…å ±] æ—¢å­˜ã®ã‚¢ãƒ—ãƒªã‚’æœ€æ–°ç‰ˆã«æ›´æ–°ã—ã¾ã™
-  echo         ï¼ˆç™»éŒ²æ¸ˆã¿ãƒ‡ãƒ¼ã‚¿ã¯ä¿æŒã•ã‚Œã¾ã™ï¼‰
+  echo  [î•ñ] Šù‘¶‚ÌƒAƒvƒŠ‚ðÅV”Å‚ÉXV‚µ‚Ü‚·
+  echo         i“o˜^Ï‚Ýƒf[ƒ^‚Í•ÛŽ‚³‚ê‚Ü‚·j
 )
 
 copy /Y "%SOURCE%" "%APP_FILE%" >/dev/null
 if errorlevel 1 (
-  echo [ã‚¨ãƒ©ãƒ¼] ãƒ•ã‚¡ã‚¤ãƒ«ã®ã‚³ãƒ”ãƒ¼ã«å¤±æ•—ã—ã¾ã—ãŸã€‚
-  echo         ã‚¦ã‚¤ãƒ«ã‚¹å¯¾ç­–ã‚½ãƒ•ãƒˆã®è¨­å®šã‚„ã€æ›¸ãè¾¼ã¿æ¨©é™ã‚’ã”ç¢ºèªãã ã•ã„ã€‚
+  echo [ƒGƒ‰[] ƒtƒ@ƒCƒ‹‚ÌƒRƒs[‚ÉŽ¸”s‚µ‚Ü‚µ‚½B
+  echo         ƒEƒCƒ‹ƒX‘Îôƒ\ƒtƒg‚ÌÝ’è‚âA‘‚«ž‚ÝŒ ŒÀ‚ð‚²Šm”F‚­‚¾‚³‚¢B
   pause
   exit /b 1
 )
-echo  [OK] ã‚¢ãƒ—ãƒªæœ¬ä½“ã‚’ã‚³ãƒ”ãƒ¼ã—ã¾ã—ãŸ
+echo  [OK] ƒAƒvƒŠ–{‘Ì‚ðƒRƒs[‚µ‚Ü‚µ‚½
 
 if exist "%ICON_SOURCE%" (
   copy /Y "%ICON_SOURCE%" "%ICON_FILE%" >/dev/null
 )
 
-REM ----- Chrome æ¤œå‡º -----
+REM ----- Chrome ŒŸo -----
 set "BROWSER="
 set "BROWSER_NAME="
 for %%P in (
@@ -80,7 +80,7 @@ for %%P in (
   )
 )
 
-REM ----- Edge æ¤œå‡ºï¼ˆChrome æœªå°Žå…¥æ™‚ã®ãƒ•ã‚©ãƒ¼ãƒ«ãƒãƒƒã‚¯ï¼‰ -----
+REM ----- Edge ŒŸoiChrome –¢“±“üŽž‚ÌƒtƒH[ƒ‹ƒoƒbƒNj -----
 if not defined BROWSER (
   for %%P in (
     "%PROGRAMFILES(X86)%\Microsoft\Edge\Application\msedge.exe"
@@ -93,16 +93,16 @@ if not defined BROWSER (
   )
 )
 
-REM æ—¢å­˜ã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆãŒã‚ã‚Œã°å‰Šé™¤ï¼ˆå†ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«æ™‚ã®é‡è¤‡é˜²æ­¢ï¼‰
+REM Šù‘¶ƒVƒ‡[ƒgƒJƒbƒg‚ª‚ ‚ê‚ÎíœiÄƒCƒ“ƒXƒg[ƒ‹Žž‚Ìd•¡–hŽ~j
 if exist "%SHORTCUT%" del /F /Q "%SHORTCUT%" >/dev/null 2>&1
 if exist "%URL_SHORTCUT%" del /F /Q "%URL_SHORTCUT%" >/dev/null 2>&1
 
-REM file:// URL ç”¨ã«ãƒãƒƒã‚¯ã‚¹ãƒ©ãƒƒã‚·ãƒ¥ã‚’ã‚¹ãƒ©ãƒƒã‚·ãƒ¥ã¸å¤‰æ›
+REM file:// URL —p‚ÉƒoƒbƒNƒXƒ‰ƒbƒVƒ…‚ðƒXƒ‰ƒbƒVƒ…‚Ö•ÏŠ·
 set "APP_FILE_FWD=!APP_FILE:\=/!"
 
 set "LAUNCH_MODE="
 if defined BROWSER (
-  REM æ—¥æœ¬èªžãƒ‘ã‚¹ã¯ç’°å¢ƒå¤‰æ•°çµŒç”±ã§ PowerShell ã«æ¸¡ã™ï¼ˆã‚³ãƒžãƒ³ãƒ‰ãƒ©ã‚¤ãƒ³ç›´æ›¸ãã®æ–‡å­—åŒ–ã‘ã‚’å›žé¿ï¼‰
+  REM “ú–{ŒêƒpƒX‚ÍŠÂ‹«•Ï”Œo—R‚Å PowerShell ‚É“n‚·iƒRƒ}ƒ“ƒhƒ‰ƒCƒ“’¼‘‚«‚Ì•¶Žš‰»‚¯‚ð‰ñ”ðj
   set "SC_PATH=%SHORTCUT%"
   set "SC_TARGET=%BROWSER%"
   set "SC_URL=file:///!APP_FILE_FWD!"
@@ -110,12 +110,12 @@ if defined BROWSER (
   set "SC_ICON=%ICON_FILE%"
   powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell; $sc=$ws.CreateShortcut($env:SC_PATH); $sc.TargetPath=$env:SC_TARGET; $sc.Arguments='--app=' + [char]34 + $env:SC_URL + [char]34; $sc.WorkingDirectory=$env:SC_WORKDIR; if (Test-Path $env:SC_ICON) { $sc.IconLocation=$env:SC_ICON } else { $sc.IconLocation=$env:SC_TARGET + ',0' }; $sc.Save()" >/dev/null 2>&1
   if exist "%SHORTCUT%" (
-    echo  [OK] ãƒ‡ã‚¹ã‚¯ãƒˆãƒƒãƒ—ã«ã€Œç¾é‡‘å‡ºç´å¸³ã€ã‚¢ã‚¤ã‚³ãƒ³ã‚’ä½œæˆã—ã¾ã—ãŸ
-    echo       ï¼ˆ!BROWSER_NAME! ã®ã‚¢ãƒ—ãƒªå°‚ç”¨ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã§èµ·å‹•ã—ã¾ã™ï¼‰
+    echo  [OK] ƒfƒXƒNƒgƒbƒv‚ÉuŒ»‹ào”[’ vƒAƒCƒRƒ“‚ðì¬‚µ‚Ü‚µ‚½
+    echo       i!BROWSER_NAME! ‚ÌƒAƒvƒŠê—pƒEƒBƒ“ƒhƒE‚Å‹N“®‚µ‚Ü‚·j
     set "LAUNCH_MODE=APP"
   ) else (
-    echo  [è­¦å‘Š] ã‚¢ãƒ—ãƒªå°‚ç”¨ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã®ã‚¢ã‚¤ã‚³ãƒ³ä½œæˆã«å¤±æ•—ã—ã¾ã—ãŸã€‚
-    echo         é€šå¸¸ã®ã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆã§ä»£æ›¿ã—ã¾ã™ï¼ˆãƒ–ãƒ©ã‚¦ã‚¶ã®ã‚¿ãƒ–ã§é–‹ãã¾ã™ï¼‰ã€‚
+    echo  [Œx] ƒAƒvƒŠê—pƒEƒBƒ“ƒhƒE‚ÌƒAƒCƒRƒ“ì¬‚ÉŽ¸”s‚µ‚Ü‚µ‚½B
+    echo         ’Êí‚ÌƒVƒ‡[ƒgƒJƒbƒg‚Å‘ã‘Ö‚µ‚Ü‚·iƒuƒ‰ƒEƒU‚Ìƒ^ƒu‚ÅŠJ‚«‚Ü‚·jB
     > "%URL_SHORTCUT%" echo [InternetShortcut]
     >> "%URL_SHORTCUT%" echo URL=file:///!APP_FILE_FWD!
     set "LAUNCH_MODE=URL"
@@ -123,23 +123,23 @@ if defined BROWSER (
 ) else (
   > "%URL_SHORTCUT%" echo [InternetShortcut]
   >> "%URL_SHORTCUT%" echo URL=file:///!APP_FILE_FWD!
-  echo  [OK] ãƒ‡ã‚¹ã‚¯ãƒˆãƒƒãƒ—ã«ã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆã‚’ä½œæˆã—ã¾ã—ãŸ
-  echo       ï¼ˆæ—¢å®šã®ãƒ–ãƒ©ã‚¦ã‚¶ã§èµ·å‹•ã—ã¾ã™ï¼‰
+  echo  [OK] ƒfƒXƒNƒgƒbƒv‚ÉƒVƒ‡[ƒgƒJƒbƒg‚ðì¬‚µ‚Ü‚µ‚½
+  echo       iŠù’è‚Ìƒuƒ‰ƒEƒU‚Å‹N“®‚µ‚Ü‚·j
   set "LAUNCH_MODE=URL"
 )
 
 echo.
 echo ============================================================
-echo    ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«å®Œäº†ï¼
+echo    ƒCƒ“ƒXƒg[ƒ‹Š®—¹I
 echo ============================================================
 echo.
-echo  ãƒ‡ã‚¹ã‚¯ãƒˆãƒƒãƒ—ã®ã€Œç¾é‡‘å‡ºç´å¸³ã€ã‚¢ã‚¤ã‚³ãƒ³ã‚’
-echo  ãƒ€ãƒ–ãƒ«ã‚¯ãƒªãƒƒã‚¯ã™ã‚‹ã¨èµ·å‹•ã§ãã¾ã™ã€‚
+echo  ƒfƒXƒNƒgƒbƒv‚ÌuŒ»‹ào”[’ vƒAƒCƒRƒ“‚ð
+echo  ƒ_ƒuƒ‹ƒNƒŠƒbƒN‚·‚é‚Æ‹N“®‚Å‚«‚Ü‚·B
 echo.
-echo  å›°ã£ãŸã¨ãã¯ã€Œã¯ã˜ã‚ã«ãŠèª­ã¿ãã ã•ã„.txtã€ã‚’ã”è¦§ãã ã•ã„ã€‚
+echo  ¢‚Á‚½‚Æ‚«‚Íu‚Í‚¶‚ß‚É‚¨“Ç‚Ý‚­‚¾‚³‚¢.txtv‚ð‚²——‚­‚¾‚³‚¢B
 echo.
 
-choice /M "ä»Šã™ãèµ·å‹•ã—ã¾ã™ã‹" /C YN /N
+choice /M "¡‚·‚®‹N“®‚µ‚Ü‚·‚©" /C YN /N
 if errorlevel 2 goto :end
 
 if "!LAUNCH_MODE!"=="APP" (
@@ -150,6 +150,6 @@ if "!LAUNCH_MODE!"=="APP" (
 
 :end
 echo.
-echo ã“ã®ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ã¯é–‰ã˜ã¦ã‹ã¾ã„ã¾ã›ã‚“ã€‚
+echo ‚±‚ÌƒEƒBƒ“ƒhƒE‚Í•Â‚¶‚Ä‚©‚Ü‚¢‚Ü‚¹‚ñB
 pause
 endlocal
