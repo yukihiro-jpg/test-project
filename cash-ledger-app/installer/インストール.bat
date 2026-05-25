@@ -108,7 +108,7 @@ if defined BROWSER (
   set "SC_URL=file:///!APP_FILE_FWD!"
   set "SC_WORKDIR=%TARGET_DIR%"
   set "SC_ICON=%ICON_FILE%"
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell; $sc=$ws.CreateShortcut($env:SC_PATH); $sc.TargetPath=$env:SC_TARGET; $sc.Arguments='--app=' + [char]34 + $env:SC_URL + [char]34; $sc.WorkingDirectory=$env:SC_WORKDIR; if (Test-Path $env:SC_ICON) { $sc.IconLocation=$env:SC_ICON } else { $sc.IconLocation=$env:SC_TARGET + ',0' }; $sc.Save()" >/dev/null 2>&1
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell; $sc=$ws.CreateShortcut($env:SC_PATH); $sc.TargetPath=$env:SC_TARGET; $sc.Arguments='--app=' + [char]34 + $env:SC_URL + [char]34; $sc.WorkingDirectory=$env:SC_WORKDIR; if (Test-Path $env:SC_ICON) { $sc.IconLocation=$env:SC_ICON + ',0' } else { $sc.IconLocation=$env:SC_TARGET + ',0' }; $sc.Save()" >/dev/null 2>&1
   if exist "%SHORTCUT%" (
     echo  [OK] デスクトップに「現金出納帳」アイコンを作成しました
     echo       （!BROWSER_NAME! のアプリ専用ウィンドウで起動します）
@@ -129,6 +129,9 @@ if defined BROWSER (
 )
 
 echo.
+REM アイコンキャッシュを更新して新しいアイコンを即反映
+ie4uinit.exe -show >/dev/null 2>&1
+
 echo ============================================================
 echo    インストール完了！
 echo ============================================================
