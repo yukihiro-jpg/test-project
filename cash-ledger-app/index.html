@@ -975,6 +975,7 @@ function settleAdvance(id, d) {
     date: d.settlementDate, storeName:'', itemName:'',
     description: desc, receiptAmount: recAmt, paymentAmount: payAmt,
     taxRate: null, memo: '', type: 'settlement', advanceId: adv.id,
+    location: adv.location||'',
   });
   adv.settlementEntryId=se.id;
 
@@ -991,6 +992,7 @@ function settleAdvance(id, d) {
       date: d.settlementDate, storeName:'', itemName:'',
       description: dDesc, receiptAmount: dRec, paymentAmount: dPay,
       taxRate: null, account: '現金過不足', memo: '', type: 'settlement', advanceId: adv.id,
+      location: adv.location||'',
     });
     adv.discrepancyEntryId = de.id;
   }
@@ -1101,7 +1103,8 @@ function reimburseExpense(id, d) {
     receiptAmount: 0,
     paymentAmount: rei.totalAmount,
     taxRate: null, memo: '',
-    type: 'reimbursement', reimbursementId: rei.id
+    type: 'reimbursement', reimbursementId: rei.id,
+    location: rei.location||''
   });
   rei.status='reimbursed';
   rei.reimbursementDate=d.reimbursementDate;
@@ -8636,6 +8639,25 @@ function showBankCsvSettings() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// 既存データ救済: 拠点採用時、仮払精算・立替返金で生成された出納帳エントリに
+// 拠点が設定されず「全拠点」にしか出ていなかったものを、親（仮払/立替）の拠点に合わせる。
+function migrateSettlementEntryLocations() {
+  var s = getSettings();
+  if (!s || !(s.locations||[]).length) return;
+  var entries = getEntries();
+  var advMap = {}; getAdvances().forEach(function(a){ advMap[a.id]=a; });
+  var reiMap = {}; getReimbursements().forEach(function(r){ reiMap[r.id]=r; });
+  var changed = false;
+  entries.forEach(function(e){
+    if (e.location) return;
+    var loc = '';
+    if (e.advanceId && advMap[e.advanceId]) loc = advMap[e.advanceId].location||'';
+    else if (e.reimbursementId && reiMap[e.reimbursementId]) loc = reiMap[e.reimbursementId].location||'';
+    if (loc) { e.location = loc; changed = true; }
+  });
+  if (changed) saveEntries(entries);
+}
+
 function initApp() {
   try {
     checkAndRestoreAutoBackup();
@@ -8647,6 +8669,7 @@ function initApp() {
       return;
     }
     document.getElementById('setup-screen').style.display='none';
+    migrateSettlementEntryLocations();
     updateHeader(); renderPage();
     doAutoSave();
   } catch (err) {
