@@ -7,12 +7,21 @@ echo 日下部税理士事務所 ファイル同期エージェント インス�
 echo ============================================================
 echo.
 
-set APP_DIR=%APPDATA%\KusakabeSyncAgent
+REM --- config.json から識別子を読み取る（複数社対応） ---
+set "APP_DIR_NAME=KusakabeSyncAgent"
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $c=Get-Content '%~dp0config.json' -Raw -Encoding UTF8 | ConvertFrom-Json; if($c.app_dir_name){$c.app_dir_name}else{'KusakabeSyncAgent'}"`) do set "APP_DIR_NAME=%%i"
+
+set "LOCAL_FOLDER_NAME=日下部税理士事務所"
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $c=Get-Content '%~dp0config.json' -Raw -Encoding UTF8 | ConvertFrom-Json; if($c.local_folder_name){$c.local_folder_name}else{'日下部税理士事務所'}"`) do set "LOCAL_FOLDER_NAME=%%i"
+
+set "APP_DIR=%APPDATA%\%APP_DIR_NAME%"
+set "TASK_NAME=%APP_DIR_NAME%"
+set "TASK_LOGON=%APP_DIR_NAME%Logon"
 
 REM 既存のインストールをクリーンアップ
 echo [1/6] 既存のインストール情報をクリアしています...
-schtasks /Delete /TN "KusakabeSyncAgent" /F > nul 2>&1
-schtasks /Delete /TN "KusakabeSyncAgentLogon" /F > nul 2>&1
+schtasks /Delete /TN "%TASK_NAME%" /F > nul 2>&1
+schtasks /Delete /TN "%TASK_LOGON%" /F > nul 2>&1
 if exist "%APP_DIR%\config.json" del /Q "%APP_DIR%\config.json" > nul 2>&1
 if exist "%APP_DIR%\sync_manifest.json" del /Q "%APP_DIR%\sync_manifest.json" > nul 2>&1
 if exist "%APP_DIR%\sync.log" del /Q "%APP_DIR%\sync.log" > nul 2>&1
@@ -37,12 +46,12 @@ echo   顧問先: !CLIENT_NAME!
 
 REM デスクトップフォルダを取得
 for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [System.Environment]::GetFolderPath('Desktop')"`) do set DESKTOP=%%i
-set LOCAL_FOLDER=%DESKTOP%\日下部税理士事務所
+set "LOCAL_FOLDER=%DESKTOP%\%LOCAL_FOLDER_NAME%"
 
 REM 既存ローカルフォルダがある場合は警告
 if exist "%LOCAL_FOLDER%" (
     echo.
-    echo [!] 既に「日下部税理士事務所」フォルダが存在します。
+    echo [!] 既に「%LOCAL_FOLDER_NAME%」フォルダが存在します。
     echo     過去のインストールで作成されたファイルが残っている可能性があります。
     echo.
 )
@@ -64,8 +73,8 @@ echo [5/6] 即時同期ボタンを作成中...
 
 REM タスクスケジューラ登録（PowerShell直接実行、VBS不要）
 echo [6/6] タスクスケジューラに登録中...
-schtasks /Create /TN "KusakabeSyncAgent" /TR "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%APP_DIR%\sync_agent.ps1\"" /SC MINUTE /MO 15 /F > nul
-schtasks /Create /TN "KusakabeSyncAgentLogon" /TR "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%APP_DIR%\sync_agent.ps1\"" /SC ONLOGON /F > nul
+schtasks /Create /TN "%TASK_NAME%" /TR "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%APP_DIR%\sync_agent.ps1\"" /SC MINUTE /MO 15 /F > nul
+schtasks /Create /TN "%TASK_LOGON%" /TR "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%APP_DIR%\sync_agent.ps1\"" /SC ONLOGON /F > nul
 
 echo.
 echo ============================================================

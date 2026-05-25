@@ -69,7 +69,17 @@ def create_drive_folders(drive, root_folder_name, client_name, shared_drive_id=N
     return client_id
 
 
-def generate_client_config(client_name, device_name, device_type, shared_drive_id=None):
+def get_install_id(client_name):
+    """インストール識別子を作る。数字プレフィックスがあればそれ、無ければサニタイズ名。"""
+    import re
+    m = re.match(r'^(\d+)', client_name)
+    if m:
+        return m.group(1)
+    sanitized = re.sub(r'[\\/:*?"<>|\s・（）()\[\]]', '', client_name)
+    return sanitized or "client"
+
+
+def generate_client_config(client_name, device_name, device_type, shared_drive_id=None, multi_client=False):
     # 数字プレフィックス（例: "608_"）を除去して会社名だけ取得
     import re
     display_name = re.sub(r'^\d+_', '', client_name)
@@ -90,11 +100,22 @@ def generate_client_config(client_name, device_name, device_type, shared_drive_i
             {"local_folder": f"税理士→{display_name}", "drive_folder": f"税理士→{display_name}", "direction": "download"},
         ]
 
+    # 複数社モード: インストール先・タスク名・デスクトップフォルダ名を会社ごとに分ける
+    if multi_client:
+        install_id = get_install_id(client_name)
+        app_dir_name = f"KusakabeSyncAgent_{install_id}"
+        local_folder_name = f"日下部税理士事務所_{display_name}"
+    else:
+        app_dir_name = "KusakabeSyncAgent"
+        local_folder_name = "日下部税理士事務所"
+
     return {
         "client_name": client_name,
         "device_name": device_name,
         "service_account_key_path": "service_account.json",
-        "local_folder": "%USERPROFILE%\\Desktop\\日下部税理士事務所",
+        "app_dir_name": app_dir_name,
+        "local_folder_name": local_folder_name,
+        "local_folder": f"%USERPROFILE%\\Desktop\\{local_folder_name}",
         "shared_drive_id": shared_drive_id,
         "gdrive_root_folder_name": "02_顧問先共有フォルダ",
         "sync_pairs": sync_pairs,
@@ -150,6 +171,8 @@ def main():
         default=str(Path(__file__).resolve().parent.parent / "installers"))
     parser.add_argument("--shared-drive-id", "-s")
     parser.add_argument("--skip-drive", action="store_true")
+    parser.add_argument("--multi-client", action="store_true",
+        help="1台のPCに複数社を入れる用（会社ごとに別フォルダ・別タスクにする）")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -170,6 +193,7 @@ def main():
     config = generate_client_config(
         client_name=args.client_name, device_name=args.device,
         device_type=args.type, shared_drive_id=args.shared_drive_id,
+        multi_client=args.multi_client,
     )
     package_installer(
         output_dir=Path(args.output), client_name=args.client_name,

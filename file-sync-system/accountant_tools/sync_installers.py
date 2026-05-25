@@ -98,6 +98,10 @@ def main():
         choices=["boss", "staff", "simple"],
         help="デバイスタイプ",
     )
+    parser.add_argument(
+        "--multi-client", action="store_true",
+        help="1台のPCに複数社を入れる用（会社ごとに別フォルダ・別タスク）",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -147,6 +151,7 @@ def main():
             device_name=args.device,
             device_type=args.type,
             shared_drive_id=args.shared_drive_id,
+            multi_client=args.multi_client,
         )
 
         # インストーラーパッケージ作成

@@ -149,7 +149,7 @@ def is_installer_outdated(installer_dir, source_dir):
 
 def generate_or_update_installer(
     output_dir, client_name, device_name, device_type,
-    shared_drive_id, sa_key_path, source_dir
+    shared_drive_id, sa_key_path, source_dir, multi_client=False
 ):
     installer_dir = output_dir / f"installer_{client_name}_{device_name}"
     existed = installer_dir.exists()
@@ -162,6 +162,7 @@ def generate_or_update_installer(
         device_name=device_name,
         device_type=device_type,
         shared_drive_id=shared_drive_id,
+        multi_client=multi_client,
     )
     package_installer(
         output_dir=output_dir,
@@ -220,6 +221,23 @@ def main():
         if not line:
             break
         new_client_names.append(line)
+
+    # 複数社モードの確認
+    print()
+    print("【複数社モード】1台のPCに2社以上を入れる場合に使います。")
+    print("会社ごとに別フォルダ（日下部税理士事務所_会社名）・別タスクになります。")
+    print("通常は n（いいえ）でOKです。")
+    try:
+        ans = input("複数社モードで作りますか？ [y/N]: ").strip().lower()
+    except EOFError:
+        ans = ""
+    multi_client = ans in ("y", "yes")
+    if multi_client:
+        # 通常版と混ざらないよう別フォルダに出力
+        output_dir = output_dir / "複数社用"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        print(f"複数社モードで生成します。出力先: {output_dir}")
+    print()
 
     # 認証
     print()
@@ -324,6 +342,7 @@ def main():
                     shared_drive_id=args.shared_drive_id,
                     sa_key_path=sa_key_path,
                     source_dir=source_dir,
+                    multi_client=multi_client,
                 )
                 if result == "created":
                     print(f"  + {label}: 新規生成")
