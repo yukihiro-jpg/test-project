@@ -1,2 +1,4 @@
 # Windows バッチファイルは必ず CRLF で取り出す（cmd.exe が LF だと即終了するため）
 *.bat text eol=crlf
+# アイコンはバイナリ（改行変換を抑止）
+*.ico binary
