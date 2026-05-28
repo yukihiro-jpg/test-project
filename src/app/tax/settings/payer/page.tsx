@@ -1,8 +1,17 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { load, save, PayerInfo } from '@/lib/tax/storage'
+import {
+  BackLink,
+  Card,
+  Field,
+  PageContainer,
+  PageTitle,
+  PrimaryButton,
+  TextInput,
+  Toggle,
+} from '@/components/tax/ui'
 
 export default function PayerSettingsPage() {
   const [payer, setPayer] = useState<PayerInfo | null>(null)
@@ -29,48 +38,46 @@ export default function PayerSettingsPage() {
   }
 
   return (
-    <main className="p-4 max-w-md mx-auto">
-      <Link href="/tax/settings" className="text-sm text-blue-600">← 戻る</Link>
-      <h1 className="text-lg font-bold my-3">納付者情報</h1>
+    <PageContainer>
+      <BackLink href="/tax/settings" label="設定" />
+      <PageTitle>納付者情報</PageTitle>
 
-      <div className="bg-white rounded-lg shadow p-3 space-y-2">
-        <Field label="税務署名" v={payer.taxOffice} on={v => update('taxOffice', v)} />
-        <Field label="税務署番号(3桁)" v={payer.taxOfficeNumber} on={v => update('taxOfficeNumber', v)} />
-        <Field label="整理番号(8桁)" v={payer.seiriNumber} on={v => update('seiriNumber', v)} />
-        <Field label="整理番号(13桁/記入者)" v={payer.payerNumber} on={v => update('payerNumber', v)} />
-        <Field label="住所(所在地)" v={payer.address} on={v => update('address', v)} />
-        <Field label="氏名(名称)" v={payer.name} on={v => update('name', v)} />
-        <Field label="電話番号" v={payer.phone} on={v => update('phone', v)} />
-        <label className="flex items-center gap-2 mt-2">
-          <input
-            type="checkbox"
+      <Card className="space-y-4">
+        <Field label="税務署名">
+          <TextInput value={payer.taxOffice} onChange={e => update('taxOffice', e.target.value)} />
+        </Field>
+        <Field label="税務署番号" hint="3桁">
+          <TextInput value={payer.taxOfficeNumber} onChange={e => update('taxOfficeNumber', e.target.value)} />
+        </Field>
+        <Field label="整理番号" hint="8桁">
+          <TextInput value={payer.seiriNumber} onChange={e => update('seiriNumber', e.target.value)} />
+        </Field>
+        <Field label="整理番号" hint="13桁/記入者">
+          <TextInput value={payer.payerNumber} onChange={e => update('payerNumber', e.target.value)} />
+        </Field>
+        <Field label="住所(所在地)">
+          <TextInput value={payer.address} onChange={e => update('address', e.target.value)} />
+        </Field>
+        <Field label="氏名(名称)">
+          <TextInput value={payer.name} onChange={e => update('name', e.target.value)} />
+        </Field>
+        <Field label="電話番号">
+          <TextInput value={payer.phone} onChange={e => update('phone', e.target.value)} inputMode="tel" />
+        </Field>
+        <div className="pt-2 border-t border-gray-100">
+          <Toggle
             checked={payer.noukiTokurei}
-            onChange={e => update('noukiTokurei', e.target.checked)}
+            onChange={v => update('noukiTokurei', v)}
+            label="納期の特例を適用（半年に1回納付）"
           />
-          <span className="text-sm">納期の特例を適用(半年に1回納付)</span>
-        </label>
+        </div>
+      </Card>
+
+      <div className="mt-6">
+        <PrimaryButton onClick={() => void saveAll()} disabled={saving}>
+          {saving ? '保存中…' : saved ? '保存しました ✓' : '保存'}
+        </PrimaryButton>
       </div>
-
-      <button
-        onClick={() => void saveAll()}
-        disabled={saving}
-        className="w-full mt-4 bg-blue-600 text-white rounded py-2 disabled:opacity-50"
-      >
-        {saving ? '保存中…' : saved ? '保存しました ✓' : '保存'}
-      </button>
-    </main>
-  )
-}
-
-function Field({ label, v, on }: { label: string; v: string; on: (v: string) => void }) {
-  return (
-    <label className="block">
-      <span className="text-xs text-gray-500">{label}</span>
-      <input
-        className="w-full border rounded px-2 py-1.5 text-sm"
-        value={v}
-        onChange={e => on(e.target.value)}
-      />
-    </label>
+    </PageContainer>
   )
 }

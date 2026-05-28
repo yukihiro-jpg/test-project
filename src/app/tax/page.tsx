@@ -1,51 +1,68 @@
 'use client'
 
 import Link from 'next/link'
+import { GroupedList, ListLink, PageContainer, PageTitle } from '@/components/tax/ui'
 
 export default function TaxHome() {
   return (
-    <main className="p-4 max-w-md mx-auto">
-      <div className="flex justify-between items-center mb-1">
-        <h1 className="text-xl font-bold">源泉所得税 納付書アシスタント</h1>
-        <Link
-          href="/tax/settings"
-          aria-label="設定"
-          className="text-2xl px-2 py-1 hover:bg-gray-100 rounded"
-        >
-          ⚙
-        </Link>
-      </div>
-      <p className="text-xs text-gray-500 mb-4">
+    <PageContainer>
+      <PageTitle
+        action={
+          <Link
+            href="/tax/settings"
+            aria-label="設定"
+            className="w-10 h-10 -mr-1 flex items-center justify-center rounded-full text-gray-500 active:bg-gray-200/70 active:text-gray-700"
+          >
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              />
+              <path
+                d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </Link>
+        }
+      >
+        源泉所得税
+        <br />
+        <span className="text-gray-500 font-semibold">納付書アシスタント</span>
+      </PageTitle>
+
+      <p className="text-[15px] text-gray-500 mb-6 leading-relaxed">
         毎月の源泉所得税を計算し、納付書のイメージを表示します。
       </p>
 
-      <div className="grid gap-3">
-        <Link href="/tax/daily" className="block bg-white rounded-lg shadow p-4">
-          <div className="font-semibold">① 毎日の給与・報酬の支払</div>
-          <div className="text-xs text-gray-500 mt-1">
-            日付・対象者・支払額を入力。区分(乙欄/ホステス)に応じて源泉税を自動計算。
-          </div>
-        </Link>
-        <Link href="/tax/slip" className="block bg-white rounded-lg shadow p-4">
-          <div className="font-semibold">② 納付書イメージを表示</div>
-          <div className="text-xs text-gray-500 mt-1">
-            月を選んで給与所得・報酬料金の納付書イメージを表示します。
-          </div>
-        </Link>
-        <Link
+      <GroupedList>
+        <ListLink
+          href="/tax/daily"
+          icon={<span>📝</span>}
+          title="毎日の給与・報酬の支払"
+          description="日付・対象者・支払額を入力。区分に応じて源泉税を自動計算。"
+        />
+        <ListLink
+          href="/tax/slip"
+          icon={<span>📄</span>}
+          title="納付書イメージを表示"
+          description="月を選んで給与所得・報酬料金の納付書イメージを確認。"
+        />
+        <ListLink
           href="/tax/export"
-          className="block bg-white rounded-lg shadow p-4 border-l-4 border-emerald-400"
-        >
-          <div className="font-semibold">③ CSV書き出し（税理士へ送る）</div>
-          <div className="text-xs text-gray-500 mt-1">
-            個別または「税理士提出用ファイル」として一括ダウンロード。
-          </div>
-        </Link>
-      </div>
+          icon={<span>📤</span>}
+          title="CSV書き出し"
+          description="個別または「税理士提出用ファイル」として一括ダウンロード。"
+        />
+      </GroupedList>
 
-      <p className="text-[10px] text-gray-400 mt-6 leading-relaxed">
-        ※ 初回利用時は ⚙ 設定 から納付者情報・従業員・税理士の登録を行ってください。
+      <p className="text-[12px] text-gray-400 mt-6 leading-relaxed px-2">
+        初回利用時は右上の設定から、納付者情報・従業員・税理士の登録を行ってください。
       </p>
-    </main>
+    </PageContainer>
   )
 }

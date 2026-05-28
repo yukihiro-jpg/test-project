@@ -1,19 +1,20 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import {
-  Employee,
-  TaxAccountant,
-  DailyPayment,
-  load,
-} from '@/lib/tax/storage'
-import {
-  calcHostessDailyTax,
-  calcKoyoOtsuTax,
-  calcZeirishiTax,
-} from '@/lib/tax/calc'
+import { Employee, TaxAccountant, DailyPayment, load } from '@/lib/tax/storage'
+import { calcHostessDailyTax, calcKoyoOtsuTax, calcZeirishiTax } from '@/lib/tax/calc'
 import { csvBlob, downloadFile, toCsv } from '@/lib/tax/csv'
+import {
+  BackLink,
+  Card,
+  Field,
+  PageContainer,
+  PageTitle,
+  PrimaryButton,
+  SectionLabel,
+  Select,
+  TextInput,
+} from '@/components/tax/ui'
 
 export default function ExportPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -35,7 +36,6 @@ export default function ExportPage() {
   const empOf = (id: string) => employees.find(e => e.id === id)
   const nameOf = (id: string) => empOf(id)?.name || ''
 
-  // 1) 給与台帳（乙欄）日別
   const koyoCsv = useMemo(() => {
     const rows: (string | number)[][] = [
       ['日付', '氏名', '区分', '支給額', '源泉所得税', '差引支給額'],
@@ -44,11 +44,7 @@ export default function ExportPage() {
       .filter(p => {
         const dt = new Date(p.date + 'T00:00:00')
         const emp = empOf(p.employeeId)
-        return (
-          dt.getFullYear() === year &&
-          dt.getMonth() + 1 === month &&
-          emp?.kind === 'koyo_otsu'
-        )
+        return dt.getFullYear() === year && dt.getMonth() + 1 === month && emp?.kind === 'koyo_otsu'
       })
       .sort((a, b) => a.date.localeCompare(b.date))
       .forEach(p => {
@@ -58,7 +54,6 @@ export default function ExportPage() {
     return toCsv(rows)
   }, [payments, employees, year, month])
 
-  // 2) ホステス日別
   const hostessCsv = useMemo(() => {
     const rows: (string | number)[][] = [
       ['日付', '氏名', '支払額', '源泉所得税', '差引支払額'],
@@ -67,11 +62,7 @@ export default function ExportPage() {
       .filter(p => {
         const dt = new Date(p.date + 'T00:00:00')
         const emp = empOf(p.employeeId)
-        return (
-          dt.getFullYear() === year &&
-          dt.getMonth() + 1 === month &&
-          emp?.kind === 'hostess'
-        )
+        return dt.getFullYear() === year && dt.getMonth() + 1 === month && emp?.kind === 'hostess'
       })
       .sort((a, b) => a.date.localeCompare(b.date))
       .forEach(p => {
@@ -81,27 +72,17 @@ export default function ExportPage() {
     return toCsv(rows)
   }, [payments, employees, year, month])
 
-  // 3) ホステス月別集計
   const hostessMonthlyCsv = useMemo(() => {
     const map = new Map<string, { name: string; days: number; gross: number; tax: number }>()
     payments
       .filter(p => {
         const dt = new Date(p.date + 'T00:00:00')
         const emp = empOf(p.employeeId)
-        return (
-          dt.getFullYear() === year &&
-          dt.getMonth() + 1 === month &&
-          emp?.kind === 'hostess'
-        )
+        return dt.getFullYear() === year && dt.getMonth() + 1 === month && emp?.kind === 'hostess'
       })
       .forEach(p => {
         const k = p.employeeId
-        const cur = map.get(k) || {
-          name: nameOf(p.employeeId),
-          days: 0,
-          gross: 0,
-          tax: 0,
-        }
+        const cur = map.get(k) || { name: nameOf(p.employeeId), days: 0, gross: 0, tax: 0 }
         cur.days += 1
         cur.gross += p.amount
         cur.tax += calcHostessDailyTax(p.amount)
@@ -114,7 +95,6 @@ export default function ExportPage() {
     return toCsv(rows)
   }, [payments, employees, year, month])
 
-  // 4) 税理士台帳
   const zeirishiCsv = useMemo(() => {
     const rows: (string | number)[][] = [
       ['年', '月', '氏名', '報酬額', '源泉所得税', '差引支払額'],
@@ -161,59 +141,52 @@ export default function ExportPage() {
   }
 
   return (
-    <main className="p-4 max-w-md mx-auto">
-      <Link href="/tax" className="text-sm text-blue-600">← 戻る</Link>
-      <h1 className="text-lg font-bold my-3">CSV書き出し（税理士へ送る）</h1>
+    <PageContainer>
+      <BackLink href="/tax" />
+      <PageTitle>CSV書き出し</PageTitle>
 
-      <div className="bg-white rounded-lg shadow p-3 mb-4 grid grid-cols-2 gap-2">
-        <label>
-          <span className="text-xs text-gray-500">年</span>
-          <input
+      <Card className="grid grid-cols-2 gap-3">
+        <Field label="年">
+          <TextInput
             type="number"
-            className="w-full border rounded px-2 py-1.5"
             value={year}
             onChange={e => setYear(parseInt(e.target.value) || year)}
           />
-        </label>
-        <label>
-          <span className="text-xs text-gray-500">月</span>
-          <select
-            className="w-full border rounded px-2 py-1.5"
-            value={month}
-            onChange={e => setMonth(parseInt(e.target.value))}
-          >
+        </Field>
+        <Field label="月">
+          <Select value={month} onChange={e => setMonth(parseInt(e.target.value))}>
             {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-              <option key={m} value={m}>{m}月</option>
+              <option key={m} value={m}>
+                {m}月
+              </option>
             ))}
-          </select>
-        </label>
+          </Select>
+        </Field>
+      </Card>
+
+      <div className="mt-5">
+        <PrimaryButton onClick={() => void downloadBundle()} disabled={bundling}>
+          {bundling ? '作成中…' : '税理士提出用ファイルをまとめてダウンロード'}
+        </PrimaryButton>
+        <p className="text-[12px] text-gray-400 mt-2 px-1">
+          4つのCSVを1つのZIPファイルにまとめます。
+        </p>
       </div>
 
-      <button
-        onClick={() => void downloadBundle()}
-        disabled={bundling}
-        className="w-full bg-blue-600 text-white rounded py-3 font-semibold mb-3 disabled:opacity-50"
-      >
-        {bundling ? '作成中…' : '税理士提出用ファイル をまとめてダウンロード'}
-      </button>
-      <p className="text-[10px] text-gray-500 mb-4">
-        ※ 4つのCSVを1つのZIPファイルにまとめます。
-      </p>
-
-      <h2 className="text-sm font-semibold mb-2">個別にダウンロード</h2>
-      <ul className="space-y-2">
+      <SectionLabel>個別にダウンロード</SectionLabel>
+      <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] overflow-hidden divide-y divide-gray-100">
         {files.map(f => (
-          <li
-            key={f.name}
-            className="bg-white rounded shadow p-3 flex justify-between items-center"
-          >
-            <div className="text-sm">{f.name}</div>
-            <button onClick={() => dl(f.name, f.csv)} className="text-sm text-blue-600">
+          <div key={f.name} className="flex justify-between items-center px-4 py-3.5">
+            <div className="text-[14px] text-gray-900 truncate pr-2">{f.name}</div>
+            <button
+              onClick={() => dl(f.name, f.csv)}
+              className="text-[14px] text-blue-500 font-medium active:text-blue-700 shrink-0"
+            >
               ダウンロード
             </button>
-          </li>
+          </div>
         ))}
-      </ul>
-    </main>
+      </div>
+    </PageContainer>
   )
 }

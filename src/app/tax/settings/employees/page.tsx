@@ -1,8 +1,20 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Employee, EmployeeKind, load, save, uid } from '@/lib/tax/storage'
+import {
+  BackLink,
+  Card,
+  Field,
+  PageContainer,
+  PageTitle,
+  PrimaryButton,
+  SecondaryButton,
+  Select,
+  SectionLabel,
+  TextArea,
+  TextInput,
+} from '@/components/tax/ui'
 
 const blank = {
   name: '',
@@ -56,10 +68,11 @@ export default function EmployeesPage() {
       memo: e.memo,
       kind: e.kind,
     })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const del = async (id: string) => {
-    if (!confirm('削除しますか? (支払記録も併せて削除されます)')) return
+    if (!confirm('削除しますか？(支払記録も併せて削除されます)')) return
     const s = await load()
     s.employees = s.employees.filter(e => e.id !== id)
     s.dailyPayments = s.dailyPayments.filter(p => p.employeeId !== id)
@@ -72,109 +85,112 @@ export default function EmployeesPage() {
     setForm({ ...form, [k]: v })
 
   return (
-    <main className="p-4 max-w-md mx-auto">
-      <Link href="/tax/settings" className="text-sm text-blue-600">← 戻る</Link>
-      <h1 className="text-lg font-bold my-3">従業員の登録</h1>
+    <PageContainer>
+      <BackLink href="/tax/settings" label="設定" />
+      <PageTitle>従業員の登録</PageTitle>
 
-      <div className="bg-white rounded-lg shadow p-3 mb-4 space-y-2">
-        <div className="text-xs text-gray-500 font-semibold">
-          {editId ? '従業員を編集' : '新規登録'}
-        </div>
-        <Field label="氏名" v={form.name} on={v => update('name', v)} placeholder="例: 山田 花子" />
-        <Field label="フリガナ" v={form.furigana} on={v => update('furigana', v)} placeholder="例: ヤマダ ハナコ" />
-        <Field label="住所" v={form.address} on={v => update('address', v)} />
-        <label className="block">
-          <span className="text-xs text-gray-500">生年月日</span>
-          <input
+      <SectionLabel>{editId ? '従業員を編集' : '新規登録'}</SectionLabel>
+      <Card className="space-y-4">
+        <Field label="氏名">
+          <TextInput
+            value={form.name}
+            onChange={e => update('name', e.target.value)}
+            placeholder="山田 花子"
+          />
+        </Field>
+        <Field label="フリガナ">
+          <TextInput
+            value={form.furigana}
+            onChange={e => update('furigana', e.target.value)}
+            placeholder="ヤマダ ハナコ"
+          />
+        </Field>
+        <Field label="住所">
+          <TextInput value={form.address} onChange={e => update('address', e.target.value)} />
+        </Field>
+        <Field label="生年月日">
+          <TextInput
             type="date"
-            className="w-full border rounded px-2 py-1.5 text-sm"
             value={form.birthday}
             onChange={e => update('birthday', e.target.value)}
           />
-        </label>
-        <label className="block">
-          <span className="text-xs text-gray-500">区分</span>
-          <select
-            className="w-full border rounded px-2 py-1.5 text-sm"
-            value={form.kind}
-            onChange={e => update('kind', e.target.value as EmployeeKind)}
-          >
-            <option value="koyo_otsu">一般従業員(乙欄)</option>
+        </Field>
+        <Field label="区分">
+          <Select value={form.kind} onChange={e => update('kind', e.target.value as EmployeeKind)}>
+            <option value="koyo_otsu">一般従業員（乙欄）</option>
             <option value="hostess">ホステス</option>
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-xs text-gray-500">メモ</span>
-          <textarea
-            className="w-full border rounded px-2 py-1.5 text-sm"
-            rows={2}
+          </Select>
+        </Field>
+        <Field label="メモ">
+          <TextArea
+            rows={3}
             value={form.memo}
             onChange={e => update('memo', e.target.value)}
           />
-        </label>
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={() => void submit()}
-            className="flex-1 bg-blue-600 text-white rounded py-2 text-sm"
-          >
+        </Field>
+        <div className="flex gap-2 pt-2">
+          <PrimaryButton onClick={() => void submit()}>
             {editId ? '更新' : '追加'}
-          </button>
+          </PrimaryButton>
           {editId && (
-            <button onClick={reset} className="px-3 border rounded text-sm">
+            <SecondaryButton onClick={reset} className="shrink-0">
               キャンセル
-            </button>
+            </SecondaryButton>
           )}
         </div>
-      </div>
+      </Card>
 
-      <ul className="space-y-2">
-        {list.map(e => (
-          <li key={e.id} className="bg-white rounded-lg shadow p-3">
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <div className="font-medium">
-                  {e.name}
-                  {e.furigana && <span className="text-xs text-gray-500 ml-2">({e.furigana})</span>}
+      <SectionLabel>登録済み{list.length > 0 && ` (${list.length})`}</SectionLabel>
+      {list.length === 0 ? (
+        <Card>
+          <p className="text-[15px] text-gray-500 text-center py-4">まだ登録がありません</p>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {list.map(e => (
+            <Card key={e.id}>
+              <div className="flex justify-between items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-[16px] font-semibold text-gray-900">
+                    {e.name}
+                    {e.furigana && (
+                      <span className="text-[12px] text-gray-500 ml-2 font-normal">
+                        {e.furigana}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[13px] text-gray-500 mt-0.5">
+                    {e.kind === 'koyo_otsu' ? '一般従業員（乙欄）' : 'ホステス'}
+                    {e.birthday && ` ・ ${e.birthday}`}
+                  </div>
+                  {e.address && (
+                    <div className="text-[13px] text-gray-500 mt-1 leading-snug">{e.address}</div>
+                  )}
+                  {e.memo && (
+                    <div className="text-[13px] text-gray-700 mt-2 whitespace-pre-wrap bg-gray-50 rounded-lg px-3 py-2 leading-snug">
+                      {e.memo}
+                    </div>
+                  )}
                 </div>
-                <div className="text-xs text-gray-500">
-                  {e.kind === 'koyo_otsu' ? '一般従業員(乙欄)' : 'ホステス'}
-                  {e.birthday && ` / ${e.birthday}`}
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <button
+                    onClick={() => edit(e)}
+                    className="text-[14px] text-blue-500 active:text-blue-700 px-2 py-1"
+                  >
+                    編集
+                  </button>
+                  <button
+                    onClick={() => void del(e.id)}
+                    className="text-[14px] text-red-500 active:text-red-700 px-2 py-1"
+                  >
+                    削除
+                  </button>
                 </div>
-                {e.address && <div className="text-xs text-gray-500 mt-0.5">{e.address}</div>}
-                {e.memo && <div className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">📝 {e.memo}</div>}
               </div>
-              <div className="flex flex-col gap-1 ml-2">
-                <button onClick={() => edit(e)} className="text-blue-600 text-xs">編集</button>
-                <button onClick={() => void del(e.id)} className="text-red-600 text-xs">削除</button>
-              </div>
-            </div>
-          </li>
-        ))}
-        {list.length === 0 && (
-          <li className="text-sm text-gray-500 text-center py-6">まだ登録がありません</li>
-        )}
-      </ul>
-    </main>
-  )
-}
-
-function Field({
-  label, v, on, placeholder,
-}: {
-  label: string
-  v: string
-  on: (v: string) => void
-  placeholder?: string
-}) {
-  return (
-    <label className="block">
-      <span className="text-xs text-gray-500">{label}</span>
-      <input
-        className="w-full border rounded px-2 py-1.5 text-sm"
-        value={v}
-        onChange={e => on(e.target.value)}
-        placeholder={placeholder}
-      />
-    </label>
+            </Card>
+          ))}
+        </div>
+      )}
+    </PageContainer>
   )
 }

@@ -19,9 +19,20 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#1f2937',
+  themeColor: '#F2F2F7',
 }
 
 export default function TaxLayout({ children }: { children: React.ReactNode }) {
-  return <div className="min-h-screen bg-gray-50 text-gray-800">{children}</div>
+  return (
+    <div
+      className="min-h-screen bg-[#F2F2F7] text-gray-900 antialiased"
+      style={{
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Yu Gothic Medium", "Meiryo", system-ui, sans-serif',
+        WebkitFontSmoothing: 'antialiased',
+      }}
+    >
+      {children}
+    </div>
+  )
 }

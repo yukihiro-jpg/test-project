@@ -4,6 +4,17 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { DailyPayment, Employee, load, save, uid } from '@/lib/tax/storage'
 import { calcHostessDailyTax, calcKoyoOtsuTax } from '@/lib/tax/calc'
+import {
+  BackLink,
+  Card,
+  Field,
+  PageContainer,
+  PageTitle,
+  PrimaryButton,
+  SectionLabel,
+  Select,
+  TextInput,
+} from '@/components/tax/ui'
 
 function calcTaxFor(emp: Employee | undefined, amount: number): number {
   if (!emp || amount <= 0) return 0
@@ -41,7 +52,7 @@ export default function DailyPaymentPage() {
   }
 
   const del = async (id: string) => {
-    if (!confirm('削除しますか?')) return
+    if (!confirm('削除しますか？')) return
     const s = await load()
     s.dailyPayments = s.dailyPayments.filter(p => p.id !== id)
     await save(s)
@@ -49,10 +60,7 @@ export default function DailyPaymentPage() {
   }
 
   const dayEntries = useMemo(
-    () =>
-      payments
-        .filter(p => p.date === date)
-        .sort((a, b) => a.id.localeCompare(b.id)),
+    () => payments.filter(p => p.date === date).sort((a, b) => a.id.localeCompare(b.id)),
     [payments, date],
   )
 
@@ -79,137 +87,139 @@ export default function DailyPaymentPage() {
   )
 
   return (
-    <main className="p-4 max-w-md mx-auto">
-      <Link href="/tax" className="text-sm text-blue-600">← 戻る</Link>
-      <h1 className="text-lg font-bold my-3">毎日の給与・報酬の支払</h1>
+    <PageContainer>
+      <BackLink href="/tax" />
+      <PageTitle>毎日の給与・報酬の支払</PageTitle>
 
-      <div className="bg-white rounded-lg shadow p-3 mb-3 space-y-2">
-        <label className="block">
-          <span className="text-xs text-gray-500">日付</span>
-          <input
-            type="date"
-            className="w-full border rounded px-2 py-1.5"
-            value={date}
-            onChange={e => setDate(e.target.value)}
-          />
-        </label>
-        <label className="block">
-          <span className="text-xs text-gray-500">対象者</span>
-          <select
-            className="w-full border rounded px-2 py-1.5"
-            value={employeeId}
-            onChange={e => setEmployeeId(e.target.value)}
-          >
+      <Card className="space-y-4">
+        <Field label="日付">
+          <TextInput type="date" value={date} onChange={e => setDate(e.target.value)} />
+        </Field>
+        <Field label="対象者">
+          <Select value={employeeId} onChange={e => setEmployeeId(e.target.value)}>
             <option value="">選択してください</option>
             {employees.map(e => (
               <option key={e.id} value={e.id}>
                 {e.name}（{e.kind === 'hostess' ? 'ホステス' : '乙欄'}）
               </option>
             ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-xs text-gray-500">本日の支払額(円)</span>
-          <input
+          </Select>
+        </Field>
+        <Field label="本日の支払額（円）">
+          <TextInput
             type="number"
             inputMode="numeric"
-            className="w-full border rounded px-2 py-1.5"
             value={amount}
             onChange={e => setAmount(e.target.value)}
+            placeholder="0"
           />
-        </label>
+        </Field>
 
         {selected && amountNum > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded p-2 text-sm space-y-0.5">
+          <div className="rounded-2xl bg-blue-50 p-4 space-y-1.5 text-[14px]">
             <div className="flex justify-between">
-              <span>支払額(総額)</span>
-              <b>{amountNum.toLocaleString()}円</b>
+              <span className="text-gray-700">支払額（総額）</span>
+              <span className="font-semibold tabular-nums">{amountNum.toLocaleString()} 円</span>
             </div>
-            <div className="flex justify-between text-red-700">
+            <div className="flex justify-between text-red-600">
               <span>
                 源泉徴収税
-                {selected.kind === 'hostess' ? '(ホステス10.21%)' : '(乙欄 月額表)'}
+                <span className="text-[12px] text-red-500/80 ml-1">
+                  {selected.kind === 'hostess' ? '(ホステス10.21%)' : '(乙欄 月額表)'}
+                </span>
               </span>
-              <b>−{tax.toLocaleString()}円</b>
+              <span className="font-semibold tabular-nums">−{tax.toLocaleString()} 円</span>
             </div>
-            <div className="flex justify-between text-green-800 border-t border-amber-300 pt-1 mt-1">
-              <span>本人へ支払う金額</span>
-              <b className="text-base">{net.toLocaleString()}円</b>
+            <div className="flex justify-between pt-1.5 border-t border-blue-200">
+              <span className="text-gray-900 font-semibold">本人へ支払う金額</span>
+              <span className="font-bold text-[17px] tabular-nums text-green-700">
+                {net.toLocaleString()} 円
+              </span>
             </div>
           </div>
         )}
 
-        <button
-          onClick={() => void add()}
-          className="w-full bg-blue-600 text-white rounded py-2 disabled:opacity-40"
-          disabled={!employeeId || !amount}
-        >
+        <PrimaryButton onClick={() => void add()} disabled={!employeeId || !amount}>
           記録する
-        </button>
-      </div>
+        </PrimaryButton>
+      </Card>
 
       {employees.length === 0 && (
-        <div className="bg-white rounded p-3 text-sm text-gray-500 text-center">
-          従業員の登録がありません。
-          <Link href="/tax/settings/employees" className="text-blue-600 underline ml-1">
-            登録画面へ
-          </Link>
-        </div>
+        <Card className="mt-4">
+          <p className="text-[14px] text-gray-500 text-center">
+            従業員の登録がありません。
+            <Link href="/tax/settings/employees" className="text-blue-500 ml-1">
+              登録画面へ
+            </Link>
+          </p>
+        </Card>
       )}
 
-      <h2 className="text-sm font-semibold mt-4 mb-2">{date} の記録</h2>
-      <ul className="space-y-2">
-        {dayEntries.length === 0 && (
-          <li className="text-xs text-gray-500 text-center py-3">この日の記録はありません</li>
-        )}
-        {dayEntries.map(p => {
-          const emp = empOf(p.employeeId)
-          const t = calcTaxFor(emp, p.amount)
-          return (
-            <li
-              key={p.id}
-              className="bg-white rounded shadow p-2 flex justify-between items-center text-sm"
-            >
-              <div>
-                <div className="font-medium">
-                  {nameOf(p.employeeId)}
-                  <span className="text-xs text-gray-500 ml-1">
-                    ({emp?.kind === 'hostess' ? 'ホステス' : '乙欄'})
-                  </span>
-                </div>
-                <div className="text-xs text-gray-500">
-                  総額 {p.amount.toLocaleString()} / 税 {t.toLocaleString()} / 手取{' '}
-                  {(p.amount - t).toLocaleString()}
-                </div>
-              </div>
-              <button onClick={() => void del(p.id)} className="text-red-600 text-xs">
-                削除
-              </button>
-            </li>
-          )
-        })}
-        {dayEntries.length > 0 && (
-          <li className="bg-blue-50 rounded p-2 text-xs flex justify-between">
-            <span>当日合計</span>
-            <span>
-              総額 {dayTotal.gross.toLocaleString()} / 税 {dayTotal.tax.toLocaleString()} / 手取{' '}
-              {dayTotal.net.toLocaleString()}
+      <SectionLabel>{date} の記録</SectionLabel>
+      {dayEntries.length === 0 ? (
+        <Card>
+          <p className="text-[14px] text-gray-500 text-center py-2">この日の記録はありません</p>
+        </Card>
+      ) : (
+        <>
+          <div className="space-y-2">
+            {dayEntries.map(p => {
+              const emp = empOf(p.employeeId)
+              const t = calcTaxFor(emp, p.amount)
+              return (
+                <Card key={p.id}>
+                  <div className="flex justify-between items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[15px] font-semibold text-gray-900">
+                        {nameOf(p.employeeId)}
+                        <span className="text-[12px] text-gray-500 ml-1.5 font-normal">
+                          {emp?.kind === 'hostess' ? 'ホステス' : '乙欄'}
+                        </span>
+                      </div>
+                      <div className="text-[12px] text-gray-500 mt-0.5 tabular-nums">
+                        総額 {p.amount.toLocaleString()} ／ 税 {t.toLocaleString()} ／ 手取{' '}
+                        {(p.amount - t).toLocaleString()}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => void del(p.id)}
+                      className="text-[13px] text-red-500 active:text-red-700 px-2 py-1 shrink-0"
+                    >
+                      削除
+                    </button>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+          <div className="mt-3 rounded-2xl bg-blue-50 px-4 py-3 text-[13px] flex justify-between">
+            <span className="text-gray-700">当日合計</span>
+            <span className="tabular-nums">
+              総額 <b>{dayTotal.gross.toLocaleString()}</b> ／ 税{' '}
+              <b>{dayTotal.tax.toLocaleString()}</b> ／ 手取{' '}
+              <b>{dayTotal.net.toLocaleString()}</b>
             </span>
-          </li>
-        )}
-      </ul>
+          </div>
+        </>
+      )}
 
-      <h2 className="text-sm font-semibold mt-6 mb-2">最近の記録(直近30件)</h2>
-      <ul className="space-y-1">
-        {recent.map(p => (
-          <li key={p.id} className="bg-white rounded p-2 text-xs flex justify-between">
-            <span>
-              {p.date} {nameOf(p.employeeId)}
-            </span>
-            <span>{p.amount.toLocaleString()}円</span>
-          </li>
-        ))}
-      </ul>
-    </main>
+      <SectionLabel>最近の記録（直近30件）</SectionLabel>
+      {recent.length === 0 ? (
+        <Card>
+          <p className="text-[14px] text-gray-500 text-center py-2">まだ記録がありません</p>
+        </Card>
+      ) : (
+        <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] overflow-hidden divide-y divide-gray-100">
+          {recent.map(p => (
+            <div key={p.id} className="flex justify-between items-center px-4 py-2.5 text-[14px]">
+              <span className="text-gray-700">
+                {p.date}　{nameOf(p.employeeId)}
+              </span>
+              <span className="tabular-nums font-medium">{p.amount.toLocaleString()} 円</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </PageContainer>
   )
 }

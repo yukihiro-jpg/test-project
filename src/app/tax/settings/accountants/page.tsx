@@ -1,9 +1,20 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { TaxAccountant, load, save, uid } from '@/lib/tax/storage'
 import { calcZeirishiTax } from '@/lib/tax/calc'
+import {
+  BackLink,
+  Card,
+  Field,
+  PageContainer,
+  PageTitle,
+  Pill,
+  PrimaryButton,
+  SecondaryButton,
+  SectionLabel,
+  TextInput,
+} from '@/components/tax/ui'
 
 const allMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
@@ -53,10 +64,11 @@ export default function AccountantsPage() {
       amount: a.amount,
       paymentMonths: [...a.paymentMonths],
     })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const del = async (id: string) => {
-    if (!confirm('削除しますか?')) return
+    if (!confirm('削除しますか？')) return
     const s = await load()
     s.accountants = s.accountants.filter(a => a.id !== id)
     await save(s)
@@ -72,114 +84,122 @@ export default function AccountantsPage() {
     })
   }
 
-  const setAllMonths = () => setForm({ ...form, paymentMonths: [...allMonths] })
-  const clearMonths = () => setForm({ ...form, paymentMonths: [] })
-
   const previewTax = form.amount > 0 ? calcZeirishiTax(form.amount) : 0
 
   return (
-    <main className="p-4 max-w-md mx-auto">
-      <Link href="/tax/settings" className="text-sm text-blue-600">← 戻る</Link>
-      <h1 className="text-lg font-bold my-3">税理士報酬の登録</h1>
+    <PageContainer>
+      <BackLink href="/tax/settings" label="設定" />
+      <PageTitle>税理士報酬の登録</PageTitle>
 
-      <div className="bg-white rounded-lg shadow p-3 mb-4 space-y-2">
-        <div className="text-xs text-gray-500 font-semibold">
-          {editId ? '税理士情報を編集' : '新規登録'}
-        </div>
-        <label className="block">
-          <span className="text-xs text-gray-500">氏名・名称</span>
-          <input
-            className="w-full border rounded px-2 py-1.5 text-sm"
+      <SectionLabel>{editId ? '税理士情報を編集' : '新規登録'}</SectionLabel>
+      <Card className="space-y-4">
+        <Field label="氏名・名称">
+          <TextInput
             value={form.name}
             onChange={e => setForm({ ...form, name: e.target.value })}
-            placeholder="例: 山田税理士事務所"
+            placeholder="山田税理士事務所"
           />
-        </label>
-        <label className="block">
-          <span className="text-xs text-gray-500">報酬額(円・1回あたり)</span>
-          <input
+        </Field>
+        <Field label="報酬額" hint="1回あたり（円）">
+          <TextInput
             type="number"
             inputMode="numeric"
-            className="w-full border rounded px-2 py-1.5 text-sm"
             value={form.amount || ''}
             onChange={e => setForm({ ...form, amount: parseInt(e.target.value) || 0 })}
           />
-        </label>
+        </Field>
+
         {form.amount > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs space-y-0.5">
-            <div className="flex justify-between"><span>報酬額</span><b>{form.amount.toLocaleString()}円</b></div>
-            <div className="flex justify-between text-red-700"><span>源泉所得税</span><b>−{previewTax.toLocaleString()}円</b></div>
-            <div className="flex justify-between text-green-800 border-t border-amber-300 pt-1 mt-1">
-              <span>差引支払額</span><b>{(form.amount - previewTax).toLocaleString()}円</b>
+          <div className="rounded-2xl bg-blue-50 p-4 space-y-1.5 text-[14px]">
+            <div className="flex justify-between">
+              <span className="text-gray-700">報酬額</span>
+              <span className="font-semibold tabular-nums">{form.amount.toLocaleString()} 円</span>
+            </div>
+            <div className="flex justify-between text-red-600">
+              <span>源泉所得税</span>
+              <span className="font-semibold tabular-nums">−{previewTax.toLocaleString()} 円</span>
+            </div>
+            <div className="flex justify-between pt-1.5 border-t border-blue-200">
+              <span className="text-gray-900 font-semibold">差引支払額</span>
+              <span className="font-bold text-[16px] tabular-nums">
+                {(form.amount - previewTax).toLocaleString()} 円
+              </span>
             </div>
           </div>
         )}
 
         <div>
-          <div className="flex justify-between items-center mb-1">
-            <span className="text-xs text-gray-500">支払月</span>
-            <div className="flex gap-2">
-              <button onClick={setAllMonths} className="text-[10px] text-blue-600">全選択</button>
-              <button onClick={clearMonths} className="text-[10px] text-gray-500">全解除</button>
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[13px] font-medium text-gray-600">支払月</span>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setForm({ ...form, paymentMonths: [...allMonths] })}
+                className="text-[13px] text-blue-500 active:text-blue-700"
+              >
+                毎月
+              </button>
+              <button
+                onClick={() => setForm({ ...form, paymentMonths: [] })}
+                className="text-[13px] text-gray-500 active:text-gray-700"
+              >
+                クリア
+              </button>
             </div>
           </div>
-          <div className="grid grid-cols-6 gap-1">
-            {allMonths.map(m => {
-              const on = form.paymentMonths.includes(m)
-              return (
-                <button
-                  key={m}
-                  onClick={() => toggleMonth(m)}
-                  className={`text-sm py-1.5 rounded border ${
-                    on ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'
-                  }`}
-                >
-                  {m}月
-                </button>
-              )
-            })}
+          <div className="grid grid-cols-6 gap-1.5">
+            {allMonths.map(m => (
+              <Pill key={m} selected={form.paymentMonths.includes(m)} onClick={() => toggleMonth(m)}>
+                {m}月
+              </Pill>
+            ))}
           </div>
         </div>
 
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={() => void submit()}
-            className="flex-1 bg-blue-600 text-white rounded py-2 text-sm"
-          >
+        <div className="flex gap-2 pt-2">
+          <PrimaryButton onClick={() => void submit()}>
             {editId ? '更新' : '追加'}
-          </button>
+          </PrimaryButton>
           {editId && (
-            <button onClick={reset} className="px-3 border rounded text-sm">
+            <SecondaryButton onClick={reset} className="shrink-0">
               キャンセル
-            </button>
+            </SecondaryButton>
           )}
         </div>
-      </div>
+      </Card>
 
-      <ul className="space-y-2">
-        {list.map(a => (
-          <li key={a.id} className="bg-white rounded-lg shadow p-3">
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <div className="font-medium">{a.name}</div>
-                <div className="text-xs text-gray-500">
-                  報酬: {a.amount.toLocaleString()}円 / 税: {calcZeirishiTax(a.amount).toLocaleString()}円
+      <SectionLabel>登録済み{list.length > 0 && ` (${list.length})`}</SectionLabel>
+      {list.length === 0 ? (
+        <Card>
+          <p className="text-[15px] text-gray-500 text-center py-4">まだ登録がありません</p>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {list.map(a => (
+            <Card key={a.id}>
+              <div className="flex justify-between items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-[16px] font-semibold text-gray-900">{a.name}</div>
+                  <div className="text-[13px] text-gray-500 mt-1 tabular-nums">
+                    報酬 {a.amount.toLocaleString()} 円 ／ 税{' '}
+                    {calcZeirishiTax(a.amount).toLocaleString()} 円
+                  </div>
+                  <div className="text-[13px] text-gray-500 mt-0.5">
+                    支払月：{a.paymentMonths.length === 12 ? '毎月' : a.paymentMonths.map(m => `${m}月`).join('・')}
+                  </div>
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">
-                  支払月: {a.paymentMonths.length === 12 ? '毎月' : a.paymentMonths.map(m => `${m}月`).join('・')}
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <button onClick={() => edit(a)} className="text-[14px] text-blue-500 active:text-blue-700 px-2 py-1">
+                    編集
+                  </button>
+                  <button onClick={() => void del(a.id)} className="text-[14px] text-red-500 active:text-red-700 px-2 py-1">
+                    削除
+                  </button>
                 </div>
               </div>
-              <div className="flex flex-col gap-1 ml-2">
-                <button onClick={() => edit(a)} className="text-blue-600 text-xs">編集</button>
-                <button onClick={() => void del(a.id)} className="text-red-600 text-xs">削除</button>
-              </div>
-            </div>
-          </li>
-        ))}
-        {list.length === 0 && (
-          <li className="text-sm text-gray-500 text-center py-6">まだ登録がありません</li>
-        )}
-      </ul>
-    </main>
+            </Card>
+          ))}
+        </div>
+      )}
+    </PageContainer>
   )
 }
