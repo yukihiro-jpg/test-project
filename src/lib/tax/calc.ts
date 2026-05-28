@@ -46,10 +46,22 @@ export function calcKoyoOtsuTax(salaryAfterInsurance: number): number {
 
 // 税理士等の報酬（所204条1項2号）: 1回の支払額が100万円以下 → 10.21%
 // 100万円超 → 100万円までは10.21%、超過部分は20.42%
+// 入力は税抜報酬額（消費税抜き）。
 export function calcZeirishiTax(amount: number): number {
   if (amount <= 0) return 0
   if (amount <= 1000000) return Math.floor(amount * 0.1021)
   return Math.floor(1000000 * 0.1021 + (amount - 1000000) * 0.2042)
+}
+
+// 税理士報酬の税込支払額（消費税10%込）
+export function calcZeirishiGross(amount: number): number {
+  if (amount <= 0) return 0
+  return Math.floor(amount * 1.1)
+}
+
+// 税理士報酬の差引支払額 = 税込支払額 − 源泉所得税
+export function calcZeirishiNet(amount: number): number {
+  return calcZeirishiGross(amount) - calcZeirishiTax(amount)
 }
 
 // 源泉所得税の納付期限

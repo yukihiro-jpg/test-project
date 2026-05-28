@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Employee, TaxAccountant, DailyPayment, load } from '@/lib/tax/storage'
-import { calcHostessDailyTax, calcKoyoOtsuTax, calcZeirishiTax } from '@/lib/tax/calc'
+import {
+  calcHostessDailyTax,
+  calcKoyoOtsuTax,
+  calcZeirishiGross,
+  calcZeirishiNet,
+  calcZeirishiTax,
+} from '@/lib/tax/calc'
 import { csvBlob, downloadFile, toCsv } from '@/lib/tax/csv'
 import {
   BackLink,
@@ -97,13 +103,20 @@ export default function ExportPage() {
 
   const zeirishiCsv = useMemo(() => {
     const rows: (string | number)[][] = [
-      ['年', '月', '氏名', '報酬額', '源泉所得税', '差引支払額'],
+      ['年', '月', '氏名', '税抜報酬額', '税込支払額', '源泉所得税', '差引支払額'],
     ]
     accountants
       .filter(a => a.paymentMonths.includes(month))
       .forEach(a => {
-        const tax = calcZeirishiTax(a.amount)
-        rows.push([year, month, a.name, a.amount, tax, a.amount - tax])
+        rows.push([
+          year,
+          month,
+          a.name,
+          a.amount,
+          calcZeirishiGross(a.amount),
+          calcZeirishiTax(a.amount),
+          calcZeirishiNet(a.amount),
+        ])
       })
     return toCsv(rows)
   }, [accountants, year, month])

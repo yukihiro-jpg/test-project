@@ -1,5 +1,5 @@
 import { Employee, TaxAccountant, DailyPayment } from './storage'
-import { calcHostessDailyTax, calcKoyoOtsuTax, calcZeirishiTax } from './calc'
+import { calcHostessDailyTax, calcKoyoOtsuTax, calcZeirishiGross, calcZeirishiTax } from './calc'
 
 export type MonthlyAggregate = {
   koyo: { people: number; amount: number; tax: number }
@@ -45,7 +45,8 @@ export function aggregateMonth(
   accountants.forEach(a => {
     if (!a.paymentMonths.includes(month)) return
     result.zeirishi.people += 1
-    result.zeirishi.amount += a.amount
+    // 納付書「支払金額」は税込で記載
+    result.zeirishi.amount += calcZeirishiGross(a.amount)
     result.zeirishi.tax += calcZeirishiTax(a.amount)
   })
 

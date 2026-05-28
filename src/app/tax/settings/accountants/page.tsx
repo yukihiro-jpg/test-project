@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { TaxAccountant, load, save, uid } from '@/lib/tax/storage'
-import { calcZeirishiTax } from '@/lib/tax/calc'
+import { calcZeirishiGross, calcZeirishiNet, calcZeirishiTax } from '@/lib/tax/calc'
 import {
   BackLink,
   Card,
@@ -100,7 +100,7 @@ export default function AccountantsPage() {
             placeholder="山田税理士事務所"
           />
         </Field>
-        <Field label="報酬額" hint="1回あたり（円）">
+        <Field label="報酬額" hint="税抜・1回あたり（円）">
           <TextInput
             type="number"
             inputMode="numeric"
@@ -112,17 +112,23 @@ export default function AccountantsPage() {
         {form.amount > 0 && (
           <div className="rounded-2xl bg-blue-50 p-4 space-y-1.5 text-[14px]">
             <div className="flex justify-between">
-              <span className="text-gray-700">報酬額</span>
+              <span className="text-gray-700">税抜報酬額</span>
               <span className="font-semibold tabular-nums">{form.amount.toLocaleString()} 円</span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-gray-700">税込支払額（×1.1）</span>
+              <span className="font-semibold tabular-nums">
+                {calcZeirishiGross(form.amount).toLocaleString()} 円
+              </span>
+            </div>
             <div className="flex justify-between text-red-600">
-              <span>源泉所得税</span>
+              <span>源泉所得税（10.21%）</span>
               <span className="font-semibold tabular-nums">−{previewTax.toLocaleString()} 円</span>
             </div>
             <div className="flex justify-between pt-1.5 border-t border-blue-200">
               <span className="text-gray-900 font-semibold">差引支払額</span>
               <span className="font-bold text-[16px] tabular-nums">
-                {(form.amount - previewTax).toLocaleString()} 円
+                {calcZeirishiNet(form.amount).toLocaleString()} 円
               </span>
             </div>
           </div>
@@ -180,8 +186,9 @@ export default function AccountantsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="text-[16px] font-semibold text-gray-900">{a.name}</div>
                   <div className="text-[13px] text-gray-500 mt-1 tabular-nums">
-                    報酬 {a.amount.toLocaleString()} 円 ／ 税{' '}
-                    {calcZeirishiTax(a.amount).toLocaleString()} 円
+                    税抜 {a.amount.toLocaleString()} 円 ／ 税{' '}
+                    {calcZeirishiTax(a.amount).toLocaleString()} 円 ／ 差引{' '}
+                    {calcZeirishiNet(a.amount).toLocaleString()} 円
                   </div>
                   <div className="text-[13px] text-gray-500 mt-0.5">
                     支払月：{a.paymentMonths.length === 12 ? '毎月' : a.paymentMonths.map(m => `${m}月`).join('・')}
