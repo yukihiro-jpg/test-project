@@ -1,32 +1,32 @@
 'use client'
 
-export type EmployeeKind = 'koyo_otsu' | 'hostess' | 'zeirishi'
+export type EmployeeKind = 'koyo_otsu' | 'hostess'
 
 export type Employee = {
   id: string
   name: string
+  furigana: string
+  address: string
+  birthday: string // YYYY-MM-DD
+  memo: string
   kind: EmployeeKind
   createdAt: number
 }
 
-export type PayrollEntry = {
+export type TaxAccountant = {
   id: string
-  employeeId: string
-  year: number
-  month: number
-  amount: number // 月額（給与/税理士月額顧問料）
-  spotAmount?: number // 税理士のスポット報酬等
-  days?: number
-  socialInsurance?: number
-  manualTaxOverride?: number | null
+  name: string
+  amount: number
+  paymentMonths: number[] // [1..12]
+  createdAt: number
 }
 
-// ホステス用：日別の支払記録
-export type HostessDailyEntry = {
+// 日別の支払（乙欄/ホステス共通）
+export type DailyPayment = {
   id: string
   employeeId: string
   date: string // YYYY-MM-DD
-  amount: number // その日の支払額(税込・控除前)
+  amount: number
 }
 
 export type PayerInfo = {
@@ -37,21 +37,20 @@ export type PayerInfo = {
   taxOfficeNumber: string
   seiriNumber: string
   payerNumber: string
-  noukiTokurei: boolean // 納期の特例 を選択しているか
+  noukiTokurei: boolean
 }
 
 export type Store = {
   employees: Employee[]
-  payroll: PayrollEntry[]
-  hostessDaily: HostessDailyEntry[]
+  accountants: TaxAccountant[]
+  dailyPayments: DailyPayment[]
   payer: PayerInfo
-  paymentDates: { [yearMonth: string]: string } // "YYYY-M" -> "YYYY-MM-DD"
 }
 
 const empty: Store = {
   employees: [],
-  payroll: [],
-  hostessDaily: [],
+  accountants: [],
+  dailyPayments: [],
   payer: {
     address: '',
     name: '',
@@ -62,7 +61,6 @@ const empty: Store = {
     payerNumber: '',
     noukiTokurei: false,
   },
-  paymentDates: {},
 }
 
 function normalize(parsed: unknown): Store {
@@ -71,11 +69,16 @@ function normalize(parsed: unknown): Store {
   return {
     ...empty,
     ...p,
-    employees: p.employees || [],
-    payroll: p.payroll || [],
-    hostessDaily: p.hostessDaily || [],
+    employees: (p.employees || []).map(e => ({
+      ...e,
+      furigana: e.furigana ?? '',
+      address: e.address ?? '',
+      birthday: e.birthday ?? '',
+      memo: e.memo ?? '',
+    })),
+    accountants: p.accountants || [],
+    dailyPayments: p.dailyPayments || [],
     payer: { ...empty.payer, ...(p.payer || {}) },
-    paymentDates: { ...empty.paymentDates, ...(p.paymentDates || {}) },
   }
 }
 

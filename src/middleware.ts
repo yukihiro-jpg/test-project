@@ -45,6 +45,7 @@ export async function middleware(request: NextRequest) {
     '/api/admin-locks',
     '/api/admin-unlock',
     '/api/store',
+    '/api/tax-export-zip',
   ]
   if (protectedApiPaths.some((p) => pathname.startsWith(p))) {
     if (!(await isAuthenticated(request))) {
@@ -66,5 +67,6 @@ export const config = {
     '/api/admin-locks/:path*',
     '/api/admin-unlock/:path*',
     '/api/store/:path*',
+    '/api/tax-export-zip/:path*',
   ],
 }
