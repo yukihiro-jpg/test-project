@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@types/archiver": "^7.0.0",
-    "@vercel/kv": "^3.0.0",
     "archiver": "^7.0.1",
     "dotenv": "^17.3.1",
     "googleapis": "^144.0.0",
@@ -21,6 +20,7 @@
     "qrcode": "^1.5.4",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
+    "redis": "^6.0.0",
     "sharp": "^0.33.0"
   },
   "devDependencies": {
