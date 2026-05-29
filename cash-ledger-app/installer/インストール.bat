@@ -1,5 +1,5 @@
 @echo off
-chcp 932 >/dev/null 2>&1
+chcp 932 >nul 2>&1
 setlocal EnableDelayedExpansion
 
 title 現金出納帳・仮払管理システム インストーラー
@@ -48,7 +48,7 @@ if not exist "%SOURCE%" (
 
 echo Enterキーでインストールを開始します。
 echo （中止する場合はこのウィンドウを閉じてください）
-pause >/dev/null
+pause >nul
 
 echo.
 echo --- インストール中 ---
@@ -60,7 +60,7 @@ if exist "%APP_FILE%" (
   echo         （登録済みデータは保持されます）
 )
 
-copy /Y "%SOURCE%" "%APP_FILE%" >/dev/null
+copy /Y "%SOURCE%" "%APP_FILE%" >nul
 if errorlevel 1 (
   echo [エラー] ファイルのコピーに失敗しました。
   echo         ウイルス対策ソフトの設定や、書き込み権限をご確認ください。
@@ -70,7 +70,7 @@ if errorlevel 1 (
 echo  [OK] アプリ本体をコピーしました
 
 if exist "%ICON_SOURCE%" (
-  copy /Y "%ICON_SOURCE%" "%ICON_FILE%" >/dev/null
+  copy /Y "%ICON_SOURCE%" "%ICON_FILE%" >nul
 )
 
 REM ----- Chrome 検出 -----
@@ -101,13 +101,13 @@ if not defined BROWSER (
 )
 
 REM 既存ショートカットがあれば削除（再インストール時の重複防止）
-if exist "%SHORTCUT%" del /F /Q "%SHORTCUT%" >/dev/null 2>&1
-if exist "%URL_SHORTCUT%" del /F /Q "%URL_SHORTCUT%" >/dev/null 2>&1
+if exist "%SHORTCUT%" del /F /Q "%SHORTCUT%" >nul 2>&1
+if exist "%URL_SHORTCUT%" del /F /Q "%URL_SHORTCUT%" >nul 2>&1
 
 REM 旧バージョンが %USERPROFILE%\Desktop に作っていた残骸も掃除
 if /I not "%DESKTOP%"=="%USERPROFILE%\Desktop" (
-  if exist "%USERPROFILE%\Desktop\現金出納帳.lnk" del /F /Q "%USERPROFILE%\Desktop\現金出納帳.lnk" >/dev/null 2>&1
-  if exist "%USERPROFILE%\Desktop\現金出納帳.url" del /F /Q "%USERPROFILE%\Desktop\現金出納帳.url" >/dev/null 2>&1
+  if exist "%USERPROFILE%\Desktop\現金出納帳.lnk" del /F /Q "%USERPROFILE%\Desktop\現金出納帳.lnk" >nul 2>&1
+  if exist "%USERPROFILE%\Desktop\現金出納帳.url" del /F /Q "%USERPROFILE%\Desktop\現金出納帳.url" >nul 2>&1
 )
 
 REM file:// URL 用にバックスラッシュをスラッシュへ変換
@@ -121,7 +121,7 @@ if defined BROWSER (
   set "SC_URL=file:///!APP_FILE_FWD!"
   set "SC_WORKDIR=%TARGET_DIR%"
   set "SC_ICON=%ICON_FILE%"
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell; $sc=$ws.CreateShortcut($env:SC_PATH); $sc.TargetPath=$env:SC_TARGET; $sc.Arguments='--app=' + [char]34 + $env:SC_URL + [char]34; $sc.WorkingDirectory=$env:SC_WORKDIR; if (Test-Path $env:SC_ICON) { $sc.IconLocation=$env:SC_ICON + ',0' } else { $sc.IconLocation=$env:SC_TARGET + ',0' }; $sc.Save()" >/dev/null 2>&1
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell; $sc=$ws.CreateShortcut($env:SC_PATH); $sc.TargetPath=$env:SC_TARGET; $sc.Arguments='--app=' + [char]34 + $env:SC_URL + [char]34; $sc.WorkingDirectory=$env:SC_WORKDIR; if (Test-Path $env:SC_ICON) { $sc.IconLocation=$env:SC_ICON + ',0' } else { $sc.IconLocation=$env:SC_TARGET + ',0' }; $sc.Save()" >nul 2>&1
   if exist "%SHORTCUT%" (
     echo  [OK] デスクトップに「現金出納帳」アイコンを作成しました
     echo       （!BROWSER_NAME! のアプリ専用ウィンドウで起動します）
@@ -143,7 +143,7 @@ if defined BROWSER (
 )
 
 REM アイコンキャッシュ更新（存在する場合のみ実行）
-where ie4uinit.exe >/dev/null 2>&1 && ie4uinit.exe -show >/dev/null 2>&1
+where ie4uinit.exe >nul 2>&1 && ie4uinit.exe -show >nul 2>&1
 
 echo.
 echo ============================================================

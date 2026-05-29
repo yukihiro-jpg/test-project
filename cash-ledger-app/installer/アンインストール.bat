@@ -1,5 +1,5 @@
 @echo off
-chcp 932 >/dev/null 2>&1
+chcp 932 >nul 2>&1
 setlocal EnableDelayedExpansion
 
 title Œ»‹ào”[’  ƒAƒ“ƒCƒ“ƒXƒg[ƒ‰[
@@ -56,13 +56,13 @@ if exist "%URL_SHORTCUT%" (
 
 REM ‹Œƒo[ƒWƒ‡ƒ“i%USERPROFILE%\Desktop ‚Éì‚Á‚Ä‚¢‚½‚à‚Ìj‚à‘|œ
 if /I not "%DESKTOP%"=="%USERPROFILE%\Desktop" (
-  if exist "%USERPROFILE%\Desktop\Œ»‹ào”[’ .lnk" del /F /Q "%USERPROFILE%\Desktop\Œ»‹ào”[’ .lnk" >/dev/null 2>&1
-  if exist "%USERPROFILE%\Desktop\Œ»‹ào”[’ .url" del /F /Q "%USERPROFILE%\Desktop\Œ»‹ào”[’ .url" >/dev/null 2>&1
+  if exist "%USERPROFILE%\Desktop\Œ»‹ào”[’ .lnk" del /F /Q "%USERPROFILE%\Desktop\Œ»‹ào”[’ .lnk" >nul 2>&1
+  if exist "%USERPROFILE%\Desktop\Œ»‹ào”[’ .url" del /F /Q "%USERPROFILE%\Desktop\Œ»‹ào”[’ .url" >nul 2>&1
 )
 
 REM ‹Œƒo[ƒWƒ‡ƒ“i%USERPROFILE%\Documents ‚É’u‚¢‚Ä‚¢‚½‚à‚Ìj‚à‘|œ
 if /I not "%DOCUMENTS%"=="%USERPROFILE%\Documents" (
-  if exist "%USERPROFILE%\Documents\Œ»‹ào”[’ " rmdir /S /Q "%USERPROFILE%\Documents\Œ»‹ào”[’ " >/dev/null 2>&1
+  if exist "%USERPROFILE%\Documents\Œ»‹ào”[’ " rmdir /S /Q "%USERPROFILE%\Documents\Œ»‹ào”[’ " >nul 2>&1
 )
 
 if exist "%TARGET_DIR%" (
