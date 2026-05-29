@@ -118,10 +118,10 @@ if defined BROWSER (
   REM 日本語パスは環境変数経由で PowerShell に渡す（コマンドライン直書きの文字化けを回避）
   set "SC_PATH=%SHORTCUT%"
   set "SC_TARGET=%BROWSER%"
-  set "SC_URL=file:///!APP_FILE_FWD!"
+  set "SC_APP_FILE=%APP_FILE%"
   set "SC_WORKDIR=%TARGET_DIR%"
   set "SC_ICON=%ICON_FILE%"
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell; $sc=$ws.CreateShortcut($env:SC_PATH); $sc.TargetPath=$env:SC_TARGET; $sc.Arguments='--app=' + [char]34 + $env:SC_URL + [char]34; $sc.WorkingDirectory=$env:SC_WORKDIR; if (Test-Path $env:SC_ICON) { $sc.IconLocation=$env:SC_ICON + ',0' } else { $sc.IconLocation=$env:SC_TARGET + ',0' }; $sc.Save()" >nul 2>&1
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell; $sc=$ws.CreateShortcut($env:SC_PATH); $sc.TargetPath=$env:SC_TARGET; $u=([uri]('file:///' + ($env:SC_APP_FILE -replace '\\','/'))).AbsoluteUri; $sc.Arguments='--app=' + [char]34 + $u + [char]34; $sc.WorkingDirectory=$env:SC_WORKDIR; if (Test-Path $env:SC_ICON) { $sc.IconLocation=$env:SC_ICON + ',0' } else { $sc.IconLocation=$env:SC_TARGET + ',0' }; $sc.Save()" >nul 2>&1
   if exist "%SHORTCUT%" (
     echo  [OK] デスクトップに「現金出納帳」アイコンを作成しました
     echo       （!BROWSER_NAME! のアプリ専用ウィンドウで起動します）
@@ -160,7 +160,7 @@ choice /M "今すぐ起動しますか" /C YN /N
 if errorlevel 2 goto :end
 
 if "!LAUNCH_MODE!"=="APP" (
-  start "" "%BROWSER%" --app="file:///!APP_FILE_FWD!"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$u=([uri]('file:///' + ($env:APP_FILE -replace '\\','/'))).AbsoluteUri; Start-Process -FilePath $env:BROWSER -ArgumentList ('--app=' + [char]34 + $u + [char]34)"
 ) else (
   start "" "%APP_FILE%"
 )
