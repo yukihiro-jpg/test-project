@@ -4,12 +4,19 @@ setlocal EnableDelayedExpansion
 
 title 現金出納帳・仮払管理システム インストーラー
 
-set "TARGET_DIR=%USERPROFILE%\Documents\現金出納帳"
+REM ----- 実 Desktop / Documents の取得（OneDrive 等のフォルダリダイレクトに対応） -----
+set "DESKTOP="
+set "DOCUMENTS="
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('Desktop')"`) do set "DESKTOP=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('MyDocuments')"`) do set "DOCUMENTS=%%A"
+if not defined DESKTOP set "DESKTOP=%USERPROFILE%\Desktop"
+if not defined DOCUMENTS set "DOCUMENTS=%USERPROFILE%\Documents"
+
+set "TARGET_DIR=%DOCUMENTS%\現金出納帳"
 set "APP_FILE=%TARGET_DIR%\index.html"
 set "ICON_FILE=%TARGET_DIR%\app.ico"
 set "SOURCE=%~dp0index.html"
 set "ICON_SOURCE=%~dp0app.ico"
-set "DESKTOP=%USERPROFILE%\Desktop"
 set "SHORTCUT=%DESKTOP%\現金出納帳.lnk"
 set "URL_SHORTCUT=%DESKTOP%\現金出納帳.url"
 
@@ -24,8 +31,8 @@ echo  このインストーラーは次のことを行います:
 echo.
 echo    1. アプリ本体を以下のフォルダにコピーします
 echo       %TARGET_DIR%
-echo    2. デスクトップに起動アイコンを作成します
-echo       （ブラウザのタブではなく、アプリ専用ウィンドウで開きます）
+echo    2. 以下のデスクトップに起動アイコンを作成します
+echo       %DESKTOP%
 echo.
 echo  ※ ネットワーク通信は一切行いません
 echo  ※ すべてのデータはご利用のパソコン内に保存されます
@@ -97,6 +104,12 @@ REM 既存ショートカットがあれば削除（再インストール時の重複防止）
 if exist "%SHORTCUT%" del /F /Q "%SHORTCUT%" >/dev/null 2>&1
 if exist "%URL_SHORTCUT%" del /F /Q "%URL_SHORTCUT%" >/dev/null 2>&1
 
+REM 旧バージョンが %USERPROFILE%\Desktop に作っていた残骸も掃除
+if /I not "%DESKTOP%"=="%USERPROFILE%\Desktop" (
+  if exist "%USERPROFILE%\Desktop\現金出納帳.lnk" del /F /Q "%USERPROFILE%\Desktop\現金出納帳.lnk" >/dev/null 2>&1
+  if exist "%USERPROFILE%\Desktop\現金出納帳.url" del /F /Q "%USERPROFILE%\Desktop\現金出納帳.url" >/dev/null 2>&1
+)
+
 REM file:// URL 用にバックスラッシュをスラッシュへ変換
 set "APP_FILE_FWD=!APP_FILE:\=/!"
 
@@ -112,6 +125,7 @@ if defined BROWSER (
   if exist "%SHORTCUT%" (
     echo  [OK] デスクトップに「現金出納帳」アイコンを作成しました
     echo       （!BROWSER_NAME! のアプリ専用ウィンドウで起動します）
+    echo       場所: %SHORTCUT%
     set "LAUNCH_MODE=APP"
   ) else (
     echo  [警告] アプリ専用ウィンドウのアイコン作成に失敗しました。
@@ -128,10 +142,10 @@ if defined BROWSER (
   set "LAUNCH_MODE=URL"
 )
 
-echo.
-REM アイコンキャッシュを更新して新しいアイコンを即反映
-ie4uinit.exe -show >/dev/null 2>&1
+REM アイコンキャッシュ更新（存在する場合のみ実行）
+where ie4uinit.exe >/dev/null 2>&1 && ie4uinit.exe -show >/dev/null 2>&1
 
+echo.
 echo ============================================================
 echo    インストール完了！
 echo ============================================================
