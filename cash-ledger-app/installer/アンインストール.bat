@@ -1,12 +1,18 @@
 @echo off
-chcp 932 >nul 2>&1
+chcp 932 >/dev/null 2>&1
 setlocal EnableDelayedExpansion
 
 title 現金出納帳 アンインストーラー
 
-set "APP_NAME=現金出納帳"
-set "TARGET_DIR=%USERPROFILE%\Documents\現金出納帳"
-set "DESKTOP=%USERPROFILE%\Desktop"
+REM 実 Desktop / Documents の取得
+set "DESKTOP="
+set "DOCUMENTS="
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('Desktop')"`) do set "DESKTOP=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('MyDocuments')"`) do set "DOCUMENTS=%%A"
+if not defined DESKTOP set "DESKTOP=%USERPROFILE%\Desktop"
+if not defined DOCUMENTS set "DOCUMENTS=%USERPROFILE%\Documents"
+
+set "TARGET_DIR=%DOCUMENTS%\現金出納帳"
 set "SHORTCUT=%DESKTOP%\現金出納帳.lnk"
 set "URL_SHORTCUT=%DESKTOP%\現金出納帳.url"
 
@@ -46,6 +52,17 @@ if exist "%SHORTCUT%" (
 if exist "%URL_SHORTCUT%" (
   del /F /Q "%URL_SHORTCUT%"
   echo  [OK] デスクトップのショートカットを削除しました
+)
+
+REM 旧バージョン（%USERPROFILE%\Desktop に作っていたもの）も掃除
+if /I not "%DESKTOP%"=="%USERPROFILE%\Desktop" (
+  if exist "%USERPROFILE%\Desktop\現金出納帳.lnk" del /F /Q "%USERPROFILE%\Desktop\現金出納帳.lnk" >/dev/null 2>&1
+  if exist "%USERPROFILE%\Desktop\現金出納帳.url" del /F /Q "%USERPROFILE%\Desktop\現金出納帳.url" >/dev/null 2>&1
+)
+
+REM 旧バージョン（%USERPROFILE%\Documents に置いていたもの）も掃除
+if /I not "%DOCUMENTS%"=="%USERPROFILE%\Documents" (
+  if exist "%USERPROFILE%\Documents\現金出納帳" rmdir /S /Q "%USERPROFILE%\Documents\現金出納帳" >/dev/null 2>&1
 )
 
 if exist "%TARGET_DIR%" (
