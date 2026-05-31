@@ -825,19 +825,22 @@ function processClientEmailAttachments() {
       const valid = attachments.filter(a => a.getSize() > 0 && a.getName());
       if (valid.length === 0) continue;
 
-      const targetFolder = getTargetFolder_(parentFolder, mapping.clientName, mapping.kbn);
-      if (!targetFolder) {
-        console.warn(`保存先フォルダが見つかりません: ${mapping.clientName} (${mapping.kbn})`);
+      // 新仕様: メール添付資料/YYYY年MM月DD日受信分/ に保存（同期対象外、手元のみ）
+      const clientFolder = findClientFolder_(parentFolder, mapping.clientName);
+      if (!clientFolder) {
+        console.warn(`顧問先フォルダが見つかりません: ${mapping.clientName}`);
         threadError = true;
         continue;
       }
+      const receivedDate = message.getDate() || new Date();
+      const targetFolder = getOrCreateEmailAttachmentDateFolder_(clientFolder, receivedDate);
 
       for (const attachment of valid) {
         const saveName = resolveAvailableFileName_(targetFolder, attachment.getName());
         const blob = attachment.copyBlob().setName(saveName);
         targetFolder.createFile(blob);
         savedFiles++;
-        console.log(`保存: ${mapping.clientName} (${mapping.kbn}) ← ${saveName}`);
+        console.log(`保存: ${mapping.clientName} (${formatDateJa_(receivedDate)}受信分) ← ${saveName}`);
       }
     }
 
@@ -910,6 +913,22 @@ function getParentFolder_() {
     console.error('CONFIG.ROOT_FOLDER_ID のフォルダにアクセスできません: ' + e.message);
     return null;
   }
+}
+
+// 顧問先名（数字プレフィックスの有無を考慮）から、該当の顧問先フォルダを返す
+function findClientFolder_(parentFolder, clientName) {
+  const displayName = clientName.replace(/^\d+_/, '');
+  const subfolders = parentFolder.getFolders();
+  while (subfolders.hasNext()) {
+    const folder = subfolders.next();
+    const folderName = folder.getName();
+    if (folderName === clientName ||
+        folderName === displayName ||
+        folderName.replace(/^\d+_/, '') === displayName) {
+      return folder;
+    }
+  }
+  return null;
 }
 
 function getTargetFolder_(parentFolder, clientName, kbn) {
