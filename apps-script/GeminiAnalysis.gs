@@ -359,14 +359,29 @@ function getOrCreateClientAnalysisSheet(clientName) {
   const rootFolder = DriveApp.getFolderById(CONFIG.ROOT_FOLDER_ID);
   const clientFolder = getOrCreateFolder(rootFolder, clientName);
   const sheetName = `${clientName}_解析結果`;
-  const files = clientFolder.getFilesByName(sheetName);
 
-  if (files.hasNext()) {
-    return SpreadsheetApp.open(files.next());
+  // 新仕様: 解析データ/スマホ撮影/ を優先して探す
+  let analysisRoot = clientFolder.getFoldersByName('解析データ');
+  const arFolder = analysisRoot.hasNext() ? analysisRoot.next() : clientFolder.createFolder('解析データ');
+  let smartphone = arFolder.getFoldersByName('スマホ撮影');
+  const sFolder = smartphone.hasNext() ? smartphone.next() : arFolder.createFolder('スマホ撮影');
+
+  const inSmartphone = sFolder.getFilesByName(sheetName);
+  if (inSmartphone.hasNext()) {
+    return SpreadsheetApp.open(inSmartphone.next());
   }
 
-  // 新規作成
+  // 旧仕様: 顧問先フォルダ直下にあれば、スマホ撮影フォルダへ移動して返す
+  const filesAtRoot = clientFolder.getFilesByName(sheetName);
+  if (filesAtRoot.hasNext()) {
+    const f = filesAtRoot.next();
+    try { f.moveTo(sFolder); } catch (e) {}
+    return SpreadsheetApp.open(f);
+  }
+
+  // 新規作成（解析データ/スマホ撮影/ 内に）
   const ss = SpreadsheetApp.create(sheetName);
+  try { DriveApp.getFileById(ss.getId()).moveTo(sFolder); } catch (e) {}
 
   // シート1: レシート・領収書
   const receiptSheet = ss.getActiveSheet();

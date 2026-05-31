@@ -299,13 +299,45 @@ function saveCashEntry(data) {
  */
 function getOrCreateClientAnalysisSheet_Code(clientName, clientFolder) {
   const sheetName = `${clientName}_解析結果`;
-  const files = clientFolder.getFilesByName(sheetName);
 
-  if (files.hasNext()) {
-    return SpreadsheetApp.open(files.next());
+  // 新仕様: まず 解析データ/スマホ撮影/ を探す
+  const analysisRoot = clientFolder.getFoldersByName('解析データ');
+  if (analysisRoot.hasNext()) {
+    const ar = analysisRoot.next();
+    const smartphoneFolder = ar.getFoldersByName('スマホ撮影');
+    if (smartphoneFolder.hasNext()) {
+      const sf = smartphoneFolder.next();
+      const fs = sf.getFilesByName(sheetName);
+      if (fs.hasNext()) {
+        return SpreadsheetApp.open(fs.next());
+      }
+    }
   }
 
+  // 旧仕様: 顧問先フォルダ直下にあれば、スマホ撮影フォルダへ移動して返す
+  const filesAtRoot = clientFolder.getFilesByName(sheetName);
+  if (filesAtRoot.hasNext()) {
+    const f = filesAtRoot.next();
+    try {
+      // 解析データ/スマホ撮影/ を取得or作成して移動
+      let ar2 = clientFolder.getFoldersByName('解析データ');
+      const arFolder = ar2.hasNext() ? ar2.next() : clientFolder.createFolder('解析データ');
+      let sf2 = arFolder.getFoldersByName('スマホ撮影');
+      const sFolder = sf2.hasNext() ? sf2.next() : arFolder.createFolder('スマホ撮影');
+      f.moveTo(sFolder);
+    } catch (e) { /* 移動失敗時はそのまま使用 */ }
+    return SpreadsheetApp.open(f);
+  }
+
+  // 新規作成（解析データ/スマホ撮影/ 内に）
   const ss = SpreadsheetApp.create(sheetName);
+  try {
+    let ar3 = clientFolder.getFoldersByName('解析データ');
+    const arFolder = ar3.hasNext() ? ar3.next() : clientFolder.createFolder('解析データ');
+    let sf3 = arFolder.getFoldersByName('スマホ撮影');
+    const sFolder = sf3.hasNext() ? sf3.next() : arFolder.createFolder('スマホ撮影');
+    DriveApp.getFileById(ss.getId()).moveTo(sFolder);
+  } catch (e) { /* 移動失敗時はそのまま */ }
 
   const receiptSheet = ss.getActiveSheet();
   receiptSheet.setName('レシート・領収書');
