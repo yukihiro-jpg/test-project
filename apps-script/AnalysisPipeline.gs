@@ -672,6 +672,295 @@ function saveAnalysisSummary_(results) {
 
 
 // ============================================================
+// 統合通知メール（案C: 到着＋解析完了を1通にまとめる）
+// ============================================================
+
+/**
+ * 全顧問先のスキャン+解析+通知を1回の実行で行う統合関数
+ * 10分ごとのトリガーで呼ばれる
+ *
+ * 流れ:
+ *  1) メール添付の保存（processClientEmailAttachments）
+ *  2) メール添付の解析（analyzeEmailAttachments）
+ *  3) ファイル同期の解析（analyzeSyncedFilesV2）
+ *  4) ファイル同期の新着検知（既存のnotifyClientSyncUploads は使わず、ここで統合）
+ *  5) 統合通知メールを送信（新着があれば）
+ */
+function runUnifiedPipeline() {
+  console.log('=== 統合パイプライン開始 ===');
+
+  const summary = {
+    analyzed: [],        // 解析完了したファイル
+    copied: [],          // コピーのみのファイル（Excel等）
+    review: [],          // 要確認のファイル
+    errors: [],          // エラー
+    syncUploads: [],     // 同期で新着のファイル（解析対象外も含む）
+  };
+
+  // 1) メール添付の保存
+  try {
+    processClientEmailAttachments();
+  } catch (e) {
+    console.error('processClientEmailAttachments エラー:', e);
+    summary.errors.push({ phase: 'email_intake', message: e.message });
+  }
+
+  // 2) メール添付の解析
+  try {
+    const r = analyzeEmailAttachments();
+    classifyResults_(r, summary);
+  } catch (e) {
+    console.error('analyzeEmailAttachments エラー:', e);
+    summary.errors.push({ phase: 'email_analysis', message: e.message });
+  }
+
+  // 3) ファイル同期の解析
+  try {
+    const r = analyzeSyncedFilesV2();
+    classifyResults_(r, summary);
+  } catch (e) {
+    console.error('analyzeSyncedFilesV2 エラー:', e);
+    summary.errors.push({ phase: 'sync_analysis', message: e.message });
+  }
+
+  // 4) ファイル同期の新着検知（_sync_logs 経由、既存の仕組み流用）
+  try {
+    summary.syncUploads = collectRecentSyncUploads_();
+  } catch (e) {
+    console.error('collectRecentSyncUploads_ エラー:', e);
+  }
+
+  // 5) 統合通知メールを送信
+  const hasNew = summary.analyzed.length > 0
+              || summary.copied.length > 0
+              || summary.review.length > 0
+              || summary.syncUploads.length > 0;
+  if (hasNew) {
+    try {
+      sendUnifiedNotification_(summary);
+    } catch (e) {
+      console.error('sendUnifiedNotification_ エラー:', e);
+    }
+  } else {
+    console.log('新着なし、通知メールは送信しません');
+  }
+
+  console.log('=== 統合パイプライン完了 ===');
+  return summary;
+}
+
+function classifyResults_(results, summary) {
+  if (!results || results.length === 0) return;
+  results.forEach(r => {
+    if (r.action === 'analyzed') summary.analyzed.push(r);
+    else if (r.action === 'copied') summary.copied.push(r);
+    else if (r.action === 'review') summary.review.push(r);
+    else if (r.action === 'error') summary.errors.push(r);
+  });
+}
+
+/**
+ * _sync_logs を巡回して、前回チェック以降の同期アップロードを収集
+ * （既存の notifyClientSyncUploads と同じロジック）
+ */
+function collectRecentSyncUploads_() {
+  const parentFolder = getParentFolder_();
+  if (!parentFolder) return [];
+
+  const props = PropertiesService.getScriptProperties();
+  const lastCheckIso = props.getProperty(SYNC_NOTIFY_CONFIG.PROPERTY_KEY);
+  const lastCheck = lastCheckIso ? new Date(lastCheckIso) : new Date(Date.now() - 15 * 60 * 1000);
+  const now = new Date();
+
+  const allUploads = [];
+  let logsScanned = 0;
+
+  const clientFolders = parentFolder.getFolders();
+  while (clientFolders.hasNext() && logsScanned < SYNC_NOTIFY_CONFIG.MAX_LOGS_PER_RUN) {
+    const clientFolder = clientFolders.next();
+    const logsFolders = clientFolder.getFoldersByName(SYNC_NOTIFY_CONFIG.LOGS_FOLDER_NAME);
+    if (!logsFolders.hasNext()) continue;
+    const logsFolder = logsFolders.next();
+
+    const logFiles = logsFolder.getFiles();
+    while (logFiles.hasNext() && logsScanned < SYNC_NOTIFY_CONFIG.MAX_LOGS_PER_RUN) {
+      const logFile = logFiles.next();
+      const updated = logFile.getLastUpdated();
+      if (updated <= lastCheck) continue;
+      logsScanned++;
+
+      try {
+        let content = logFile.getBlob().getDataAsString('UTF-8');
+        if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+        const data = JSON.parse(content);
+        if (!data.operations || !Array.isArray(data.operations)) continue;
+
+        data.operations.forEach(op => {
+          if (op.operation === 'upload' || op.operation === 'update_upload') {
+            allUploads.push({
+              clientName: data.client_name || op.client_name || '(不明)',
+              deviceName: data.device_name || op.device_name || '',
+              filePath: op.file_path || '(ファイル名不明)',
+              sizeBytes: Number(op.size_bytes) || 0,
+              operation: op.operation,
+            });
+          }
+        });
+      } catch (e) {
+        console.error(`ログ解析エラー: ${logFile.getName()} - ${e}`);
+      }
+    }
+  }
+
+  props.setProperty(SYNC_NOTIFY_CONFIG.PROPERTY_KEY, now.toISOString());
+  return allUploads;
+}
+
+/**
+ * 統合通知メールを送信
+ */
+function sendUnifiedNotification_(summary) {
+  const nowStr = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
+  const totalAnalyzed = summary.analyzed.length;
+  const totalCopied = summary.copied.length;
+  const totalReview = summary.review.length;
+  const totalSyncUploads = summary.syncUploads.length;
+
+  // 件名
+  const subject = `【新着処理完了】解析${totalAnalyzed}件 / コピー${totalCopied}件 / 要確認${totalReview}件 - ${nowStr}`;
+
+  // HTML本文
+  let html = `
+<div style="font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif; max-width: 700px;">
+  <h2 style="color: #1a73e8; border-bottom: 2px solid #1a73e8; padding-bottom: 8px;">
+    新着処理サマリー
+  </h2>
+  <p style="color: #666;">
+    ${nowStr} 時点での処理結果です。
+  </p>
+  <div style="background: #e8f0fe; padding: 12px; border-radius: 6px; margin: 16px 0;">
+    <strong>📊 件数</strong><br>
+    自動解析完了: ${totalAnalyzed} 件 ／ コピーのみ: ${totalCopied} 件 ／
+    要確認: ${totalReview} 件 ／ 同期新着: ${totalSyncUploads} 件
+  </div>
+`;
+
+  // 自動解析完了
+  if (totalAnalyzed > 0) {
+    html += renderSection_('🤖 自動解析完了', summary.analyzed, true);
+  }
+
+  // コピーのみ（Excel等）
+  if (totalCopied > 0) {
+    html += renderSection_('📋 コピーのみ（Excel等）', summary.copied, false);
+  }
+
+  // 要確認
+  if (totalReview > 0) {
+    html += `
+<div style="background: #fff3e0; border-radius: 8px; padding: 16px; margin: 16px 0; border-left: 4px solid #f57c00;">
+  <h3 style="margin: 0 0 12px 0; color: #e65100;">⚠️ 要確認（${totalReview}件）</h3>
+  <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
+    信頼度低・分類不能のため、人の目でチェックしてください。
+    <a href="${getLogSheetUrl_()}" style="color: #1a73e8;">要確認シートを開く →</a>
+  </p>
+  <ul style="margin: 0; padding-left: 20px;">
+`;
+    summary.review.forEach(r => {
+      html += `<li style="font-size: 13px; margin: 4px 0;">[${escapeHtml_(r.docType || '不明')}] ${escapeHtml_(r.fileName)} <small>(${escapeHtml_(r.clientName || '')}, ${escapeHtml_(r.route || '')})</small></li>`;
+    });
+    html += '</ul></div>';
+  }
+
+  // 同期新着（解析対象外も含めて全部報告）
+  if (totalSyncUploads > 0) {
+    html += '<div style="background: #f1f8e9; border-radius: 8px; padding: 16px; margin: 16px 0;">';
+    html += `<h3 style="margin: 0 0 12px 0; color: #33691e;">📦 ファイル同期 新着 (${totalSyncUploads}件)</h3>`;
+    const grouped = groupBy_(summary.syncUploads, u => `${u.clientName}（${u.deviceName}）`);
+    Object.keys(grouped).sort().forEach(key => {
+      const items = grouped[key];
+      html += `<p style="font-size: 14px; margin: 8px 0 4px 0;"><strong>${escapeHtml_(key)}</strong></p><ul style="margin: 0; padding-left: 20px;">`;
+      items.forEach(u => {
+        const sizeKb = u.sizeBytes > 0 ? Math.round(u.sizeBytes / 1024) : 0;
+        const tag = u.operation === 'update_upload' ? '更新' : '新規';
+        const sizeText = sizeKb > 0 ? ` (${sizeKb} KB)` : '';
+        html += `<li style="font-size: 13px; margin: 2px 0;">[${tag}] ${escapeHtml_(u.filePath)}${sizeText}</li>`;
+      });
+      html += '</ul>';
+    });
+    html += '</div>';
+  }
+
+  // エラー
+  if (summary.errors.length > 0) {
+    html += '<div style="background: #ffebee; border-radius: 8px; padding: 16px; margin: 16px 0; border-left: 4px solid #c62828;">';
+    html += `<h3 style="margin: 0 0 12px 0; color: #b71c1c;">❌ エラー (${summary.errors.length}件)</h3><ul>`;
+    summary.errors.forEach(e => {
+      html += `<li style="font-size: 13px;">${escapeHtml_(e.phase || '')}: ${escapeHtml_(e.message || e.error || '')}</li>`;
+    });
+    html += '</ul></div>';
+  }
+
+  html += `
+  <p style="color: #999; font-size: 12px; margin-top: 20px;">
+    このメールは10分ごとに、新着があった時のみ送信されます。
+  </p>
+</div>
+`;
+
+  GmailApp.sendEmail(
+    CONFIG.NOTIFICATION_EMAIL,
+    subject,
+    `解析${totalAnalyzed}件 / コピー${totalCopied}件 / 要確認${totalReview}件 / 同期新着${totalSyncUploads}件`,
+    { htmlBody: html }
+  );
+  console.log(`統合通知メール送信: 解析${totalAnalyzed} / コピー${totalCopied} / 要確認${totalReview} / 同期${totalSyncUploads}`);
+}
+
+function renderSection_(title, items, withLink) {
+  const grouped = groupBy_(items, r => r.clientName || '(不明)');
+  let html = `<div style="background: #f8f9fa; border-radius: 8px; padding: 16px; margin: 16px 0;">
+  <h3 style="margin: 0 0 12px 0; color: #333;">${title}（${items.length}件）</h3>`;
+  Object.keys(grouped).sort().forEach(name => {
+    const subs = grouped[name];
+    html += `<p style="font-size: 14px; margin: 8px 0 4px 0;"><strong>${escapeHtml_(name)}</strong></p><ul style="margin: 0; padding-left: 20px;">`;
+    subs.forEach(r => {
+      const linkPart = (withLink && r.outputUrl)
+        ? ` <a href="${r.outputUrl}" style="color: #1a73e8; font-size: 12px;">解析結果を開く →</a>`
+        : '';
+      const tag = r.docType ? `[${escapeHtml_(r.docType)}]` : '';
+      const routeLabel = (r.route === 'sync') ? 'ファイル同期'
+                       : (r.route === 'email') ? 'メール添付'
+                       : (r.route === 'smartphone') ? 'スマホ撮影' : (r.route || '');
+      html += `<li style="font-size: 13px; margin: 2px 0;">${tag} ${escapeHtml_(r.fileName)} <small style="color: #888;">(${escapeHtml_(routeLabel)})</small>${linkPart}</li>`;
+    });
+    html += '</ul>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function groupBy_(items, keyFn) {
+  const out = {};
+  items.forEach(it => {
+    const k = keyFn(it);
+    if (!out[k]) out[k] = [];
+    out[k].push(it);
+  });
+  return out;
+}
+
+function getLogSheetUrl_() {
+  try {
+    const ss = getOrCreateLogSheet();
+    return ss.getUrl();
+  } catch (e) {
+    return '';
+  }
+}
+
+
+// ============================================================
 // テスト用
 // ============================================================
 
@@ -685,4 +974,8 @@ function testAnalyzeSyncedFilesV2() {
 
 function testAnalyzeEmailAttachments() {
   analyzeEmailAttachments();
+}
+
+function testRunUnifiedPipeline() {
+  runUnifiedPipeline();
 }

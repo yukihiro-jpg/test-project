@@ -1127,7 +1127,7 @@ function createTriggers() {
   const triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(trigger => ScriptApp.deleteTrigger(trigger));
 
-  // AM3:00 - Gemini API解析
+  // AM3:00 - スマホ撮影分のGemini解析（蓄積型・既存）
   ScriptApp.newTrigger('analyzeUploadedDocuments')
     .timeBased()
     .atHour(3)
@@ -1135,7 +1135,7 @@ function createTriggers() {
     .inTimezone('Asia/Tokyo')
     .create();
 
-  // AM6:00 - メール通知
+  // AM6:00 - 日次レポートメール（既存・スマホ撮影分のサマリー）
   ScriptApp.newTrigger('sendDailySummaryEmail')
     .timeBased()
     .atHour(6)
@@ -1143,23 +1143,16 @@ function createTriggers() {
     .inTimezone('Asia/Tokyo')
     .create();
 
-  // 10分ごと - 顧問先メール添付の自動保存
-  ScriptApp.newTrigger('processClientEmailAttachments')
-    .timeBased()
-    .everyMinutes(10)
-    .create();
-
-  // 10分ごと - ファイル同期 新規アップロード通知
-  ScriptApp.newTrigger('notifyClientSyncUploads')
+  // 10分ごと - 統合パイプライン（メール添付保存＋同期/メール添付解析＋統合通知）
+  ScriptApp.newTrigger('runUnifiedPipeline')
     .timeBased()
     .everyMinutes(10)
     .create();
 
   console.log('トリガー設定完了:');
-  console.log('  AM3:00 - Gemini API解析');
+  console.log('  AM3:00 - スマホ撮影分の Gemini 解析');
   console.log('  AM6:00 - 日次レポートメール');
-  console.log('  10分ごと - 顧問先メール添付の自動保存');
-  console.log('  10分ごと - ファイル同期 新規アップロード通知');
+  console.log('  10分ごと - 統合パイプライン (メール添付保存＋解析＋通知)');
 }
 
 // ============================================================
