@@ -38,38 +38,40 @@ export default function SlipPage() {
 
   const reiwaYear = year - 2018
 
+  // 報酬・料金（ホステス等）は納期特例の対象外で常に毎月納付
+  const effectivePeriod: Period = type === 'hoshu' ? 'monthly' : period
+
   const aggregated = useMemo(() => {
-    if (period === 'monthly') {
+    if (effectivePeriod === 'monthly') {
       return aggregateMonth(year, month, employees, payments, accountants)
     }
     return aggregateHalfYear(
       year,
-      period === 'first-half' ? 'first' : 'second',
+      effectivePeriod === 'first-half' ? 'first' : 'second',
       employees,
       payments,
       accountants,
     )
-  }, [period, year, month, employees, payments, accountants])
+  }, [effectivePeriod, year, month, employees, payments, accountants])
 
   // 期間情報（納付書「自〜至」表示用）
   const periodMonths = useMemo(() => {
-    if (period === 'monthly') return { from: month, to: undefined as number | undefined }
-    if (period === 'first-half') return { from: 1, to: 6 }
+    if (effectivePeriod === 'monthly') return { from: month, to: undefined as number | undefined }
+    if (effectivePeriod === 'first-half') return { from: 1, to: 6 }
     return { from: 7, to: 12 }
-  }, [period, month])
+  }, [effectivePeriod, month])
 
   const dueDateText = useMemo(() => {
     if (!payer) return ''
-    if (period === 'monthly') {
+    if (effectivePeriod === 'monthly') {
       const lastDay = new Date(year, month, 0)
       return formatJpDate(calcDueDate(lastDay, false))
     }
-    // 納期特例
-    if (period === 'first-half') {
+    if (effectivePeriod === 'first-half') {
       return formatJpDate(calcDueDate(new Date(year, 5, 15), true))
     }
     return formatJpDate(calcDueDate(new Date(year, 11, 15), true))
-  }, [period, year, month, payer])
+  }, [effectivePeriod, year, month, payer])
 
   if (!payer) return null
 
@@ -85,7 +87,14 @@ export default function SlipPage() {
       <PageTitle>納付書イメージ</PageTitle>
 
       <Card className="space-y-3">
-        {payer.noukiTokurei && (
+        <Field label="納付書種類">
+          <Select value={type} onChange={e => setType(e.target.value as SlipType)}>
+            <option value="kyuyo">給与所得・退職所得等（30203）</option>
+            <option value="hoshu">報酬・料金等（32319）</option>
+          </Select>
+        </Field>
+
+        {payer.noukiTokurei && type === 'kyuyo' && (
           <Field label="納付区分">
             <Select value={period} onChange={e => setPeriod(e.target.value as Period)}>
               <option value="monthly">月次納付（毎月）</option>
@@ -103,7 +112,7 @@ export default function SlipPage() {
               onChange={e => setYear(parseInt(e.target.value) || year)}
             />
           </Field>
-          {period === 'monthly' ? (
+          {effectivePeriod === 'monthly' ? (
             <Field label="月">
               <Select value={month} onChange={e => setMonth(parseInt(e.target.value))}>
                 {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
@@ -116,27 +125,26 @@ export default function SlipPage() {
           ) : (
             <Field label="対象期間">
               <div className="block w-full bg-gray-100 rounded-xl px-3.5 py-2.5 text-[16px] text-gray-700">
-                {period === 'first-half' ? '1月〜6月' : '7月〜12月'}
+                {effectivePeriod === 'first-half' ? '1月〜6月' : '7月〜12月'}
               </div>
             </Field>
           )}
         </div>
 
-        <Field label="納付書種類">
-          <Select value={type} onChange={e => setType(e.target.value as SlipType)}>
-            <option value="kyuyo">給与所得・退職所得等（30203）</option>
-            <option value="hoshu">報酬・料金等（32319）</option>
-          </Select>
-        </Field>
+        {payer.noukiTokurei && type === 'hoshu' && (
+          <p className="text-[12px] text-gray-500 leading-snug px-1">
+            ※ 報酬・料金等（ホステス等）は納期特例の対象外のため、納期特例設定中でも毎月納付になります。
+          </p>
+        )}
       </Card>
 
       <div className="mt-4 rounded-2xl bg-amber-50 ring-1 ring-amber-200/50 p-4">
         <div className="text-[13px] text-amber-700/80">納付期限</div>
         <div className="text-[18px] font-bold text-amber-900">{dueDateText}</div>
         <div className="text-[11px] text-amber-700/70 mt-0.5">
-          {period === 'monthly'
+          {effectivePeriod === 'monthly'
             ? '※ 原則（翌月10日）。土日は翌平日に繰下げ'
-            : period === 'first-half'
+            : effectivePeriod === 'first-half'
             ? '※ 納期特例 上半期：原則7月10日'
             : '※ 納期特例 下半期：原則翌年1月20日'}
         </div>
