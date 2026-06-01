@@ -60,6 +60,17 @@ export default function TaxHome() {
         />
       </GroupedList>
 
+      <div className="mt-3">
+        <GroupedList>
+          <ListLink
+            href="/tax/help"
+            icon={<span>❓</span>}
+            title="使い方ガイド"
+            description="初めての方はこちら。画面付きで手順を説明します。"
+          />
+        </GroupedList>
+      </div>
+
       <p className="text-[12px] text-gray-400 mt-6 leading-relaxed px-2">
         初回利用時は右上の設定から、納付者情報・従業員・税理士の登録を行ってください。
       </p>

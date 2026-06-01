@@ -6,6 +6,7 @@ export type Employee = {
   id: string
   name: string
   furigana: string
+  stageName: string // 源氏名（ホステス等の店内呼称）
   address: string
   birthday: string // YYYY-MM-DD
   memo: string
@@ -72,6 +73,7 @@ function normalize(parsed: unknown): Store {
     employees: (p.employees || []).map(e => ({
       ...e,
       furigana: e.furigana ?? '',
+      stageName: e.stageName ?? '',
       address: e.address ?? '',
       birthday: e.birthday ?? '',
       memo: e.memo ?? '',

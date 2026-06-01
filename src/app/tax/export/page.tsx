@@ -41,10 +41,11 @@ export default function ExportPage() {
 
   const empOf = (id: string) => employees.find(e => e.id === id)
   const nameOf = (id: string) => empOf(id)?.name || ''
+  const stageOf = (id: string) => empOf(id)?.stageName || ''
 
   const koyoCsv = useMemo(() => {
     const rows: (string | number)[][] = [
-      ['日付', '氏名', '区分', '支給額', '源泉所得税', '差引支給額'],
+      ['日付', '氏名', '源氏名（備考）', '区分', '支給額', '源泉所得税', '差引支給額'],
     ]
     payments
       .filter(p => {
@@ -55,14 +56,14 @@ export default function ExportPage() {
       .sort((a, b) => a.date.localeCompare(b.date))
       .forEach(p => {
         const tax = calcKoyoOtsuTax(p.amount)
-        rows.push([p.date, nameOf(p.employeeId), '乙欄', p.amount, tax, p.amount - tax])
+        rows.push([p.date, nameOf(p.employeeId), stageOf(p.employeeId), '乙欄', p.amount, tax, p.amount - tax])
       })
     return toCsv(rows)
   }, [payments, employees, year, month])
 
   // 1-b) 乙欄 月別集計（人別）
   const koyoMonthlyCsv = useMemo(() => {
-    const map = new Map<string, { name: string; days: number; gross: number; tax: number }>()
+    const map = new Map<string, { name: string; stage: string; days: number; gross: number; tax: number }>()
     payments
       .filter(p => {
         const dt = new Date(p.date + 'T00:00:00')
@@ -71,22 +72,30 @@ export default function ExportPage() {
       })
       .forEach(p => {
         const k = p.employeeId
-        const cur = map.get(k) || { name: nameOf(p.employeeId), days: 0, gross: 0, tax: 0 }
+        const cur = map.get(k) || {
+          name: nameOf(p.employeeId),
+          stage: stageOf(p.employeeId),
+          days: 0,
+          gross: 0,
+          tax: 0,
+        }
         cur.days += 1
         cur.gross += p.amount
         cur.tax += calcKoyoOtsuTax(p.amount)
         map.set(k, cur)
       })
     const rows: (string | number)[][] = [
-      ['年', '月', '氏名', '出勤日数', '支給額合計', '源泉所得税合計', '差引支給額合計'],
+      ['年', '月', '氏名', '源氏名（備考）', '出勤日数', '支給額合計', '源泉所得税合計', '差引支給額合計'],
     ]
-    map.forEach(v => rows.push([year, month, v.name, v.days, v.gross, v.tax, v.gross - v.tax]))
+    map.forEach(v =>
+      rows.push([year, month, v.name, v.stage, v.days, v.gross, v.tax, v.gross - v.tax]),
+    )
     return toCsv(rows)
   }, [payments, employees, year, month])
 
   const hostessCsv = useMemo(() => {
     const rows: (string | number)[][] = [
-      ['日付', '氏名', '支払額', '源泉所得税', '差引支払額'],
+      ['日付', '氏名', '源氏名（備考）', '支払額', '源泉所得税', '差引支払額'],
     ]
     payments
       .filter(p => {
@@ -97,13 +106,13 @@ export default function ExportPage() {
       .sort((a, b) => a.date.localeCompare(b.date))
       .forEach(p => {
         const tax = calcHostessDailyTax(p.amount)
-        rows.push([p.date, nameOf(p.employeeId), p.amount, tax, p.amount - tax])
+        rows.push([p.date, nameOf(p.employeeId), stageOf(p.employeeId), p.amount, tax, p.amount - tax])
       })
     return toCsv(rows)
   }, [payments, employees, year, month])
 
   const hostessMonthlyCsv = useMemo(() => {
-    const map = new Map<string, { name: string; days: number; gross: number; tax: number }>()
+    const map = new Map<string, { name: string; stage: string; days: number; gross: number; tax: number }>()
     payments
       .filter(p => {
         const dt = new Date(p.date + 'T00:00:00')
@@ -112,16 +121,24 @@ export default function ExportPage() {
       })
       .forEach(p => {
         const k = p.employeeId
-        const cur = map.get(k) || { name: nameOf(p.employeeId), days: 0, gross: 0, tax: 0 }
+        const cur = map.get(k) || {
+          name: nameOf(p.employeeId),
+          stage: stageOf(p.employeeId),
+          days: 0,
+          gross: 0,
+          tax: 0,
+        }
         cur.days += 1
         cur.gross += p.amount
         cur.tax += calcHostessDailyTax(p.amount)
         map.set(k, cur)
       })
     const rows: (string | number)[][] = [
-      ['年', '月', '氏名', '出勤日数', '支払額合計', '源泉所得税合計', '差引支払額合計'],
+      ['年', '月', '氏名', '源氏名（備考）', '出勤日数', '支払額合計', '源泉所得税合計', '差引支払額合計'],
     ]
-    map.forEach(v => rows.push([year, month, v.name, v.days, v.gross, v.tax, v.gross - v.tax]))
+    map.forEach(v =>
+      rows.push([year, month, v.name, v.stage, v.days, v.gross, v.tax, v.gross - v.tax]),
+    )
     return toCsv(rows)
   }, [payments, employees, year, month])
 

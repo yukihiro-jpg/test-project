@@ -100,7 +100,8 @@ export default function DailyPaymentPage() {
             <option value="">選択してください</option>
             {employees.map(e => (
               <option key={e.id} value={e.id}>
-                {e.name}（{e.kind === 'hostess' ? 'ホステス' : '乙欄'}）
+                {e.name}
+                {e.stageName ? `（${e.stageName}）` : ''} ／{e.kind === 'hostess' ? 'ホステス' : '乙欄'}
               </option>
             ))}
           </Select>
@@ -172,6 +173,11 @@ export default function DailyPaymentPage() {
                     <div className="flex-1 min-w-0">
                       <div className="text-[15px] font-semibold text-gray-900">
                         {nameOf(p.employeeId)}
+                        {emp?.stageName && (
+                          <span className="text-[13px] text-pink-600 ml-1.5 font-medium">
+                            （{emp.stageName}）
+                          </span>
+                        )}
                         <span className="text-[12px] text-gray-500 ml-1.5 font-normal">
                           {emp?.kind === 'hostess' ? 'ホステス' : '乙欄'}
                         </span>
@@ -210,14 +216,20 @@ export default function DailyPaymentPage() {
         </Card>
       ) : (
         <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] overflow-hidden divide-y divide-gray-100">
-          {recent.map(p => (
-            <div key={p.id} className="flex justify-between items-center px-4 py-2.5 text-[14px]">
-              <span className="text-gray-700">
-                {p.date}　{nameOf(p.employeeId)}
-              </span>
-              <span className="tabular-nums font-medium">{p.amount.toLocaleString()} 円</span>
-            </div>
-          ))}
+          {recent.map(p => {
+            const emp = empOf(p.employeeId)
+            return (
+              <div key={p.id} className="flex justify-between items-center px-4 py-2.5 text-[14px]">
+                <span className="text-gray-700">
+                  {p.date}　{nameOf(p.employeeId)}
+                  {emp?.stageName && (
+                    <span className="text-pink-600 ml-1">（{emp.stageName}）</span>
+                  )}
+                </span>
+                <span className="tabular-nums font-medium">{p.amount.toLocaleString()} 円</span>
+              </div>
+            )
+          })}
         </div>
       )}
     </PageContainer>

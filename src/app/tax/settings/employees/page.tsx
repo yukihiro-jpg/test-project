@@ -19,6 +19,7 @@ import {
 const blank = {
   name: '',
   furigana: '',
+  stageName: '',
   address: '',
   birthday: '',
   memo: '',
@@ -63,6 +64,7 @@ export default function EmployeesPage() {
     setForm({
       name: e.name,
       furigana: e.furigana,
+      stageName: e.stageName,
       address: e.address,
       birthday: e.birthday,
       memo: e.memo,
@@ -103,6 +105,13 @@ export default function EmployeesPage() {
             value={form.furigana}
             onChange={e => update('furigana', e.target.value)}
             placeholder="ヤマダ ハナコ"
+          />
+        </Field>
+        <Field label="源氏名" hint="店内呼称（任意）">
+          <TextInput
+            value={form.stageName}
+            onChange={e => update('stageName', e.target.value)}
+            placeholder="れな"
           />
         </Field>
         <Field label="住所">
@@ -153,12 +162,15 @@ export default function EmployeesPage() {
                 <div className="flex-1 min-w-0">
                   <div className="text-[16px] font-semibold text-gray-900">
                     {e.name}
-                    {e.furigana && (
-                      <span className="text-[12px] text-gray-500 ml-2 font-normal">
-                        {e.furigana}
+                    {e.stageName && (
+                      <span className="text-[14px] text-pink-600 ml-2 font-medium">
+                        源氏名：{e.stageName}
                       </span>
                     )}
                   </div>
+                  {e.furigana && (
+                    <div className="text-[12px] text-gray-500 mt-0.5">{e.furigana}</div>
+                  )}
                   <div className="text-[13px] text-gray-500 mt-0.5">
                     {e.kind === 'koyo_otsu' ? '一般従業員（乙欄）' : 'ホステス'}
                     {e.birthday && ` ・ ${e.birthday}`}
