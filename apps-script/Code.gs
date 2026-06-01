@@ -341,7 +341,7 @@ function getOrCreateClientAnalysisSheet_Code(clientName, clientFolder) {
 
   const receiptSheet = ss.getActiveSheet();
   receiptSheet.setName('レシート・領収書');
-  receiptSheet.appendRow(['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '支払総額', '主な品名', 'インボイス番号', '備考']);
+  receiptSheet.appendRow(['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '対象外金額', '支払総額', '主な品名', 'インボイス番号', '備考']);
   receiptSheet.setFrozenRows(1);
 
   const ccSheet = ss.insertSheet('クレジットカード利用明細書');

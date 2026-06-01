@@ -188,6 +188,7 @@ function buildPrompt(docType, bankName, clientSheet) {
 - "相手先名称": 店舗名・発行者名
 - "10%対象額": 消費税10%対象の税込金額（数値、該当なしは0）
 - "軽減8%対象額": 軽減税率8%対象の税込金額（数値、該当なしは0）
+- "対象外金額": 消費税が課されない非課税・不課税・免税の金額（数値、該当なしは0）。例: 商品券、印紙、切手、保険料、地代家賃、給与、行政手数料、海外取引等。
 - "支払総額": 支払い合計金額（数値）
 - "主な品名": そのレシート内で一番金額の大きい品目の名前
 - "インボイス番号": T+13桁の登録番号（見つからなければ空文字""）
@@ -386,7 +387,7 @@ function getOrCreateClientAnalysisSheet(clientName) {
   // シート1: レシート・領収書
   const receiptSheet = ss.getActiveSheet();
   receiptSheet.setName('レシート・領収書');
-  receiptSheet.appendRow(['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '支払総額', '主な品名', 'インボイス番号', '備考']);
+  receiptSheet.appendRow(['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '対象外金額', '支払総額', '主な品名', 'インボイス番号', '備考']);
   receiptSheet.setFrozenRows(1);
 
   // シート2: クレジットカード利用明細書
@@ -441,6 +442,7 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber
           row['相手先名称'] || '',
           row['10%対象額'] || 0,
           row['軽減8%対象額'] || 0,
+          row['対象外金額'] || 0,
           row['支払総額'] || 0,
           row['主な品名'] || '',
           row['インボイス番号'] || '',

@@ -979,3 +979,82 @@ function testAnalyzeEmailAttachments() {
 function testRunUnifiedPipeline() {
   runUnifiedPipeline();
 }
+
+// ============================================================
+// 既存スプレッドシート「レシート・領収書」タブに「対象外金額」列を追加
+// （既に追加済みのものはスキップ・安全に再実行可）
+// ============================================================
+function migrateReceiptTabAddTaxFreeColumn() {
+  const parentFolder = getParentFolder_();
+  if (!parentFolder) throw new Error('親フォルダが取得できません');
+
+  let processed = 0;
+  let updated = 0;
+  let alreadyDone = 0;
+
+  const clientFolders = parentFolder.getFolders();
+  while (clientFolders.hasNext()) {
+    const clientFolder = clientFolders.next();
+    const clientName = clientFolder.getName();
+    if (clientName.startsWith('_')) continue;
+
+    const sheetName = `${clientName}_解析結果`;
+    // 解析データ/スマホ撮影/ 内のスプレッドシートを優先
+    let ss = null;
+    const arFolders = clientFolder.getFoldersByName('解析データ');
+    if (arFolders.hasNext()) {
+      const ar = arFolders.next();
+      const sp = ar.getFoldersByName('スマホ撮影');
+      if (sp.hasNext()) {
+        const spFolder = sp.next();
+        const fs = spFolder.getFilesByName(sheetName);
+        if (fs.hasNext()) ss = SpreadsheetApp.open(fs.next());
+      }
+    }
+    // 旧仕様（顧問先フォルダ直下）も念のため確認
+    if (!ss) {
+      const fs2 = clientFolder.getFilesByName(sheetName);
+      if (fs2.hasNext()) ss = SpreadsheetApp.open(fs2.next());
+    }
+
+    if (!ss) {
+      // スプレッドシート未作成（スマホ撮影実績なし）
+      continue;
+    }
+    processed++;
+
+    const sheet = ss.getSheetByName('レシート・領収書');
+    if (!sheet) {
+      console.log(`  ${clientName}: レシート・領収書タブなし`);
+      continue;
+    }
+
+    // ヘッダ行を確認
+    const lastCol = sheet.getLastColumn();
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+
+    // 既に「対象外金額」列がある？
+    if (headers.indexOf('対象外金額') >= 0) {
+      alreadyDone++;
+      console.log(`  ${clientName}: 対象外金額列は既に存在`);
+      continue;
+    }
+
+    // 「支払総額」列の前に挿入する
+    const totalIdx = headers.indexOf('支払総額');
+    if (totalIdx < 0) {
+      console.warn(`  ${clientName}: 支払総額列が見つかりません`);
+      continue;
+    }
+
+    // 「支払総額」の位置（1始まり）に1列挿入
+    const insertAt = totalIdx + 1; // 0-indexed totalIdx → 1-indexed insertAt が「支払総額」の列
+    sheet.insertColumnBefore(insertAt);
+    sheet.getRange(1, insertAt).setValue('対象外金額');
+    // 既存データ行は空欄（0 ではなく空）にしておく
+    updated++;
+    console.log(`  ${clientName}: 対象外金額列を追加`);
+  }
+
+  console.log(`=== マイグレーション完了: ${processed}スプレッドシート確認 / ${updated}件追加 / ${alreadyDone}件既存 ===`);
+}
