@@ -60,6 +60,30 @@ export default function ExportPage() {
     return toCsv(rows)
   }, [payments, employees, year, month])
 
+  // 1-b) 乙欄 月別集計（人別）
+  const koyoMonthlyCsv = useMemo(() => {
+    const map = new Map<string, { name: string; days: number; gross: number; tax: number }>()
+    payments
+      .filter(p => {
+        const dt = new Date(p.date + 'T00:00:00')
+        const emp = empOf(p.employeeId)
+        return dt.getFullYear() === year && dt.getMonth() + 1 === month && emp?.kind === 'koyo_otsu'
+      })
+      .forEach(p => {
+        const k = p.employeeId
+        const cur = map.get(k) || { name: nameOf(p.employeeId), days: 0, gross: 0, tax: 0 }
+        cur.days += 1
+        cur.gross += p.amount
+        cur.tax += calcKoyoOtsuTax(p.amount)
+        map.set(k, cur)
+      })
+    const rows: (string | number)[][] = [
+      ['年', '月', '氏名', '出勤日数', '支給額合計', '源泉所得税合計', '差引支給額合計'],
+    ]
+    map.forEach(v => rows.push([year, month, v.name, v.days, v.gross, v.tax, v.gross - v.tax]))
+    return toCsv(rows)
+  }, [payments, employees, year, month])
+
   const hostessCsv = useMemo(() => {
     const rows: (string | number)[][] = [
       ['日付', '氏名', '支払額', '源泉所得税', '差引支払額'],
@@ -123,7 +147,8 @@ export default function ExportPage() {
 
   const ym = `${year}-${String(month).padStart(2, '0')}`
   const files = [
-    { name: `給与台帳_乙欄_${ym}.csv`, csv: koyoCsv },
+    { name: `給与台帳_乙欄_日別_${ym}.csv`, csv: koyoCsv },
+    { name: `給与台帳_乙欄_月別集計_${ym}.csv`, csv: koyoMonthlyCsv },
     { name: `ホステス支払台帳_日別_${ym}.csv`, csv: hostessCsv },
     { name: `ホステス支払台帳_月別集計_${ym}.csv`, csv: hostessMonthlyCsv },
     { name: `税理士台帳_${ym}.csv`, csv: zeirishiCsv },
