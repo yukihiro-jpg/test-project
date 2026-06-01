@@ -12,6 +12,9 @@ export type KyuyoSlipData = {
   payerNumber: string
   noukiYear: string
   noukiMonth: string
+  // 納期特例: 期間範囲。指定時は「自〜至」表示
+  noukiYearTo?: string
+  noukiMonthTo?: string
   address: string
   name: string
   phone: string
@@ -133,10 +136,25 @@ export default function SlipKyuyo({ data }: { data: KyuyoSlipData }) {
         <div>
           <div className="mb-1">
             <div className="text-[10px]">納期等の区分</div>
-            <div className="flex items-center gap-1">
-              <span>令和</span><D value={data.noukiYear} cols={2} />
-              <span>年</span><D value={data.noukiMonth} cols={2} /><span>月</span>
-            </div>
+            {data.noukiMonthTo ? (
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px]">自</span>
+                  <span>令和</span><D value={data.noukiYear} cols={2} />
+                  <span>年</span><D value={data.noukiMonth} cols={2} /><span>月</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px]">至</span>
+                  <span>令和</span><D value={data.noukiYearTo || data.noukiYear} cols={2} />
+                  <span>年</span><D value={data.noukiMonthTo} cols={2} /><span>月</span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span>令和</span><D value={data.noukiYear} cols={2} />
+                <span>年</span><D value={data.noukiMonth} cols={2} /><span>月</span>
+              </div>
+            )}
             <div className="text-[10px] mt-1">支払分源泉所得税及び復興特別所得税</div>
           </div>
           <div className="border border-gray-700">

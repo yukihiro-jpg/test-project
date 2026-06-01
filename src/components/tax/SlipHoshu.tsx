@@ -19,6 +19,8 @@ export type HoshuSlipData = {
   payerNumber: string // 13桁
   noukiYear: string // 納期等の区分 令和年（例: 8）
   noukiMonth: string // 月（例: 5）
+  noukiYearTo?: string // 納期特例の終了年
+  noukiMonthTo?: string // 納期特例の終了月
   address: string
   name: string
   phone: string
@@ -130,10 +132,25 @@ export default function SlipHoshu({ data }: { data: HoshuSlipData }) {
         <div>
           <div className="mb-1">
             <div className="text-[10px]">納期等の区分</div>
-            <div className="flex items-center gap-1">
-              <span>令和</span><Digits value={data.noukiYear} cols={2} />
-              <span>年</span><Digits value={data.noukiMonth} cols={2} /><span>月</span>
-            </div>
+            {data.noukiMonthTo ? (
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px]">自</span>
+                  <span>令和</span><Digits value={data.noukiYear} cols={2} />
+                  <span>年</span><Digits value={data.noukiMonth} cols={2} /><span>月</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px]">至</span>
+                  <span>令和</span><Digits value={data.noukiYearTo || data.noukiYear} cols={2} />
+                  <span>年</span><Digits value={data.noukiMonthTo} cols={2} /><span>月</span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span>令和</span><Digits value={data.noukiYear} cols={2} />
+                <span>年</span><Digits value={data.noukiMonth} cols={2} /><span>月</span>
+              </div>
+            )}
             <div className="text-[10px] mt-1">支払分源泉所得税及び復興特別所得税</div>
           </div>
           <div className="border border-gray-700">

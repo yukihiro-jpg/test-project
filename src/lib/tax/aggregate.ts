@@ -52,3 +52,52 @@ export function aggregateMonth(
 
   return result
 }
+
+// 納期特例の半期集計（1-6月 or 7-12月）
+export function aggregateHalfYear(
+  year: number,
+  half: 'first' | 'second',
+  employees: Employee[],
+  payments: DailyPayment[],
+  accountants: TaxAccountant[],
+): MonthlyAggregate {
+  const months = half === 'first' ? [1, 2, 3, 4, 5, 6] : [7, 8, 9, 10, 11, 12]
+  const sum: MonthlyAggregate = {
+    koyo: { people: 0, amount: 0, tax: 0 },
+    hostess: { people: 0, amount: 0, tax: 0 },
+    zeirishi: { people: 0, amount: 0, tax: 0 },
+  }
+  const koyoIds = new Set<string>()
+  const hostessIds = new Set<string>()
+  const zeirishiIds = new Set<string>()
+
+  months.forEach(m => {
+    const r = aggregateMonth(year, m, employees, payments, accountants)
+    sum.koyo.amount += r.koyo.amount
+    sum.koyo.tax += r.koyo.tax
+    sum.hostess.amount += r.hostess.amount
+    sum.hostess.tax += r.hostess.tax
+    sum.zeirishi.amount += r.zeirishi.amount
+    sum.zeirishi.tax += r.zeirishi.tax
+  })
+
+  // 実人員：半期中に支払のあった人の延べ重複を排除
+  payments.forEach(p => {
+    const dt = new Date(p.date + 'T00:00:00')
+    if (dt.getFullYear() !== year) return
+    if (!months.includes(dt.getMonth() + 1)) return
+    const emp = employees.find(e => e.id === p.employeeId)
+    if (!emp) return
+    if (emp.kind === 'hostess') hostessIds.add(emp.id)
+    else koyoIds.add(emp.id)
+  })
+  accountants.forEach(a => {
+    if (months.some(m => a.paymentMonths.includes(m))) zeirishiIds.add(a.id)
+  })
+
+  sum.koyo.people = koyoIds.size
+  sum.hostess.people = hostessIds.size
+  sum.zeirishi.people = zeirishiIds.size
+
+  return sum
+}

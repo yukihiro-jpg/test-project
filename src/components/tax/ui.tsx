@@ -116,7 +116,7 @@ export function Field({
 }
 
 const inputBase =
-  'w-full bg-gray-100 rounded-xl px-3.5 py-2.5 text-[16px] text-gray-900 placeholder:text-gray-400 border-0 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition'
+  'block w-full box-border bg-gray-100 rounded-xl px-3.5 py-2.5 text-[16px] text-gray-900 placeholder:text-gray-400 border-0 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition appearance-none [&::-webkit-date-and-time-value]:text-left'
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputBase} ${props.className || ''}`} />
