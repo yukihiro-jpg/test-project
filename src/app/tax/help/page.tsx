@@ -272,43 +272,41 @@ export default function HelpPage() {
 
       <Step num={7} title="税理士提出用ファイルをダウンロード">
         <p className="text-[14px] text-gray-700 leading-relaxed mb-3">
-          トップの <b>「CSV書き出し」</b> から、月を選んで <b>「税理士提出用ファイルをまとめてダウンロード」</b> をタップ。5つのCSVがZIPでまとまります。
+          トップの <b>「CSV書き出し」</b> から、<b>開始月〜終了月</b>を選んで <b>「税理士提出用ファイルをまとめてダウンロード」</b> をタップ。複数月を一度に出力できます（月ごとに別ファイル）。
         </p>
-        <PhoneFrame caption="CSV書き出し">
+        <PhoneFrame caption="CSV書き出し（範囲指定）">
           <div className="text-[11px] font-bold mb-2 text-gray-900">CSV書き出し</div>
           <MiniCard>
+            <div className="text-[7.5px] text-gray-500 mb-1">開始月</div>
+            <div className="grid grid-cols-2 gap-1">
+              <MiniInput label="年" value="2026" />
+              <MiniInput label="月" value="3月" />
+            </div>
+            <div className="text-[7.5px] text-gray-500 mb-1 mt-1.5">終了月</div>
             <div className="grid grid-cols-2 gap-1">
               <MiniInput label="年" value="2026" />
               <MiniInput label="月" value="5月" />
             </div>
           </MiniCard>
+          <div className="mt-2 rounded-md bg-blue-50 p-1.5 text-[8px] text-blue-900 leading-snug">
+            📦 出力対象: <b>3ヶ月分</b>（2026-03〜2026-05）<br />
+            ファイル数: <b>16個</b>
+          </div>
           <div className="mt-2 bg-blue-500 text-white text-[9px] text-center py-1.5 rounded-lg font-semibold leading-tight">
             税理士提出用ファイルを<br/>まとめてダウンロード
           </div>
           <div className="text-[7px] text-gray-400 mt-1">スマホでは共有メニューが開きます</div>
-          <div className="mt-2 text-[8px] font-semibold text-gray-500">個別ダウンロード</div>
-          <div className="bg-white rounded-md ring-1 ring-black/5 divide-y divide-gray-100 mt-1">
-            {[
-              '従業員台帳_2026-05.csv',
-              '給与台帳_乙欄_日別_2026-05.csv',
-              '給与台帳_乙欄_月別集計_2026-05.csv',
-              'ホステス支払台帳_日別_2026-05.csv',
-              'ホステス支払台帳_月別集計_2026-05.csv',
-              '税理士台帳_2026-05.csv',
-            ].map(n => (
-              <div key={n} className="flex justify-between items-center px-1.5 py-1 text-[7.5px]">
-                <span className="truncate text-gray-700">{n}</span>
-                <span className="text-blue-500 shrink-0 ml-1">DL</span>
-              </div>
-            ))}
-          </div>
         </PhoneFrame>
+        <Hint>
+          範囲指定すると、月ごとに別々のCSVファイルとしてZIPに格納されます（合算されません）。<br/>
+          <b>従業員台帳</b>は範囲内の最新月の状態が1ファイルだけ入ります。
+        </Hint>
         <Hint>
           スマホでタップすると「共有メニュー」が開きます。LINE・メール・<b>ファイル App</b>から選んで保存・送信できます。<br/>
           パソコンでは通常のダウンロードになります。
         </Hint>
         <Hint>
-          ZIPには<b>従業員台帳</b>を含む計6ファイルが入ります。CSVには<b className="text-pink-600">源氏名</b>と<b>税務署報告区分（対象/対象外）</b>の列が含まれます。
+          CSVには<b className="text-pink-600">源氏名</b>と<b>税務署報告区分（対象/対象外）</b>の列が含まれます。
         </Hint>
       </Step>
 
