@@ -11,6 +11,7 @@ import {
   PageContainer,
   PageTitle,
   PrimaryButton,
+  SecondaryButton,
   SectionLabel,
   Select,
   TextInput,
@@ -29,6 +30,7 @@ export default function DailyPaymentPage() {
   const [date, setDate] = useState(today)
   const [employeeId, setEmployeeId] = useState('')
   const [amount, setAmount] = useState('')
+  const [editId, setEditId] = useState<string | null>(null)
 
   useEffect(() => {
     load().then(s => {
@@ -42,13 +44,35 @@ export default function DailyPaymentPage() {
   const tax = calcTaxFor(selected, amountNum)
   const net = amountNum - tax
 
-  const add = async () => {
+  const reset = () => {
+    setDate(today)
+    setEmployeeId('')
+    setAmount('')
+    setEditId(null)
+  }
+
+  const submit = async () => {
     if (!employeeId || amountNum <= 0 || !date) return
     const s = await load()
-    s.dailyPayments.push({ id: uid(), employeeId, date, amount: amountNum })
+    if (editId) {
+      const idx = s.dailyPayments.findIndex(p => p.id === editId)
+      if (idx >= 0) {
+        s.dailyPayments[idx] = { ...s.dailyPayments[idx], employeeId, date, amount: amountNum }
+      }
+    } else {
+      s.dailyPayments.push({ id: uid(), employeeId, date, amount: amountNum })
+    }
     await save(s)
     setPayments(s.dailyPayments)
-    setAmount('')
+    reset()
+  }
+
+  const startEdit = (p: DailyPayment) => {
+    setEditId(p.id)
+    setDate(p.date)
+    setEmployeeId(p.employeeId)
+    setAmount(String(p.amount))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const del = async (id: string) => {
@@ -57,6 +81,7 @@ export default function DailyPaymentPage() {
     s.dailyPayments = s.dailyPayments.filter(p => p.id !== id)
     await save(s)
     setPayments(s.dailyPayments)
+    if (editId === id) reset()
   }
 
   const dayEntries = useMemo(
@@ -92,18 +117,28 @@ export default function DailyPaymentPage() {
       <PageTitle>毎日の給与・報酬の支払</PageTitle>
 
       <Card className="space-y-4">
+        {editId && (
+          <div className="rounded-xl bg-amber-50 ring-1 ring-amber-200/60 px-3 py-2 text-[13px] text-amber-900">
+            ✏️ 既存の記録を編集中です
+          </div>
+        )}
+
         <Field label="日付">
           <TextInput type="date" value={date} onChange={e => setDate(e.target.value)} />
         </Field>
         <Field label="対象者">
           <Select value={employeeId} onChange={e => setEmployeeId(e.target.value)}>
             <option value="">選択してください</option>
-            {employees.map(e => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-                {e.stageName ? `（${e.stageName}）` : ''} ／{e.kind === 'hostess' ? 'ホステス' : '乙欄'}
-              </option>
-            ))}
+            {employees.map(e => {
+              const label = e.stageName
+                ? `${e.name}（源氏名：${e.stageName}）／${e.kind === 'hostess' ? 'ホステス' : '乙欄'}`
+                : `${e.name}／${e.kind === 'hostess' ? 'ホステス' : '乙欄'}`
+              return (
+                <option key={e.id} value={e.id}>
+                  {label}
+                </option>
+              )
+            })}
           </Select>
         </Field>
         <Field label="本日の支払額（円）">
@@ -140,9 +175,16 @@ export default function DailyPaymentPage() {
           </div>
         )}
 
-        <PrimaryButton onClick={() => void add()} disabled={!employeeId || !amount}>
-          記録する
-        </PrimaryButton>
+        <div className="flex gap-2">
+          <PrimaryButton onClick={() => void submit()} disabled={!employeeId || !amount}>
+            {editId ? '更新する' : '記録する'}
+          </PrimaryButton>
+          {editId && (
+            <SecondaryButton onClick={reset} className="shrink-0">
+              キャンセル
+            </SecondaryButton>
+          )}
+        </div>
       </Card>
 
       {employees.length === 0 && (
@@ -167,8 +209,9 @@ export default function DailyPaymentPage() {
             {dayEntries.map(p => {
               const emp = empOf(p.employeeId)
               const t = calcTaxFor(emp, p.amount)
+              const isEditing = editId === p.id
               return (
-                <Card key={p.id}>
+                <Card key={p.id} className={isEditing ? 'ring-2 ring-blue-400' : ''}>
                   <div className="flex justify-between items-center gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="text-[15px] font-semibold text-gray-900">
@@ -187,12 +230,20 @@ export default function DailyPaymentPage() {
                         {(p.amount - t).toLocaleString()}
                       </div>
                     </div>
-                    <button
-                      onClick={() => void del(p.id)}
-                      className="text-[13px] text-red-500 active:text-red-700 px-2 py-1 shrink-0"
-                    >
-                      削除
-                    </button>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <button
+                        onClick={() => startEdit(p)}
+                        className="text-[13px] text-blue-500 active:text-blue-700 px-2 py-0.5"
+                      >
+                        編集
+                      </button>
+                      <button
+                        onClick={() => void del(p.id)}
+                        className="text-[13px] text-red-500 active:text-red-700 px-2 py-0.5"
+                      >
+                        削除
+                      </button>
+                    </div>
                   </div>
                 </Card>
               )
@@ -209,7 +260,7 @@ export default function DailyPaymentPage() {
         </>
       )}
 
-      <SectionLabel>最近の記録（直近30件）</SectionLabel>
+      <SectionLabel>最近の記録（直近30件・タップで編集）</SectionLabel>
       {recent.length === 0 ? (
         <Card>
           <p className="text-[14px] text-gray-500 text-center py-2">まだ記録がありません</p>
@@ -218,8 +269,15 @@ export default function DailyPaymentPage() {
         <div className="bg-white rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.04] overflow-hidden divide-y divide-gray-100">
           {recent.map(p => {
             const emp = empOf(p.employeeId)
+            const isEditing = editId === p.id
             return (
-              <div key={p.id} className="flex justify-between items-center px-4 py-2.5 text-[14px]">
+              <button
+                key={p.id}
+                onClick={() => startEdit(p)}
+                className={`w-full flex justify-between items-center px-4 py-2.5 text-[14px] text-left active:bg-gray-50 ${
+                  isEditing ? 'bg-blue-50' : ''
+                }`}
+              >
                 <span className="text-gray-700">
                   {p.date}　{nameOf(p.employeeId)}
                   {emp?.stageName && (
@@ -227,7 +285,7 @@ export default function DailyPaymentPage() {
                   )}
                 </span>
                 <span className="tabular-nums font-medium">{p.amount.toLocaleString()} 円</span>
-              </div>
+              </button>
             )
           })}
         </div>

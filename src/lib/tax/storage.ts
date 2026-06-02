@@ -11,6 +11,7 @@ export type Employee = {
   birthday: string // YYYY-MM-DD
   memo: string
   kind: EmployeeKind
+  reportable: boolean // CSV等で外部（税理士）へ報告してよいか
   createdAt: number
 }
 
@@ -77,6 +78,7 @@ function normalize(parsed: unknown): Store {
       address: e.address ?? '',
       birthday: e.birthday ?? '',
       memo: e.memo ?? '',
+      reportable: e.reportable ?? true,
     })),
     accountants: p.accountants || [],
     dailyPayments: p.dailyPayments || [],

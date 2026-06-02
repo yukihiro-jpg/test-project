@@ -14,6 +14,7 @@ import {
   SectionLabel,
   TextArea,
   TextInput,
+  Toggle,
 } from '@/components/tax/ui'
 
 const blank = {
@@ -24,6 +25,7 @@ const blank = {
   birthday: '',
   memo: '',
   kind: 'koyo_otsu' as EmployeeKind,
+  reportable: true,
 }
 
 export default function EmployeesPage() {
@@ -69,6 +71,7 @@ export default function EmployeesPage() {
       birthday: e.birthday,
       memo: e.memo,
       kind: e.kind,
+      reportable: e.reportable,
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -137,6 +140,16 @@ export default function EmployeesPage() {
             onChange={e => update('memo', e.target.value)}
           />
         </Field>
+        <div className="pt-2 border-t border-gray-100">
+          <Toggle
+            checked={form.reportable}
+            onChange={v => update('reportable', v)}
+            label="支払情報を税理士へ報告する"
+          />
+          <p className="text-[12px] text-gray-500 mt-1.5 leading-snug">
+            OFFにすると、この人の支払はCSV出力（税理士提出用ファイル）から除外されます。納付書の本税合計には含まれます。
+          </p>
+        </div>
         <div className="flex gap-2 pt-2">
           <PrimaryButton onClick={() => void submit()}>
             {editId ? '更新' : '追加'}
@@ -171,9 +184,16 @@ export default function EmployeesPage() {
                   {e.furigana && (
                     <div className="text-[12px] text-gray-500 mt-0.5">{e.furigana}</div>
                   )}
-                  <div className="text-[13px] text-gray-500 mt-0.5">
-                    {e.kind === 'koyo_otsu' ? '一般従業員（乙欄）' : 'ホステス'}
-                    {e.birthday && ` ・ ${e.birthday}`}
+                  <div className="text-[13px] text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    <span>
+                      {e.kind === 'koyo_otsu' ? '一般従業員（乙欄）' : 'ホステス'}
+                      {e.birthday && ` ・ ${e.birthday}`}
+                    </span>
+                    {!e.reportable && (
+                      <span className="inline-block bg-red-50 text-red-700 text-[11px] px-1.5 py-0.5 rounded-full ring-1 ring-red-200">
+                        報告不可
+                      </span>
+                    )}
                   </div>
                   {e.address && (
                     <div className="text-[13px] text-gray-500 mt-1 leading-snug">{e.address}</div>

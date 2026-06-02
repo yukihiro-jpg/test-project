@@ -51,7 +51,12 @@ export default function ExportPage() {
       .filter(p => {
         const dt = new Date(p.date + 'T00:00:00')
         const emp = empOf(p.employeeId)
-        return dt.getFullYear() === year && dt.getMonth() + 1 === month && emp?.kind === 'koyo_otsu'
+        return (
+          dt.getFullYear() === year &&
+          dt.getMonth() + 1 === month &&
+          emp?.kind === 'koyo_otsu' &&
+          emp?.reportable
+        )
       })
       .sort((a, b) => a.date.localeCompare(b.date))
       .forEach(p => {
@@ -68,7 +73,12 @@ export default function ExportPage() {
       .filter(p => {
         const dt = new Date(p.date + 'T00:00:00')
         const emp = empOf(p.employeeId)
-        return dt.getFullYear() === year && dt.getMonth() + 1 === month && emp?.kind === 'koyo_otsu'
+        return (
+          dt.getFullYear() === year &&
+          dt.getMonth() + 1 === month &&
+          emp?.kind === 'koyo_otsu' &&
+          emp?.reportable
+        )
       })
       .forEach(p => {
         const k = p.employeeId
@@ -101,7 +111,12 @@ export default function ExportPage() {
       .filter(p => {
         const dt = new Date(p.date + 'T00:00:00')
         const emp = empOf(p.employeeId)
-        return dt.getFullYear() === year && dt.getMonth() + 1 === month && emp?.kind === 'hostess'
+        return (
+          dt.getFullYear() === year &&
+          dt.getMonth() + 1 === month &&
+          emp?.kind === 'hostess' &&
+          emp?.reportable
+        )
       })
       .sort((a, b) => a.date.localeCompare(b.date))
       .forEach(p => {
@@ -117,7 +132,12 @@ export default function ExportPage() {
       .filter(p => {
         const dt = new Date(p.date + 'T00:00:00')
         const emp = empOf(p.employeeId)
-        return dt.getFullYear() === year && dt.getMonth() + 1 === month && emp?.kind === 'hostess'
+        return (
+          dt.getFullYear() === year &&
+          dt.getMonth() + 1 === month &&
+          emp?.kind === 'hostess' &&
+          emp?.reportable
+        )
       })
       .forEach(p => {
         const k = p.employeeId
@@ -161,6 +181,27 @@ export default function ExportPage() {
       })
     return toCsv(rows)
   }, [accountants, year, month])
+
+  // 報告不可で当月に支払があった人を抽出（通知表示用）
+  const excludedNames = useMemo(() => {
+    const ids = new Set<string>()
+    payments.forEach(p => {
+      const dt = new Date(p.date + 'T00:00:00')
+      const emp = empOf(p.employeeId)
+      if (
+        dt.getFullYear() === year &&
+        dt.getMonth() + 1 === month &&
+        emp &&
+        !emp.reportable
+      ) {
+        ids.add(emp.id)
+      }
+    })
+    return Array.from(ids).map(id => {
+      const e = empOf(id)
+      return e?.stageName ? `${e.name}（${e.stageName}）` : e?.name || ''
+    })
+  }, [payments, employees, year, month])
 
   const ym = `${year}-${String(month).padStart(2, '0')}`
   const files = [
@@ -218,6 +259,14 @@ export default function ExportPage() {
           </Select>
         </Field>
       </Card>
+
+      {excludedNames.length > 0 && (
+        <div className="mt-4 rounded-2xl bg-red-50 ring-1 ring-red-200/60 p-3 text-[13px] text-red-800 leading-relaxed">
+          ⚠️ <b>報告不可</b>に設定されている方の当月支払は、すべてのCSVから除外されます：
+          <br />
+          {excludedNames.join('、')}
+        </div>
+      )}
 
       <div className="mt-5">
         <PrimaryButton onClick={() => void downloadBundle()} disabled={bundling}>
