@@ -11,7 +11,7 @@ export type Employee = {
   birthday: string // YYYY-MM-DD
   memo: string
   kind: EmployeeKind
-  reportable: boolean // CSV等で外部（税理士）へ報告してよいか
+  reportable: boolean // 税務署への報告対象とするか（CSVには区分として常に含まれる）
   createdAt: number
 }
 

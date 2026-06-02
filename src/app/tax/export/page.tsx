@@ -9,7 +9,7 @@ import {
   calcZeirishiNet,
   calcZeirishiTax,
 } from '@/lib/tax/calc'
-import { csvBlob, downloadFile, toCsv } from '@/lib/tax/csv'
+import { csvBlob, downloadFile, shareFiles, toCsv } from '@/lib/tax/csv'
 import {
   BackLink,
   Card,
@@ -42,10 +42,12 @@ export default function ExportPage() {
   const empOf = (id: string) => employees.find(e => e.id === id)
   const nameOf = (id: string) => empOf(id)?.name || ''
   const stageOf = (id: string) => empOf(id)?.stageName || ''
+  const reportFlagOf = (id: string) => (empOf(id)?.reportable === false ? '対象外' : '対象')
 
+  // 1) 乙欄 日別
   const koyoCsv = useMemo(() => {
     const rows: (string | number)[][] = [
-      ['日付', '氏名', '源氏名（備考）', '区分', '支給額', '源泉所得税', '差引支給額'],
+      ['日付', '氏名', '源氏名（備考）', '区分', '支給額', '源泉所得税', '差引支給額', '税務署報告'],
     ]
     payments
       .filter(p => {
@@ -54,21 +56,32 @@ export default function ExportPage() {
         return (
           dt.getFullYear() === year &&
           dt.getMonth() + 1 === month &&
-          emp?.kind === 'koyo_otsu' &&
-          emp?.reportable
+          emp?.kind === 'koyo_otsu'
         )
       })
       .sort((a, b) => a.date.localeCompare(b.date))
       .forEach(p => {
         const tax = calcKoyoOtsuTax(p.amount)
-        rows.push([p.date, nameOf(p.employeeId), stageOf(p.employeeId), '乙欄', p.amount, tax, p.amount - tax])
+        rows.push([
+          p.date,
+          nameOf(p.employeeId),
+          stageOf(p.employeeId),
+          '乙欄',
+          p.amount,
+          tax,
+          p.amount - tax,
+          reportFlagOf(p.employeeId),
+        ])
       })
     return toCsv(rows)
   }, [payments, employees, year, month])
 
-  // 1-b) 乙欄 月別集計（人別）
+  // 1-b) 乙欄 月別集計
   const koyoMonthlyCsv = useMemo(() => {
-    const map = new Map<string, { name: string; stage: string; days: number; gross: number; tax: number }>()
+    const map = new Map<
+      string,
+      { name: string; stage: string; flag: string; days: number; gross: number; tax: number }
+    >()
     payments
       .filter(p => {
         const dt = new Date(p.date + 'T00:00:00')
@@ -76,8 +89,7 @@ export default function ExportPage() {
         return (
           dt.getFullYear() === year &&
           dt.getMonth() + 1 === month &&
-          emp?.kind === 'koyo_otsu' &&
-          emp?.reportable
+          emp?.kind === 'koyo_otsu'
         )
       })
       .forEach(p => {
@@ -85,6 +97,7 @@ export default function ExportPage() {
         const cur = map.get(k) || {
           name: nameOf(p.employeeId),
           stage: stageOf(p.employeeId),
+          flag: reportFlagOf(p.employeeId),
           days: 0,
           gross: 0,
           tax: 0,
@@ -95,17 +108,18 @@ export default function ExportPage() {
         map.set(k, cur)
       })
     const rows: (string | number)[][] = [
-      ['年', '月', '氏名', '源氏名（備考）', '出勤日数', '支給額合計', '源泉所得税合計', '差引支給額合計'],
+      ['年', '月', '氏名', '源氏名（備考）', '出勤日数', '支給額合計', '源泉所得税合計', '差引支給額合計', '税務署報告'],
     ]
     map.forEach(v =>
-      rows.push([year, month, v.name, v.stage, v.days, v.gross, v.tax, v.gross - v.tax]),
+      rows.push([year, month, v.name, v.stage, v.days, v.gross, v.tax, v.gross - v.tax, v.flag]),
     )
     return toCsv(rows)
   }, [payments, employees, year, month])
 
+  // 2) ホステス 日別
   const hostessCsv = useMemo(() => {
     const rows: (string | number)[][] = [
-      ['日付', '氏名', '源氏名（備考）', '支払額', '源泉所得税', '差引支払額'],
+      ['日付', '氏名', '源氏名（備考）', '支払額', '源泉所得税', '差引支払額', '税務署報告'],
     ]
     payments
       .filter(p => {
@@ -114,20 +128,31 @@ export default function ExportPage() {
         return (
           dt.getFullYear() === year &&
           dt.getMonth() + 1 === month &&
-          emp?.kind === 'hostess' &&
-          emp?.reportable
+          emp?.kind === 'hostess'
         )
       })
       .sort((a, b) => a.date.localeCompare(b.date))
       .forEach(p => {
         const tax = calcHostessDailyTax(p.amount)
-        rows.push([p.date, nameOf(p.employeeId), stageOf(p.employeeId), p.amount, tax, p.amount - tax])
+        rows.push([
+          p.date,
+          nameOf(p.employeeId),
+          stageOf(p.employeeId),
+          p.amount,
+          tax,
+          p.amount - tax,
+          reportFlagOf(p.employeeId),
+        ])
       })
     return toCsv(rows)
   }, [payments, employees, year, month])
 
+  // 2-b) ホステス 月別集計
   const hostessMonthlyCsv = useMemo(() => {
-    const map = new Map<string, { name: string; stage: string; days: number; gross: number; tax: number }>()
+    const map = new Map<
+      string,
+      { name: string; stage: string; flag: string; days: number; gross: number; tax: number }
+    >()
     payments
       .filter(p => {
         const dt = new Date(p.date + 'T00:00:00')
@@ -135,8 +160,7 @@ export default function ExportPage() {
         return (
           dt.getFullYear() === year &&
           dt.getMonth() + 1 === month &&
-          emp?.kind === 'hostess' &&
-          emp?.reportable
+          emp?.kind === 'hostess'
         )
       })
       .forEach(p => {
@@ -144,6 +168,7 @@ export default function ExportPage() {
         const cur = map.get(k) || {
           name: nameOf(p.employeeId),
           stage: stageOf(p.employeeId),
+          flag: reportFlagOf(p.employeeId),
           days: 0,
           gross: 0,
           tax: 0,
@@ -154,14 +179,15 @@ export default function ExportPage() {
         map.set(k, cur)
       })
     const rows: (string | number)[][] = [
-      ['年', '月', '氏名', '源氏名（備考）', '出勤日数', '支払額合計', '源泉所得税合計', '差引支払額合計'],
+      ['年', '月', '氏名', '源氏名（備考）', '出勤日数', '支払額合計', '源泉所得税合計', '差引支払額合計', '税務署報告'],
     ]
     map.forEach(v =>
-      rows.push([year, month, v.name, v.stage, v.days, v.gross, v.tax, v.gross - v.tax]),
+      rows.push([year, month, v.name, v.stage, v.days, v.gross, v.tax, v.gross - v.tax, v.flag]),
     )
     return toCsv(rows)
   }, [payments, employees, year, month])
 
+  // 3) 税理士台帳
   const zeirishiCsv = useMemo(() => {
     const rows: (string | number)[][] = [
       ['年', '月', '氏名', '税抜報酬額', '税込支払額', '源泉所得税', '差引支払額'],
@@ -182,29 +208,29 @@ export default function ExportPage() {
     return toCsv(rows)
   }, [accountants, year, month])
 
-  // 報告不可で当月に支払があった人を抽出（通知表示用）
-  const excludedNames = useMemo(() => {
-    const ids = new Set<string>()
-    payments.forEach(p => {
-      const dt = new Date(p.date + 'T00:00:00')
-      const emp = empOf(p.employeeId)
-      if (
-        dt.getFullYear() === year &&
-        dt.getMonth() + 1 === month &&
-        emp &&
-        !emp.reportable
-      ) {
-        ids.add(emp.id)
-      }
+  // 4) 従業員台帳（登録された人の基本情報）
+  const employeesCsv = useMemo(() => {
+    const rows: (string | number)[][] = [
+      ['氏名', 'フリガナ', '源氏名', '区分', '生年月日', '住所', 'メモ', '税務署報告'],
+    ]
+    employees.forEach(e => {
+      rows.push([
+        e.name,
+        e.furigana,
+        e.stageName,
+        e.kind === 'hostess' ? 'ホステス' : '乙欄',
+        e.birthday,
+        e.address,
+        e.memo.replace(/\r?\n/g, ' '),
+        e.reportable ? '対象' : '対象外',
+      ])
     })
-    return Array.from(ids).map(id => {
-      const e = empOf(id)
-      return e?.stageName ? `${e.name}（${e.stageName}）` : e?.name || ''
-    })
-  }, [payments, employees, year, month])
+    return toCsv(rows)
+  }, [employees])
 
   const ym = `${year}-${String(month).padStart(2, '0')}`
   const files = [
+    { name: `従業員台帳_${ym}.csv`, csv: employeesCsv },
     { name: `給与台帳_乙欄_日別_${ym}.csv`, csv: koyoCsv },
     { name: `給与台帳_乙欄_月別集計_${ym}.csv`, csv: koyoMonthlyCsv },
     { name: `ホステス支払台帳_日別_${ym}.csv`, csv: hostessCsv },
@@ -230,7 +256,18 @@ export default function ExportPage() {
         return
       }
       const blob = await res.blob()
-      downloadFile(blob, `税理士提出用ファイル_${ym}.zip`)
+      const zipName = `税理士提出用ファイル_${ym}.zip`
+
+      // モバイルでは Web 共有メニュー（LINE・メール・ファイル App 等に送れる）
+      const file = new File([blob], zipName, { type: 'application/zip' })
+      const shared = await shareFiles([file], `税理士提出用ファイル ${ym}`)
+      if (!shared) {
+        // デスクトップ等は従来のダウンロード
+        downloadFile(blob, zipName)
+      }
+    } catch (err) {
+      console.error(err)
+      alert('ダウンロードに失敗しました')
     } finally {
       setBundling(false)
     }
@@ -260,20 +297,13 @@ export default function ExportPage() {
         </Field>
       </Card>
 
-      {excludedNames.length > 0 && (
-        <div className="mt-4 rounded-2xl bg-red-50 ring-1 ring-red-200/60 p-3 text-[13px] text-red-800 leading-relaxed">
-          ⚠️ <b>報告不可</b>に設定されている方の当月支払は、すべてのCSVから除外されます：
-          <br />
-          {excludedNames.join('、')}
-        </div>
-      )}
-
       <div className="mt-5">
         <PrimaryButton onClick={() => void downloadBundle()} disabled={bundling}>
           {bundling ? '作成中…' : '税理士提出用ファイルをまとめてダウンロード'}
         </PrimaryButton>
-        <p className="text-[12px] text-gray-400 mt-2 px-1">
-          4つのCSVを1つのZIPファイルにまとめます。
+        <p className="text-[12px] text-gray-500 mt-2 px-1 leading-relaxed">
+          スマホでは共有メニュー（LINE・メール・ファイル App など）が開きます。<br />
+          パソコンではそのまま ZIP がダウンロードされます。
         </p>
       </div>
 

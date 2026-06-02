@@ -144,10 +144,11 @@ export default function EmployeesPage() {
           <Toggle
             checked={form.reportable}
             onChange={v => update('reportable', v)}
-            label="支払情報を税理士へ報告する"
+            label="税務署への報告対象とする"
           />
           <p className="text-[12px] text-gray-500 mt-1.5 leading-snug">
-            OFFにすると、この人の支払はCSV出力（税理士提出用ファイル）から除外されます。納付書の本税合計には含まれます。
+            OFFにすると、税理士へ提出するCSVには「対象外」と区分されて記載されます。
+            支払記録自体は税理士提出ファイルに含まれます（税理士は内部管理用として全員分を受け取ります）。
           </p>
         </div>
         <div className="flex gap-2 pt-2">
@@ -190,8 +191,8 @@ export default function EmployeesPage() {
                       {e.birthday && ` ・ ${e.birthday}`}
                     </span>
                     {!e.reportable && (
-                      <span className="inline-block bg-red-50 text-red-700 text-[11px] px-1.5 py-0.5 rounded-full ring-1 ring-red-200">
-                        報告不可
+                      <span className="inline-block bg-gray-100 text-gray-600 text-[11px] px-1.5 py-0.5 rounded-full ring-1 ring-gray-200">
+                        税務署報告 対象外
                       </span>
                     )}
                   </div>

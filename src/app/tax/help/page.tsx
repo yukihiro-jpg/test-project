@@ -131,14 +131,15 @@ export default function HelpPage() {
                 <span className="text-gray-400">▽</span>
               </div>
             </div>
-            <MiniToggle on={true} label="支払情報を税理士へ報告する" />
+            <MiniToggle on={true} label="税務署への報告対象とする" />
           </MiniCard>
         </PhoneFrame>
         <Hint>
           <b>区分</b>はホステス／一般従業員（乙欄）から選択。区分によって源泉税の計算式が自動で切り替わります。
         </Hint>
         <Warn>
-          <b>「支払情報を税理士へ報告する」がOFF</b>の人は、CSV出力（税理士提出用ファイル）から自動的に除外されます。納付書の本税合計には含まれます。
+          <b>「税務署への報告対象とする」</b>がOFFの人は、CSV内で「対象外」と区分されて記載されます。
+          税理士は内部管理用に全員分の支払記録を受け取りますが、年末調整や法定調書の段階で対象外と扱われます。
         </Warn>
       </Step>
 
@@ -281,15 +282,14 @@ export default function HelpPage() {
               <MiniInput label="月" value="5月" />
             </div>
           </MiniCard>
-          <div className="mt-2 rounded-md bg-red-50 ring-1 ring-red-200 px-1.5 py-1 text-[7.5px] text-red-800 leading-snug">
-            ⚠️ 報告不可の方の支払はCSVから除外：佐藤 美咲（あや）
-          </div>
           <div className="mt-2 bg-blue-500 text-white text-[9px] text-center py-1.5 rounded-lg font-semibold leading-tight">
             税理士提出用ファイルを<br/>まとめてダウンロード
           </div>
+          <div className="text-[7px] text-gray-400 mt-1">スマホでは共有メニューが開きます</div>
           <div className="mt-2 text-[8px] font-semibold text-gray-500">個別ダウンロード</div>
           <div className="bg-white rounded-md ring-1 ring-black/5 divide-y divide-gray-100 mt-1">
             {[
+              '従業員台帳_2026-05.csv',
               '給与台帳_乙欄_日別_2026-05.csv',
               '給与台帳_乙欄_月別集計_2026-05.csv',
               'ホステス支払台帳_日別_2026-05.csv',
@@ -304,7 +304,11 @@ export default function HelpPage() {
           </div>
         </PhoneFrame>
         <Hint>
-          ZIPファイルをそのままLINEやメールで税理士に送ってください。CSVには<b className="text-pink-600">源氏名も備考列</b>として含まれます。
+          スマホでタップすると「共有メニュー」が開きます。LINE・メール・<b>ファイル App</b>から選んで保存・送信できます。<br/>
+          パソコンでは通常のダウンロードになります。
+        </Hint>
+        <Hint>
+          ZIPには<b>従業員台帳</b>を含む計6ファイルが入ります。CSVには<b className="text-pink-600">源氏名</b>と<b>税務署報告区分（対象/対象外）</b>の列が含まれます。
         </Hint>
       </Step>
 
