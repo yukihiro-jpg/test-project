@@ -183,6 +183,67 @@ export function Pill({
   )
 }
 
+export function RadioCardGroup<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T | null
+  onChange: (v: T) => void
+  options: { value: T; label: string; description?: string; tone?: 'default' | 'danger' }[]
+}) {
+  return (
+    <div className="grid gap-2">
+      {options.map(opt => {
+        const selected = value === opt.value
+        const isDanger = opt.tone === 'danger'
+        return (
+          <button
+            type="button"
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`text-left rounded-2xl px-4 py-3 ring-1 transition active:opacity-80 ${
+              selected
+                ? isDanger
+                  ? 'bg-red-500 text-white ring-red-500'
+                  : 'bg-blue-500 text-white ring-blue-500'
+                : 'bg-white text-gray-900 ring-gray-200'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span
+                className={`shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                  selected
+                    ? 'border-white'
+                    : isDanger
+                    ? 'border-gray-300'
+                    : 'border-gray-300'
+                }`}
+              >
+                {selected && <span className="w-2 h-2 rounded-full bg-white" />}
+              </span>
+              <div className="flex-1">
+                <div className={`text-[15px] font-semibold ${selected ? '' : 'text-gray-900'}`}>
+                  {opt.label}
+                </div>
+                {opt.description && (
+                  <div
+                    className={`text-[12px] mt-0.5 leading-snug ${
+                      selected ? 'text-white/90' : 'text-gray-500'
+                    }`}
+                  >
+                    {opt.description}
+                  </div>
+                )}
+              </div>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export function Toggle({
   checked,
   onChange,

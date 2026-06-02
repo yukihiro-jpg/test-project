@@ -9,23 +9,34 @@ import {
   PageContainer,
   PageTitle,
   PrimaryButton,
+  RadioCardGroup,
   SecondaryButton,
   Select,
   SectionLabel,
   TextArea,
   TextInput,
-  Toggle,
 } from '@/components/tax/ui'
 
-const blank = {
+type FormState = {
+  name: string
+  furigana: string
+  stageName: string
+  address: string
+  birthday: string
+  memo: string
+  kind: EmployeeKind
+  reportable: boolean | null // null = ユーザー未選択
+}
+
+const blank: FormState = {
   name: '',
   furigana: '',
   stageName: '',
   address: '',
   birthday: '',
   memo: '',
-  kind: 'koyo_otsu' as EmployeeKind,
-  reportable: true,
+  kind: 'koyo_otsu',
+  reportable: null,
 }
 
 export default function EmployeesPage() {
@@ -42,17 +53,28 @@ export default function EmployeesPage() {
     setEditId(null)
   }
 
+  const canSubmit = form.name.trim().length > 0 && form.reportable !== null
+
   const submit = async () => {
-    if (!form.name.trim()) return
+    if (!canSubmit || form.reportable === null) return
     const s = await load()
+    const payload = {
+      name: form.name.trim(),
+      furigana: form.furigana,
+      stageName: form.stageName,
+      address: form.address,
+      birthday: form.birthday,
+      memo: form.memo,
+      kind: form.kind,
+      reportable: form.reportable,
+    }
     if (editId) {
       const idx = s.employees.findIndex(e => e.id === editId)
-      if (idx >= 0) s.employees[idx] = { ...s.employees[idx], ...form, name: form.name.trim() }
+      if (idx >= 0) s.employees[idx] = { ...s.employees[idx], ...payload }
     } else {
       s.employees.push({
         id: uid(),
-        ...form,
-        name: form.name.trim(),
+        ...payload,
         createdAt: Date.now(),
       })
     }
@@ -140,19 +162,38 @@ export default function EmployeesPage() {
             onChange={e => update('memo', e.target.value)}
           />
         </Field>
-        <div className="pt-2 border-t border-gray-100">
-          <Toggle
-            checked={form.reportable}
-            onChange={v => update('reportable', v)}
-            label="税務署への報告対象とする"
+        <div className="pt-3 border-t border-gray-100">
+          <div className="flex items-baseline justify-between mb-2">
+            <span className="text-[14px] font-semibold text-gray-900">
+              税務署への報告
+            </span>
+            <span className="text-[11px] text-red-500 font-medium">※ 必ず選択してください</span>
+          </div>
+          <RadioCardGroup
+            value={form.reportable === null ? null : form.reportable ? 'yes' : 'no'}
+            onChange={v => update('reportable', v === 'yes')}
+            options={[
+              {
+                value: 'yes',
+                label: '対象とする',
+                description: '通常はこちら。年末調整・法定調書・支払調書などの税務署提出書類に含めます。',
+              },
+              {
+                value: 'no',
+                label: '対象としない',
+                description: '税務署提出書類には含めません。税理士の内部管理用として支払記録は引き続き共有されます。',
+                tone: 'danger',
+              },
+            ]}
           />
-          <p className="text-[12px] text-gray-500 mt-1.5 leading-snug">
-            OFFにすると、税理士へ提出するCSVには「対象外」と区分されて記載されます。
-            支払記録自体は税理士提出ファイルに含まれます（税理士は内部管理用として全員分を受け取ります）。
-          </p>
+          {form.reportable === null && (
+            <p className="text-[12px] text-red-600 mt-2 leading-snug">
+              ⚠️ 「対象とする」「対象としない」のいずれかを選択してください。
+            </p>
+          )}
         </div>
         <div className="flex gap-2 pt-2">
-          <PrimaryButton onClick={() => void submit()}>
+          <PrimaryButton onClick={() => void submit()} disabled={!canSubmit}>
             {editId ? '更新' : '追加'}
           </PrimaryButton>
           {editId && (

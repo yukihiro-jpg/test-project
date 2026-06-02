@@ -131,15 +131,31 @@ export default function HelpPage() {
                 <span className="text-gray-400">▽</span>
               </div>
             </div>
-            <MiniToggle on={true} label="税務署への報告対象とする" />
+            <div className="mt-2 pt-2 border-t border-gray-100">
+              <div className="flex justify-between items-baseline mb-1">
+                <span className="text-[9px] font-semibold">税務署への報告</span>
+                <span className="text-[7px] text-red-500">必ず選択</span>
+              </div>
+              <div className="bg-blue-500 text-white rounded-md px-1.5 py-1 text-[8.5px] flex items-center gap-1 mb-0.5">
+                <span className="w-2 h-2 rounded-full border-2 border-white flex items-center justify-center">
+                  <span className="w-0.5 h-0.5 rounded-full bg-white" />
+                </span>
+                <span className="font-semibold">対象とする</span>
+              </div>
+              <div className="bg-white ring-1 ring-gray-200 rounded-md px-1.5 py-1 text-[8.5px] flex items-center gap-1 text-gray-700">
+                <span className="w-2 h-2 rounded-full border-2 border-gray-300" />
+                <span>対象としない</span>
+              </div>
+            </div>
           </MiniCard>
         </PhoneFrame>
         <Hint>
           <b>区分</b>はホステス／一般従業員（乙欄）から選択。区分によって源泉税の計算式が自動で切り替わります。
         </Hint>
         <Warn>
-          <b>「税務署への報告対象とする」</b>がOFFの人は、CSV内で「対象外」と区分されて記載されます。
-          税理士は内部管理用に全員分の支払記録を受け取りますが、年末調整や法定調書の段階で対象外と扱われます。
+          <b>税務署への報告</b>は<b>必ず明示的に選択</b>してください（未選択だと追加・更新できません）。
+          「対象としない」を選んだ人はCSV内で「対象外」と区分されて記載され、年末調整や法定調書の段階で除外されます。
+          支払記録自体は税理士へ全員分が共有されます。
         </Warn>
       </Step>
 
