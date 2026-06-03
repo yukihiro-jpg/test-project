@@ -508,9 +508,11 @@ function analyzeSyncedFilesV2() {
       const subName = sub.getName();
       if (subName.indexOf('→税理士') < 0) continue;
 
-      const files = sub.getFiles();
-      while (files.hasNext()) {
-        const file = files.next();
+      // 再帰的にファイルを集める（顧問先がサブフォルダ R8.3期/ 等を作る場合に対応）
+      const allFiles = collectFilesRecursive_(sub);
+      for (let i = 0; i < allFiles.length; i++) {
+        const fileInfo = allFiles[i];
+        const file = fileInfo.file;
         if (processedIds.has(file.getId())) continue;
 
         const result = analyzeFileToAnalysisFolder_({
@@ -521,12 +523,14 @@ function analyzeSyncedFilesV2() {
           receivedDate: new Date(),
         });
         result.clientName = clientName;
-        result.sourceFolder = subName;
+        // 相対パス（サブフォルダの中なら "2026-3/file.xlsx" のように）
+        result.sourceFolder = subName + (fileInfo.relPath ? '/' + fileInfo.relPath : '');
+        result.fileName = fileInfo.relPath ? fileInfo.relPath + '/' + file.getName() : file.getName();
         results.push(result);
 
         // ログに記録（再処理防止）
         syncLogSheet.appendRow([
-          new Date(), clientName, subName, file.getName(),
+          new Date(), clientName, result.sourceFolder, file.getName(),
           result.docType || result.action, result.confidence || '',
           file.getId(), result.note || result.error || result.action
         ]);
@@ -538,6 +542,24 @@ function analyzeSyncedFilesV2() {
   // 結果サマリーを保存（通知メールで使う）
   saveAnalysisSummary_(results);
   return results;
+}
+
+// フォルダ配下のファイルを再帰的に収集（相対パス情報付き）
+function collectFilesRecursive_(folder, relPath) {
+  relPath = relPath || '';
+  const out = [];
+  const files = folder.getFiles();
+  while (files.hasNext()) {
+    out.push({ file: files.next(), relPath: relPath });
+  }
+  const subs = folder.getFolders();
+  while (subs.hasNext()) {
+    const sub = subs.next();
+    const childRel = relPath ? relPath + '/' + sub.getName() : sub.getName();
+    const childFiles = collectFilesRecursive_(sub, childRel);
+    for (let i = 0; i < childFiles.length; i++) out.push(childFiles[i]);
+  }
+  return out;
 }
 
 function ensureSyncFileLogSheet_(ss) {
@@ -829,7 +851,7 @@ function sendUnifiedNotification_(summary) {
   // 件名
   const subject = `【新着処理完了】解析${totalAnalyzed}件 / コピー${totalCopied}件 / 要確認${totalReview}件 - ${nowStr}`;
 
-  // HTML本文
+  // HTML本文（絵文字を使わずプレーン記号で構築）
   let html = `
 <div style="font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif; max-width: 700px;">
   <h2 style="color: #1a73e8; border-bottom: 2px solid #1a73e8; padding-bottom: 8px;">
@@ -839,7 +861,7 @@ function sendUnifiedNotification_(summary) {
     ${nowStr} 時点での処理結果です。
   </p>
   <div style="background: #e8f0fe; padding: 12px; border-radius: 6px; margin: 16px 0;">
-    <strong>📊 件数</strong><br>
+    <strong>■ 件数</strong><br>
     自動解析完了: ${totalAnalyzed} 件 ／ コピーのみ: ${totalCopied} 件 ／
     要確認: ${totalReview} 件 ／ 同期新着: ${totalSyncUploads} 件
   </div>
@@ -847,19 +869,19 @@ function sendUnifiedNotification_(summary) {
 
   // 自動解析完了
   if (totalAnalyzed > 0) {
-    html += renderSection_('🤖 自動解析完了', summary.analyzed, true);
+    html += renderSection_('■ 自動解析完了', summary.analyzed, true);
   }
 
   // コピーのみ（Excel等）
   if (totalCopied > 0) {
-    html += renderSection_('📋 コピーのみ（Excel等）', summary.copied, false);
+    html += renderSection_('■ コピーのみ（Excel等）', summary.copied, false);
   }
 
   // 要確認
   if (totalReview > 0) {
     html += `
 <div style="background: #fff3e0; border-radius: 8px; padding: 16px; margin: 16px 0; border-left: 4px solid #f57c00;">
-  <h3 style="margin: 0 0 12px 0; color: #e65100;">⚠️ 要確認（${totalReview}件）</h3>
+  <h3 style="margin: 0 0 12px 0; color: #e65100;">【要確認】 ${totalReview}件</h3>
   <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
     信頼度低・分類不能のため、人の目でチェックしてください。
     <a href="${getLogSheetUrl_()}" style="color: #1a73e8;">要確認シートを開く →</a>
@@ -875,7 +897,7 @@ function sendUnifiedNotification_(summary) {
   // 同期新着（解析対象外も含めて全部報告）
   if (totalSyncUploads > 0) {
     html += '<div style="background: #f1f8e9; border-radius: 8px; padding: 16px; margin: 16px 0;">';
-    html += `<h3 style="margin: 0 0 12px 0; color: #33691e;">📦 ファイル同期 新着 (${totalSyncUploads}件)</h3>`;
+    html += `<h3 style="margin: 0 0 12px 0; color: #33691e;">■ ファイル同期 新着 (${totalSyncUploads}件)</h3>`;
     const grouped = groupBy_(summary.syncUploads, u => `${u.clientName}（${u.deviceName}）`);
     Object.keys(grouped).sort().forEach(key => {
       const items = grouped[key];
@@ -894,7 +916,7 @@ function sendUnifiedNotification_(summary) {
   // エラー
   if (summary.errors.length > 0) {
     html += '<div style="background: #ffebee; border-radius: 8px; padding: 16px; margin: 16px 0; border-left: 4px solid #c62828;">';
-    html += `<h3 style="margin: 0 0 12px 0; color: #b71c1c;">❌ エラー (${summary.errors.length}件)</h3><ul>`;
+    html += `<h3 style="margin: 0 0 12px 0; color: #b71c1c;">【エラー】 ${summary.errors.length}件</h3><ul>`;
     summary.errors.forEach(e => {
       html += `<li style="font-size: 13px;">${escapeHtml_(e.phase || '')}: ${escapeHtml_(e.message || e.error || '')}</li>`;
     });
