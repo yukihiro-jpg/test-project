@@ -461,6 +461,8 @@ function getHeadersForDocType_(docType) {
       return ['解析日', '請求日', '請求相手先名称', '案件名', '10%売上高', '軽減8%売上高', '不課税売上高', '総売上高', '備考'];
     case '仕入請求書':
       return ['解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '総仕入高', '備考'];
+    case '賃貸送金明細':
+      return ['解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考'];
     default:
       return null;
   }
@@ -1156,6 +1158,50 @@ function testAnalyzeEmailAttachments() {
 
 function testRunUnifiedPipeline() {
   runUnifiedPipeline();
+}
+
+// 既存スプレッドシートに「賃貸送金明細」タブを追加
+function migrateAddRemittanceTab() {
+  const parentFolder = getParentFolder_();
+  if (!parentFolder) throw new Error('親フォルダが取得できません');
+
+  let added = 0;
+  let alreadyDone = 0;
+
+  const clientFolders = parentFolder.getFolders();
+  while (clientFolders.hasNext()) {
+    const clientFolder = clientFolders.next();
+    const clientName = clientFolder.getName();
+    if (clientName.startsWith('_')) continue;
+
+    const sheetName = `${clientName}_解析結果`;
+    let ss = null;
+    const arFolders = clientFolder.getFoldersByName('解析データ');
+    if (arFolders.hasNext()) {
+      const sp = arFolders.next().getFoldersByName('スマホ撮影');
+      if (sp.hasNext()) {
+        const fs = sp.next().getFilesByName(sheetName);
+        if (fs.hasNext()) ss = SpreadsheetApp.open(fs.next());
+      }
+    }
+    if (!ss) {
+      const fs2 = clientFolder.getFilesByName(sheetName);
+      if (fs2.hasNext()) ss = SpreadsheetApp.open(fs2.next());
+    }
+    if (!ss) continue;
+
+    if (ss.getSheetByName('賃貸送金明細')) {
+      alreadyDone++;
+      console.log(`  ${clientName}: 賃貸送金明細タブは既に存在`);
+      continue;
+    }
+    const sheet = ss.insertSheet('賃貸送金明細');
+    sheet.appendRow(['解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考']);
+    sheet.setFrozenRows(1);
+    added++;
+    console.log(`  ${clientName}: 賃貸送金明細タブを追加`);
+  }
+  console.log(`=== 完了: ${added}件追加 / ${alreadyDone}件既存 ===`);
 }
 
 // ============================================================

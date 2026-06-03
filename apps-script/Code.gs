@@ -360,6 +360,10 @@ function getOrCreateClientAnalysisSheet_Code(clientName, clientFolder) {
   purchaseSheet.appendRow(['解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '総仕入高', '備考']);
   purchaseSheet.setFrozenRows(1);
 
+  const remittanceSheet = ss.insertSheet('賃貸送金明細');
+  remittanceSheet.appendRow(['解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考']);
+  remittanceSheet.setFrozenRows(1);
+
   const cashSheet = ss.insertSheet('現金出納帳');
   cashSheet.appendRow(['月日', '相手先名称', '主な品名', '入金額', '出金額', '残高', '処理日']);
   cashSheet.setFrozenRows(1);
