@@ -31,6 +31,12 @@ const ANALYZABLE_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png'];
 // コピーのみ対象拡張子
 const COPY_ONLY_EXTENSIONS = ['xlsx', 'xls', 'csv', 'doc', 'docx', 'txt', 'zip'];
 
+// ファイルサイズ上限（バイト）。これを超えるファイルは解析せずスキップ
+const MAX_ANALYZE_BYTES = 10 * 1024 * 1024;  // 10 MB
+
+// 1回の runUnifiedPipeline 実行で解析する最大ファイル数（タイムアウト防止）
+const MAX_ANALYZE_FILES_PER_RUN = 5;
+
 
 // ============================================================
 // 日付フォーマット
@@ -271,6 +277,18 @@ function analyzeFileToAnalysisFolder_(params) {
   // 解析対象外（その他拡張子）
   if (ANALYZABLE_EXTENSIONS.indexOf(ext) < 0) {
     return { action: 'skipped', fileName: fileName, reason: '対象外拡張子: ' + ext };
+  }
+
+  // サイズ上限チェック（Gemini解析コスト爆発防止）
+  const sizeBytes = file.getSize();
+  if (sizeBytes > MAX_ANALYZE_BYTES) {
+    const sizeMB = Math.round(sizeBytes / 1024 / 1024 * 10) / 10;
+    return {
+      action: 'skipped_too_large',
+      fileName: fileName,
+      sizeBytes: sizeBytes,
+      reason: `サイズ超過 ${sizeMB}MB > ${MAX_ANALYZE_BYTES / 1024 / 1024}MB`,
+    };
   }
 
   // ----- 解析処理 -----
@@ -540,6 +558,7 @@ function analyzeSyncedFilesV2() {
   const processedIds = collectProcessedFileIds_(syncLogSheet);
 
   const results = [];
+  let analyzedThisRun = 0;  // この実行で実際に解析した件数（タイムアウト防止）
   const clientFolders = parentFolder.getFolders();
   while (clientFolders.hasNext()) {
     const clientFolder = clientFolders.next();
@@ -560,6 +579,21 @@ function analyzeSyncedFilesV2() {
         const file = fileInfo.file;
         if (processedIds.has(file.getId())) continue;
 
+        // 解析対象（PDF/画像）のみ件数制限の対象。Excel等のコピーは制限外
+        const ext = getExtension_(file.getName());
+        const isAnalyzable = ANALYZABLE_EXTENSIONS.indexOf(ext) >= 0;
+
+        if (isAnalyzable && analyzedThisRun >= MAX_ANALYZE_FILES_PER_RUN) {
+          // タイムアウト防止: 解析件数が上限に達したPDFは次回に回す
+          results.push({
+            action: 'pending',
+            clientName: clientName,
+            fileName: file.getName(),
+            route: 'sync',
+          });
+          continue;
+        }
+
         const result = analyzeFileToAnalysisFolder_({
           file: file,
           clientFolder: clientFolder,
@@ -573,12 +607,19 @@ function analyzeSyncedFilesV2() {
         result.fileName = fileInfo.relPath ? fileInfo.relPath + '/' + file.getName() : file.getName();
         results.push(result);
 
-        // ログに記録（再処理防止）
-        syncLogSheet.appendRow([
-          new Date(), clientName, result.sourceFolder, file.getName(),
-          result.docType || result.action, result.confidence || '',
-          file.getId(), result.note || result.error || result.action
-        ]);
+        // Gemini を呼んだファイル（analyzed）のみカウント。copied/error/skipped は無料相当なので数えない
+        if (result.action === 'analyzed') {
+          analyzedThisRun++;
+        }
+
+        // ログに記録（再処理防止）。pending はログ残さず次回再処理
+        if (result.action !== 'pending') {
+          syncLogSheet.appendRow([
+            new Date(), clientName, result.sourceFolder, file.getName(),
+            result.docType || result.action, result.confidence || '',
+            file.getId(), result.note || result.error || result.action
+          ]);
+        }
       }
     }
   }
@@ -620,14 +661,29 @@ function ensureSyncFileLogSheet_(ss) {
   return sheet;
 }
 
+// エラーで永久にループしないよう、リトライは MAX_ERROR_RETRIES 回まで
+const MAX_ERROR_RETRIES = 3;
+
 function collectProcessedFileIds_(syncLogSheet) {
   const data = syncLogSheet.getDataRange().getValues();
   const set = new Set();
+  const errorCounts = {};
+
   for (let i = 1; i < data.length; i++) {
-    // エラー行は処理済みとせず、再処理可能にする
     const action = data[i][4];
-    if (action === 'error' || action === 'エラー') continue;
-    if (data[i][6]) set.add(data[i][6]);
+    const fileId = data[i][6];
+    if (!fileId) continue;
+
+    if (action === 'error' || action === 'エラー') {
+      // エラー回数をカウント。MAX_ERROR_RETRIES 回を超えたら永久スキップ
+      errorCounts[fileId] = (errorCounts[fileId] || 0) + 1;
+      if (errorCounts[fileId] >= MAX_ERROR_RETRIES) {
+        set.add(fileId);  // これ以上リトライしない（無限ループ防止）
+      }
+    } else {
+      // 成功・コピー済み・要確認等は処理済みとして除外
+      set.add(fileId);
+    }
   }
   return set;
 }
@@ -650,6 +706,7 @@ function analyzeEmailAttachments() {
   const processedIds = collectProcessedFileIds_(logSheet);
 
   const results = [];
+  let analyzedThisRun = 0;
   const clientFolders = parentFolder.getFolders();
   while (clientFolders.hasNext()) {
     const clientFolder = clientFolders.next();
@@ -673,6 +730,20 @@ function analyzeEmailAttachments() {
         const file = files.next();
         if (processedIds.has(file.getId())) continue;
 
+        // 解析対象（PDF/画像）のみ件数制限の対象。Excel等のコピーは制限外
+        const ext = getExtension_(file.getName());
+        const isAnalyzable = ANALYZABLE_EXTENSIONS.indexOf(ext) >= 0;
+
+        if (isAnalyzable && analyzedThisRun >= MAX_ANALYZE_FILES_PER_RUN) {
+          results.push({
+            action: 'pending',
+            clientName: clientName,
+            fileName: file.getName(),
+            route: 'email',
+          });
+          continue;
+        }
+
         const result = analyzeFileToAnalysisFolder_({
           file: file,
           clientFolder: clientFolder,
@@ -684,11 +755,15 @@ function analyzeEmailAttachments() {
         result.sourceFolder = ANALYSIS_FOLDERS.EMAIL_ATTACHMENT + '/' + dateFolderName;
         results.push(result);
 
-        logSheet.appendRow([
-          new Date(), clientName, dateFolderName, file.getName(),
-          result.docType || result.action, result.confidence || '',
-          file.getId(), result.note || result.error || result.action
-        ]);
+        if (result.action === 'analyzed') analyzedThisRun++;
+
+        if (result.action !== 'pending') {
+          logSheet.appendRow([
+            new Date(), clientName, dateFolderName, file.getName(),
+            result.docType || result.action, result.confidence || '',
+            file.getId(), result.note || result.error || result.action
+          ]);
+        }
       }
     }
   }
@@ -764,6 +839,8 @@ function runUnifiedPipeline() {
     copied: [],          // コピーのみのファイル（Excel等）
     review: [],          // 要確認のファイル
     errors: [],          // エラー
+    tooLarge: [],        // サイズ上限超過でスキップ
+    pending: [],         // この実行では処理しなかった（次回回し）
     syncUploads: [],     // 同期で新着のファイル（解析対象外も含む）
   };
 
@@ -804,6 +881,8 @@ function runUnifiedPipeline() {
   const hasNew = summary.analyzed.length > 0
               || summary.copied.length > 0
               || summary.review.length > 0
+              || summary.tooLarge.length > 0
+              || summary.pending.length > 0
               || summary.syncUploads.length > 0;
   if (hasNew) {
     try {
@@ -826,6 +905,8 @@ function classifyResults_(results, summary) {
     else if (r.action === 'copied') summary.copied.push(r);
     else if (r.action === 'review') summary.review.push(r);
     else if (r.action === 'error') summary.errors.push(r);
+    else if (r.action === 'skipped_too_large') summary.tooLarge.push(r);
+    else if (r.action === 'pending') summary.pending.push(r);
   });
 }
 
@@ -894,10 +975,15 @@ function sendUnifiedNotification_(summary) {
   const totalAnalyzed = summary.analyzed.length;
   const totalCopied = summary.copied.length;
   const totalReview = summary.review.length;
+  const totalTooLarge = summary.tooLarge.length;
+  const totalPending = summary.pending.length;
   const totalSyncUploads = summary.syncUploads.length;
 
   // 件名
-  const subject = `【新着処理完了】解析${totalAnalyzed}件 / コピー${totalCopied}件 / 要確認${totalReview}件 - ${nowStr}`;
+  let subjectParts = [`解析${totalAnalyzed}件`, `コピー${totalCopied}件`, `要確認${totalReview}件`];
+  if (totalTooLarge > 0) subjectParts.push(`サイズ超過${totalTooLarge}件`);
+  if (totalPending > 0) subjectParts.push(`待機${totalPending}件`);
+  const subject = `【新着処理完了】${subjectParts.join(' / ')} - ${nowStr}`;
 
   // HTML本文（絵文字を使わずプレーン記号で構築）
   let html = `
@@ -911,7 +997,8 @@ function sendUnifiedNotification_(summary) {
   <div style="background: #e8f0fe; padding: 12px; border-radius: 6px; margin: 16px 0;">
     <strong>■ 件数</strong><br>
     自動解析完了: ${totalAnalyzed} 件 ／ コピーのみ: ${totalCopied} 件 ／
-    要確認: ${totalReview} 件 ／ 同期新着: ${totalSyncUploads} 件
+    要確認: ${totalReview} 件 ／ サイズ超過: ${totalTooLarge} 件 ／
+    待機中（次回回し）: ${totalPending} 件 ／ 同期新着: ${totalSyncUploads} 件
   </div>
 `;
 
@@ -940,6 +1027,27 @@ function sendUnifiedNotification_(summary) {
       html += `<li style="font-size: 13px; margin: 4px 0;">[${escapeHtml_(r.docType || '不明')}] ${escapeHtml_(r.fileName)} <small>(${escapeHtml_(r.clientName || '')}, ${escapeHtml_(r.route || '')})</small></li>`;
     });
     html += '</ul></div>';
+  }
+
+  // サイズ超過
+  if (totalTooLarge > 0) {
+    html += '<div style="background: #fff8e1; border-radius: 8px; padding: 16px; margin: 16px 0; border-left: 4px solid #f9a825;">';
+    html += `<h3 style="margin: 0 0 12px 0; color: #f57f17;">【サイズ超過】 ${totalTooLarge}件（解析せずスキップ）</h3>`;
+    html += `<p style="font-size: 13px; color: #666; margin-bottom: 8px;">${MAX_ANALYZE_BYTES / 1024 / 1024} MB を超えるファイルは自動解析の対象外です。手動でご確認ください。</p>`;
+    html += '<ul style="margin: 0; padding-left: 20px;">';
+    summary.tooLarge.forEach(r => {
+      const mb = Math.round(r.sizeBytes / 1024 / 1024 * 10) / 10;
+      html += `<li style="font-size: 13px;">${escapeHtml_(r.fileName)} <small style="color: #888;">(${mb} MB, ${escapeHtml_(r.clientName || '')})</small></li>`;
+    });
+    html += '</ul></div>';
+  }
+
+  // 待機中（次回回し）
+  if (totalPending > 0) {
+    html += '<div style="background: #e3f2fd; border-radius: 8px; padding: 16px; margin: 16px 0; border-left: 4px solid #1976d2;">';
+    html += `<h3 style="margin: 0 0 8px 0; color: #0d47a1;">【待機中】 ${totalPending}件（次回以降に処理）</h3>`;
+    html += `<p style="font-size: 13px; color: #666;">1回の実行で処理する上限（${MAX_ANALYZE_FILES_PER_RUN}件/回）を超えたため、次回以降の10分ごと実行で順次処理されます。何もしなくて OK。</p>`;
+    html += '</div>';
   }
 
   // 同期新着（解析対象外も含めて全部報告）
