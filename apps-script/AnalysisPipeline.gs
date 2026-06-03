@@ -383,10 +383,18 @@ function analyzeForIndividualSheet_(file, base64Data, classification, clientFold
   const destFolder = getOutputFolderForRoute_(clientFolder, route, receivedDate);
   const sheetName = buildAnalysisSheetName_(docType, file.getName(), receivedDate);
 
-  // Spreadsheet作成 → 指定フォルダに移動
-  const newSpreadsheet = SpreadsheetApp.create(sheetName);
-  const newFile = DriveApp.getFileById(newSpreadsheet.getId());
-  newFile.moveTo(destFolder);
+  // 既に同名gsheetがあれば再利用（前回エラーで残った空のgsheet等を再利用）
+  let newSpreadsheet;
+  const existingFiles = destFolder.getFilesByName(sheetName);
+  if (existingFiles.hasNext()) {
+    newSpreadsheet = SpreadsheetApp.open(existingFiles.next());
+  } else {
+    newSpreadsheet = SpreadsheetApp.create(sheetName);
+    DriveApp.getFileById(newSpreadsheet.getId()).moveTo(destFolder);
+  }
+
+  // 書類種別に応じたタブを初期化（writeAnalysisResult がタブ名で書き込むため）
+  initializeIndividualSheetTabs_(newSpreadsheet, docType);
 
   // 詳細解析実行（既存の callGeminiApi を使用）
   const analysisRows = callGeminiApi(base64Data, docType, bankName, newSpreadsheet);
@@ -401,6 +409,43 @@ function analyzeForIndividualSheet_(file, base64Data, classification, clientFold
     confidence: classification.confidence,
     route: route,
   };
+}
+
+/**
+ * 個別gsheetに、書類種別に応じたタブを初期化する
+ * デフォルトの空シートを書類種別タブにリネーム＋ヘッダ設定
+ */
+function initializeIndividualSheetTabs_(ss, docType) {
+  const headers = getHeadersForDocType_(docType);
+  if (!headers) return;
+
+  const sheets = ss.getSheets();
+  const defaultSheet = sheets[0];
+  // 既に書類種別タブが存在する（再生成の場合）はスキップ
+  if (defaultSheet.getName() === docType && defaultSheet.getLastRow() > 0) return;
+
+  defaultSheet.setName(docType);
+  if (defaultSheet.getLastRow() === 0) {
+    defaultSheet.appendRow(headers);
+    defaultSheet.setFrozenRows(1);
+  }
+}
+
+function getHeadersForDocType_(docType) {
+  switch (docType) {
+    case 'レシート・領収書':
+      return ['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '対象外金額', '支払総額', '主な品名', 'インボイス番号', '備考'];
+    case 'クレジットカード利用明細書':
+      return ['解析日', 'カード会社名', '利用日', '利用先名称', '利用金額', '支払区分', '備考'];
+    case '通帳':
+      return ['解析日', '銀行名', '口座番号', '年月日', '摘要', '入金額', '出金額', '残高', '備考'];
+    case '売上請求書':
+      return ['解析日', '請求日', '請求相手先名称', '案件名', '10%売上高', '軽減8%売上高', '不課税売上高', '総売上高', '備考'];
+    case '仕入請求書':
+      return ['解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '総仕入高', '備考'];
+    default:
+      return null;
+  }
 }
 
 /**
@@ -579,6 +624,9 @@ function collectProcessedFileIds_(syncLogSheet) {
   const data = syncLogSheet.getDataRange().getValues();
   const set = new Set();
   for (let i = 1; i < data.length; i++) {
+    // エラー行は処理済みとせず、再処理可能にする
+    const action = data[i][4];
+    if (action === 'error' || action === 'エラー') continue;
     if (data[i][6]) set.add(data[i][6]);
   }
   return set;
