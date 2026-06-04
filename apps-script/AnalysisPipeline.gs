@@ -75,13 +75,18 @@ function buildRouteParentFolderName_(route) {
 
 /**
  * 解析結果スプレッドシート名:
- *   [書類種別]解析データ_[元ファイル名]_YYYY年MM月DD日受領分
+ *   通帳:   通帳解析データ_[元ファイル名]_YYYY年MM月DD日受領分
+ *   その他: [書類種別]解析データ_YYYY年MM月DD日受領分  ← 同一日付内で集約
  */
 function buildAnalysisSheetName_(docType, originalFileName, date) {
   const dateStr = formatDateJa_(date);
-  // 元ファイル名から拡張子除去
-  const baseName = stripExtension_(originalFileName);
-  return `${docType}解析データ_${baseName}_${dateStr}受領分`;
+  if (docType === '通帳') {
+    // 通帳は混在を避けるため個別ファイル
+    const baseName = stripExtension_(originalFileName);
+    return `通帳解析データ_${baseName}_${dateStr}受領分`;
+  }
+  // その他の書類種別は同一日付内で集約
+  return `${docType}解析データ_${dateStr}受領分`;
 }
 
 /**
@@ -411,12 +416,13 @@ function analyzeForIndividualSheet_(file, base64Data, classification, clientFold
     DriveApp.getFileById(newSpreadsheet.getId()).moveTo(destFolder);
   }
 
-  // 書類種別に応じたタブを初期化（writeAnalysisResult がタブ名で書き込むため）
+  // 書類種別に応じたタブを初期化（参照元PDFファイル列付きヘッダ）
   initializeIndividualSheetTabs_(newSpreadsheet, docType);
 
   // 詳細解析実行（既存の callGeminiApi を使用）
   const analysisRows = callGeminiApi(base64Data, docType, bankName, newSpreadsheet);
-  writeAnalysisResult(newSpreadsheet, docType, analysisRows, bankName, accountNumber, '');
+  // 集約gsheet用の書き込み（先頭列に参照元PDFファイル名を入れる）
+  writeRowsWithSource_(newSpreadsheet, docType, analysisRows, file.getName(), bankName, accountNumber);
 
   return {
     action: 'analyzed',
@@ -450,21 +456,138 @@ function initializeIndividualSheetTabs_(ss, docType) {
 }
 
 function getHeadersForDocType_(docType) {
+  // 個別gsheet用のヘッダ。先頭に「参照元PDFファイル」列をつけて、
+  // 複数PDFが集約されたときにどのPDFの行か追えるようにする
   switch (docType) {
     case 'レシート・領収書':
-      return ['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '対象外金額', '支払総額', '主な品名', 'インボイス番号', '備考'];
+      return ['参照元PDFファイル', '解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '対象外金額', '支払総額', '主な品名', 'インボイス番号', '備考'];
     case 'クレジットカード利用明細書':
-      return ['解析日', 'カード会社名', '利用日', '利用先名称', '利用金額', '支払区分', '備考'];
+      return ['参照元PDFファイル', '解析日', 'カード会社名', '利用日', '利用先名称', '利用金額', '支払区分', '備考'];
     case '通帳':
-      return ['解析日', '銀行名', '口座番号', '年月日', '摘要', '入金額', '出金額', '残高', '備考'];
+      return ['参照元PDFファイル', '解析日', '銀行名', '口座番号', '年月日', '摘要', '入金額', '出金額', '残高', '備考'];
     case '売上請求書':
-      return ['解析日', '請求日', '請求相手先名称', '案件名', '10%売上高', '軽減8%売上高', '不課税売上高', '総売上高', '備考'];
+      return ['参照元PDFファイル', '解析日', '請求日', '請求相手先名称', '案件名', '10%売上高', '軽減8%売上高', '不課税売上高', '総売上高', '備考'];
     case '仕入請求書':
-      return ['解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '総仕入高', '備考'];
+      return ['参照元PDFファイル', '解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '総仕入高', '備考'];
     case '賃貸送金明細':
-      return ['解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考'];
+      return ['参照元PDFファイル', '解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考'];
     default:
       return null;
+  }
+}
+
+/**
+ * 個別gsheetに解析結果を書き込む（先頭列に「参照元PDFファイル」を入れる）
+ * 通帳以外は同一日付内の集約gsheetなので、複数PDFの行が混在する。
+ */
+function writeRowsWithSource_(ss, docType, rows, sourceFileName, bankName, accountNumber) {
+  const sheet = ss.getSheetByName(docType);
+  if (!sheet) return;
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
+
+  switch (docType) {
+    case 'レシート・領収書':
+      rows.forEach(row => {
+        sheet.appendRow([
+          sourceFileName,
+          today,
+          '',  // 使用者名（同期/メール添付ルートでは空）
+          row['日付'] || '',
+          row['相手先名称'] || '',
+          row['10%対象額'] || 0,
+          row['軽減8%対象額'] || 0,
+          row['対象外金額'] || 0,
+          row['支払総額'] || 0,
+          row['主な品名'] || '',
+          row['インボイス番号'] || '',
+          row['備考'] || ''
+        ]);
+      });
+      break;
+
+    case 'クレジットカード利用明細書':
+      rows.forEach(row => {
+        sheet.appendRow([
+          sourceFileName,
+          today,
+          row['カード会社名'] || '',
+          row['利用日'] || '',
+          row['利用先名称'] || '',
+          row['利用金額'] || 0,
+          row['支払区分'] || '',
+          row['備考'] || ''
+        ]);
+      });
+      break;
+
+    case '通帳':
+      rows.forEach(row => {
+        sheet.appendRow([
+          sourceFileName,
+          today,
+          bankName || row['銀行名'] || '',
+          accountNumber || row['口座番号'] || '',
+          row['年月日'] || '',
+          row['摘要'] || '',
+          row['入金額'] || 0,
+          row['出金額'] || 0,
+          row['残高'] || 0,
+          row['備考'] || ''
+        ]);
+      });
+      break;
+
+    case '売上請求書':
+      rows.forEach(row => {
+        sheet.appendRow([
+          sourceFileName,
+          today,
+          row['請求日'] || '',
+          row['請求相手先名称'] || '',
+          row['案件名'] || '',
+          row['10%売上高'] || 0,
+          row['軽減8%売上高'] || 0,
+          row['不課税売上高'] || 0,
+          row['総売上高'] || 0,
+          row['備考'] || ''
+        ]);
+      });
+      break;
+
+    case '仕入請求書':
+      rows.forEach(row => {
+        sheet.appendRow([
+          sourceFileName,
+          today,
+          row['請求日'] || '',
+          row['相手方名称'] || '',
+          row['主たる購入品目'] || '',
+          row['10%仕入高'] || 0,
+          row['軽減8%仕入高'] || 0,
+          row['不課税仕入高'] || 0,
+          row['総仕入高'] || 0,
+          row['備考'] || ''
+        ]);
+      });
+      break;
+
+    case '賃貸送金明細':
+      rows.forEach(row => {
+        sheet.appendRow([
+          sourceFileName,
+          today,
+          row['対象月'] || '',
+          row['送金日'] || '',
+          row['送金元'] || '',
+          row['物件名'] || '',
+          row['振込額'] || 0,
+          row['収入額'] || 0,
+          row['収入消費税'] || 0,
+          row['手数料'] || 0,
+          row['備考'] || ''
+        ]);
+      });
+      break;
   }
 }
 
