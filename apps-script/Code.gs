@@ -341,27 +341,27 @@ function getOrCreateClientAnalysisSheet_Code(clientName, clientFolder) {
 
   const receiptSheet = ss.getActiveSheet();
   receiptSheet.setName('レシート・領収書');
-  receiptSheet.appendRow(['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '対象外金額', '支払総額', '主な品名', 'インボイス番号', '備考']);
+  receiptSheet.appendRow(['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '対象外金額', '税区', '支払総額', '主な品名', 'インボイス番号', '備考', '参照ファイル']);
   receiptSheet.setFrozenRows(1);
 
   const ccSheet = ss.insertSheet('クレジットカード利用明細書');
-  ccSheet.appendRow(['解析日', 'カード会社名', '利用日', '利用先名称', '利用金額', '支払区分', '備考']);
+  ccSheet.appendRow(['解析日', 'カード会社名', '利用日', '利用先名称', '利用金額', '支払区分', '備考', '参照ファイル']);
   ccSheet.setFrozenRows(1);
 
   const bankSheet = ss.insertSheet('通帳');
-  bankSheet.appendRow(['解析日', '銀行名', '口座番号', '年月日', '摘要', '入金額', '出金額', '残高', '備考']);
+  bankSheet.appendRow(['解析日', '銀行名', '口座番号', '年月日', '摘要', '入金額', '出金額', '残高', '備考', '参照ファイル']);
   bankSheet.setFrozenRows(1);
 
   const salesSheet = ss.insertSheet('売上請求書');
-  salesSheet.appendRow(['解析日', '請求日', '請求相手先名称', '案件名', '10%売上高', '軽減8%売上高', '不課税売上高', '総売上高', '備考']);
+  salesSheet.appendRow(['解析日', '請求日', '請求相手先名称', '案件名', '10%売上高', '軽減8%売上高', '不課税売上高', '税区', '総売上高', '備考', '参照ファイル']);
   salesSheet.setFrozenRows(1);
 
   const purchaseSheet = ss.insertSheet('仕入請求書');
-  purchaseSheet.appendRow(['解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '総仕入高', '備考']);
+  purchaseSheet.appendRow(['解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '税区', '総仕入高', '備考', '参照ファイル']);
   purchaseSheet.setFrozenRows(1);
 
   const remittanceSheet = ss.insertSheet('賃貸送金明細');
-  remittanceSheet.appendRow(['解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考']);
+  remittanceSheet.appendRow(['解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考', '参照ファイル']);
   remittanceSheet.setFrozenRows(1);
 
   const cashSheet = ss.insertSheet('現金出納帳');

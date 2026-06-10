@@ -71,14 +71,15 @@ function analyzeUploadedDocuments() {
 
         // PDFをDriveから取得
         const file = DriveApp.getFileById(target.fileId);
+        const sourceFileName = file.getName();
         const blob = file.getBlob();
         const base64Data = Utilities.base64Encode(blob.getBytes());
 
         // Gemini APIで解析
         const analysisResult = callGeminiApi(base64Data, target.docType, target.bankName, clientSheet);
 
-        // スプレッドシートに書き込み
-        writeAnalysisResult(clientSheet, target.docType, analysisResult, target.bankName, target.accountNumber, target.userName);
+        // スプレッドシートに書き込み（参照ファイル名付き）
+        writeAnalysisResult(clientSheet, target.docType, analysisResult, target.bankName, target.accountNumber, target.userName, sourceFileName);
 
         // レシート・領収書の場合、現金出納帳にも書き込み
         if (target.docType === 'レシート・領収書') {
@@ -418,32 +419,32 @@ function getOrCreateClientAnalysisSheet(clientName) {
   // シート1: レシート・領収書
   const receiptSheet = ss.getActiveSheet();
   receiptSheet.setName('レシート・領収書');
-  receiptSheet.appendRow(['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '対象外金額', '支払総額', '主な品名', 'インボイス番号', '備考']);
+  receiptSheet.appendRow(['解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '対象外金額', '税区', '支払総額', '主な品名', 'インボイス番号', '備考', '参照ファイル']);
   receiptSheet.setFrozenRows(1);
 
   // シート2: クレジットカード利用明細書
   const ccSheet = ss.insertSheet('クレジットカード利用明細書');
-  ccSheet.appendRow(['解析日', 'カード会社名', '利用日', '利用先名称', '利用金額', '支払区分', '備考']);
+  ccSheet.appendRow(['解析日', 'カード会社名', '利用日', '利用先名称', '利用金額', '支払区分', '備考', '参照ファイル']);
   ccSheet.setFrozenRows(1);
 
   // シート3: 通帳
   const bankSheet = ss.insertSheet('通帳');
-  bankSheet.appendRow(['解析日', '銀行名', '口座番号', '年月日', '摘要', '入金額', '出金額', '残高', '備考']);
+  bankSheet.appendRow(['解析日', '銀行名', '口座番号', '年月日', '摘要', '入金額', '出金額', '残高', '備考', '参照ファイル']);
   bankSheet.setFrozenRows(1);
 
   // シート3: 売上請求書
   const salesSheet = ss.insertSheet('売上請求書');
-  salesSheet.appendRow(['解析日', '請求日', '請求相手先名称', '案件名', '10%売上高', '軽減8%売上高', '不課税売上高', '総売上高', '備考']);
+  salesSheet.appendRow(['解析日', '請求日', '請求相手先名称', '案件名', '10%売上高', '軽減8%売上高', '不課税売上高', '税区', '総売上高', '備考', '参照ファイル']);
   salesSheet.setFrozenRows(1);
 
   // シート4: 仕入請求書
   const purchaseSheet = ss.insertSheet('仕入請求書');
-  purchaseSheet.appendRow(['解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '総仕入高', '備考']);
+  purchaseSheet.appendRow(['解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '税区', '総仕入高', '備考', '参照ファイル']);
   purchaseSheet.setFrozenRows(1);
 
   // シート5: 賃貸送金明細
   const remittanceSheet = ss.insertSheet('賃貸送金明細');
-  remittanceSheet.appendRow(['解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考']);
+  remittanceSheet.appendRow(['解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考', '参照ファイル']);
   remittanceSheet.setFrozenRows(1);
 
   // シート6: 現金出納帳
@@ -463,8 +464,43 @@ function getOrCreateClientAnalysisSheet(clientName) {
 // 解析結果をスプレッドシートに書き込み
 // ============================================================
 
-function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber, userName) {
+/**
+ * 解析結果のJSON行から「税区」を判定する
+ * - 10%対象額のみがある → '10%'
+ * - 軽減8%対象額のみがある → '軽8%'
+ * - 対象外金額のみがある → '対象外'
+ * - 複数税率が混在 → '複数税率'
+ * 売上請求書/仕入請求書も同じルール（10%売上高/軽減8%売上高/不課税売上高等）
+ */
+function determineTaxCategory_(row, type) {
+  let a10, a8, ex;
+  if (type === 'receipt') {
+    a10 = Number(row['10%対象額']) || 0;
+    a8 = Number(row['軽減8%対象額']) || 0;
+    ex = Number(row['対象外金額']) || 0;
+  } else if (type === 'sales') {
+    a10 = Number(row['10%売上高']) || 0;
+    a8 = Number(row['軽減8%売上高']) || 0;
+    ex = Number(row['不課税売上高']) || 0;
+  } else if (type === 'purchase') {
+    a10 = Number(row['10%仕入高']) || 0;
+    a8 = Number(row['軽減8%仕入高']) || 0;
+    ex = Number(row['不課税仕入高']) || 0;
+  } else {
+    return '';
+  }
+  const nonZero = [];
+  if (a10 > 0) nonZero.push('10%');
+  if (a8 > 0) nonZero.push('軽8%');
+  if (ex > 0) nonZero.push('対象外');
+  if (nonZero.length === 0) return '';
+  if (nonZero.length === 1) return nonZero[0];
+  return '複数税率';
+}
+
+function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber, userName, sourceFileName) {
   const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd');
+  const refFile = sourceFileName || '';
   let sheet;
 
   switch (docType) {
@@ -479,10 +515,12 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber
           row['10%対象額'] || 0,
           row['軽減8%対象額'] || 0,
           row['対象外金額'] || 0,
+          determineTaxCategory_(row, 'receipt'),
           row['支払総額'] || 0,
           row['主な品名'] || '',
           row['インボイス番号'] || '',
-          row['備考'] || ''
+          row['備考'] || '',
+          refFile
         ]);
       });
       break;
@@ -497,7 +535,8 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber
           row['利用先名称'] || '',
           row['利用金額'] || 0,
           row['支払区分'] || '',
-          row['備考'] || ''
+          row['備考'] || '',
+          refFile
         ]);
       });
       break;
@@ -517,7 +556,8 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber
           row['入金額'] || 0,
           row['出金額'] || 0,
           row['残高'] || 0,
-          row['備考'] || ''
+          row['備考'] || '',
+          refFile
         ]);
       });
       break;
@@ -533,8 +573,10 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber
           row['10%売上高'] || 0,
           row['軽減8%売上高'] || 0,
           row['不課税売上高'] || 0,
+          determineTaxCategory_(row, 'sales'),
           row['総売上高'] || 0,
-          row['備考'] || ''
+          row['備考'] || '',
+          refFile
         ]);
       });
       break;
@@ -550,8 +592,10 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber
           row['10%仕入高'] || 0,
           row['軽減8%仕入高'] || 0,
           row['不課税仕入高'] || 0,
+          determineTaxCategory_(row, 'purchase'),
           row['総仕入高'] || 0,
-          row['備考'] || ''
+          row['備考'] || '',
+          refFile
         ]);
       });
       break;
@@ -561,7 +605,7 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber
       if (!sheet) {
         // 既存スプレッドシート用にタブが無い場合は作成
         sheet = clientSheet.insertSheet('賃貸送金明細');
-        sheet.appendRow(['解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考']);
+        sheet.appendRow(['解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考', '参照ファイル']);
         sheet.setFrozenRows(1);
       }
       rows.forEach(row => {
@@ -575,7 +619,8 @@ function writeAnalysisResult(clientSheet, docType, rows, bankName, accountNumber
           row['収入額'] || 0,
           row['収入消費税'] || 0,
           row['手数料'] || 0,
-          row['備考'] || ''
+          row['備考'] || '',
+          refFile
         ]);
       });
       break;
@@ -693,7 +738,7 @@ function analyzeSyncedFiles() {
           const userName = '';
 
           const analysisResult = callGeminiApi(base64Data, classification.docType, bankName, clientSheet);
-          writeAnalysisResult(clientSheet, classification.docType, analysisResult, bankName, accountNumber, userName);
+          writeAnalysisResult(clientSheet, classification.docType, analysisResult, bankName, accountNumber, userName, fileName);
 
           // レシートの場合、現金出納帳にも書き込み
           if (classification.docType === 'レシート・領収書') {

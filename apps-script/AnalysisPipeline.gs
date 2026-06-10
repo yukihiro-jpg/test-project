@@ -456,21 +456,22 @@ function initializeIndividualSheetTabs_(ss, docType) {
 }
 
 function getHeadersForDocType_(docType) {
-  // 個別gsheet用のヘッダ。先頭に「参照元PDFファイル」列をつけて、
-  // 複数PDFが集約されたときにどのPDFの行か追えるようにする
+  // 個別gsheet用のヘッダ。先頭に「参照ファイル」列をつけて、
+  // 複数PDFが集約されたときにどのPDFの行か追えるようにする。
+  // 税区はレシート/請求書系のみ追加。
   switch (docType) {
     case 'レシート・領収書':
-      return ['参照元PDFファイル', '解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '対象外金額', '支払総額', '主な品名', 'インボイス番号', '備考'];
+      return ['参照ファイル', '解析日', '使用者名', '日付', '相手先名称', '10%対象額', '軽減8%対象額', '対象外金額', '税区', '支払総額', '主な品名', 'インボイス番号', '備考'];
     case 'クレジットカード利用明細書':
-      return ['参照元PDFファイル', '解析日', 'カード会社名', '利用日', '利用先名称', '利用金額', '支払区分', '備考'];
+      return ['参照ファイル', '解析日', 'カード会社名', '利用日', '利用先名称', '利用金額', '支払区分', '備考'];
     case '通帳':
-      return ['参照元PDFファイル', '解析日', '銀行名', '口座番号', '年月日', '摘要', '入金額', '出金額', '残高', '備考'];
+      return ['参照ファイル', '解析日', '銀行名', '口座番号', '年月日', '摘要', '入金額', '出金額', '残高', '備考'];
     case '売上請求書':
-      return ['参照元PDFファイル', '解析日', '請求日', '請求相手先名称', '案件名', '10%売上高', '軽減8%売上高', '不課税売上高', '総売上高', '備考'];
+      return ['参照ファイル', '解析日', '請求日', '請求相手先名称', '案件名', '10%売上高', '軽減8%売上高', '不課税売上高', '税区', '総売上高', '備考'];
     case '仕入請求書':
-      return ['参照元PDFファイル', '解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '総仕入高', '備考'];
+      return ['参照ファイル', '解析日', '請求日', '相手方名称', '主たる購入品目', '10%仕入高', '軽減8%仕入高', '不課税仕入高', '税区', '総仕入高', '備考'];
     case '賃貸送金明細':
-      return ['参照元PDFファイル', '解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考'];
+      return ['参照ファイル', '解析日', '対象月', '送金日', '送金元', '物件名', '振込額', '収入額(税抜)', '収入消費税', '手数料', '備考'];
     default:
       return null;
   }
@@ -497,6 +498,7 @@ function writeRowsWithSource_(ss, docType, rows, sourceFileName, bankName, accou
           row['10%対象額'] || 0,
           row['軽減8%対象額'] || 0,
           row['対象外金額'] || 0,
+          determineTaxCategory_(row, 'receipt'),
           row['支払総額'] || 0,
           row['主な品名'] || '',
           row['インボイス番号'] || '',
@@ -548,6 +550,7 @@ function writeRowsWithSource_(ss, docType, rows, sourceFileName, bankName, accou
           row['10%売上高'] || 0,
           row['軽減8%売上高'] || 0,
           row['不課税売上高'] || 0,
+          determineTaxCategory_(row, 'sales'),
           row['総売上高'] || 0,
           row['備考'] || ''
         ]);
@@ -565,6 +568,7 @@ function writeRowsWithSource_(ss, docType, rows, sourceFileName, bankName, accou
           row['10%仕入高'] || 0,
           row['軽減8%仕入高'] || 0,
           row['不課税仕入高'] || 0,
+          determineTaxCategory_(row, 'purchase'),
           row['総仕入高'] || 0,
           row['備考'] || ''
         ]);
@@ -1281,6 +1285,84 @@ function testAnalyzeEmailAttachments() {
 
 function testRunUnifiedPipeline() {
   runUnifiedPipeline();
+}
+
+// 既存スプレッドシートに「税区」「参照ファイル」列を追加するマイグレーション
+// レシート/売上請求書/仕入請求書には税区を、全タブ末尾に参照ファイルを追加
+function migrateAddTaxCategoryAndSourceColumns() {
+  const parentFolder = getParentFolder_();
+  if (!parentFolder) throw new Error('親フォルダが取得できません');
+
+  // タブ別の列追加設定（税区を挿入する列名、参照ファイルは末尾追加）
+  const tabConfig = {
+    'レシート・領収書': { taxInsertBefore: '支払総額' },
+    '売上請求書': { taxInsertBefore: '総売上高' },
+    '仕入請求書': { taxInsertBefore: '総仕入高' },
+    'クレジットカード利用明細書': {},
+    '通帳': {},
+    '賃貸送金明細': {},
+  };
+
+  let processed = 0;
+  let taxAdded = 0;
+  let refAdded = 0;
+
+  const clientFolders = parentFolder.getFolders();
+  while (clientFolders.hasNext()) {
+    const clientFolder = clientFolders.next();
+    const clientName = clientFolder.getName();
+    if (clientName.startsWith('_')) continue;
+
+    const sheetName = `${clientName}_解析結果`;
+    let ss = null;
+    const ar = clientFolder.getFoldersByName('解析データ');
+    if (ar.hasNext()) {
+      const sp = ar.next().getFoldersByName('スマホ撮影');
+      if (sp.hasNext()) {
+        const fs = sp.next().getFilesByName(sheetName);
+        if (fs.hasNext()) ss = SpreadsheetApp.open(fs.next());
+      }
+    }
+    if (!ss) {
+      const fs2 = clientFolder.getFilesByName(sheetName);
+      if (fs2.hasNext()) ss = SpreadsheetApp.open(fs2.next());
+    }
+    if (!ss) continue;
+    processed++;
+
+    Object.keys(tabConfig).forEach(tabName => {
+      const sheet = ss.getSheetByName(tabName);
+      if (!sheet) return;
+      const cfg = tabConfig[tabName];
+      const lastCol = sheet.getLastColumn();
+      if (lastCol === 0) return;
+      const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+
+      // 税区列の挿入
+      if (cfg.taxInsertBefore && headers.indexOf('税区') < 0) {
+        const idx = headers.indexOf(cfg.taxInsertBefore);
+        if (idx >= 0) {
+          const insertAt = idx + 1; // 1始まり
+          sheet.insertColumnBefore(insertAt);
+          sheet.getRange(1, insertAt).setValue('税区');
+          headers.splice(idx, 0, '税区');
+          taxAdded++;
+        }
+      }
+
+      // 参照ファイル列の末尾追加
+      const refreshed = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      if (refreshed.indexOf('参照ファイル') < 0) {
+        const newCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, newCol).setValue('参照ファイル');
+        refAdded++;
+      }
+    });
+
+    console.log(`  ${clientName}: マイグレーション処理済み`);
+  }
+
+  console.log(`=== 完了: ${processed}スプレッドシート / 税区追加 ${taxAdded}タブ / 参照ファイル追加 ${refAdded}タブ ===`);
 }
 
 // 既存スプレッドシートに「賃貸送金明細」タブを追加
