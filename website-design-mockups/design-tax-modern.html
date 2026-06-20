@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KSK会計事務所｜税務法務系モダン案</title>
+<style>
+  :root{
+    --navy:#0e2a47; --navy2:#15395f; --gold:#b8924a; --gold2:#caa45f;
+    --ink:#1c2b3a; --gray:#5b6b7a; --line:#e3e8ee; --bg:#fff; --soft:#f5f7fa;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Noto Sans JP","Helvetica Neue",Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.85;-webkit-font-smoothing:antialiased}
+  h1,h2,h3,.serif{font-family:"Noto Serif JP",serif}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+  .eyebrow{font-size:12px;letter-spacing:.28em;color:var(--gold);font-weight:700;display:block;margin-bottom:14px}
+  .eyebrow::before{content:"";display:inline-block;width:28px;height:1px;background:var(--gold);vertical-align:middle;margin-right:10px}
+  /* top bar */
+  .topbar{background:var(--navy);color:#cdd9e5;font-size:12.5px}
+  .topbar .wrap{display:flex;justify-content:space-between;height:38px;align-items:center}
+  /* header */
+  header{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;height:78px;gap:8px}
+  .brand{display:flex;align-items:center;gap:14px}
+  .brand .mark{width:44px;height:44px;border:1.5px solid var(--gold);display:flex;align-items:center;justify-content:center;color:var(--navy);font-family:"Noto Serif JP",serif;font-weight:700;font-size:20px}
+  .brand .nm{font-family:"Noto Serif JP",serif;font-size:21px;font-weight:700;letter-spacing:.05em;color:var(--navy)}
+  .brand .nm small{display:block;font-family:"Noto Sans JP";font-size:10.5px;letter-spacing:.25em;color:var(--gray);font-weight:400}
+  .nav nav{margin-left:auto;display:flex;gap:26px;align-items:center}
+  .nav nav a{font-size:14px;color:var(--ink);position:relative;padding:4px 0}
+  .nav nav a::after{content:"";position:absolute;left:0;bottom:-4px;width:0;height:2px;background:var(--gold);transition:.25s}
+  .nav nav a:hover::after{width:100%}
+  .tel{font-family:"Noto Serif JP",serif;font-weight:700;color:var(--navy);font-size:18px;letter-spacing:.04em;margin-left:8px}
+  .btn{display:inline-block;background:var(--navy);color:#fff;padding:14px 30px;font-size:14px;letter-spacing:.08em;border:none;cursor:pointer;transition:.25s}
+  .btn:hover{background:var(--gold);}
+  .btn.gold{background:var(--gold)} .btn.gold:hover{background:var(--navy)}
+  .btn.line{background:transparent;border:1px solid rgba(255,255,255,.5);color:#fff}
+  .btn.line:hover{background:#fff;color:var(--navy);border-color:#fff}
+  /* hero */
+  .hero{position:relative;min-height:600px;display:flex;align-items:center;color:#fff;overflow:hidden}
+  .hero::before{content:"";position:absolute;inset:0;background:
+    linear-gradient(100deg,rgba(14,42,71,.92) 0%,rgba(14,42,71,.72) 45%,rgba(14,42,71,.25) 100%),
+    url("https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1800&q=80") center/cover}
+  .hero .wrap{position:relative;padding:90px 28px}
+  .hero h1{font-size:50px;line-height:1.5;font-weight:700;letter-spacing:.04em;margin-bottom:24px}
+  .hero h1 em{font-style:normal;color:var(--gold2)}
+  .hero p{font-size:17px;max-width:46ch;color:#dbe4ee;margin-bottom:36px}
+  .hero .cta{display:flex;gap:14px;flex-wrap:wrap}
+  .hero .badges{position:absolute;right:28px;bottom:40px;display:flex;gap:10px}
+  .hero .badge{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);backdrop-filter:blur(6px);padding:12px 18px;font-size:13px}
+  .hero .badge b{color:var(--gold2);font-family:"Noto Serif JP",serif;font-size:22px;display:block}
+  /* trust strip */
+  .strip{background:var(--soft);border-bottom:1px solid var(--line)}
+  .strip .wrap{display:grid;grid-template-columns:repeat(4,1fr)}
+  .strip .it{padding:30px 24px;text-align:center;border-right:1px solid var(--line)}
+  .strip .it:last-child{border:none}
+  .strip .it b{font-family:"Noto Serif JP",serif;font-size:34px;color:var(--navy);display:block;line-height:1}
+  .strip .it b small{font-size:15px;color:var(--gold)}
+  .strip .it span{font-size:13px;color:var(--gray)}
+  /* section */
+  section{padding:96px 0}
+  .head{margin-bottom:54px}
+  h2{font-size:34px;color:var(--navy);font-weight:700;letter-spacing:.06em;line-height:1.5}
+  .head .en{display:block;font-size:13px;letter-spacing:.3em;color:var(--gold);margin-top:8px;font-family:"Noto Sans JP"}
+  /* services list */
+  .svc{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border-top:1px solid var(--line);border-left:1px solid var(--line)}
+  .svc .row{display:flex;gap:22px;padding:34px 30px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);transition:.25s}
+  .svc .row:hover{background:var(--soft)}
+  .svc .no{font-family:"Noto Serif JP",serif;font-size:15px;color:var(--gold);border:1px solid var(--gold);width:46px;height:46px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .svc h3{font-size:20px;color:var(--navy);margin-bottom:8px;font-weight:700;letter-spacing:.04em}
+  .svc p{font-size:14.5px;color:var(--gray)}
+  /* about split */
+  .about{background:var(--navy);color:#e7eef5}
+  .about .grid{display:grid;grid-template-columns:1fr 1.15fr;gap:64px;align-items:center}
+  .about img{width:100%;aspect-ratio:4/5;object-fit:cover}
+  .about h2{color:#fff}
+  .about .eyebrow{color:var(--gold2)}
+  .about p{color:#c4d2df;font-size:15.5px;margin-bottom:18px}
+  .about .sign{font-family:"Noto Serif JP",serif;font-size:18px;color:#fff;margin-top:24px}
+  .about .sign small{display:block;color:var(--gold2);font-size:13px;letter-spacing:.2em;font-family:"Noto Sans JP";margin-bottom:4px}
+  /* why */
+  .why{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+  .why .c{border:1px solid var(--line);padding:36px 30px;position:relative}
+  .why .c .n{font-family:"Noto Serif JP",serif;font-size:14px;color:var(--gold);letter-spacing:.2em}
+  .why .c h3{font-size:19px;color:var(--navy);margin:14px 0 10px;font-weight:700}
+  .why .c p{font-size:14px;color:var(--gray)}
+  .why .c::after{content:"";position:absolute;left:0;top:0;width:3px;height:0;background:var(--gold);transition:.3s}
+  .why .c:hover::after{height:100%}
+  /* flow */
+  .flow{counter-reset:s;border-top:1px solid var(--line)}
+  .flow .r{display:grid;grid-template-columns:120px 1fr;gap:30px;padding:30px 0;border-bottom:1px solid var(--line);align-items:baseline}
+  .flow .r .st{font-family:"Noto Serif JP",serif;color:var(--gold);font-size:14px;letter-spacing:.2em}
+  .flow .r .st b{display:block;font-size:40px;color:var(--navy);line-height:1}
+  .flow .r h3{font-size:19px;color:var(--navy);margin-bottom:6px}
+  .flow .r p{color:var(--gray);font-size:14.5px}
+  /* price */
+  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+  .plan{border:1px solid var(--line);padding:40px 32px;text-align:center;transition:.25s}
+  .plan.pop{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .plan h3{font-family:"Noto Serif JP",serif;font-size:22px;color:var(--navy);letter-spacing:.1em}
+  .plan.pop h3{color:#fff}
+  .plan .p{font-family:"Noto Serif JP",serif;font-size:40px;color:var(--navy);margin:16px 0;letter-spacing:.02em}
+  .plan.pop .p{color:var(--gold2)}
+  .plan .p small{font-size:15px;color:var(--gray)} .plan.pop .p small{color:#aebfce}
+  .plan ul{list-style:none;margin:20px 0 28px;text-align:left}
+  .plan li{padding:9px 0;font-size:14px;border-bottom:1px solid var(--line);color:var(--gray)}
+  .plan.pop li{border-color:rgba(255,255,255,.12);color:#d4ddE6}
+  .plan li::before{content:"—";color:var(--gold);margin-right:10px}
+  /* cta band */
+  .band{position:relative;color:#fff;text-align:center;overflow:hidden}
+  .band::before{content:"";position:absolute;inset:0;background:linear-gradient(rgba(14,42,71,.9),rgba(14,42,71,.9)),url("https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1800&q=80") center/cover}
+  .band .wrap{position:relative;padding:88px 28px}
+  .band h2{color:#fff;margin-bottom:18px}
+  .band p{color:#cdd9e5;margin-bottom:32px}
+  /* contact */
+  .contact{display:grid;grid-template-columns:1fr 1.1fr;gap:56px}
+  .info dl{display:flex;border-bottom:1px solid var(--line);padding:16px 0;font-size:15px}
+  .info dt{min-width:120px;color:var(--gold);font-weight:700;letter-spacing:.08em}
+  .info dd{color:var(--ink)}
+  form{background:var(--soft);padding:36px}
+  form label{display:block;font-size:13px;color:var(--navy);font-weight:700;margin:14px 0 6px;letter-spacing:.05em}
+  form input,form textarea{width:100%;border:1px solid var(--line);padding:13px 15px;font-size:15px;font-family:inherit;background:#fff}
+  form input:focus,form textarea:focus{outline:none;border-color:var(--gold)}
+  /* footer */
+  footer{background:var(--navy);color:#9fb3c6;font-size:13px;padding:54px 0 30px}
+  .fcols{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:40px;padding-bottom:34px;border-bottom:1px solid rgba(255,255,255,.12)}
+  footer .brand .nm{color:#fff}
+  footer h4{color:#fff;font-size:13px;letter-spacing:.2em;margin-bottom:16px}
+  footer a{display:block;padding:5px 0;color:#9fb3c6}
+  footer a:hover{color:var(--gold2)}
+  .copy{padding-top:22px;text-align:center;color:#7c93a8}
+  @media(max-width:900px){
+    .nav nav,.topbar{display:none}
+    .hero h1{font-size:32px} h2{font-size:26px}
+    .svc,.why,.plans,.strip .wrap,.about .grid,.contact,.fcols{grid-template-columns:1fr}
+    .strip .it{border-right:none;border-bottom:1px solid var(--line)}
+    .hero .badges{position:static;margin-top:24px}
+  }
+</style>
+</head>
+<body>
+<div class="topbar"><div class="wrap"><span>創業30年・地域密着の会計事務所</span><span>受付時間 平日 9:00〜18:00</span></div></div>
+
+<header>
+  <div class="wrap nav">
+    <div class="brand">
+      <div class="mark">税</div>
+      <div class="nm">KSK会計事務所<small>KSK ACCOUNTING OFFICE</small></div>
+    </div>
+    <nav>
+      <a href="#service">サービス</a>
+      <a href="#about">事務所案内</a>
+      <a href="#why">選ばれる理由</a>
+      <a href="#price">料金</a>
+      <a href="#contact">お問い合わせ</a>
+      <span class="tel">000-000-0000</span>
+      <a href="#contact" class="btn gold">無料相談</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <span class="eyebrow" style="color:var(--gold2)">RELIABLE PARTNER FOR YOUR BUSINESS</span>
+      <h1>誠実な仕事で、<br>会社の未来に<em>責任</em>を持つ。</h1>
+      <p>税務顧問・相続・会社設立まで。経験豊富な専門家が、貴社の経営を数字の面から確かに支えます。</p>
+      <div class="cta">
+        <a href="#contact" class="btn gold">無料相談を予約する</a>
+        <a href="#service" class="btn line">サービス一覧</a>
+      </div>
+      <div class="badges">
+        <div class="badge"><b>30年</b>地域での実績</div>
+        <div class="badge"><b>1,200社</b>累計サポート</div>
+        <div class="badge"><b>98%</b>顧問継続率</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STRIP -->
+  <div class="strip">
+    <div class="wrap">
+      <div class="it"><b>30<small>年</small></b><span>創業からの歩み</span></div>
+      <div class="it"><b>1,200<small>社</small></b><span>累計サポート企業</span></div>
+      <div class="it"><b>24<small>時間</small></b><span>平均レスポンス</span></div>
+      <div class="it"><b>無料</b><span>初回ご相談</span></div>
+    </div>
+  </div>
+
+  <!-- SERVICE -->
+  <section id="service" class="wrap">
+    <div class="head">
+      <span class="eyebrow">SERVICE</span>
+      <h2>業務内容</h2>
+      <span class="en">専門家によるワンストップサポート</span>
+    </div>
+    <div class="svc">
+      <div class="row"><div class="no">01</div><div><h3>税務顧問</h3><p>月次巡回監査と決算・申告を通じ、経営の数字を可視化。節税と資金繰りまで継続的に支援します。</p></div></div>
+      <div class="row"><div class="no">02</div><div><h3>確定申告・記帳代行</h3><p>個人事業主・フリーランスの記帳から申告まで一括代行。煩雑な作業から解放されます。</p></div></div>
+      <div class="row"><div class="no">03</div><div><h3>相続・贈与</h3><p>生前対策から相続税申告まで一貫対応。円満な資産承継を専門家が丁寧にサポートします。</p></div></div>
+      <div class="row"><div class="no">04</div><div><h3>会社設立・創業支援</h3><p>設立手続き・事業計画・資金調達まで。創業期の不安を専門家が伴走して解消します。</p></div></div>
+      <div class="row"><div class="no">05</div><div><h3>経営コンサルティング</h3><p>月次レポートと定期面談で、数字を経営判断に活かす。次の一手を共に描きます。</p></div></div>
+      <div class="row"><div class="no">06</div><div><h3>給与計算・社会保険</h3><p>給与計算・年末調整・社会保険手続きを代行し、バックオフィスを最適化します。</p></div></div>
+    </div>
+  </section>
+
+  <!-- ABOUT -->
+  <section id="about" class="about">
+    <div class="wrap">
+      <div class="grid">
+        <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=900&q=80" alt="代表">
+        <div>
+          <span class="eyebrow">MESSAGE</span>
+          <h2>「身近な専門家」<br>であり続けるために。</h2>
+          <p>私たちは、ただ数字を扱う事務所ではありません。経営者の悩みに耳を傾け、同じ目線で未来を考える——そんな「いちばん近くの相談相手」でありたいと考えています。</p>
+          <p>制度が複雑化する時代だからこそ、わかりやすい言葉で、誠実に。創業から30年、その姿勢を変えることなく地域の事業者様と歩んでまいりました。</p>
+          <div class="sign"><small>代表税理士</small>所長　○○ ○○</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHY -->
+  <section id="why" class="wrap">
+    <div class="head">
+      <span class="eyebrow">REASON</span>
+      <h2>選ばれる理由</h2>
+      <span class="en">ご相談いただく4つの理由</span>
+    </div>
+    <div class="why">
+      <div class="c"><span class="n">POINT 01</span><h3>明朗な料金体系</h3><p>初回相談は無料。費用は契約前に明確にご提示し、不透明な追加請求はありません。</p></div>
+      <div class="c"><span class="n">POINT 02</span><h3>クラウド会計に強い</h3><p>freee・マネーフォワードに完全対応。最新の数字をリアルタイムで共有します。</p></div>
+      <div class="c"><span class="n">POINT 03</span><h3>迅速なレスポンス</h3><p>平均24時間以内に回答。お急ぎのご相談にも、スピーディーに対応します。</p></div>
+    </div>
+  </section>
+
+  <!-- FLOW -->
+  <section class="wrap" style="padding-top:0">
+    <div class="head">
+      <span class="eyebrow">FLOW</span>
+      <h2>ご相談の流れ</h2>
+    </div>
+    <div class="flow">
+      <div class="r"><div class="st">STEP<b>01</b></div><div><h3>お問い合わせ</h3><p>フォームまたはお電話にて受付。費用は一切かかりません。</p></div></div>
+      <div class="r"><div class="st">STEP<b>02</b></div><div><h3>無料面談・ヒアリング</h3><p>現状とお悩みを丁寧にお伺いし、最適なプランをご提案します。</p></div></div>
+      <div class="r"><div class="st">STEP<b>03</b></div><div><h3>お見積り・ご契約</h3><p>明朗な料金をご提示。内容にご納得いただいたうえでご契約です。</p></div></div>
+      <div class="r"><div class="st">STEP<b>04</b></div><div><h3>サポート開始</h3><p>専任担当がつき、速やかにサポートを開始いたします。</p></div></div>
+    </div>
+  </section>
+
+  <!-- PRICE -->
+  <section id="price" class="wrap" style="padding-top:0">
+    <div class="head">
+      <span class="eyebrow">PRICE</span>
+      <h2>料金プラン</h2>
+      <span class="en">事業規模に合わせた3つのプラン</span>
+    </div>
+    <div class="plans">
+      <div class="plan"><h3>LIGHT</h3><div class="p">¥15,000<small>/月〜</small></div><ul><li>記帳サポート</li><li>決算・申告</li><li>チャット相談</li></ul><a href="#contact" class="btn" style="width:100%">相談する</a></div>
+      <div class="plan pop"><h3>STANDARD</h3><div class="p">¥30,000<small>/月〜</small></div><ul><li>月次巡回監査</li><li>決算・申告・節税提案</li><li>経営レポート</li><li>面談（隔月）</li></ul><a href="#contact" class="btn gold" style="width:100%">相談する</a></div>
+      <div class="plan"><h3>FULL</h3><div class="p">¥50,000<small>/月〜</small></div><ul><li>スタンダード全内容</li><li>給与計算・社会保険</li><li>経営コンサル面談</li></ul><a href="#contact" class="btn" style="width:100%">相談する</a></div>
+    </div>
+  </section>
+
+  <!-- BAND -->
+  <section class="band">
+    <div class="wrap">
+      <span class="eyebrow" style="color:var(--gold2)">CONTACT</span>
+      <h2>まずは、お気軽にご相談ください。</h2>
+      <p>税務のお悩みから将来の事業承継まで。専門家がしっかりとお応えします。</p>
+      <a href="#contact" class="btn gold">無料相談を予約する</a>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section id="contact" class="wrap" style="padding-top:96px">
+    <div class="head">
+      <span class="eyebrow">CONTACT</span>
+      <h2>お問い合わせ</h2>
+    </div>
+    <div class="contact">
+      <div class="info">
+        <dl><dt>事務所名</dt><dd>KSK会計事務所（仮）</dd></dl>
+        <dl><dt>所在地</dt><dd>〒000-0000 ○○県○○市○○町0-0-0 ○○ビル0F</dd></dl>
+        <dl><dt>電話番号</dt><dd>000-000-0000</dd></dl>
+        <dl><dt>メール</dt><dd>info@example.com</dd></dl>
+        <dl><dt>受付時間</dt><dd>平日 9:00〜18:00（土日祝休）</dd></dl>
+      </div>
+      <form onsubmit="return false">
+        <label>お名前</label><input placeholder="山田 太郎">
+        <label>会社名</label><input placeholder="株式会社○○">
+        <label>メールアドレス</label><input placeholder="you@example.com">
+        <label>ご相談内容</label><textarea rows="4" placeholder="ご相談内容をご記入ください"></textarea>
+        <button class="btn gold" style="margin-top:20px;width:100%">この内容で送信する</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="fcols">
+      <div>
+        <div class="brand"><div class="mark" style="border-color:var(--gold2)">税</div><div class="nm">KSK会計事務所</div></div>
+        <p style="margin-top:16px;max-width:34ch">創業30年。地域の事業者様の「いちばん近くの相談相手」として歩み続けています。</p>
+      </div>
+      <div><h4>SERVICE</h4><a href="#service">税務顧問</a><a href="#service">確定申告</a><a href="#service">相続・贈与</a><a href="#service">会社設立</a></div>
+      <div><h4>INFORMATION</h4><a href="#about">事務所案内</a><a href="#price">料金プラン</a><a href="#contact">お問い合わせ</a></div>
+    </div>
+    <div class="copy">© KSK会計事務所（仮）｜このページはデザイン確認用モックアップです（税務法務系モダン案）</div>
+  </div>
+</footer>
+</body>
+</html>

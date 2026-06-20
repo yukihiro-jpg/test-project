@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KSK会計事務所｜Googleイメージ案</title>
+<style>
+  :root{
+    --blue:#1a73e8; --red:#ea4335; --yellow:#fbbc04; --green:#34a853;
+    --ink:#202124; --gray:#5f6368; --line:#dadce0; --bg:#fff; --soft:#f8f9fa;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Roboto","Noto Sans JP","Helvetica Neue",Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased}
+  a{color:var(--blue);text-decoration:none}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 24px}
+  /* header */
+  header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);backdrop-filter:saturate(180%) blur(8px);border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;height:64px;gap:8px}
+  .logo{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:500;letter-spacing:-.5px}
+  .logo .dots{display:inline-flex;gap:3px}
+  .logo .dots i{width:9px;height:9px;border-radius:50%;display:inline-block}
+  .logo b{font-weight:500}
+  .nav nav{margin-left:auto;display:flex;gap:4px;align-items:center}
+  .nav nav a{color:var(--gray);font-size:14px;padding:8px 14px;border-radius:999px;font-weight:500}
+  .nav nav a:hover{background:var(--soft);color:var(--ink)}
+  .btn{display:inline-block;background:var(--blue);color:#fff;border:none;border-radius:999px;padding:10px 22px;font-size:14px;font-weight:500;cursor:pointer;transition:.2s}
+  .btn:hover{box-shadow:0 1px 3px rgba(60,64,67,.3),0 4px 8px rgba(60,64,67,.15)}
+  .btn.ghost{background:#fff;color:var(--blue);border:1px solid var(--line)}
+  /* hero */
+  .hero{padding:72px 0 56px;display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+  .hero h1{font-size:52px;line-height:1.15;font-weight:400;letter-spacing:-1.5px;margin-bottom:20px}
+  .hero h1 .g{background:linear-gradient(90deg,var(--blue),var(--green));-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:500}
+  .hero p{font-size:18px;color:var(--gray);margin-bottom:28px;max-width:34ch}
+  .hero .cta{display:flex;gap:12px;flex-wrap:wrap}
+  .hero .pic{position:relative}
+  .hero .pic img{width:100%;border-radius:28px;display:block;aspect-ratio:4/3;object-fit:cover;box-shadow:0 12px 40px rgba(60,64,67,.18)}
+  .hero .chip{position:absolute;background:#fff;border-radius:16px;box-shadow:0 6px 24px rgba(60,64,67,.18);padding:12px 16px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px}
+  .hero .chip .dot{width:10px;height:10px;border-radius:50%}
+  .chip.c1{bottom:18px;left:-18px}
+  .chip.c2{top:18px;right:-14px}
+  /* pill row */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:8px 0 64px}
+  .stat{background:var(--soft);border-radius:18px;padding:24px}
+  .stat .n{font-size:34px;font-weight:500;letter-spacing:-1px}
+  .stat .n.b{color:var(--blue)} .stat .n.r{color:var(--red)} .stat .n.y{color:#f9ab00} .stat .n.g{color:var(--green)}
+  .stat .l{font-size:13px;color:var(--gray)}
+  /* section */
+  section{padding:64px 0}
+  .eyebrow{display:inline-block;font-size:13px;font-weight:600;color:var(--blue);background:#e8f0fe;padding:5px 14px;border-radius:999px;margin-bottom:14px}
+  h2{font-size:36px;font-weight:400;letter-spacing:-1px;margin-bottom:14px}
+  .lead{color:var(--gray);font-size:17px;max-width:60ch;margin-bottom:40px}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .card{border:1px solid var(--line);border-radius:20px;padding:28px;transition:.2s;background:#fff}
+  .card:hover{box-shadow:0 1px 3px rgba(60,64,67,.2),0 8px 24px rgba(60,64,67,.12);transform:translateY(-3px)}
+  .card .ic{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px}
+  .card h3{font-size:19px;font-weight:500;margin-bottom:8px}
+  .card p{color:var(--gray);font-size:14.5px}
+  .ic.b{background:#e8f0fe}.ic.r{background:#fce8e6}.ic.y{background:#fef7e0}.ic.g{background:#e6f4ea}
+  /* why */
+  .why{background:var(--soft);border-radius:32px}
+  .why .grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+  .why img{width:100%;border-radius:24px;aspect-ratio:5/4;object-fit:cover}
+  .why ul{list-style:none;margin-top:8px}
+  .why li{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
+  .why li:last-child{border:none}
+  .why li .k{width:30px;height:30px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px}
+  .why li b{font-weight:500;display:block}
+  .why li span{color:var(--gray);font-size:14px}
+  /* steps */
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+  .step{text-align:center}
+  .step .num{width:56px;height:56px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;margin:0 auto 14px;color:var(--blue)}
+  .step h4{font-weight:500;margin-bottom:6px}
+  .step p{font-size:14px;color:var(--gray)}
+  /* price */
+  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .plan{border:1px solid var(--line);border-radius:24px;padding:32px;position:relative}
+  .plan.pop{border:2px solid var(--blue);box-shadow:0 8px 30px rgba(26,115,232,.12)}
+  .plan .tag{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--blue);color:#fff;font-size:12px;font-weight:500;padding:5px 16px;border-radius:999px}
+  .plan h3{font-size:20px;font-weight:500}
+  .plan .price{font-size:38px;font-weight:500;letter-spacing:-1px;margin:8px 0}
+  .plan .price small{font-size:15px;color:var(--gray);font-weight:400}
+  .plan ul{list-style:none;margin:18px 0 24px}
+  .plan li{padding:8px 0;font-size:14.5px;color:#3c4043;display:flex;gap:10px}
+  .plan li::before{content:"✓";color:var(--green);font-weight:700}
+  .plan .btn{width:100%;text-align:center}
+  /* cta band */
+  .band{background:linear-gradient(120deg,#1a73e8,#174ea6);color:#fff;border-radius:32px;padding:56px;text-align:center}
+  .band h2{color:#fff}
+  .band p{color:#d2e3fc;margin-bottom:26px;font-size:17px}
+  .band .btn{background:#fff;color:var(--blue)}
+  /* contact */
+  .contact{display:grid;grid-template-columns:1fr 1fr;gap:40px}
+  .info p{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
+  .info p b{min-width:90px;color:var(--gray);font-weight:500}
+  form{background:var(--soft);border-radius:24px;padding:28px}
+  form label{display:block;font-size:13px;color:var(--gray);margin:12px 0 6px;font-weight:500}
+  form input,form textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px;font-family:inherit;background:#fff}
+  form input:focus,form textarea:focus{outline:none;border-color:var(--blue)}
+  /* footer */
+  footer{border-top:1px solid var(--line);padding:40px 0;margin-top:40px;color:var(--gray);font-size:13px}
+  .foot{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
+  @media(max-width:900px){
+    .hero,.why .grid,.contact{grid-template-columns:1fr}
+    .stats,.cards,.plans,.steps{grid-template-columns:1fr 1fr}
+    .hero h1{font-size:38px} h2{font-size:28px}
+    .nav nav{display:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap nav">
+    <div class="logo">
+      <span class="dots"><i style="background:#1a73e8"></i><i style="background:#ea4335"></i><i style="background:#fbbc04"></i><i style="background:#34a853"></i></span>
+      <b>KSK会計事務所</b>
+    </div>
+    <nav>
+      <a href="#service">サービス</a>
+      <a href="#why">選ばれる理由</a>
+      <a href="#flow">ご相談の流れ</a>
+      <a href="#price">料金</a>
+      <a href="#contact">お問い合わせ</a>
+      <a href="#contact" class="btn">無料相談</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- HERO -->
+  <section class="hero">
+    <div>
+      <h1>数字のことは、<br><span class="g">いちばん近くの</span><br>相談相手に。</h1>
+      <p>税務顧問から確定申告、相続、会社設立まで。クラウド会計に強い会計事務所が、あなたのビジネスを伴走します。</p>
+      <div class="cta">
+        <a href="#contact" class="btn">無料で相談する</a>
+        <a href="#service" class="btn ghost">サービスを見る</a>
+      </div>
+    </div>
+    <div class="pic">
+      <img src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80" alt="打ち合わせの様子">
+      <div class="chip c1"><span class="dot" style="background:#34a853"></span>初回相談 無料</div>
+      <div class="chip c2"><span class="dot" style="background:#1a73e8"></span>クラウド会計対応</div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <div class="stats">
+    <div class="stat"><div class="n b">30<small>年</small></div><div class="l">地域密着の実績</div></div>
+    <div class="stat"><div class="n r">1,200<small>社</small></div><div class="l">累計サポート企業</div></div>
+    <div class="stat"><div class="n y">24<small>時間</small></div><div class="l">平均レスポンス</div></div>
+    <div class="stat"><div class="n g">98<small>%</small></div><div class="l">顧問継続率</div></div>
+  </div>
+
+  <!-- SERVICE -->
+  <section id="service">
+    <span class="eyebrow">SERVICE</span>
+    <h2>サービス</h2>
+    <p class="lead">創業期から事業承継まで、フェーズに合わせた専門サービスをワンストップでご提供します。</p>
+    <div class="cards">
+      <div class="card"><div class="ic b">📊</div><h3>税務顧問</h3><p>月次巡回監査と決算・申告で、経営の数字を毎月可視化。節税と資金繰りまでサポートします。</p></div>
+      <div class="card"><div class="ic r">🧾</div><h3>確定申告・記帳代行</h3><p>個人事業主・フリーランスの記帳から申告までまるごと代行。本業に集中いただけます。</p></div>
+      <div class="card"><div class="ic y">🏠</div><h3>相続・贈与</h3><p>円満な資産承継を専門家がサポート。生前対策から申告手続きまで一貫して対応します。</p></div>
+      <div class="card"><div class="ic g">🚀</div><h3>会社設立・創業支援</h3><p>設立手続き・事業計画・資金調達まで。創業のスタートダッシュを伴走します。</p></div>
+      <div class="card"><div class="ic b">📈</div><h3>経営コンサルティング</h3><p>数字を経営判断に。月次レポートと面談で、次の一手を一緒に考えます。</p></div>
+      <div class="card"><div class="ic r">👥</div><h3>給与計算・社会保険</h3><p>給与計算・年末調整・社会保険手続きを代行。バックオフィスをまるごと最適化。</p></div>
+    </div>
+  </section>
+
+  <!-- WHY -->
+  <section id="why">
+    <div class="why" style="padding:48px">
+      <div class="grid">
+        <img src="https://images.unsplash.com/photo-1521737711867-e3b97375f902?auto=format&fit=crop&w=1100&q=80" alt="チームの様子">
+        <div>
+          <span class="eyebrow">WHY KSK</span>
+          <h2>選ばれる理由</h2>
+          <ul>
+            <li><span class="k">1</span><div><b>初回相談は無料</b><span>まずは話すことから。料金は事前に明朗にご提示します。</span></div></li>
+            <li><span class="k">2</span><div><b>クラウド会計に強い</b><span>freee・マネーフォワードに完全対応。リアルタイムで数字を共有。</span></div></li>
+            <li><span class="k">3</span><div><b>レスポンスが速い</b><span>平均24時間以内に回答。チャットでも気軽に質問できます。</span></div></li>
+            <li><span class="k">4</span><div><b>創業30年の安心</b><span>地域に根ざし、あらゆる業種・規模の相談に対応してきました。</span></div></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FLOW -->
+  <section id="flow">
+    <span class="eyebrow">FLOW</span>
+    <h2>ご相談の流れ</h2>
+    <p class="lead">お問い合わせから契約まで、最短でその週のうちに。</p>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><h4>お問い合わせ</h4><p>フォーム・電話で受付。費用は一切かかりません。</p></div>
+      <div class="step"><div class="num">2</div><h4>無料面談</h4><p>現状とお悩みをヒアリング。最適なプランをご提案。</p></div>
+      <div class="step"><div class="num">3</div><h4>お見積り</h4><p>明朗な料金をご提示。ご納得のうえご契約。</p></div>
+      <div class="step"><div class="num">4</div><h4>サポート開始</h4><p>担当がつき、すぐにサポートを開始します。</p></div>
+    </div>
+  </section>
+
+  <!-- PRICE -->
+  <section id="price">
+    <span class="eyebrow">PRICE</span>
+    <h2>料金プラン</h2>
+    <p class="lead">事業規模に合わせて選べる3つのプラン。すべて顧問契約・クラウド会計に対応。</p>
+    <div class="plans">
+      <div class="plan">
+        <h3>ライト</h3>
+        <div class="price">¥15,000<small>/月〜</small></div>
+        <p style="color:var(--gray);font-size:14px">起業まもない方・小規模事業者向け</p>
+        <ul><li>記帳サポート</li><li>決算・申告</li><li>チャット相談</li></ul>
+        <a href="#contact" class="btn ghost">このプランで相談</a>
+      </div>
+      <div class="plan pop">
+        <span class="tag">人気</span>
+        <h3>スタンダード</h3>
+        <div class="price">¥30,000<small>/月〜</small></div>
+        <p style="color:var(--gray);font-size:14px">成長中の中小企業向け</p>
+        <ul><li>月次巡回監査</li><li>決算・申告・節税提案</li><li>経営レポート</li><li>面談（隔月）</li></ul>
+        <a href="#contact" class="btn">このプランで相談</a>
+      </div>
+      <div class="plan">
+        <h3>フルサポート</h3>
+        <div class="price">¥50,000<small>/月〜</small></div>
+        <p style="color:var(--gray);font-size:14px">バックオフィスを任せたい企業向け</p>
+        <ul><li>スタンダードの全内容</li><li>給与計算・社保</li><li>経営コンサル面談（毎月）</li></ul>
+        <a href="#contact" class="btn ghost">このプランで相談</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- BAND -->
+  <section>
+    <div class="band">
+      <h2>まずは無料で話してみませんか？</h2>
+      <p>「こんなこと聞いていいのかな」も大歓迎。お気軽にどうぞ。</p>
+      <a href="#contact" class="btn">無料相談を予約する</a>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section id="contact">
+    <span class="eyebrow">CONTACT</span>
+    <h2>お問い合わせ</h2>
+    <p class="lead">下記フォーム、またはお電話・メールにてお気軽にご連絡ください。</p>
+    <div class="contact">
+      <div class="info">
+        <p><b>事務所名</b><span>KSK会計事務所（仮）</span></p>
+        <p><b>所在地</b><span>〒000-0000 ○○県○○市○○町0-0-0 ○○ビル0F</span></p>
+        <p><b>電話</b><span>000-000-0000（平日 9:00〜18:00）</span></p>
+        <p><b>メール</b><span>info@example.com</span></p>
+        <p><b>定休日</b><span>土・日・祝</span></p>
+      </div>
+      <form onsubmit="return false">
+        <label>お名前</label><input placeholder="山田 太郎">
+        <label>メールアドレス</label><input placeholder="you@example.com">
+        <label>ご相談内容</label><textarea rows="4" placeholder="ご相談内容をご記入ください"></textarea>
+        <button class="btn" style="margin-top:18px;width:100%">送信する</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>© KSK会計事務所（仮）</div>
+    <div>このページはデザイン確認用モックアップです（Googleイメージ案）</div>
+  </div>
+</footer>
+</body>
+</html>
