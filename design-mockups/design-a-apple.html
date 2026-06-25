@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>デザイン案A: Apple風</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', sans-serif;
+  background: #f2f2f7;
+  color: #1c1c1e;
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding-bottom: 100px;
+}
+
+/* ヘッダー */
+.header {
+  background: rgba(242, 242, 247, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 60px 20px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.header h1 {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.header .subtitle {
+  font-size: 15px;
+  color: #8e8e93;
+  margin-top: 4px;
+}
+.badge {
+  display: inline-block;
+  background: #007aff;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  margin-right: 6px;
+}
+
+/* 期限バナー */
+.deadline {
+  margin: 16px 20px;
+  background: linear-gradient(135deg, #ff3b30, #ff6961);
+  border-radius: 16px;
+  padding: 16px 20px;
+  text-align: center;
+}
+.deadline p { color: white; font-weight: 700; font-size: 17px; }
+.deadline small { color: rgba(255,255,255,0.8); font-size: 13px; }
+
+/* セクション */
+.section {
+  margin: 24px 20px;
+}
+.section-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: -0.3px;
+}
+
+/* カード（Apple風の角丸グループリスト） */
+.card-group {
+  background: white;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.card-row {
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 0.5px solid rgba(60,60,67,0.1);
+}
+.card-row:last-child { border-bottom: none; }
+.card-row .label {
+  color: #8e8e93;
+  font-size: 15px;
+  width: 100px;
+  flex-shrink: 0;
+}
+.card-row .value {
+  font-size: 17px;
+  font-weight: 400;
+  flex: 1;
+}
+
+/* ボタン */
+.btn-group {
+  margin: 20px 20px;
+  display: flex;
+  gap: 10px;
+}
+.btn {
+  flex: 1;
+  padding: 16px;
+  border: none;
+  border-radius: 14px;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-green {
+  background: #34c759;
+  color: white;
+}
+.btn-orange {
+  background: #ff9500;
+  color: white;
+}
+
+/* 扶養親族カード */
+.dep-card {
+  background: white;
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 10px;
+}
+.dep-name {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+.dep-rel {
+  font-size: 15px;
+  color: #8e8e93;
+  margin-left: 8px;
+}
+.dep-detail {
+  margin-top: 10px;
+  font-size: 15px;
+  color: #3a3a3c;
+  line-height: 1.8;
+}
+.dep-birthday {
+  font-size: 17px;
+  color: #1c1c1e;
+  font-weight: 500;
+}
+
+/* 年収入力 */
+.income-input {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 0.5px solid rgba(60,60,67,0.1);
+}
+.income-input label {
+  font-size: 15px;
+  color: #8e8e93;
+  display: block;
+  margin-bottom: 6px;
+}
+.income-input input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 17px;
+  border: 1px solid #d1d1d6;
+  border-radius: 10px;
+  background: #f2f2f7;
+  outline: none;
+}
+.income-input input:focus {
+  border-color: #007aff;
+  background: white;
+}
+
+/* ステップバッジ */
+.step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #007aff;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.design-label {
+  text-align: center;
+  padding: 10px;
+  background: #007aff;
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 2px;
+}
+</style>
+</head>
+<body>
+
+<div class="design-label">DESIGN A: APPLE STYLE</div>
+
+<div class="header">
+  <h1>年末調整</h1>
+  <div class="subtitle">
+    <span class="badge">令和8年度</span>
+    株式会社松坂屋
+  </div>
+</div>
+
+<div class="deadline">
+  <p>提出期限：11月30日</p>
+  <small>期限を過ぎると年末調整に間に合わない場合があります</small>
+</div>
+
+<!-- 本人情報 -->
+<div class="section">
+  <h2 class="section-title"><span class="step-badge">1</span>本人情報</h2>
+  <div class="card-group">
+    <div class="card-row">
+      <span class="label">氏名</span>
+      <span class="value" style="font-weight:600;">逸見　勇造</span>
+    </div>
+    <div class="card-row">
+      <span class="label">生年月日</span>
+      <span class="value">S37.7.5</span>
+    </div>
+    <div class="card-row">
+      <span class="label">住所</span>
+      <span class="value" style="font-size:15px;">茨城県小美玉市下吉影863-1</span>
+    </div>
+    <div class="card-row">
+      <span class="label">障碍者区分</span>
+      <span class="value">非該当</span>
+    </div>
+    <div class="card-row">
+      <span class="label">寡婦/ひとり親</span>
+      <span class="value">非該当</span>
+    </div>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-green">前年と相違なし</button>
+    <button class="btn btn-orange">相違あり（訂正）</button>
+  </div>
+</div>
+
+<!-- 扶養親族 -->
+<div class="section">
+  <h2 class="section-title"><span class="step-badge">2</span>扶養親族・配偶者</h2>
+
+  <div class="dep-card">
+    <span class="dep-name">逸見　文江</span>
+    <span class="dep-rel">妻</span>
+    <div class="dep-detail">
+      <span class="dep-birthday">生年月日: S42.5.2</span>
+    </div>
+    <div class="income-input">
+      <label>年収（円）</label>
+      <input type="text" inputmode="numeric" placeholder="0" value="1,230,000">
+    </div>
+  </div>
+
+  <div class="dep-card">
+    <span class="dep-name">逸見　太一</span>
+    <span class="dep-rel">長男</span>
+    <div class="dep-detail">
+      <span class="dep-birthday">生年月日: H15.3.20</span><br>
+      <span style="color:#007aff;font-weight:600;">特定扶養親族</span>
+    </div>
+    <div class="income-input">
+      <label>年収（円） <span style="color:#ff9500;">※未入力</span></label>
+      <input type="text" inputmode="numeric" placeholder="0">
+    </div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-green">前年と相違なし</button>
+    <button class="btn btn-orange">相違あり（訂正）</button>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>デザイン案C: Notion風</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, 'Noto Sans JP', 'Yu Gothic UI', sans-serif;
+  background: #ffffff;
+  color: #37352f;
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding-bottom: 100px;
+}
+
+/* ヘッダー（Notion風 ミニマル） */
+.header {
+  padding: 48px 24px 12px;
+  border-bottom: 1px solid #e9e9e7;
+}
+.header .icon { font-size: 48px; margin-bottom: 8px; }
+.header h1 {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1.1;
+}
+.header .meta {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #f1f1ef;
+  color: #787774;
+}
+.tag.blue { background: #d3e5ef; color: #24598d; }
+.tag.red { background: #ffe2dd; color: #93000a; }
+
+/* 期限（Notion callout風） */
+.callout {
+  margin: 20px 24px;
+  background: #fbe4e7;
+  border-radius: 4px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.callout-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+.callout-text { font-size: 14px; line-height: 1.6; }
+.callout-text strong { font-weight: 600; }
+
+/* セクション */
+.section { margin: 28px 24px; }
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title .num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: #37352f;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Notion風テーブル */
+.table {
+  width: 100%;
+  border: 1px solid #e9e9e7;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.table-row {
+  display: flex;
+  border-bottom: 1px solid #e9e9e7;
+}
+.table-row:last-child { border-bottom: none; }
+.table-row:hover { background: #f7f6f3; }
+.table-cell {
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.table-cell.label {
+  width: 110px;
+  flex-shrink: 0;
+  color: #9b9a97;
+  background: #fbfbfa;
+  border-right: 1px solid #e9e9e7;
+  font-size: 13px;
+}
+.table-cell.value {
+  flex: 1;
+  color: #37352f;
+}
+
+/* Notion風ボタン */
+.btn-group {
+  margin: 16px 24px;
+  display: flex;
+  gap: 8px;
+}
+.btn {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #e9e9e7;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  background: white;
+  transition: background 0.15s;
+}
+.btn:hover { background: #f7f6f3; }
+.btn-green {
+  background: #dbeddb;
+  border-color: #dbeddb;
+  color: #1e6231;
+}
+.btn-green:hover { background: #c8e0c8; }
+.btn-orange {
+  background: #fadec9;
+  border-color: #fadec9;
+  color: #93370e;
+}
+.btn-orange:hover { background: #f0cfb4; }
+
+/* 扶養親族（Notionデータベース風） */
+.dep-item {
+  border: 1px solid #e9e9e7;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.dep-header {
+  padding: 12px 16px;
+  background: #fbfbfa;
+  border-bottom: 1px solid #e9e9e7;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dep-icon {
+  font-size: 16px;
+}
+.dep-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+.dep-rel-tag {
+  font-size: 11px;
+  background: #e8deee;
+  color: #6940a5;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.dep-props {
+  padding: 0;
+}
+.dep-prop {
+  display: flex;
+  border-bottom: 1px solid #e9e9e7;
+  font-size: 14px;
+}
+.dep-prop:last-child { border-bottom: none; }
+.dep-prop .prop-label {
+  width: 90px;
+  padding: 8px 12px;
+  color: #9b9a97;
+  background: #fbfbfa;
+  border-right: 1px solid #e9e9e7;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.dep-prop .prop-value {
+  padding: 8px 12px;
+  flex: 1;
+}
+.dep-type-tag {
+  font-size: 11px;
+  background: #d3e5ef;
+  color: #24598d;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* 年収入力 */
+.dep-prop input {
+  width: 100%;
+  border: none;
+  font-size: 14px;
+  padding: 0;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+}
+.dep-prop input::placeholder { color: #d3d1cb; }
+
+.design-label {
+  text-align: center;
+  padding: 10px;
+  background: #37352f;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 2px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #9b9a97;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.toggle:hover { color: #37352f; }
+</style>
+</head>
+<body>
+
+<div class="design-label">DESIGN C: NOTION STYLE</div>
+
+<div class="header">
+  <div class="icon">📋</div>
+  <h1>年末調整</h1>
+  <div class="meta">
+    <span class="tag blue">令和8年度</span>
+    <span class="tag">株式会社松坂屋</span>
+    <span class="tag red">期限: 11月30日</span>
+  </div>
+</div>
+
+<div class="callout">
+  <span class="callout-icon">⚠️</span>
+  <div class="callout-text">
+    <strong>提出期限は11月30日（厳守）です。</strong><br>
+    期限を過ぎると年末調整に間に合わない場合があります。
+  </div>
+</div>
+
+<!-- 本人情報 -->
+<div class="section">
+  <h2 class="section-title"><span class="num">1</span> 本人情報の確認</h2>
+  <div class="table">
+    <div class="table-row">
+      <div class="table-cell label">氏名</div>
+      <div class="table-cell value" style="font-weight:600;">逸見　勇造</div>
+    </div>
+    <div class="table-row">
+      <div class="table-cell label">生年月日</div>
+      <div class="table-cell value">S37.7.5</div>
+    </div>
+    <div class="table-row">
+      <div class="table-cell label">住所</div>
+      <div class="table-cell value">茨城県小美玉市下吉影863-1</div>
+    </div>
+    <div class="table-row">
+      <div class="table-cell label">障碍者区分</div>
+      <div class="table-cell value">非該当</div>
+    </div>
+    <div class="table-row">
+      <div class="table-cell label">寡婦/ひとり親</div>
+      <div class="table-cell value">非該当</div>
+    </div>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-green">✓ 前年と相違なし</button>
+    <button class="btn btn-orange">✎ 相違あり（訂正）</button>
+  </div>
+</div>
+
+<!-- 扶養親族 -->
+<div class="section">
+  <h2 class="section-title"><span class="num">2</span> 扶養親族・配偶者の確認</h2>
+
+  <div class="dep-item">
+    <div class="dep-header">
+      <span class="dep-icon">👩</span>
+      <span class="dep-name">逸見　文江</span>
+      <span class="dep-rel-tag">妻</span>
+    </div>
+    <div class="dep-props">
+      <div class="dep-prop">
+        <div class="prop-label">生年月日</div>
+        <div class="prop-value" style="font-size:15px;">S42.5.2</div>
+      </div>
+      <div class="dep-prop">
+        <div class="prop-label">障碍者区分</div>
+        <div class="prop-value">非該当</div>
+      </div>
+      <div class="dep-prop">
+        <div class="prop-label">年収（円）</div>
+        <div class="prop-value">
+          <input type="text" inputmode="numeric" value="1,230,000">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dep-item">
+    <div class="dep-header">
+      <span class="dep-icon">👦</span>
+      <span class="dep-name">逸見　太一</span>
+      <span class="dep-rel-tag">長男</span>
+      <span class="dep-type-tag">特定扶養親族</span>
+    </div>
+    <div class="dep-props">
+      <div class="dep-prop">
+        <div class="prop-label">生年月日</div>
+        <div class="prop-value" style="font-size:15px;">H15.3.20</div>
+      </div>
+      <div class="dep-prop">
+        <div class="prop-label">障碍者区分</div>
+        <div class="prop-value">非該当</div>
+      </div>
+      <div class="dep-prop">
+        <div class="prop-label">年収（円）</div>
+        <div class="prop-value">
+          <input type="text" inputmode="numeric" placeholder="未入力" style="color: #eb5757;">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toggle">▶ 扶養親族を追加...</div>
+
+  <div class="btn-group">
+    <button class="btn btn-green">✓ 前年と相違なし</button>
+    <button class="btn btn-orange">✎ 相違あり（訂正）</button>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>デザイン案B: Google / Material Design風</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Google Sans', 'Noto Sans JP', Roboto, 'Yu Gothic UI', sans-serif;
+  background: #f8f9fa;
+  color: #202124;
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding-bottom: 100px;
+}
+
+/* ヘッダー（Material You風） */
+.header {
+  background: #e8f0fe;
+  padding: 60px 24px 20px;
+  border-radius: 0 0 28px 28px;
+}
+.header h1 {
+  font-size: 28px;
+  font-weight: 400;
+  color: #1a73e8;
+}
+.header .subtitle {
+  font-size: 14px;
+  color: #5f6368;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chip {
+  display: inline-block;
+  background: #1a73e8;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 16px;
+}
+
+/* 期限バナー（Material Design風エラーカラー） */
+.deadline {
+  margin: 16px 16px;
+  background: #fce8e6;
+  border: 1px solid #f5c6cb;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.deadline-icon {
+  width: 40px;
+  height: 40px;
+  background: #ea4335;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.deadline p { color: #c5221f; font-weight: 500; font-size: 14px; }
+.deadline strong { font-size: 16px; display: block; margin-bottom: 2px; }
+
+/* セクション */
+.section { margin: 20px 16px; }
+.section-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1a73e8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+
+/* カード（Material Elevation） */
+.card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  overflow: hidden;
+}
+.card-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e8eaed;
+}
+.card-row:last-child { border-bottom: none; }
+.card-row .icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 16px;
+  color: #5f6368;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.card-row .content {
+  flex: 1;
+}
+.card-row .label {
+  font-size: 12px;
+  color: #5f6368;
+  margin-bottom: 2px;
+}
+.card-row .value {
+  font-size: 16px;
+  color: #202124;
+}
+
+/* FAB風ボタン */
+.btn-group {
+  margin: 16px 16px;
+  display: flex;
+  gap: 8px;
+}
+.btn {
+  flex: 1;
+  padding: 14px;
+  border: none;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  transition: box-shadow 0.2s;
+}
+.btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+.btn-green {
+  background: #1e8e3e;
+  color: white;
+}
+.btn-orange {
+  background: #e37400;
+  color: white;
+}
+
+/* 扶養親族カード */
+.dep-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  padding: 20px;
+  margin-bottom: 12px;
+}
+.dep-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dep-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #e8f0fe;
+  color: #1a73e8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.dep-name {
+  font-size: 18px;
+  font-weight: 500;
+}
+.dep-rel {
+  font-size: 14px;
+  color: #5f6368;
+}
+.dep-detail {
+  margin-top: 16px;
+  padding-left: 56px;
+}
+.dep-birthday {
+  font-size: 16px;
+  color: #202124;
+}
+.dep-type {
+  display: inline-block;
+  margin-top: 4px;
+  background: #e8f0fe;
+  color: #1a73e8;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+/* 年収入力（Material風テキストフィールド） */
+.income-input {
+  margin-top: 16px;
+  padding: 0 0 0 56px;
+}
+.income-input label {
+  font-size: 12px;
+  color: #5f6368;
+  display: block;
+  margin-bottom: 4px;
+}
+.income-input input {
+  width: 100%;
+  padding: 12px 0;
+  font-size: 16px;
+  border: none;
+  border-bottom: 2px solid #dadce0;
+  background: transparent;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.income-input input:focus {
+  border-bottom-color: #1a73e8;
+}
+.warning { color: #e37400; font-size: 12px; margin-left: 4px; }
+
+/* ステップインジケーター */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding-left: 4px;
+}
+.step-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 500;
+}
+.step-dot.active { background: #1a73e8; color: white; }
+.step-dot.inactive { background: #e8eaed; color: #5f6368; }
+.step-line { width: 24px; height: 2px; background: #e8eaed; }
+
+.design-label {
+  text-align: center;
+  padding: 10px;
+  background: #1a73e8;
+  color: white;
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: 2px;
+}
+</style>
+</head>
+<body>
+
+<div class="design-label">DESIGN B: GOOGLE / MATERIAL DESIGN STYLE</div>
+
+<div class="header">
+  <h1>年末調整</h1>
+  <div class="subtitle">
+    <span class="chip">令和8年度</span>
+    株式会社松坂屋
+  </div>
+</div>
+
+<div class="deadline">
+  <div class="deadline-icon">!</div>
+  <div>
+    <p><strong>提出期限：11月30日（厳守）</strong></p>
+    <p>期限を過ぎると年末調整に間に合わない場合があります</p>
+  </div>
+</div>
+
+<!-- ステップインジケーター -->
+<div class="section">
+  <div class="step-indicator">
+    <div class="step-dot active">1</div>
+    <div class="step-line"></div>
+    <div class="step-dot inactive">2</div>
+    <div class="step-line"></div>
+    <div class="step-dot inactive">3</div>
+  </div>
+
+  <div class="section-title">本人情報の確認</div>
+  <div class="card">
+    <div class="card-row">
+      <div class="icon">👤</div>
+      <div class="content">
+        <div class="label">氏名</div>
+        <div class="value" style="font-weight:500;">逸見　勇造</div>
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="icon">🎂</div>
+      <div class="content">
+        <div class="label">生年月日</div>
+        <div class="value">S37.7.5</div>
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="icon">📍</div>
+      <div class="content">
+        <div class="label">住所</div>
+        <div class="value">茨城県小美玉市下吉影863-1</div>
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="icon">📋</div>
+      <div class="content">
+        <div class="label">障碍者区分</div>
+        <div class="value">非該当</div>
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="icon">📋</div>
+      <div class="content">
+        <div class="label">寡婦/ひとり親</div>
+        <div class="value">非該当</div>
+      </div>
+    </div>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-green">前年と相違なし</button>
+    <button class="btn btn-orange">相違あり（訂正）</button>
+  </div>
+</div>
+
+<!-- 扶養親族 -->
+<div class="section">
+  <div class="section-title">扶養親族・配偶者の確認</div>
+
+  <div class="dep-card">
+    <div class="dep-header">
+      <div class="dep-avatar">文</div>
+      <div>
+        <div class="dep-name">逸見　文江</div>
+        <div class="dep-rel">妻</div>
+      </div>
+    </div>
+    <div class="dep-detail">
+      <div class="dep-birthday">生年月日: S42.5.2</div>
+    </div>
+    <div class="income-input">
+      <label>年収（円）</label>
+      <input type="text" inputmode="numeric" value="1,230,000">
+    </div>
+  </div>
+
+  <div class="dep-card">
+    <div class="dep-header">
+      <div class="dep-avatar">太</div>
+      <div>
+        <div class="dep-name">逸見　太一</div>
+        <div class="dep-rel">長男</div>
+      </div>
+    </div>
+    <div class="dep-detail">
+      <div class="dep-birthday">生年月日: H15.3.20</div>
+      <div class="dep-type">特定扶養親族</div>
+    </div>
+    <div class="income-input">
+      <label>年収（円）<span class="warning">※未入力</span></label>
+      <input type="text" inputmode="numeric" placeholder="0">
+    </div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-green">前年と相違なし</button>
+    <button class="btn btn-orange">相違あり（訂正）</button>
+  </div>
+</div>
+
+</body>
+</html>
