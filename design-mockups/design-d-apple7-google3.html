@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>デザイン案D: Apple 7 : Google 3</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  background: #f2f2f7;
+  color: #1c1c1e;
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding-bottom: 120px;
+}
+.design-label {
+  text-align: center; padding: 10px;
+  background: linear-gradient(135deg, #007aff 70%, #1a73e8 100%);
+  color: white; font-weight: 700; font-size: 13px; letter-spacing: 1px;
+}
+
+.header {
+  background: rgba(242,242,247,0.92);
+  backdrop-filter: blur(20px);
+  padding: 56px 20px 18px;
+  position: sticky; top: 0; z-index: 10;
+}
+.header h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.5px; }
+.header .meta {
+  margin-top: 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.badge {
+  display: inline-block; background: #007aff; color: white;
+  font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 14px;
+}
+.company { font-size: 16px; color: #636366; }
+
+/* 期限バナー */
+.deadline {
+  margin: 16px 20px;
+  background: linear-gradient(135deg, #ff3b30, #ff6259);
+  border-radius: 16px;
+  padding: 18px 20px;
+  text-align: center;
+}
+.deadline p { color: white; font-weight: 700; font-size: 20px; }
+.deadline small { color: rgba(255,255,255,0.85); font-size: 14px; display: block; margin-top: 4px; }
+
+/* セクション */
+.section { margin: 28px 20px; }
+.section-title {
+  font-size: 20px; font-weight: 700; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 10px;
+}
+.step-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: #007aff; color: white; font-size: 15px; font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* カード（Apple風グループ + Google風シャドウ） */
+.card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  overflow: hidden;
+}
+.card-row {
+  display: flex; align-items: flex-start;
+  padding: 16px 20px;
+  border-bottom: 0.5px solid rgba(60,60,67,0.12);
+  min-height: 56px;
+}
+.card-row:last-child { border-bottom: none; }
+.card-row .label {
+  color: #8e8e93; font-size: 15px; width: 110px; flex-shrink: 0;
+  padding-top: 2px;
+}
+.card-row .value {
+  font-size: 18px; font-weight: 400; flex: 1;
+  line-height: 1.4;
+}
+
+/* ボタン（大きめ・押しやすい） */
+.btn-group {
+  margin: 18px 20px; display: flex; gap: 10px;
+}
+.btn {
+  flex: 1; padding: 18px; border: none; border-radius: 16px;
+  font-size: 17px; font-weight: 600; cursor: pointer;
+  transition: transform 0.1s;
+  min-height: 56px;
+}
+.btn:active { transform: scale(0.97); }
+.btn-green { background: #34c759; color: white; }
+.btn-orange { background: #ff9500; color: white; }
+
+/* 扶養親族カード */
+.dep-card {
+  background: white; border-radius: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  padding: 20px; margin-bottom: 12px;
+}
+.dep-header { display: flex; align-items: center; gap: 12px; }
+.dep-avatar {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: #e8f0fe; color: #007aff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 600; flex-shrink: 0;
+}
+.dep-name { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
+.dep-rel { font-size: 16px; color: #8e8e93; margin-top: 2px; }
+
+.dep-detail { margin-top: 14px; padding-left: 60px; }
+.dep-birthday-label { font-size: 14px; color: #8e8e93; margin-bottom: 2px; }
+.dep-birthday { font-size: 20px; color: #1c1c1e; font-weight: 500; }
+.dep-type {
+  display: inline-block; margin-top: 6px;
+  background: #d3e5ef; color: #1a73e8;
+  font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+}
+
+/* 年収入力（大きめ） */
+.income-section {
+  margin-top: 16px; padding-top: 16px;
+  border-top: 0.5px solid rgba(60,60,67,0.12);
+  padding-left: 60px;
+}
+.income-label {
+  font-size: 15px; color: #8e8e93; display: block; margin-bottom: 6px;
+}
+.income-label .warn { color: #ff9500; font-weight: 600; }
+.income-input {
+  width: 100%; padding: 14px 16px;
+  font-size: 20px; border: 1.5px solid #d1d1d6;
+  border-radius: 12px; background: #f9f9fb; outline: none;
+}
+.income-input:focus { border-color: #007aff; background: white; }
+.income-hint {
+  font-size: 13px; color: #8e8e93; margin-top: 6px; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="design-label">DESIGN D: APPLE 7 : GOOGLE 3 — 大きめ文字・ボタン</div>
+
+<div class="header">
+  <h1>年末調整</h1>
+  <div class="meta">
+    <span class="badge">令和8年度</span>
+    <span class="company">株式会社松坂屋</span>
+  </div>
+</div>
+
+<div class="deadline">
+  <p>提出期限：11月30日</p>
+  <small>期限を過ぎると年末調整に間に合わない場合があります</small>
+</div>
+
+<div class="section">
+  <h2 class="section-title"><span class="step-num">1</span>本人情報の確認</h2>
+  <div class="card">
+    <div class="card-row">
+      <span class="label">氏名</span>
+      <span class="value" style="font-weight:600;font-size:20px;">逸見　勇造</span>
+    </div>
+    <div class="card-row">
+      <span class="label">生年月日</span>
+      <span class="value">S37.7.5</span>
+    </div>
+    <div class="card-row">
+      <span class="label">住所</span>
+      <span class="value" style="font-size:16px;">茨城県小美玉市下吉影863-1</span>
+    </div>
+    <div class="card-row">
+      <span class="label">障碍者区分</span>
+      <span class="value">非該当</span>
+    </div>
+    <div class="card-row">
+      <span class="label">寡婦/ひとり親</span>
+      <span class="value">非該当</span>
+    </div>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-green">前年と相違なし</button>
+    <button class="btn btn-orange">相違あり（訂正）</button>
+  </div>
+</div>
+
+<div class="section">
+  <h2 class="section-title"><span class="step-num">2</span>扶養親族・配偶者</h2>
+
+  <div class="dep-card">
+    <div class="dep-header">
+      <div class="dep-avatar">文</div>
+      <div>
+        <div class="dep-name">逸見　文江</div>
+        <div class="dep-rel">妻</div>
+      </div>
+    </div>
+    <div class="dep-detail">
+      <div class="dep-birthday-label">生年月日</div>
+      <div class="dep-birthday">S42.5.2</div>
+    </div>
+    <div class="income-section">
+      <label class="income-label">年収（円）</label>
+      <input class="income-input" type="text" inputmode="numeric" value="1,230,000">
+    </div>
+  </div>
+
+  <div class="dep-card">
+    <div class="dep-header">
+      <div class="dep-avatar">太</div>
+      <div>
+        <div class="dep-name">逸見　太一</div>
+        <div class="dep-rel">長男</div>
+      </div>
+    </div>
+    <div class="dep-detail">
+      <div class="dep-birthday-label">生年月日</div>
+      <div class="dep-birthday">H15.3.20</div>
+      <span class="dep-type">特定扶養親族</span>
+    </div>
+    <div class="income-section">
+      <label class="income-label">年収（円）<span class="warn">※未入力</span></label>
+      <input class="income-input" type="text" inputmode="numeric" placeholder="0">
+      <p class="income-hint">手取りではなく総支給額を入力してください</p>
+    </div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-green">前年と相違なし</button>
+    <button class="btn btn-orange">相違あり（訂正）</button>
+  </div>
+</div>
+</body>
+</html>

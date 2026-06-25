@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>デザイン案F: Apple 3 : Google 7</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Google Sans', Roboto, 'Noto Sans JP', -apple-system, sans-serif;
+  background: #f8f9fa;
+  color: #202124;
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding-bottom: 120px;
+}
+.design-label {
+  text-align: center; padding: 10px;
+  background: linear-gradient(135deg, #007aff 30%, #1a73e8 100%);
+  color: white; font-weight: 700; font-size: 13px; letter-spacing: 1px;
+}
+
+/* ヘッダー（Material You風 Surface Tint） */
+.header {
+  background: #d3e3fd;
+  padding: 56px 24px 22px;
+  border-radius: 0 0 28px 28px;
+}
+.header h1 {
+  font-size: 28px; font-weight: 400; color: #041e49;
+}
+.header .meta {
+  margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.chip {
+  display: inline-flex; align-items: center;
+  font-size: 14px; font-weight: 500; padding: 6px 16px;
+  border-radius: 20px; gap: 6px;
+}
+.chip-filled { background: #0b57d0; color: white; }
+.chip-outline { background: white; color: #444746; border: 1px solid #c4c7c5; }
+
+/* 期限バナー（Material3 Banner） */
+.deadline {
+  margin: 14px 16px;
+  background: #f9dedc;
+  border-radius: 16px;
+  padding: 20px;
+}
+.deadline-content { display: flex; align-items: center; gap: 16px; }
+.deadline-icon {
+  width: 48px; height: 48px; border-radius: 16px;
+  background: #b3261e; color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; font-weight: 700; flex-shrink: 0;
+}
+.deadline strong { font-size: 20px; color: #410e0b; display: block; }
+.deadline p { font-size: 14px; color: #8c1d18; margin-top: 2px; line-height: 1.5; }
+
+/* ステップ（Material3 Stepper） */
+.stepper {
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px 16px 8px; gap: 4px;
+}
+.stepper-step {
+  display: flex; align-items: center; gap: 4px;
+}
+.stepper-num {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 500;
+}
+.stepper-num.active { background: #0b57d0; color: white; }
+.stepper-num.pending { background: #e0e0e0; color: #9e9e9e; }
+.stepper-label { font-size: 13px; font-weight: 500; color: #444746; }
+.stepper-label.active { color: #0b57d0; }
+.stepper-line { width: 32px; height: 2px; background: #e0e0e0; margin: 0 4px; }
+
+/* セクション */
+.section { margin: 20px 16px; }
+.section-title {
+  font-size: 16px; font-weight: 500; color: #0b57d0;
+  margin-bottom: 12px; padding-left: 4px;
+  letter-spacing: 0.2px;
+}
+
+/* カード（Material3 Elevated Card） */
+.card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.05);
+}
+.card-row {
+  display: flex; align-items: flex-start;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e8eaed;
+  min-height: 60px;
+}
+.card-row:last-child { border-bottom: none; }
+.card-row .icon {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: #e8f0fe; color: #0b57d0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; margin-right: 16px; flex-shrink: 0;
+}
+.card-row .content { flex: 1; padding-top: 4px; }
+.card-row .label { font-size: 13px; color: #5f6368; margin-bottom: 3px; }
+.card-row .value { font-size: 18px; color: #202124; font-weight: 400; }
+
+/* ボタン（Material3 Filled Tonal + Apple大きさ） */
+.btn-group { margin: 16px 16px; display: flex; gap: 10px; }
+.btn {
+  flex: 1; padding: 18px; border: none; border-radius: 28px;
+  font-size: 16px; font-weight: 500; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  transition: transform 0.1s, background 0.2s;
+  min-height: 58px; letter-spacing: 0.2px;
+}
+.btn:active { transform: scale(0.97); }
+.btn-green {
+  background: #c4eed0; color: #0d5223;
+}
+.btn-green:active { background: #a8e6b8; }
+.btn-orange {
+  background: #ffddb7; color: #723c00;
+}
+.btn-orange:active { background: #ffc98b; }
+
+/* 扶養親族カード（Material3 Card） */
+.dep-card {
+  background: white; border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.05);
+  margin-bottom: 14px; overflow: hidden;
+}
+.dep-top {
+  padding: 20px;
+  display: flex; align-items: center; gap: 16px;
+}
+.dep-avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, #d3e3fd, #aecbfa);
+  color: #0b57d0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; font-weight: 500; flex-shrink: 0;
+}
+.dep-info { flex: 1; }
+.dep-name { font-size: 22px; font-weight: 500; color: #1f1f1f; }
+.dep-rel { font-size: 15px; color: #5f6368; margin-top: 2px; }
+
+.dep-body { padding: 0 20px 20px; }
+.dep-prop { display: flex; align-items: center; margin-bottom: 12px; }
+.dep-prop-label { font-size: 14px; color: #5f6368; width: 90px; flex-shrink: 0; }
+.dep-prop-value { font-size: 20px; color: #202124; font-weight: 500; }
+.dep-chip {
+  display: inline-block; margin-top: 4px;
+  background: #d3e3fd; color: #0b57d0;
+  font-size: 13px; font-weight: 500; padding: 5px 14px; border-radius: 8px;
+}
+
+/* 年収入力（Material3 Filled Text Field風） */
+.income-area {
+  margin-top: 16px; padding-top: 16px; border-top: 1px solid #e8eaed;
+}
+.income-label-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.income-label { font-size: 15px; color: #444746; font-weight: 500; }
+.income-warn {
+  font-size: 12px; color: #b3261e; font-weight: 500;
+  background: #f9dedc; padding: 2px 8px; border-radius: 4px;
+}
+.income-field-wrap {
+  background: #f0f4f9;
+  border-radius: 16px 16px 0 0;
+  border-bottom: 2px solid #c4c7c5;
+  padding: 4px 0;
+  transition: border-color 0.2s;
+}
+.income-field-wrap:focus-within {
+  border-bottom-color: #0b57d0;
+  background: #e8f0fe;
+}
+.income-field {
+  width: 100%; padding: 16px 20px;
+  font-size: 24px; font-weight: 500;
+  border: none; background: transparent; outline: none;
+  font-family: inherit;
+}
+.income-hint {
+  font-size: 13px; color: #5f6368; margin-top: 8px; line-height: 1.5;
+  padding-left: 4px;
+}
+</style>
+</head>
+<body>
+<div class="design-label">DESIGN F: APPLE 3 : GOOGLE 7 — Material You + 大文字</div>
+
+<div class="header">
+  <h1>年末調整</h1>
+  <div class="meta">
+    <span class="chip chip-filled">令和8年度</span>
+    <span class="chip chip-outline">株式会社松坂屋</span>
+  </div>
+</div>
+
+<div class="deadline">
+  <div class="deadline-content">
+    <div class="deadline-icon">!</div>
+    <div>
+      <strong>提出期限：11月30日</strong>
+      <p>期限を過ぎると年末調整に間に合わない場合があります</p>
+    </div>
+  </div>
+</div>
+
+<div class="stepper">
+  <div class="stepper-step">
+    <div class="stepper-num active">1</div>
+    <span class="stepper-label active">本人</span>
+  </div>
+  <div class="stepper-line"></div>
+  <div class="stepper-step">
+    <div class="stepper-num pending">2</div>
+    <span class="stepper-label">扶養</span>
+  </div>
+  <div class="stepper-line"></div>
+  <div class="stepper-step">
+    <div class="stepper-num pending">3</div>
+    <span class="stepper-label">書類</span>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">本人情報の確認</div>
+  <div class="card">
+    <div class="card-row">
+      <div class="icon">👤</div>
+      <div class="content">
+        <div class="label">氏名</div>
+        <div class="value" style="font-weight:500;font-size:20px;">逸見　勇造</div>
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="icon">🎂</div>
+      <div class="content">
+        <div class="label">生年月日</div>
+        <div class="value">S37.7.5</div>
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="icon">📍</div>
+      <div class="content">
+        <div class="label">住所</div>
+        <div class="value" style="font-size:16px;">茨城県小美玉市下吉影863-1</div>
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="icon">📋</div>
+      <div class="content">
+        <div class="label">障碍者区分</div>
+        <div class="value">非該当</div>
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="icon">📋</div>
+      <div class="content">
+        <div class="label">寡婦/ひとり親</div>
+        <div class="value">非該当</div>
+      </div>
+    </div>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-green">前年と相違なし</button>
+    <button class="btn btn-orange">相違あり（訂正）</button>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">扶養親族・配偶者の確認</div>
+
+  <div class="dep-card">
+    <div class="dep-top">
+      <div class="dep-avatar">文</div>
+      <div class="dep-info">
+        <div class="dep-name">逸見　文江</div>
+        <div class="dep-rel">妻</div>
+      </div>
+    </div>
+    <div class="dep-body">
+      <div class="dep-prop">
+        <span class="dep-prop-label">生年月日</span>
+        <span class="dep-prop-value">S42.5.2</span>
+      </div>
+      <div class="income-area">
+        <div class="income-label-row">
+          <span class="income-label">年収（円）</span>
+        </div>
+        <div class="income-field-wrap">
+          <input class="income-field" type="text" inputmode="numeric" value="1,230,000">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dep-card">
+    <div class="dep-top">
+      <div class="dep-avatar">太</div>
+      <div class="dep-info">
+        <div class="dep-name">逸見　太一</div>
+        <div class="dep-rel">長男</div>
+      </div>
+    </div>
+    <div class="dep-body">
+      <div class="dep-prop">
+        <span class="dep-prop-label">生年月日</span>
+        <span class="dep-prop-value">H15.3.20</span>
+      </div>
+      <div style="margin-bottom:8px;"><span class="dep-chip">特定扶養親族</span></div>
+      <div class="income-area">
+        <div class="income-label-row">
+          <span class="income-label">年収（円）</span>
+          <span class="income-warn">未入力</span>
+        </div>
+        <div class="income-field-wrap">
+          <input class="income-field" type="text" inputmode="numeric" placeholder="0">
+        </div>
+        <p class="income-hint">手取りではなく総支給額を入力。間違えると年末調整計算が誤ります。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-green">前年と相違なし</button>
+    <button class="btn btn-orange">相違あり（訂正）</button>
+  </div>
+</div>
+</body>
+</html>
