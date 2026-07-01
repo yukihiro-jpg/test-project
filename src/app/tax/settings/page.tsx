@@ -27,6 +27,12 @@ export default function SettingsHome() {
           title="税理士報酬の登録"
           description="氏名・報酬額・支払月。月別の納付書に自動反映されます。"
         />
+        <ListLink
+          href="/tax/settings/data"
+          icon={<span>💾</span>}
+          title="データのバックアップ／移行"
+          description="全データをJSONで書き出し・読み込み。新アプリへの移行にも。"
+        />
       </GroupedList>
     </PageContainer>
   )
